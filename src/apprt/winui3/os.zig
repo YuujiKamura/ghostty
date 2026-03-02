@@ -320,6 +320,36 @@ pub const WM_IME_NOTIFY: UINT = 0x0282;
 pub extern "imm32" fn ImmSetOpenStatus(hIMC: HIMC, fOpen: BOOL) callconv(.winapi) BOOL;
 pub extern "imm32" fn ImmGetOpenStatus(hIMC: HIMC) callconv(.winapi) BOOL;
 
+// --- Fullscreen support ---
+pub const GWL_STYLE: c_int = -16;
+pub const WS_CAPTION: DWORD = 0x00C00000;
+pub const WS_THICKFRAME: DWORD = 0x00040000;
+pub const SWP_FRAMECHANGED: UINT = 0x0020;
+pub const SWP_NOOWNERZORDER: UINT = 0x0200;
+pub const MONITOR_DEFAULTTONEAREST: DWORD = 0x00000002;
+pub const HWND_TOP: ?HWND = null;
+
+pub const WINDOWPLACEMENT = extern struct {
+    length: UINT = @sizeOf(WINDOWPLACEMENT),
+    flags: UINT = 0,
+    showCmd: UINT = 0,
+    ptMinPosition: POINT = .{},
+    ptMaxPosition: POINT = .{},
+    rcNormalPosition: RECT = .{},
+};
+
+pub const MONITORINFO = extern struct {
+    cbSize: DWORD = @sizeOf(MONITORINFO),
+    rcMonitor: RECT = .{},
+    rcWork: RECT = .{},
+    dwFlags: DWORD = 0,
+};
+
+pub extern "user32" fn GetWindowPlacement(hWnd: HWND, lpwndpl: *WINDOWPLACEMENT) callconv(.winapi) BOOL;
+pub extern "user32" fn SetWindowPlacement(hWnd: HWND, lpwndpl: *const WINDOWPLACEMENT) callconv(.winapi) BOOL;
+pub extern "user32" fn MonitorFromWindow(hWnd: HWND, dwFlags: DWORD) callconv(.winapi) ?HANDLE;
+pub extern "user32" fn GetMonitorInfoW(hMonitor: HANDLE, lpmi: *MONITORINFO) callconv(.winapi) BOOL;
+
 // --- winmm extern declarations ---
 pub extern "winmm" fn timeBeginPeriod(uPeriod: UINT) callconv(.winapi) UINT;
 pub extern "winmm" fn timeEndPeriod(uPeriod: UINT) callconv(.winapi) UINT;

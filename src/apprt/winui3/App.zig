@@ -354,6 +354,11 @@ resizing: bool = false,
 /// Pending size from WM_SIZE during modal resize. Applied on WM_EXITSIZEMOVE.
 pending_size: ?struct { width: u32, height: u32 } = null,
 
+/// Fullscreen state.
+is_fullscreen: bool = false,
+saved_style: usize = 0,
+saved_placement: os.WINDOWPLACEMENT = .{},
+
 /// Closed event handler (prevent dangling reference).
 closed_handler: ?*event.SimpleEventHandler(App) = null,
 closed_token: ?i64 = null,
@@ -797,6 +802,10 @@ pub fn performAction(
             self.setTitle(value.title);
             return true;
         },
+        .toggle_fullscreen => {
+            self.toggleFullscreen();
+            return true;
+        },
         else => return false,
     }
 }
@@ -959,6 +968,45 @@ fn boxString(_: *App, str: winrt.HSTRING) !*winrt.IInspectable {
     const factory = try winrt.getActivationFactory(com.IPropertyValueStatics, class_name);
     defer factory.release();
     return factory.createString(str);
+}
+
+/// Toggle fullscreen mode using Win32 borderless window approach.
+fn toggleFullscreen(self: *App) void {
+    const hwnd = self.hwnd orelse return;
+
+    if (self.is_fullscreen) {
+        // Restore windowed mode.
+        _ = os.SetWindowLongPtrW(hwnd, os.GWL_STYLE, self.saved_style);
+        _ = os.SetWindowPlacement(hwnd, &self.saved_placement);
+        const SWP_NOMOVE = 0x0002;
+        const SWP_NOSIZE = 0x0001;
+        _ = os.SetWindowPos(hwnd, null, 0, 0, 0, 0, os.SWP_FRAMECHANGED | os.SWP_NOOWNERZORDER | os.SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE);
+        self.is_fullscreen = false;
+    } else {
+        // Save current state and enter fullscreen.
+        self.saved_style = os.GetWindowLongPtrW(hwnd, os.GWL_STYLE);
+        _ = os.GetWindowPlacement(hwnd, &self.saved_placement);
+
+        // Remove caption and thick frame for borderless.
+        const new_style = self.saved_style & ~@as(usize, os.WS_OVERLAPPEDWINDOW);
+        _ = os.SetWindowLongPtrW(hwnd, os.GWL_STYLE, new_style);
+
+        // Expand to cover the full monitor.
+        const monitor = os.MonitorFromWindow(hwnd, os.MONITOR_DEFAULTTONEAREST) orelse return;
+        var mi: os.MONITORINFO = .{};
+        if (os.GetMonitorInfoW(monitor, &mi) != 0) {
+            _ = os.SetWindowPos(
+                hwnd,
+                os.HWND_TOP,
+                mi.rcMonitor.left,
+                mi.rcMonitor.top,
+                mi.rcMonitor.right - mi.rcMonitor.left,
+                mi.rcMonitor.bottom - mi.rcMonitor.top,
+                os.SWP_FRAMECHANGED | os.SWP_NOOWNERZORDER,
+            );
+        }
+        self.is_fullscreen = true;
+    }
 }
 
 /// Load XamlControlsResources into Application.Resources.
