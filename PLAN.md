@@ -233,10 +233,25 @@ zig build -Dapp-runtime=win32 -Drenderer=opengl
 - **結果**: TabView + TabViewItem + イベントハンドラ全て動作
 - **教訓**: WinUI3 の IXamlType は UWP と異なり get_BoxedType が追加されている
 
-### Phase 5: 実機テスト・安定化 — 進行中 (2026-03-03)
+### Phase 5: バグ修正・機能追加 — 完了 (2026-03-03)
+- **COM参照リーク修正**
+  - `newTab()` で `surface.init()` 成功後のエラーパスに `errdefer surface.deinit()` 追加
+  - `Surface.init()` で COM オブジェクト (swap_chain_panel, swap_chain_panel_native) に errdefer 追加
+  - `closeTab()` のエラーログ改善
+- **フォーカスコールバック追加**
+  - `WM_SETFOCUS` → `core_surface.focusCallback(true)`
+  - `WM_KILLFOCUS` → `core_surface.focusCallback(false)`
+  - `onSelectionChanged` でタブ切り替え時に旧Surface→focus(false)、新Surface→focus(true)
+- **タブタイトル更新**
+  - `IPropertyValueStatics` を com.zig に追加（WinRT string boxing）
+  - `setTitle()` がウィンドウタイトル + アクティブタブヘッダーの両方を更新
+  - `boxString()` ヘルパー: HSTRING → IInspectable (PropertyValue.CreateString)
+
+### Phase 6: 実機テスト — ユーザー操作待ち (2026-03-03)
 - [ ] IME 日本語入力の実機確認（infrastructure は実装済み）
 - [x] TabView の作成確認（ログ上は成功、IXamlType.ActivateInstance 経由）
 - [ ] TabView の表示・切り替え実機確認（ユーザー操作が必要）
+- [ ] タブタイトルがターミナルタイトルに追従するか確認
 - [ ] exit segfault が解消されたか確認（ユーザー操作が必要）
 - [ ] リサイズ動作確認（ユーザー操作が必要）
 - [x] ReleaseSafe ビルド動作確認（ログ上は全ステップ成功、安定動作）
