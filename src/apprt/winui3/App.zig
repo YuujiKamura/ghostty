@@ -21,295 +21,18 @@ const bootstrap = @import("bootstrap.zig");
 const com = @import("com.zig");
 const event = @import("event.zig");
 const os = @import("os.zig");
+const com_aggregation = @import("com_aggregation.zig");
+const input_overlay = @import("input_overlay.zig");
+const ime = @import("ime.zig");
 
 const log = std.log.scoped(.winui3);
 
 /// Timer ID for live resize preview.
 const RESIZE_TIMER_ID: usize = 1;
 
-// ---------------------------------------------------------------
-// ApplicationInitializationCallback — WinRT delegate for Application.Start()
-// IID: {D8EEF1C9-1234-56F1-9963-45DD9C80A661}
-// WinMD blob: 01 00 C9 F1 EE D8 34 12 F1 56 99 63 45 DD 9C 80 A6 61 00 00
-// vtable: IUnknown(0-2) + Invoke(3)
-// ---------------------------------------------------------------
-
-const InitCallback = struct {
-    /// COM-visible part — extern struct with lpVtbl at offset 0.
-    com: Com,
-    app: *App,
-
-    const Com = extern struct {
-        lpVtbl: *const VTable,
-
-        const VTable = extern struct {
-            QueryInterface: *const fn (*anyopaque, *const winrt.GUID, *?*anyopaque) callconv(.winapi) winrt.HRESULT,
-            AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-            Release: *const fn (*anyopaque) callconv(.winapi) u32,
-            Invoke: *const fn (*anyopaque, *anyopaque) callconv(.winapi) winrt.HRESULT,
-        };
-    };
-
-    const vtable_inst = Com.VTable{
-        .QueryInterface = &qiFn,
-        .AddRef = &addRefFn,
-        .Release = &releaseFn,
-        .Invoke = &invokeFn,
-    };
-
-    fn create(app: *App) InitCallback {
-        return .{
-            .com = .{ .lpVtbl = &vtable_inst },
-            .app = app,
-        };
-    }
-
-    fn comPtr(self: *InitCallback) *anyopaque {
-        return @ptrCast(&self.com);
-    }
-
-    fn fromComPtr(ptr: *anyopaque) *InitCallback {
-        const com_ptr: *Com = @ptrCast(@alignCast(ptr));
-        return @fieldParentPtr("com", com_ptr);
-    }
-
-    fn qiFn(this: *anyopaque, riid: *const winrt.GUID, ppv: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
-        const IID_IUnknown = winrt.GUID{ .Data1 = 0x00000000, .Data2 = 0x0000, .Data3 = 0x0000, .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
-        const IID_IAgileObject = winrt.GUID{ .Data1 = 0x94ea2b94, .Data2 = 0xe9cc, .Data3 = 0x49e0, .Data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
-        const IID_Self = winrt.GUID{ .Data1 = 0xd8eef1c9, .Data2 = 0x1234, .Data3 = 0x56f1, .Data4 = .{ 0x99, 0x63, 0x45, 0xdd, 0x9c, 0x80, 0xa6, 0x61 } };
-
-        if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject) or guidEql(riid, &IID_Self)) {
-            ppv.* = this;
-            return 0; // S_OK
-        }
-        ppv.* = null;
-        return @bitCast(@as(u32, 0x80004002)); // E_NOINTERFACE
-    }
-
-    fn addRefFn(_: *anyopaque) callconv(.winapi) u32 {
-        return 1;
-    }
-
-    fn releaseFn(_: *anyopaque) callconv(.winapi) u32 {
-        return 1;
-    }
-
-    fn invokeFn(this: *anyopaque, _: *anyopaque) callconv(.winapi) winrt.HRESULT {
-        const self = fromComPtr(this);
-        self.app.initXaml() catch |err| {
-            log.err("initXaml failed in Application.Start callback: {}", .{err});
-            return @bitCast(@as(u32, 0x80004005)); // E_FAIL
-        };
-        return 0; // S_OK
-    }
-};
-
-fn guidEql(a: *const winrt.GUID, b: *const winrt.GUID) bool {
-    return a.Data1 == b.Data1 and a.Data2 == b.Data2 and a.Data3 == b.Data3 and
-        std.mem.eql(u8, &a.Data4, &b.Data4);
-}
-
-// ---------------------------------------------------------------
-// AppOuter — COM aggregation wrapper for Application
-//
-// WinUI 3 custom controls (TabView, etc.) require their XAML templates to be
-// loaded via XamlControlsResources. The XAML framework discovers these templates
-// by calling IXamlMetadataProvider on the Application object. In normal C++/WinRT
-// apps, the XAML compiler generates this. Without a XAML compiler, we must
-// implement the COM aggregation pattern manually:
-//
-//   1. AppOuter acts as the "outer" (controlling) IUnknown
-//   2. IApplicationFactory::CreateInstance receives AppOuter as outer
-//   3. The WinRT Application becomes the "inner" (non-delegating) object
-//   4. QI for IXamlMetadataProvider → AppOuter handles it, delegating to
-//      an activated XamlControlsXamlMetaDataProvider instance
-//   5. QI for anything else → delegates to inner
-// ---------------------------------------------------------------
-
-const AppOuter = struct {
-    /// The COM-visible IUnknown vtable pointer — must be at offset 0.
-    iunknown: IUnknownVtblPtr,
-    /// The IXamlMetadataProvider vtable pointer — at offset 8.
-    imetadata: IMetadataVtblPtr,
-    /// Reference count.
-    ref_count: u32,
-    /// The inner (non-delegating) IInspectable from Application.
-    inner: ?*winrt.IInspectable,
-    /// XamlControlsXamlMetaDataProvider instance for IXamlMetadataProvider delegation.
-    provider: ?*com.IXamlMetadataProvider,
-
-    const IUnknownVtblPtr = extern struct {
-        lpVtbl: *const IUnknownVtbl,
-    };
-    const IUnknownVtbl = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const winrt.GUID, *?*anyopaque) callconv(.winapi) winrt.HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-    };
-
-    const IMetadataVtblPtr = extern struct {
-        lpVtbl: *const IMetadataVtbl,
-    };
-    const IMetadataVtbl = extern struct {
-        // IUnknown (slots 0-2) — delegating to outer
-        QueryInterface: *const fn (*anyopaque, *const winrt.GUID, *?*anyopaque) callconv(.winapi) winrt.HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        // IInspectable (slots 3-5)
-        GetIids: *const fn (*anyopaque, *u32, *?[*]winrt.GUID) callconv(.winapi) winrt.HRESULT,
-        GetRuntimeClassName: *const fn (*anyopaque, *?winrt.HSTRING) callconv(.winapi) winrt.HRESULT,
-        GetTrustLevel: *const fn (*anyopaque, *u32) callconv(.winapi) winrt.HRESULT,
-        // IXamlMetadataProvider (slots 6-8)
-        GetXamlType: *const fn (*anyopaque, [*]const u8, *?*anyopaque) callconv(.winapi) winrt.HRESULT,
-        GetXamlType_2: *const fn (*anyopaque, ?winrt.HSTRING, *?*anyopaque) callconv(.winapi) winrt.HRESULT,
-        GetXmlnsDefinitions: *const fn (*anyopaque, *u32, *?[*]*anyopaque) callconv(.winapi) winrt.HRESULT,
-    };
-
-    const iunknown_vtable = IUnknownVtbl{
-        .QueryInterface = &outerQueryInterface,
-        .AddRef = &outerAddRef,
-        .Release = &outerRelease,
-    };
-
-    const imetadata_vtable = IMetadataVtbl{
-        .QueryInterface = &metadataQueryInterface,
-        .AddRef = &metadataAddRef,
-        .Release = &metadataRelease,
-        .GetIids = &metadataGetIids,
-        .GetRuntimeClassName = &metadataGetRuntimeClassName,
-        .GetTrustLevel = &metadataGetTrustLevel,
-        .GetXamlType = &metadataGetXamlType,
-        .GetXamlType_2 = &metadataGetXamlType2,
-        .GetXmlnsDefinitions = &metadataGetXmlnsDefinitions,
-    };
-
-    fn init(self: *AppOuter) void {
-        self.* = .{
-            .iunknown = .{ .lpVtbl = &iunknown_vtable },
-            .imetadata = .{ .lpVtbl = &imetadata_vtable },
-            .ref_count = 1,
-            .inner = null,
-            .provider = null,
-        };
-    }
-
-    fn outerPtr(self: *AppOuter) *anyopaque {
-        return @ptrCast(&self.iunknown);
-    }
-
-    fn fromIUnknownPtr(ptr: *anyopaque) *AppOuter {
-        const p: *IUnknownVtblPtr = @ptrCast(@alignCast(ptr));
-        return @fieldParentPtr("iunknown", p);
-    }
-
-    fn fromIMetadataPtr(ptr: *anyopaque) *AppOuter {
-        const p: *IMetadataVtblPtr = @ptrCast(@alignCast(ptr));
-        return @fieldParentPtr("imetadata", p);
-    }
-
-    // --- Outer IUnknown (controlling unknown) ---
-
-    fn outerQueryInterface(this: *anyopaque, riid: *const winrt.GUID, ppv: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
-        const self = fromIUnknownPtr(this);
-        const IID_IUnknown = winrt.GUID{ .Data1 = 0x00000000, .Data2 = 0x0000, .Data3 = 0x0000, .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
-        const IID_IAgileObject = winrt.GUID{ .Data1 = 0x94ea2b94, .Data2 = 0xe9cc, .Data3 = 0x49e0, .Data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
-
-        // IXamlMetadataProvider → return our metadata interface
-        if (guidEql(riid, &com.IXamlMetadataProvider.IID)) {
-            ppv.* = @ptrCast(&self.imetadata);
-            _ = outerAddRef(this);
-            return 0; // S_OK
-        }
-
-        // IUnknown or IAgileObject → return outer
-        if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
-            ppv.* = this;
-            _ = outerAddRef(this);
-            return 0; // S_OK
-        }
-
-        // Everything else → delegate to inner (non-delegating QI)
-        if (self.inner) |inner| {
-            return inner.lpVtbl.QueryInterface(@ptrCast(inner), riid, ppv);
-        }
-
-        ppv.* = null;
-        return @bitCast(@as(u32, 0x80004002)); // E_NOINTERFACE
-    }
-
-    fn outerAddRef(this: *anyopaque) callconv(.winapi) u32 {
-        const self = fromIUnknownPtr(this);
-        self.ref_count += 1;
-        return self.ref_count;
-    }
-
-    fn outerRelease(this: *anyopaque) callconv(.winapi) u32 {
-        const self = fromIUnknownPtr(this);
-        self.ref_count -= 1;
-        return self.ref_count;
-    }
-
-    // --- IXamlMetadataProvider interface (delegating IUnknown to outer) ---
-
-    fn metadataQueryInterface(this: *anyopaque, riid: *const winrt.GUID, ppv: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
-        const self = fromIMetadataPtr(this);
-        return outerQueryInterface(@ptrCast(&self.iunknown), riid, ppv);
-    }
-
-    fn metadataAddRef(this: *anyopaque) callconv(.winapi) u32 {
-        const self = fromIMetadataPtr(this);
-        return outerAddRef(@ptrCast(&self.iunknown));
-    }
-
-    fn metadataRelease(this: *anyopaque) callconv(.winapi) u32 {
-        const self = fromIMetadataPtr(this);
-        return outerRelease(@ptrCast(&self.iunknown));
-    }
-
-    fn metadataGetIids(_: *anyopaque, count: *u32, iids: *?[*]winrt.GUID) callconv(.winapi) winrt.HRESULT {
-        count.* = 0;
-        iids.* = null;
-        return 0; // S_OK
-    }
-
-    fn metadataGetRuntimeClassName(_: *anyopaque, name: *?winrt.HSTRING) callconv(.winapi) winrt.HRESULT {
-        name.* = null;
-        return 0; // S_OK
-    }
-
-    fn metadataGetTrustLevel(_: *anyopaque, level: *u32) callconv(.winapi) winrt.HRESULT {
-        level.* = 0; // BaseTrust
-        return 0; // S_OK
-    }
-
-    fn metadataGetXamlType(this: *anyopaque, type_name: [*]const u8, result: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
-        const self = fromIMetadataPtr(this);
-        if (self.provider) |provider| {
-            return provider.lpVtbl.GetXamlType(@ptrCast(provider), type_name, result);
-        }
-        result.* = null;
-        return 0; // S_OK — return null IXamlType (type not found)
-    }
-
-    fn metadataGetXamlType2(this: *anyopaque, full_name: ?winrt.HSTRING, result: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
-        const self = fromIMetadataPtr(this);
-        if (self.provider) |provider| {
-            return provider.lpVtbl.GetXamlType_2(@ptrCast(provider), full_name, result);
-        }
-        result.* = null;
-        return 0; // S_OK — return null IXamlType (type not found)
-    }
-
-    fn metadataGetXmlnsDefinitions(this: *anyopaque, count: *u32, definitions: *?[*]*anyopaque) callconv(.winapi) winrt.HRESULT {
-        const self = fromIMetadataPtr(this);
-        if (self.provider) |provider| {
-            return provider.lpVtbl.GetXmlnsDefinitions(@ptrCast(provider), count, definitions);
-        }
-        count.* = 0;
-        definitions.* = null;
-        return 0; // S_OK
-    }
-};
+const InitCallback = com_aggregation.InitCallback;
+const AppOuter = com_aggregation.AppOuter;
+const guidEql = com_aggregation.guidEql;
 
 /// The core application.
 core_app: *CoreApp,
@@ -414,7 +137,7 @@ pub fn init(
 }
 
 /// Called from inside Application.Start() callback — XAML thread is active here.
-fn initXaml(self: *App) !void {
+pub fn initXaml(self: *App) !void {
     log.info("initXaml: creating Window inside XAML thread", .{});
 
     // Step 0: Create the Application instance via IApplicationFactory with COM aggregation.
@@ -602,7 +325,7 @@ fn initXaml(self: *App) !void {
     }
 
     // Create our input overlay HWND.
-    self.input_hwnd = createInputWindow(self.hwnd.?, @intFromPtr(self));
+    self.input_hwnd = input_overlay.createInputWindow(self.hwnd.?, @intFromPtr(self));
     if (self.input_hwnd) |input_hwnd| {
         // Enable IME on our input HWND.
         _ = os.ImmAssociateContextEx(input_hwnd, null, os.IACE_DEFAULT);
@@ -907,8 +630,22 @@ pub fn closeTab(self: *App, idx: usize) void {
     }
 }
 
+/// Close a surface by pointer (called from Surface.close).
+pub fn closeSurface(self: *App, surface: *Surface) void {
+    for (self.surfaces.items, 0..) |s, i| {
+        if (s == surface) {
+            self.closeTab(i);
+            return;
+        }
+    }
+    // Fallback: close the app if surface not found
+    if (self.hwnd) |hwnd| {
+        _ = os.PostMessageW(hwnd, os.WM_CLOSE, 0, 0);
+    }
+}
+
 /// Get the currently active Surface, or null if none.
-fn activeSurface(self: *App) ?*Surface {
+pub fn activeSurface(self: *App) ?*Surface {
     if (self.surfaces.items.len == 0) return null;
     if (self.active_surface_idx >= self.surfaces.items.len) return null;
     return self.surfaces.items[self.active_surface_idx];
@@ -1083,7 +820,7 @@ fn drainMailbox(self: *App) void {
 }
 
 fn setTitle(self: *App, title: [:0]const u8) void {
-    const h = winrt.hstringRuntime(title) catch return;
+    const h = winrt.hstringRuntime(self.core_app.alloc, title) catch return;
     defer winrt.deleteHString(h);
 
     // Update window title bar.
@@ -1160,9 +897,9 @@ fn subclassProc(
         os.WM_APP_BIND_SWAP_CHAIN => return handleBindSwapChain(wparam, lparam),
         // IME messages only handled in subclass as fallback (when input_hwnd failed).
         // When input_hwnd is active, IME messages go directly to inputWndProc.
-        os.WM_IME_STARTCOMPOSITION => return handleIMEStartComposition(app, hwnd, msg, wparam, lparam),
-        os.WM_IME_COMPOSITION => return handleIMEComposition(app, hwnd, msg, wparam, lparam),
-        os.WM_IME_ENDCOMPOSITION => return handleIMEEndComposition(app, hwnd, msg, wparam, lparam),
+        os.WM_IME_STARTCOMPOSITION => return ime.handleIMEStartComposition(app, hwnd, msg, wparam, lparam),
+        os.WM_IME_COMPOSITION => return ime.handleIMEComposition(app, hwnd, msg, wparam, lparam),
+        os.WM_IME_ENDCOMPOSITION => return ime.handleIMEEndComposition(app, hwnd, msg, wparam, lparam),
         os.WM_SETFOCUS => {
             // When the main or child HWND receives focus, redirect to our input HWND
             // so that keyboard/IME messages go to inputWndProc instead of WinUI3's TSF.
@@ -1326,336 +1063,3 @@ fn handleBindSwapChain(wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
     return 0;
 }
 
-// ---------------------------------------------------------------
-// IME (Input Method Editor) handlers for CJK text input
-// ---------------------------------------------------------------
-
-/// Dispatch to the correct default handler depending on whether hwnd is the
-/// input overlay (plain wndproc) or a subclassed HWND.
-inline fn imeDefProc(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
-    if (app.input_hwnd != null and app.input_hwnd.? == hwnd)
-        return os.DefWindowProcW(hwnd, msg, wparam, lparam);
-    return os.DefSubclassProc(hwnd, msg, wparam, lparam);
-}
-
-fn handleIMEStartComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
-    log.info("IME: WM_IME_STARTCOMPOSITION on HWND=0x{x}", .{@intFromPtr(hwnd)});
-    if (app.activeSurface()) |surface| {
-        if (surface.core_initialized) {
-            const himc = os.ImmGetContext(hwnd) orelse
-                return imeDefProc(app, hwnd, msg, wparam, lparam);
-            defer _ = os.ImmReleaseContext(hwnd, himc);
-
-            const ime_pos = surface.core_surface.imePoint();
-            const cf = os.COMPOSITIONFORM{
-                .dwStyle = os.CFS_POINT,
-                .ptCurrentPos = .{
-                    .x = @intFromFloat(ime_pos.x),
-                    .y = @intFromFloat(ime_pos.y),
-                },
-                .rcArea = .{},
-            };
-            _ = os.ImmSetCompositionWindow(himc, &cf);
-        }
-    }
-    return imeDefProc(app, hwnd, msg, wparam, lparam);
-}
-
-fn handleIMEComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
-    const lp: usize = @bitCast(lparam);
-    const lp_flags: u32 = @truncate(lp);
-    log.info("IME: WM_IME_COMPOSITION flags=0x{X:0>8} on HWND=0x{x}", .{ lp_flags, @intFromPtr(hwnd) });
-
-    if (app.activeSurface()) |surface| {
-        if (surface.core_initialized) {
-            const himc = os.ImmGetContext(hwnd) orelse
-                return imeDefProc(app, hwnd, msg, wparam, lparam);
-            defer _ = os.ImmReleaseContext(hwnd, himc);
-
-            // If a result string is ready, clear preedit.
-            // The actual committed text arrives via WM_CHAR from DefWindowProc/DefSubclassProc.
-            if (lp_flags & os.GCS_RESULTSTR != 0) {
-                log.info("IME: GCS_RESULTSTR — clearing preedit, committed text via WM_CHAR", .{});
-                surface.core_surface.preeditCallback(null) catch |err| {
-                    log.warn("IME preedit clear error: {}", .{err});
-                };
-            }
-
-            // If a composition string is present, send it as preedit text.
-            if (lp_flags & os.GCS_COMPSTR != 0) {
-                const byte_len = os.ImmGetCompositionStringW(himc, os.GCS_COMPSTR, null, 0);
-                if (byte_len > 0) {
-                    const ulen: u32 = @intCast(byte_len);
-                    var wide_buf: [256]u16 = undefined;
-                    // Clamp to buffer size (in bytes).
-                    const buf_bytes: u32 = @intCast(@min(ulen, wide_buf.len * 2));
-                    const actual_bytes = os.ImmGetCompositionStringW(himc, os.GCS_COMPSTR, @ptrCast(&wide_buf), buf_bytes);
-                    if (actual_bytes > 0) {
-                        const actual_ulen: usize = @intCast(actual_bytes);
-                        const wide_count = actual_ulen / 2;
-                        var utf8_buf: [1024]u8 = undefined;
-                        const utf8_len = imeUtf16ToUtf8(&utf8_buf, wide_buf[0..wide_count]);
-                        if (utf8_len > 0) {
-                            log.info("IME: preedit text ({d} bytes UTF-8)", .{utf8_len});
-                            surface.core_surface.preeditCallback(utf8_buf[0..utf8_len]) catch |err| {
-                                log.warn("IME preedit callback error: {}", .{err});
-                            };
-                        } else {
-                            surface.core_surface.preeditCallback(null) catch {};
-                        }
-                    } else {
-                        surface.core_surface.preeditCallback(null) catch {};
-                    }
-                } else {
-                    surface.core_surface.preeditCallback(null) catch {};
-                }
-            }
-
-            // Update IME window position.
-            const ime_pos = surface.core_surface.imePoint();
-            const cf = os.COMPOSITIONFORM{
-                .dwStyle = os.CFS_POINT,
-                .ptCurrentPos = .{
-                    .x = @intFromFloat(ime_pos.x),
-                    .y = @intFromFloat(ime_pos.y),
-                },
-                .rcArea = .{},
-            };
-            _ = os.ImmSetCompositionWindow(himc, &cf);
-        }
-    }
-    // Must call the default handler so the system generates WM_CHAR for committed text.
-    return imeDefProc(app, hwnd, msg, wparam, lparam);
-}
-
-fn handleIMEEndComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
-    log.info("IME: WM_IME_ENDCOMPOSITION on HWND=0x{x}", .{@intFromPtr(hwnd)});
-    if (app.activeSurface()) |surface| {
-        if (surface.core_initialized) {
-            surface.core_surface.preeditCallback(null) catch |err| {
-                log.warn("IME preedit end error: {}", .{err});
-            };
-        }
-    }
-    return imeDefProc(app, hwnd, msg, wparam, lparam);
-}
-
-// ---------------------------------------------------------------
-// Dedicated input HWND — bypasses WinUI3's TSF input stack
-// ---------------------------------------------------------------
-
-/// Window class name for our input overlay (UTF-16LE, null-terminated).
-const INPUT_CLASS_NAME = std.unicode.utf8ToUtf16LeStringLiteral("GhosttyInputOverlay");
-
-/// Whether the input window class has been registered.
-var input_class_registered: bool = false;
-
-/// Create a transparent child HWND for keyboard/IME input.
-/// This HWND is a standard Win32 window (not part of WinUI3's XAML tree)
-/// so it receives IME messages via the legacy IMM32 path without TSF interference.
-fn createInputWindow(parent: os.HWND, app_ptr: usize) ?os.HWND {
-    // Register the window class once.
-    if (!input_class_registered) {
-        const wc = os.WNDCLASSEXW{
-            .style = 0,
-            .lpfnWndProc = &inputWndProc,
-            .hInstance = os.GetModuleHandleW(null) orelse return null,
-            .lpszClassName = INPUT_CLASS_NAME,
-        };
-        const atom = os.RegisterClassExW(&wc);
-        if (atom == 0) {
-            log.err("createInputWindow: RegisterClassExW failed", .{});
-            return null;
-        }
-        input_class_registered = true;
-    }
-
-    // Get parent client rect for initial size.
-    var rc: os.RECT = .{};
-    _ = os.GetClientRect(parent, &rc);
-
-    const hinstance = os.GetModuleHandleW(null) orelse return null;
-
-    const hwnd = os.CreateWindowExW(
-        0, // no WS_EX_TRANSPARENT — we want this window to receive mouse clicks
-        INPUT_CLASS_NAME,
-        INPUT_CLASS_NAME, // window name (unused)
-        os.WS_CHILD | os.WS_VISIBLE, // child, visible
-        0,
-        0,
-        rc.right - rc.left,
-        rc.bottom - rc.top,
-        parent,
-        null,
-        hinstance,
-        null,
-    );
-    if (hwnd) |h| {
-        // Store the App pointer in GWLP_USERDATA for the wndproc.
-        _ = os.SetWindowLongPtrW(h, os.GWLP_USERDATA, app_ptr);
-        return h;
-    }
-    log.err("createInputWindow: CreateWindowExW failed", .{});
-    return null;
-}
-
-/// Window procedure for the dedicated input HWND.
-/// Handles keyboard, IME, and mouse messages. Forwards everything else to DefWindowProc.
-fn inputWndProc(
-    hwnd: os.HWND,
-    msg: os.UINT,
-    wparam: os.WPARAM,
-    lparam: os.LPARAM,
-) callconv(.winapi) os.LRESULT {
-    const app_ptr = os.GetWindowLongPtrW(hwnd, os.GWLP_USERDATA);
-    if (app_ptr == 0) return os.DefWindowProcW(hwnd, msg, wparam, lparam);
-    const app: *App = @ptrFromInt(app_ptr);
-
-    switch (msg) {
-        os.WM_KEYDOWN, os.WM_SYSKEYDOWN => {
-            if (app.activeSurface()) |surface| {
-                const wp: usize = @bitCast(wparam);
-                surface.handleKeyEvent(@truncate(wp), true);
-            }
-            return os.DefWindowProcW(hwnd, msg, wparam, lparam);
-        },
-        os.WM_KEYUP, os.WM_SYSKEYUP => {
-            if (app.activeSurface()) |surface| {
-                const wp: usize = @bitCast(wparam);
-                surface.handleKeyEvent(@truncate(wp), false);
-            }
-            return os.DefWindowProcW(hwnd, msg, wparam, lparam);
-        },
-        os.WM_CHAR => {
-            if (app.activeSurface()) |surface| {
-                const wp: usize = @bitCast(wparam);
-                surface.handleCharEvent(@truncate(wp));
-            }
-            // Do NOT call DefWindowProcW for WM_CHAR — we consumed it.
-            return 0;
-        },
-        os.WM_IME_STARTCOMPOSITION => return handleIMEStartComposition(app, hwnd, msg, wparam, lparam),
-        os.WM_IME_COMPOSITION => return handleIMEComposition(app, hwnd, msg, wparam, lparam),
-        os.WM_IME_ENDCOMPOSITION => return handleIMEEndComposition(app, hwnd, msg, wparam, lparam),
-        os.WM_IME_SETCONTEXT => {
-            // Let the system draw the default IME UI (candidate window etc.)
-            return os.DefWindowProcW(hwnd, msg, wparam, lparam);
-        },
-        os.WM_IME_NOTIFY => {
-            return os.DefWindowProcW(hwnd, msg, wparam, lparam);
-        },
-        os.WM_MOUSEMOVE => {
-            if (app.activeSurface()) |surface| {
-                const lp: usize = @bitCast(lparam);
-                const x: i16 = @bitCast(@as(u16, @truncate(lp)));
-                const y: i16 = @bitCast(@as(u16, @truncate(lp >> 16)));
-                surface.handleMouseMove(@floatFromInt(x), @floatFromInt(y));
-            }
-            return 0;
-        },
-        os.WM_LBUTTONDOWN => {
-            // Ensure we keep focus when clicked.
-            _ = os.SetFocus(hwnd);
-            if (app.activeSurface()) |surface| surface.handleMouseButton(.left, .press);
-            return 0;
-        },
-        os.WM_RBUTTONDOWN => {
-            if (app.activeSurface()) |surface| surface.handleMouseButton(.right, .press);
-            return 0;
-        },
-        os.WM_MBUTTONDOWN => {
-            if (app.activeSurface()) |surface| surface.handleMouseButton(.middle, .press);
-            return 0;
-        },
-        os.WM_LBUTTONUP => {
-            if (app.activeSurface()) |surface| surface.handleMouseButton(.left, .release);
-            return 0;
-        },
-        os.WM_RBUTTONUP => {
-            if (app.activeSurface()) |surface| surface.handleMouseButton(.right, .release);
-            return 0;
-        },
-        os.WM_MBUTTONUP => {
-            if (app.activeSurface()) |surface| surface.handleMouseButton(.middle, .release);
-            return 0;
-        },
-        os.WM_MOUSEWHEEL => {
-            if (app.activeSurface()) |surface| {
-                const wp: usize = @bitCast(wparam);
-                const delta: i16 = @bitCast(@as(u16, @truncate(wp >> 16)));
-                const offset = @as(f64, @floatFromInt(delta)) / 120.0;
-                surface.handleScroll(0, offset);
-            }
-            return 0;
-        },
-        os.WM_MOUSEHWHEEL => {
-            if (app.activeSurface()) |surface| {
-                const wp: usize = @bitCast(wparam);
-                const delta: i16 = @bitCast(@as(u16, @truncate(wp >> 16)));
-                const offset = @as(f64, @floatFromInt(delta)) / 120.0;
-                surface.handleScroll(offset, 0);
-            }
-            return 0;
-        },
-        os.WM_PAINT => {
-            // Validate the paint region so Windows doesn't keep sending WM_PAINT.
-            var ps: os.PAINTSTRUCT = .{};
-            _ = os.BeginPaint(hwnd, &ps);
-            _ = os.EndPaint(hwnd, &ps);
-            return 0;
-        },
-        os.WM_ERASEBKGND => return 1, // Don't erase — transparent overlay.
-        os.WM_SETFOCUS => {
-            log.info("inputWndProc: WM_SETFOCUS received on input HWND=0x{x}", .{@intFromPtr(hwnd)});
-            if (app.activeSurface()) |surface| {
-                surface.core_surface.focusCallback(true) catch |err| {
-                    log.warn("focusCallback(true) error: {}", .{err});
-                };
-            }
-            return os.DefWindowProcW(hwnd, msg, wparam, lparam);
-        },
-        os.WM_KILLFOCUS => {
-            log.info("inputWndProc: WM_KILLFOCUS on input HWND=0x{x}, new focus=0x{x}", .{ @intFromPtr(hwnd), wparam });
-            if (app.activeSurface()) |surface| {
-                surface.core_surface.focusCallback(false) catch |err| {
-                    log.warn("focusCallback(false) error: {}", .{err});
-                };
-            }
-            return os.DefWindowProcW(hwnd, msg, wparam, lparam);
-        },
-        else => {},
-    }
-
-    return os.DefWindowProcW(hwnd, msg, wparam, lparam);
-}
-
-/// Convert a UTF-16LE slice to UTF-8 in a destination buffer.
-/// Returns the number of UTF-8 bytes written. Stops on invalid data or buffer overflow.
-fn imeUtf16ToUtf8(dest: []u8, src: []const u16) usize {
-    var dest_i: usize = 0;
-    var src_i: usize = 0;
-    while (src_i < src.len) {
-        const cp: u21 = blk: {
-            const high = src[src_i];
-            if (high >= 0xD800 and high <= 0xDBFF) {
-                // High surrogate — need a low surrogate next.
-                src_i += 1;
-                if (src_i >= src.len) return dest_i;
-                const low = src[src_i];
-                if (low < 0xDC00 or low > 0xDFFF) return dest_i;
-                break :blk @as(u21, high - 0xD800) * 0x400 + @as(u21, low - 0xDC00) + 0x10000;
-            } else if (high >= 0xDC00 and high <= 0xDFFF) {
-                // Lone low surrogate — invalid.
-                return dest_i;
-            } else {
-                break :blk @as(u21, high);
-            }
-        };
-        src_i += 1;
-        const len = std.unicode.utf8CodepointSequenceLength(cp) catch return dest_i;
-        if (dest_i + len > dest.len) return dest_i;
-        _ = std.unicode.utf8Encode(cp, dest[dest_i..][0..len]) catch return dest_i;
-        dest_i += len;
-    }
-    return dest_i;
-}

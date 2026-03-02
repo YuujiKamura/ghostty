@@ -1,5 +1,6 @@
 const std = @import("std");
 const input = @import("../../input.zig");
+const os = @import("os.zig");
 
 const Key = input.Key;
 const Mods = input.Mods;
@@ -228,10 +229,17 @@ pub fn vkToKey(vk: u16) ?Key {
 }
 
 /// Maps a Win32 Virtual Key code to the unshifted Unicode codepoint.
-/// This is needed for keybinding matching: bindings like ctrl+shift+v use
-/// `.unicode = 'v'`, so we must provide the unshifted codepoint alongside
-/// the physical key.
+/// Uses MapVirtualKeyW for dynamic keyboard-layout-aware resolution.
+/// Falls back to a US layout table when MapVirtualKeyW returns 0.
 pub fn vkToUnshiftedCodepoint(vk: u16) u21 {
+    // Try dynamic resolution via current keyboard layout first.
+    const mapped = os.MapVirtualKeyW(@as(os.UINT, vk), os.MAPVK_VK_TO_CHAR);
+    if (mapped != 0) {
+        // MapVirtualKeyW returns the unshifted character in the low word.
+        // Bit 31 is set for dead keys — mask it off to get the base codepoint.
+        return @intCast(mapped & 0x7FFFFFFF);
+    }
+    // Fallback: static US layout table for keys MapVirtualKeyW doesn't resolve.
     return switch (vk) {
         // A-Z → lowercase a-z
         0x41...0x5A => @as(u21, vk) | 0x20,
@@ -239,7 +247,7 @@ pub fn vkToUnshiftedCodepoint(vk: u16) u21 {
         0x30...0x39 => @as(u21, vk),
         // Space
         VK_SPACE => ' ',
-        // Common OEM keys (US layout)
+        // OEM keys (US layout fallback)
         VK_OEM_1 => ';',
         VK_OEM_PLUS => '=',
         VK_OEM_COMMA => ',',

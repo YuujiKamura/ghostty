@@ -51,12 +51,11 @@ pub const IApplicationStatics = extern struct {
         LoadComponent_2: VtblPlaceholder, // 9
     };
 
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
     pub fn start(self: *IApplicationStatics, callback: *anyopaque) WinRTError!void {
         try hrCheck(self.lpVtbl.Start(@ptrCast(self), callback));
-    }
-
-    pub fn release(self: *IApplicationStatics) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
     }
 };
 
@@ -85,6 +84,9 @@ pub const IApplicationFactory = extern struct {
         CreateInstance: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT, // 6
     };
 
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
     /// Create an Application instance with COM aggregation.
     /// `outer` is the controlling IUnknown (or null for non-aggregated creation).
     /// Returns the inner IInspectable (non-delegating) and the wrapper instance.
@@ -96,10 +98,6 @@ pub const IApplicationFactory = extern struct {
             .inner = @ptrCast(@alignCast(inner orelse return error.WinRTFailed)),
             .instance = @ptrCast(@alignCast(instance orelse return error.WinRTFailed)),
         };
-    }
-
-    pub fn release(self: *IApplicationFactory) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
     }
 };
 
@@ -139,6 +137,9 @@ pub const IApplication = extern struct {
         Exit: *const fn (*anyopaque) callconv(.winapi) HRESULT, // 17
     };
 
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
     pub fn getResources(self: *IApplication) WinRTError!*IInspectable {
         var result: ?*anyopaque = null;
         try hrCheck(self.lpVtbl.get_Resources(@ptrCast(self), &result));
@@ -151,10 +152,6 @@ pub const IApplication = extern struct {
 
     pub fn exit(self: *IApplication) WinRTError!void {
         try hrCheck(self.lpVtbl.Exit(@ptrCast(self)));
-    }
-
-    pub fn release(self: *IApplication) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
     }
 };
 
@@ -205,6 +202,9 @@ pub const IWindow = extern struct {
         SetTitleBar: VtblPlaceholder, // 28
     };
 
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
     pub fn activate(self: *IWindow) WinRTError!void {
         try hrCheck(self.lpVtbl.Activate(@ptrCast(self)));
     }
@@ -236,16 +236,6 @@ pub const IWindow = extern struct {
         try hrCheck(self.lpVtbl.add_SizeChanged(@ptrCast(self), handler, &token));
         return token;
     }
-
-    pub fn queryInterface(self: *IWindow, comptime T: type) WinRTError!*T {
-        var result: ?*anyopaque = null;
-        try hrCheck(self.lpVtbl.QueryInterface(@ptrCast(self), &T.IID, &result));
-        return @ptrCast(@alignCast(result orelse return error.WinRTFailed));
-    }
-
-    pub fn release(self: *IWindow) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
-    }
 };
 
 // ============================================================================
@@ -273,14 +263,13 @@ pub const IWindowNative = extern struct {
         get_WindowHandle: *const fn (*anyopaque, *?HWND) callconv(.winapi) HRESULT,
     };
 
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
     pub fn getWindowHandle(self: *IWindowNative) WinRTError!HWND {
         var hwnd: ?HWND = null;
         try hrCheck(self.lpVtbl.get_WindowHandle(@ptrCast(self), &hwnd));
         return hwnd orelse error.WinRTFailed;
-    }
-
-    pub fn release(self: *IWindowNative) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
     }
 };
 
@@ -309,12 +298,11 @@ pub const ISwapChainPanelNative = extern struct {
         SetSwapChain: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
 
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
     pub fn setSwapChain(self: *ISwapChainPanelNative, swap_chain: ?*anyopaque) WinRTError!void {
         try hrCheck(self.lpVtbl.SetSwapChain(@ptrCast(self), swap_chain));
-    }
-
-    pub fn release(self: *ISwapChainPanelNative) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
     }
 };
 
@@ -397,6 +385,9 @@ pub const ITabView = extern struct {
         remove_TabStripDrop: VtblPlaceholder, // 60
     };
 
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
     pub fn getTabItems(self: *ITabView) WinRTError!*IVector {
         var result: ?*IVector = null;
         try hrCheck(self.lpVtbl.get_TabItems(@ptrCast(self), &result));
@@ -442,16 +433,6 @@ pub const ITabView = extern struct {
     pub fn removeSelectionChanged(self: *ITabView, token: i64) WinRTError!void {
         try hrCheck(self.lpVtbl.remove_SelectionChanged(@ptrCast(self), token));
     }
-
-    pub fn queryInterface(self: *ITabView, comptime T: type) WinRTError!*T {
-        var result: ?*anyopaque = null;
-        try hrCheck(self.lpVtbl.QueryInterface(@ptrCast(self), &T.IID, &result));
-        return @ptrCast(@alignCast(result orelse return error.WinRTFailed));
-    }
-
-    pub fn release(self: *ITabView) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
-    }
 };
 
 // ============================================================================
@@ -489,22 +470,15 @@ pub const ITabViewItem = extern struct {
         remove_CloseRequested: VtblPlaceholder, // 16
     };
 
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
     pub fn putHeader(self: *ITabViewItem, header: ?*anyopaque) WinRTError!void {
         try hrCheck(self.lpVtbl.put_Header(@ptrCast(self), header));
     }
 
     pub fn putIsClosable(self: *ITabViewItem, closable: bool) WinRTError!void {
         try hrCheck(self.lpVtbl.put_IsClosable(@ptrCast(self), @intFromBool(closable)));
-    }
-
-    pub fn queryInterface(self: *ITabViewItem, comptime T: type) WinRTError!*T {
-        var result: ?*anyopaque = null;
-        try hrCheck(self.lpVtbl.QueryInterface(@ptrCast(self), &T.IID, &result));
-        return @ptrCast(@alignCast(result orelse return error.WinRTFailed));
-    }
-
-    pub fn release(self: *ITabViewItem) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
     }
 };
 
@@ -541,12 +515,11 @@ pub const IContentControl = extern struct {
         get_ContentTemplateRoot: VtblPlaceholder, // 14
     };
 
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
     pub fn putContent(self: *IContentControl, content: ?*anyopaque) WinRTError!void {
         try hrCheck(self.lpVtbl.put_Content(@ptrCast(self), content));
-    }
-
-    pub fn release(self: *IContentControl) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
     }
 };
 
@@ -590,6 +563,9 @@ pub const IVector = extern struct {
         ReplaceAll: VtblPlaceholder, // 17
     };
 
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
     pub fn getAt(self: *IVector, index: u32) WinRTError!*anyopaque {
         var result: ?*anyopaque = null;
         try hrCheck(self.lpVtbl.GetAt(@ptrCast(self), index, &result));
@@ -612,10 +588,6 @@ pub const IVector = extern struct {
 
     pub fn append(self: *IVector, item: ?*anyopaque) WinRTError!void {
         try hrCheck(self.lpVtbl.Append(@ptrCast(self), item));
-    }
-
-    pub fn release(self: *IVector) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
     }
 };
 
@@ -647,14 +619,13 @@ pub const IResourceDictionary = extern struct {
         get_ThemeDictionaries: VtblPlaceholder, // 9
     };
 
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
     pub fn getMergedDictionaries(self: *IResourceDictionary) WinRTError!*IVector {
         var result: ?*IVector = null;
         try hrCheck(self.lpVtbl.get_MergedDictionaries(@ptrCast(self), &result));
         return result orelse error.WinRTFailed;
-    }
-
-    pub fn release(self: *IResourceDictionary) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
     }
 };
 
@@ -685,17 +656,14 @@ pub const IXamlMetadataProvider = extern struct {
         GetXmlnsDefinitions: *const fn (*anyopaque, *u32, *?[*]*anyopaque) callconv(.winapi) HRESULT, // 8
     };
 
-    pub fn release(self: *IXamlMetadataProvider) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
-    }
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
 
     /// Call GetXamlType(fullName) → IXamlType (slot 7).
-    pub fn getXamlType(self: *IXamlMetadataProvider, full_name: ?HSTRING) !*IXamlType {
+    pub fn getXamlType(self: *IXamlMetadataProvider, full_name: ?HSTRING) WinRTError!*IXamlType {
         var result: ?*anyopaque = null;
-        const hr = self.lpVtbl.GetXamlType_2(@ptrCast(self), full_name, &result);
-        if (hr < 0) return error.ComCallFailed;
-        if (result == null) return error.ComCallFailed;
-        return @ptrCast(@alignCast(result.?));
+        try hrCheck(self.lpVtbl.GetXamlType_2(@ptrCast(self), full_name, &result));
+        return @ptrCast(@alignCast(result orelse return error.WinRTFailed));
     }
 };
 
@@ -744,17 +712,14 @@ pub const IXamlType = extern struct {
         RunInitializer: VtblPlaceholder, // 24
     };
 
-    pub fn release(self: *IXamlType) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
-    }
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
 
     /// Create an instance of this XAML type.
-    pub fn activateInstance(self: *IXamlType) !*IInspectable {
+    pub fn activateInstance(self: *IXamlType) WinRTError!*IInspectable {
         var result: ?*anyopaque = null;
-        const hr = self.lpVtbl.ActivateInstance(@ptrCast(self), &result);
-        if (hr < 0) return error.ComCallFailed;
-        if (result == null) return error.ComCallFailed;
-        return @ptrCast(@alignCast(result.?));
+        try hrCheck(self.lpVtbl.ActivateInstance(@ptrCast(self), &result));
+        return @ptrCast(@alignCast(result orelse return error.WinRTFailed));
     }
 };
 
@@ -842,7 +807,22 @@ pub const IPropertyValueStatics = extern struct {
         return result orelse error.WinRTFailed;
     }
 
-    pub fn release(self: *IPropertyValueStatics) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
-    }
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
 };
+
+// ============================================================================
+// Common COM helpers — reduce release/queryInterface boilerplate
+// ============================================================================
+
+/// Release a COM object. Works with any interface struct that has lpVtbl.Release.
+pub inline fn comRelease(self: anytype) void {
+    _ = self.lpVtbl.Release(@ptrCast(self));
+}
+
+/// QueryInterface on any COM object. Works with any interface struct that has lpVtbl.QueryInterface.
+pub inline fn comQueryInterface(self: anytype, comptime T: type) WinRTError!*T {
+    var result: ?*anyopaque = null;
+    try hrCheck(self.lpVtbl.QueryInterface(@ptrCast(self), &T.IID, &result));
+    return @ptrCast(@alignCast(result orelse return error.WinRTFailed));
+}

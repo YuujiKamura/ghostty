@@ -1,0 +1,120 @@
+/// IME (Input Method Editor) handlers for CJK text input.
+///
+/// Extracted from App.zig — handles WM_IME_STARTCOMPOSITION,
+/// WM_IME_COMPOSITION, and WM_IME_ENDCOMPOSITION messages.
+const std = @import("std");
+const os = @import("os.zig");
+const App = @import("App.zig");
+const input_overlay = @import("input_overlay.zig");
+
+const log = std.log.scoped(.winui3);
+
+/// Dispatch to the correct default handler depending on whether hwnd is the
+/// input overlay (plain wndproc) or a subclassed HWND.
+pub inline fn imeDefProc(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
+    if (app.input_hwnd != null and app.input_hwnd.? == hwnd)
+        return os.DefWindowProcW(hwnd, msg, wparam, lparam);
+    return os.DefSubclassProc(hwnd, msg, wparam, lparam);
+}
+
+pub fn handleIMEStartComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
+    log.info("IME: WM_IME_STARTCOMPOSITION on HWND=0x{x}", .{@intFromPtr(hwnd)});
+    if (app.activeSurface()) |surface| {
+        if (surface.core_initialized) {
+            const himc = os.ImmGetContext(hwnd) orelse
+                return imeDefProc(app, hwnd, msg, wparam, lparam);
+            defer _ = os.ImmReleaseContext(hwnd, himc);
+
+            const ime_pos = surface.core_surface.imePoint();
+            const cf = os.COMPOSITIONFORM{
+                .dwStyle = os.CFS_POINT,
+                .ptCurrentPos = .{
+                    .x = @intFromFloat(ime_pos.x),
+                    .y = @intFromFloat(ime_pos.y),
+                },
+                .rcArea = .{},
+            };
+            _ = os.ImmSetCompositionWindow(himc, &cf);
+        }
+    }
+    return imeDefProc(app, hwnd, msg, wparam, lparam);
+}
+
+pub fn handleIMEComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
+    const lp: usize = @bitCast(lparam);
+    const lp_flags: u32 = @truncate(lp);
+    log.info("IME: WM_IME_COMPOSITION flags=0x{X:0>8} on HWND=0x{x}", .{ lp_flags, @intFromPtr(hwnd) });
+
+    if (app.activeSurface()) |surface| {
+        if (surface.core_initialized) {
+            const himc = os.ImmGetContext(hwnd) orelse
+                return imeDefProc(app, hwnd, msg, wparam, lparam);
+            defer _ = os.ImmReleaseContext(hwnd, himc);
+
+            // If a result string is ready, clear preedit.
+            // The actual committed text arrives via WM_CHAR from DefWindowProc/DefSubclassProc.
+            if (lp_flags & os.GCS_RESULTSTR != 0) {
+                log.info("IME: GCS_RESULTSTR — clearing preedit, committed text via WM_CHAR", .{});
+                surface.core_surface.preeditCallback(null) catch |err| {
+                    log.warn("IME preedit clear error: {}", .{err});
+                };
+            }
+
+            // If a composition string is present, send it as preedit text.
+            if (lp_flags & os.GCS_COMPSTR != 0) {
+                const byte_len = os.ImmGetCompositionStringW(himc, os.GCS_COMPSTR, null, 0);
+                if (byte_len > 0) {
+                    const ulen: u32 = @intCast(byte_len);
+                    var wide_buf: [256]u16 = undefined;
+                    // Clamp to buffer size (in bytes).
+                    const buf_bytes: u32 = @intCast(@min(ulen, wide_buf.len * 2));
+                    const actual_bytes = os.ImmGetCompositionStringW(himc, os.GCS_COMPSTR, @ptrCast(&wide_buf), buf_bytes);
+                    if (actual_bytes > 0) {
+                        const actual_ulen: usize = @intCast(actual_bytes);
+                        const wide_count = actual_ulen / 2;
+                        var utf8_buf: [1024]u8 = undefined;
+                        const utf8_len = input_overlay.imeUtf16ToUtf8(&utf8_buf, wide_buf[0..wide_count]);
+                        if (utf8_len > 0) {
+                            log.info("IME: preedit text ({d} bytes UTF-8)", .{utf8_len});
+                            surface.core_surface.preeditCallback(utf8_buf[0..utf8_len]) catch |err| {
+                                log.warn("IME preedit callback error: {}", .{err});
+                            };
+                        } else {
+                            surface.core_surface.preeditCallback(null) catch {};
+                        }
+                    } else {
+                        surface.core_surface.preeditCallback(null) catch {};
+                    }
+                } else {
+                    surface.core_surface.preeditCallback(null) catch {};
+                }
+            }
+
+            // Update IME window position.
+            const ime_pos = surface.core_surface.imePoint();
+            const cf = os.COMPOSITIONFORM{
+                .dwStyle = os.CFS_POINT,
+                .ptCurrentPos = .{
+                    .x = @intFromFloat(ime_pos.x),
+                    .y = @intFromFloat(ime_pos.y),
+                },
+                .rcArea = .{},
+            };
+            _ = os.ImmSetCompositionWindow(himc, &cf);
+        }
+    }
+    // Must call the default handler so the system generates WM_CHAR for committed text.
+    return imeDefProc(app, hwnd, msg, wparam, lparam);
+}
+
+pub fn handleIMEEndComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
+    log.info("IME: WM_IME_ENDCOMPOSITION on HWND=0x{x}", .{@intFromPtr(hwnd)});
+    if (app.activeSurface()) |surface| {
+        if (surface.core_initialized) {
+            surface.core_surface.preeditCallback(null) catch |err| {
+                log.warn("IME preedit end error: {}", .{err});
+            };
+        }
+    }
+    return imeDefProc(app, hwnd, msg, wparam, lparam);
+}

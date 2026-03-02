@@ -86,6 +86,9 @@ pub const MWMO_INPUTAVAILABLE: DWORD = 0x0004;
 pub const WAIT_TIMEOUT: DWORD = 0x00000102;
 pub const INFINITE: DWORD = 0xFFFFFFFF;
 
+// --- MapVirtualKeyW ---
+pub const MAPVK_VK_TO_CHAR: UINT = 2;
+
 // --- SetWindowPos flags ---
 pub const SWP_NOZORDER: UINT = 0x0004;
 pub const SWP_NOACTIVATE: UINT = 0x0010;
@@ -245,6 +248,9 @@ pub extern "user32" fn MsgWaitForMultipleObjectsEx(
     dwWakeMask: DWORD,
     dwFlags: DWORD,
 ) callconv(.winapi) DWORD;
+
+pub extern "user32" fn MapVirtualKeyW(uCode: UINT, uMapType: UINT) callconv(.winapi) UINT;
+pub extern "user32" fn GetKeyboardLayout(idThread: DWORD) callconv(.winapi) usize;
 
 // --- kernel32 extern declarations ---
 pub extern "kernel32" fn GetModuleHandleW(lpModuleName: ?LPCWSTR) callconv(.winapi) ?HINSTANCE;

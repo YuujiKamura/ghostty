@@ -160,17 +160,7 @@ pub fn rtApp(self: *Surface) *App {
 
 pub fn close(self: *Surface, process_active: bool) void {
     _ = process_active;
-    // Find this surface's index and close its tab
-    for (self.app.surfaces.items, 0..) |s, i| {
-        if (s == self) {
-            self.app.closeTab(i);
-            return;
-        }
-    }
-    // Fallback: close the app if surface not found
-    if (self.app.hwnd) |hwnd| {
-        _ = os.PostMessageW(hwnd, os.WM_CLOSE, 0, 0);
-    }
+    self.app.closeSurface(self);
 }
 
 pub fn getTitle(_: *Surface) ?[:0]const u8 {

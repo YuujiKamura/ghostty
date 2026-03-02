@@ -10,6 +10,7 @@
 //! Pattern follows src/renderer/d3d11/com.zig.
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.winui3);
 
 // --- Windows base types ---
@@ -65,20 +66,19 @@ pub fn hstring(comptime utf8: []const u8) WinRTError!HSTRING {
 }
 
 /// Create HSTRING from a runtime UTF-8 string.
-/// Uses a stack buffer (512 code units) which covers virtually all real titles.
+/// Uses a stack buffer (512 code units) for short strings; heap-allocates for longer ones.
 /// The returned HSTRING must be freed with deleteHString.
-pub fn hstringRuntime(utf8: []const u8) WinRTError!HSTRING {
-    var buf: [512]u16 = undefined;
-    const len = std.unicode.utf8ToUtf16Le(&buf, utf8) catch {
-        // Truncation or invalid UTF-8 — use what we have.
-        var safe_len: usize = buf.len;
-        while (safe_len > 0 and buf[safe_len - 1] == 0) safe_len -= 1;
-        if (safe_len > 0 and buf[safe_len - 1] >= 0xD800 and buf[safe_len - 1] <= 0xDBFF) {
-            safe_len -= 1;
-        }
-        return createHString(buf[0..safe_len]);
-    };
-    return createHString(buf[0..len]);
+pub fn hstringRuntime(alloc: Allocator, utf8: []const u8) WinRTError!HSTRING {
+    var stack_buf: [512]u16 = undefined;
+    if (utf8.len <= stack_buf.len) {
+        const len = std.unicode.utf8ToUtf16Le(&stack_buf, utf8) catch return error.WinRTFailed;
+        return createHString(stack_buf[0..len]);
+    }
+    // Heap allocate for long strings (utf8.len >= UTF-16 code unit count)
+    const heap_buf = alloc.alloc(u16, utf8.len) catch return error.WinRTFailed;
+    defer alloc.free(heap_buf);
+    const len = std.unicode.utf8ToUtf16Le(heap_buf, utf8) catch return error.WinRTFailed;
+    return createHString(heap_buf[0..len]);
 }
 
 // ============================================================================
@@ -191,7 +191,7 @@ const RoGetActivationFactoryFn = *const fn (HSTRING, *const GUID, *?*anyopaque) 
 const WindowsCreateStringFn = *const fn ([*]const u16, UINT32, *?HSTRING) callconv(.winapi) HRESULT;
 const WindowsDeleteStringFn = *const fn (?HSTRING) callconv(.winapi) HRESULT;
 
-var combase_loaded: bool = false;
+var combase_loaded = std.atomic.Value(bool).init(false);
 var fn_RoInitialize: ?RoInitializeFn = null;
 var fn_RoUninitialize: ?RoUninitializeFn = null;
 var fn_RoActivateInstance: ?RoActivateInstanceFn = null;
@@ -200,7 +200,7 @@ var fn_WindowsCreateString: ?WindowsCreateStringFn = null;
 var fn_WindowsDeleteString: ?WindowsDeleteStringFn = null;
 
 fn loadCombase() WinRTError!void {
-    if (combase_loaded) return;
+    if (combase_loaded.load(.acquire)) return;
 
     const dll_name = std.unicode.utf8ToUtf16LeStringLiteral("combase.dll");
     const module = std.os.windows.kernel32.LoadLibraryW(dll_name) orelse {
@@ -233,7 +233,7 @@ fn loadCombase() WinRTError!void {
         return error.WinRTFailed;
     });
 
-    combase_loaded = true;
+    combase_loaded.store(true, .release);
 }
 
 pub fn RoInitialize(initType: u32) HRESULT {
