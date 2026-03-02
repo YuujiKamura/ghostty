@@ -33,6 +33,7 @@ pub const WM_SIZE: UINT = 0x0005;
 pub const WM_PAINT: UINT = 0x000F;
 pub const WM_CLOSE: UINT = 0x0010;
 pub const WM_QUIT: UINT = 0x0012;
+pub const WM_SYSCOMMAND: UINT = 0x0112;
 pub const WM_ERASEBKGND: UINT = 0x0014;
 pub const WM_KEYDOWN: UINT = 0x0100;
 pub const WM_KEYUP: UINT = 0x0101;
@@ -54,6 +55,10 @@ pub const WM_EXITSIZEMOVE: UINT = 0x0232;
 pub const WM_DPICHANGED: UINT = 0x02E0;
 pub const WM_USER: UINT = 0x0400;
 
+// --- Application-defined messages (WM_USER + N) ---
+/// Posted by the renderer thread to request swap chain binding on the UI thread.
+pub const WM_APP_BIND_SWAP_CHAIN: UINT = WM_USER + 1;
+
 // --- Window styles ---
 pub const WS_OVERLAPPEDWINDOW: DWORD = 0x00CF0000;
 pub const WS_VISIBLE: DWORD = 0x10000000;
@@ -73,6 +78,7 @@ pub const PM_NOREMOVE: UINT = 0x0000;
 pub const GWLP_USERDATA: c_int = -21;
 pub const CF_UNICODETEXT: UINT = 13;
 pub const GMEM_MOVEABLE: UINT = 0x0002;
+pub const SC_CLOSE: usize = 0xF060;
 
 // --- MsgWaitForMultipleObjectsEx ---
 pub const QS_ALLINPUT: DWORD = 0x04FF;
@@ -214,6 +220,12 @@ pub extern "user32" fn SetClipboardData(uFormat: UINT, hMem: LPVOID) callconv(.w
 pub extern "user32" fn EmptyClipboard() callconv(.winapi) BOOL;
 pub extern "user32" fn SetCapture(hWnd: HWND) callconv(.winapi) ?HWND;
 pub extern "user32" fn ReleaseCapture() callconv(.winapi) BOOL;
+pub extern "user32" fn GetFocus() callconv(.winapi) ?HWND;
+pub extern "user32" fn GetWindow(hWnd: HWND, uCmd: UINT) callconv(.winapi) ?HWND;
+pub extern "user32" fn GetAncestor(hWnd: HWND, gaFlags: UINT) callconv(.winapi) ?HWND;
+pub const GW_CHILD: UINT = 5;
+pub const GW_HWNDNEXT: UINT = 2;
+pub const GA_ROOT: UINT = 2;
 pub extern "user32" fn UnregisterClassW(lpClassName: LPCWSTR, hInstance: ?HINSTANCE) callconv(.winapi) BOOL;
 pub extern "user32" fn SetWindowPos(
     hWnd: HWND,
@@ -283,6 +295,30 @@ pub extern "imm32" fn ImmGetContext(hWnd: HWND) callconv(.winapi) HIMC;
 pub extern "imm32" fn ImmReleaseContext(hWnd: HWND, hIMC: HIMC) callconv(.winapi) BOOL;
 pub extern "imm32" fn ImmGetCompositionStringW(hIMC: HIMC, dwIndex: DWORD, lpBuf: LPVOID, dwBufLen: DWORD) callconv(.winapi) LONG;
 pub extern "imm32" fn ImmSetCompositionWindow(hIMC: HIMC, lpCompForm: *const COMPOSITIONFORM) callconv(.winapi) BOOL;
+pub extern "imm32" fn ImmAssociateContextEx(hWnd: HWND, hIMC: HIMC, dwFlags: DWORD) callconv(.winapi) BOOL;
+pub const IACE_DEFAULT: DWORD = 0x0010;
+
+// --- Window styles (for input overlay HWND) ---
+pub const WS_CHILD: DWORD = 0x40000000;
+pub const WS_EX_TRANSPARENT: DWORD = 0x00000020;
+pub const WS_EX_NOACTIVATE: DWORD = 0x08000000;
+
+// --- SetFocus / SetParent ---
+pub extern "user32" fn SetFocus(hWnd: ?HWND) callconv(.winapi) ?HWND;
+pub extern "user32" fn SetParent(hWndChild: HWND, hWndNewParent: ?HWND) callconv(.winapi) ?HWND;
+pub extern "user32" fn MoveWindow(hWnd: HWND, X: c_int, Y: c_int, nWidth: c_int, nHeight: c_int, bRepaint: BOOL) callconv(.winapi) BOOL;
+
+// --- WM_SETFOCUS / WM_KILLFOCUS ---
+pub const WM_SETFOCUS: UINT = 0x0007;
+pub const WM_KILLFOCUS: UINT = 0x0008;
+
+// --- WM_IME_SETCONTEXT ---
+pub const WM_IME_SETCONTEXT: UINT = 0x0281;
+pub const WM_IME_NOTIFY: UINT = 0x0282;
+
+// --- ImmSetOpenStatus / ImmGetOpenStatus ---
+pub extern "imm32" fn ImmSetOpenStatus(hIMC: HIMC, fOpen: BOOL) callconv(.winapi) BOOL;
+pub extern "imm32" fn ImmGetOpenStatus(hIMC: HIMC) callconv(.winapi) BOOL;
 
 // --- winmm extern declarations ---
 pub extern "winmm" fn timeBeginPeriod(uPeriod: UINT) callconv(.winapi) UINT;

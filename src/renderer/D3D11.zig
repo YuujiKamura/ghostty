@@ -176,11 +176,8 @@ pub fn threadEnter(self: *D3D11, surface: *apprt.Surface) !void {
             log.err("CreateSwapChainForComposition failed", .{});
             return error.D3D11InitFailed;
         };
-        // Bind the swap chain to the SwapChainPanel
-        surface.bindSwapChain(@ptrCast(self.swap_chain.?)) catch {
-            log.err("bindSwapChain to SwapChainPanel failed", .{});
-            return error.D3D11InitFailed;
-        };
+        // Post swap chain binding to the UI thread (async — will happen via WM_USER+1).
+        surface.bindSwapChain(@ptrCast(self.swap_chain.?));
     } else {
         // HWND swap chain (win32 path)
         const sc_desc = com.DXGI_SWAP_CHAIN_DESC1{

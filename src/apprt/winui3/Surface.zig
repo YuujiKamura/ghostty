@@ -117,6 +117,17 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
 }
 
 pub fn deinit(self: *Surface) void {
+    // Stop the renderer/IO threads FIRST by tearing down core_surface.
+    // This joins the renderer thread, ensuring no further bindSwapChain
+    // calls (or WM_APP_BIND_SWAP_CHAIN posts) can occur after we release
+    // the COM objects below.
+    if (self.core_initialized) {
+        self.app.core_app.deleteSurface(self);
+        self.core_surface.deinit();
+        self.core_initialized = false;
+    }
+
+    // Now safe to release COM objects -- renderer thread is stopped.
     if (self.swap_chain_panel_native) |native| {
         native.release();
         self.swap_chain_panel_native = null;
@@ -128,12 +139,6 @@ pub fn deinit(self: *Surface) void {
     if (self.tab_view_item_inspectable) |tvi| {
         _ = tvi.release();
         self.tab_view_item_inspectable = null;
-    }
-
-    if (self.core_initialized) {
-        self.app.core_app.deleteSurface(self);
-        self.core_surface.deinit();
-        self.core_initialized = false;
     }
 }
 
@@ -481,8 +486,10 @@ pub fn handleMouseButton(self: *Surface, button: input.MouseButton, action: inpu
     const mods = key.getModifiers();
 
     // Capture/release the mouse so drag events are delivered even outside the window.
+    // Use input_hwnd when available — mouse events are routed through it.
     if (action == .press) {
-        if (self.app.hwnd) |hwnd| _ = os.SetCapture(hwnd);
+        const capture_hwnd = self.app.input_hwnd orelse self.app.hwnd;
+        if (capture_hwnd) |h| _ = os.SetCapture(h);
     } else {
         _ = os.ReleaseCapture();
     }
@@ -502,11 +509,29 @@ pub fn handleScroll(self: *Surface, xoffset: f64, yoffset: f64) void {
 
 /// Bind a DXGI swap chain to the SwapChainPanel.
 /// Called from the renderer thread after creating a composition swap chain.
-pub fn bindSwapChain(self: *Surface, swap_chain: *anyopaque) !void {
-    const native = self.swap_chain_panel_native orelse return error.SwapChainPanelNotReady;
+/// ISwapChainPanelNative::SetSwapChain must be called from the UI thread,
+/// so we post WM_APP_BIND_SWAP_CHAIN with wparam=swap_chain, lparam=self.
+pub fn bindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
+    if (self.app.hwnd) |hwnd| {
+        _ = os.PostMessageW(
+            hwnd,
+            os.WM_APP_BIND_SWAP_CHAIN,
+            @bitCast(@intFromPtr(swap_chain)),
+            @bitCast(@intFromPtr(self)),
+        );
+    }
+}
+
+/// Actually perform the swap chain binding. Must be called on the UI thread.
+/// swap_chain comes from wparam of the posted message.
+pub fn completeBindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
+    const native = self.swap_chain_panel_native orelse {
+        log.warn("SwapChainPanelNative not available for binding (shutdown race)", .{});
+        return;
+    };
     native.setSwapChain(swap_chain) catch |err| {
         log.err("ISwapChainPanelNative::SetSwapChain failed: {}", .{err});
-        return err;
+        return;
     };
-    log.info("Swap chain bound to SwapChainPanel", .{});
+    log.info("Swap chain bound to SwapChainPanel (UI thread)", .{});
 }
