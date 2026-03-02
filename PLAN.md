@@ -220,9 +220,25 @@ zig build -Dapp-runtime=win32 -Drenderer=opengl
   - Ctrl+T (新規タブ) / Ctrl+W (閉じる) は performAction 経由で接続済み
 - **未確認**: 実機テスト（IME動作、TabView表示、segfault解消）
 
-### Phase 5: 実機テスト・安定化 — 未着手
-- IME 日本語入力の実機確認
-- TabView の表示・切り替え確認
-- exit segfault が解消されたか確認
-- リサイズ動作確認
-- ReleaseSafe ビルドでの動作確認
+### Phase 4.5: TabView XAML type system 修正 — 完了 (2026-03-03)
+- **問題: RoActivateInstance("Microsoft.UI.Xaml.Controls.TabView") が E_NOTIMPL**
+  - WinUI3 カスタムコントロールは RoActivateInstance では作成不可
+  - XAML type system 経由: IXamlMetadataProvider.GetXamlType → IXamlType.ActivateInstance
+- **バグ: IXamlType vtable スロットずれ**
+  - 原因: `get_BoxedType` (slot 17) が存在。手動定義で欠落していた
+  - ActivateInstance は slot 19（slot 18 と想定していた）
+  - winmd2zig で WinMD から正しいスロット順を確認して修正
+  - 修正前: slot 18 = get_UnderlyingType → 返り値が文字列バッファで vtable 0x2200000000
+  - 修正後: slot 19 = ActivateInstance → 正常な COM オブジェクト返却
+- **結果**: TabView + TabViewItem + イベントハンドラ全て動作
+- **教訓**: WinUI3 の IXamlType は UWP と異なり get_BoxedType が追加されている
+
+### Phase 5: 実機テスト・安定化 — 進行中 (2026-03-03)
+- [ ] IME 日本語入力の実機確認（infrastructure は実装済み）
+- [x] TabView の作成確認（ログ上は成功、IXamlType.ActivateInstance 経由）
+- [ ] TabView の表示・切り替え実機確認（ユーザー操作が必要）
+- [ ] exit segfault が解消されたか確認（ユーザー操作が必要）
+- [ ] リサイズ動作確認（ユーザー操作が必要）
+- [x] ReleaseSafe ビルド動作確認（ログ上は全ステップ成功、安定動作）
+- [ ] Ctrl+T/Ctrl+W のタブ操作確認（ユーザー操作が必要）
+- [x] Debug ビルド動作確認（TabView + Surface + D3D11 + cmd.exe 起動）

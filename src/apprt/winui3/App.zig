@@ -635,6 +635,10 @@ fn onWindowClosed(self: *App, _: *anyopaque, _: *anyopaque) void {
     }
 
     self.running = false;
+    // Exit the XAML message loop so Application.Start() returns cleanly.
+    if (self.xaml_app) |xa| {
+        xa.exit() catch {};
+    }
 }
 
 fn hardExitNow() noreturn {
@@ -1031,10 +1035,20 @@ fn subclassProc(
     const app: *App = @ptrFromInt(ref_data);
 
     switch (msg) {
-        os.WM_CLOSE => hardExitNow(),
+        os.WM_CLOSE => {
+            // Let WinUI3 handle WM_CLOSE normally — the Closed event handler
+            // (onWindowClosed) will do cleanup and call Application.Exit().
+            app.running = false;
+            if (app.xaml_app) |xa| xa.exit() catch {};
+            return os.DefSubclassProc(hwnd, msg, wparam, lparam);
+        },
         os.WM_SYSCOMMAND => {
             const wp: usize = @bitCast(wparam);
-            if ((wp & 0xFFF0) == os.SC_CLOSE) hardExitNow();
+            if ((wp & 0xFFF0) == os.SC_CLOSE) {
+                app.running = false;
+                if (app.xaml_app) |xa| xa.exit() catch {};
+                return os.DefSubclassProc(hwnd, msg, wparam, lparam);
+            }
         },
         os.WM_ENTERSIZEMOVE => return handleEnterSizeMove(app, hwnd),
         os.WM_EXITSIZEMOVE => return handleExitSizeMove(app, hwnd),
