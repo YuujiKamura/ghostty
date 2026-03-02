@@ -16,6 +16,8 @@ pub const action = @import("apprt/action.zig");
 pub const ipc = @import("apprt/ipc.zig");
 pub const gtk = @import("apprt/gtk.zig");
 pub const none = @import("apprt/none.zig");
+pub const win32 = @import("apprt/win32.zig");
+pub const winui3 = @import("apprt/winui3.zig");
 pub const browser = @import("apprt/browser.zig");
 pub const embedded = @import("apprt/embedded.zig");
 pub const surface = @import("apprt/surface.zig");
@@ -43,6 +45,8 @@ pub const runtime = switch (build_config.artifact) {
     .exe => switch (build_config.app_runtime) {
         .none => none,
         .gtk => gtk,
+        .win32 => win32,
+        .winui3 => winui3,
     },
     .lib => embedded,
     .wasm_module => browser,

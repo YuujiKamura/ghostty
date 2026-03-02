@@ -236,6 +236,12 @@ pub fn focusGained(
     assert(td.backend == .exec);
     const execdata = &td.backend.exec;
 
+    if (comptime builtin.os.tag == .windows) {
+        // termios timer is not implemented on Windows yet.
+        // TODO: support on Windows
+        return;
+    }
+
     if (!focused) {
         // Flag the timer to end on the next iteration. This is
         // a lot cheaper than doing full timer cancellation.
@@ -1287,7 +1293,7 @@ pub const ReadThread = struct {
             .{ .fd = quit, .events = posix.POLL.IN, .revents = undefined },
         };
 
-        var buf: [1024]u8 = undefined;
+        var buf: [16384]u8 = undefined;
         while (true) {
             // We try to read from the file descriptor as long as possible
             // to maximize performance. We only check the quit fd if the
@@ -1358,7 +1364,7 @@ pub const ReadThread = struct {
         };
         defer crash.sentry.thread_state = null;
 
-        var buf: [1024]u8 = undefined;
+        var buf: [16384]u8 = undefined;
         while (true) {
             while (true) {
                 var n: windows.DWORD = 0;

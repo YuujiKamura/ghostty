@@ -5,6 +5,7 @@
 //! print.
 const CodepointWidth = @This();
 
+const builtin = @import("builtin");
 const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
@@ -101,7 +102,15 @@ fn stepNoop(ptr: *anyopaque) Benchmark.Error!void {
     _ = ptr;
 }
 
-extern "c" fn wcwidth(c: u32) c_int;
+const wcwidth_available = builtin.os.tag != .windows;
+
+fn wcwidthFn(c: u32) c_int {
+    if (comptime !wcwidth_available) return 1;
+    const f = struct {
+        extern "c" fn wcwidth(cp: u32) c_int;
+    };
+    return f.wcwidth(c);
+}
 
 fn stepWcwidth(ptr: *anyopaque) Benchmark.Error!void {
     const self: *CodepointWidth = @ptrCast(@alignCast(ptr));
@@ -124,7 +133,7 @@ fn stepWcwidth(ptr: *anyopaque) Benchmark.Error!void {
             const cp_, const consumed = d.next(c);
             assert(consumed);
             if (cp_) |cp| {
-                std.mem.doNotOptimizeAway(wcwidth(cp));
+                std.mem.doNotOptimizeAway(wcwidthFn(cp));
             }
         }
     }

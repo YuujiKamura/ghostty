@@ -92,3 +92,23 @@ pub fn finish() void {
 pub fn flush() void {
     glad.context.Flush.?();
 }
+
+// --- GL Sync (fence) functions for async GPU completion detection ---
+
+pub const GLsync = c.GLsync;
+
+/// Insert a fence sync object. Returns null on failure.
+pub fn fenceSync() ?GLsync {
+    return glad.context.FenceSync.?(c.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+}
+
+/// Wait for a sync object to be signaled. Returns the wait result.
+/// Uses GL_SYNC_FLUSH_COMMANDS_BIT to flush before waiting.
+pub fn clientWaitSync(sync_obj: GLsync, timeout_ns: c.GLuint64) c.GLenum {
+    return glad.context.ClientWaitSync.?(sync_obj, c.GL_SYNC_FLUSH_COMMANDS_BIT, timeout_ns);
+}
+
+/// Delete a sync object.
+pub fn deleteSync(sync_obj: GLsync) void {
+    glad.context.DeleteSync.?(sync_obj);
+}

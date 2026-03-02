@@ -40,7 +40,7 @@ pub const Uniforms = extern struct {
 };
 
 /// The target to load shaders for.
-pub const Target = enum { glsl, msl };
+pub const Target = enum { glsl, msl, hlsl };
 
 /// Load a set of shaders from files and convert them to the target
 /// format. The shader order is preserved.
@@ -135,6 +135,8 @@ pub fn loadFromFile(
         // is the final result that will be returned to the caller.
         .glsl => try glslFromSpv(alloc_gpa, spirv),
         .msl => try mslFromSpv(alloc_gpa, spirv),
+        // TODO: HLSL custom shaders via SPIR-V cross-compilation
+        .hlsl => try hlslFromSpv(alloc_gpa, spirv),
     };
 }
 
@@ -266,6 +268,23 @@ pub fn glslFromSpv(alloc: Allocator, spv: []const u8) ![:0]const u8 {
                 options,
                 c.SPVC_COMPILER_OPTION_GLSL_VERSION,
                 GLSL_VERSION,
+            ) != c.SPVC_SUCCESS) {
+                return error.SpvcFailed;
+            }
+        }
+    }).setOptions);
+}
+
+/// Convert SPIR-V binary to HLSL.
+pub fn hlslFromSpv(alloc: Allocator, spv: []const u8) ![:0]const u8 {
+    const c = spvcross.c;
+    return try spvCross(alloc, c.SPVC_BACKEND_HLSL, spv, (struct {
+        fn setOptions(options: c.spvc_compiler_options) error{SpvcFailed}!void {
+            // Target Shader Model 5.0 for D3D11 compatibility.
+            if (c.spvc_compiler_options_set_uint(
+                options,
+                c.SPVC_COMPILER_OPTION_HLSL_SHADER_MODEL,
+                50,
             ) != c.SPVC_SUCCESS) {
                 return error.SpvcFailed;
             }

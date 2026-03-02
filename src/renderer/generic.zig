@@ -31,15 +31,7 @@ const getConstraint = @import("../font/nerd_font_attributes.zig").getConstraint;
 
 const FileType = @import("../file_type.zig").FileType;
 
-const macos = switch (builtin.os.tag) {
-    .macos => @import("macos"),
-    else => void,
-};
-
-const DisplayLink = switch (builtin.os.tag) {
-    .macos => *macos.video.DisplayLink,
-    else => void,
-};
+const vsync_mod = @import("vsync.zig");
 
 const log = std.log.scoped(.generic_renderer);
 
@@ -79,6 +71,8 @@ const log = std.log.scoped(.generic_renderer);
 /// [ Texture ] - An abstraction over a GPU texture.
 ///
 pub fn Renderer(comptime GraphicsAPI: type) type {
+    const VSync = vsync_mod.Provider(GraphicsAPI);
+
     return struct {
         const Self = @This();
 
@@ -194,10 +188,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         /// Graphics API state.
         api: GraphicsAPI,
 
-        /// The CVDisplayLink used to drive the rendering loop in
-        /// sync with the display. This is void on platforms that
-        /// don't support a display link.
-        display_link: ?DisplayLink = null,
+        /// Unified VSync provider (macOS CVDisplayLink / Windows DwmFlush).
+        vsync: VSync = .{},
 
         /// Health of the most recently completed frame.
         health: std.atomic.Value(Health) = .{ .raw = .healthy },
@@ -689,14 +681,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 };
             };
 
-            const display_link: ?DisplayLink = switch (builtin.os.tag) {
-                .macos => if (options.config.vsync)
-                    try macos.video.DisplayLink.createWithActiveCGDisplays()
-                else
-                    null,
-                else => null,
-            };
-            errdefer if (display_link) |v| v.release();
+            var vsync_provider = try VSync.init(options.config.vsync);
+            errdefer vsync_provider.deinit();
 
             var result: Self = .{
                 .alloc = alloc,
@@ -783,7 +769,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 // Graphics API stuff
                 .api = api,
                 .swap_chain = swap_chain,
-                .display_link = display_link,
+                .vsync = vsync_provider,
             };
 
             try result.initShaders();
@@ -804,12 +790,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             if (self.search_matches) |*m| m.arena.deinit();
             self.swap_chain.deinit();
 
-            if (DisplayLink != void) {
-                if (self.display_link) |display_link| {
-                    display_link.stop() catch {};
-                    display_link.release();
-                }
-            }
+            self.vsync.deinit();
 
             self.cells.deinit(self.alloc);
 
@@ -878,7 +859,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         }
 
         /// Callback called by renderer.Thread when it begins.
-        pub fn threadEnter(self: *const Self, surface: *apprt.Surface) !void {
+        pub fn threadEnter(self: *Self, surface: *apprt.Surface) !void {
             // If our API has to do things on thread enter, let it.
             if (@hasDecl(GraphicsAPI, "threadEnter")) {
                 try self.api.threadEnter(surface);
@@ -900,19 +881,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 self.api.loopEnter();
             }
 
-            // If we don't support a display link we have no work to do.
-            if (comptime DisplayLink == void) return;
-
-            // This is when we know our "self" pointer is stable so we can
-            // setup the display link. To setup the display link we set our
-            // callback and we can start it immediately.
-            const display_link = self.display_link orelse return;
-            try display_link.setOutputCallback(
-                xev.Async,
-                &displayLinkCallback,
-                &thr.draw_now,
-            );
-            display_link.start() catch {};
+            try self.vsync.start(&thr.draw_now);
         }
 
         /// Called by renderer.Thread when it exits the main loop.
@@ -922,14 +891,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 self.api.loopExit();
             }
 
-            // If we don't support a display link we have no work to do.
-            if (comptime DisplayLink == void) return;
-
-            // Stop our display link. If this fails its okay it just means
-            // that we either never started it or the view its attached to
-            // is gone which is fine.
-            const display_link = self.display_link orelse return;
-            display_link.stop() catch {};
+            self.vsync.stop();
         }
 
         /// This is called by the GTK apprt after the surface is
@@ -983,16 +945,6 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             self.shaders.deinit(self.alloc);
         }
 
-        fn displayLinkCallback(
-            _: *macos.video.DisplayLink,
-            ud: ?*xev.Async,
-        ) void {
-            const draw_now = ud orelse return;
-            draw_now.notify() catch |err| {
-                log.err("error notifying draw_now err={}", .{err});
-            };
-        }
-
         /// Mark the full screen as dirty so that we redraw everything.
         pub inline fn markDirty(self: *Self) void {
             self.terminal_state.dirty = .full;
@@ -1000,12 +952,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
         /// Called when we get an updated display ID for our display link.
         pub fn setMacOSDisplayID(self: *Self, id: u32) !void {
-            if (comptime DisplayLink == void) return;
-            const display_link = self.display_link orelse return;
-            log.info("updating display link display id={}", .{id});
-            display_link.setCurrentCGDisplay(id) catch |err| {
-                log.warn("error setting display link display id err={}", .{err});
-            };
+            self.vsync.setMacOSDisplayID(id);
         }
 
         /// True if our renderer has animations so that a higher frequency
@@ -1018,9 +965,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         /// is responsible for triggering draw_now calls to the render thread.
         /// That is the only way to trigger a drawFrame.
         pub fn hasVsync(self: *const Self) bool {
-            if (comptime DisplayLink == void) return false;
-            const display_link = self.display_link orelse return false;
-            return display_link.isRunning();
+            return self.vsync.isRunning();
         }
 
         /// Callback when the focus changes for the terminal this is rendering.
@@ -1034,34 +979,16 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             // Flag that we need to update our custom shaders
             self.custom_shader_focused_changed = true;
 
-            // If we're not focused, then we want to stop the display link
-            // because it is a waste of resources and we can move to pure
-            // change-driven updates.
-            if (comptime DisplayLink != void) link: {
-                const display_link = self.display_link orelse break :link;
-                if (focus) {
-                    display_link.start() catch {};
-                } else {
-                    display_link.stop() catch {};
-                }
-            }
+            // Pause/resume VSync based on focus state.
+            self.vsync.setFocusPaused(focus);
         }
 
         /// Callback when the window is visible or occluded.
         ///
         /// Must be called on the render thread.
         pub fn setVisible(self: *Self, visible: bool) void {
-            // If we're not visible, then we want to stop the display link
-            // because it is a waste of resources and we can move to pure
-            // change-driven updates.
-            if (comptime DisplayLink != void) link: {
-                const display_link = self.display_link orelse break :link;
-                if (visible and self.focused) {
-                    display_link.start() catch {};
-                } else {
-                    display_link.stop() catch {};
-                }
-            }
+            // Pause/resume VSync based on visibility and focus state.
+            self.vsync.setVisibilityPaused(visible, self.focused);
         }
 
         /// Set the new font grid.

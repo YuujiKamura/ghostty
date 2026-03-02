@@ -497,7 +497,13 @@ fn drawFrame(self: *Thread, now: bool) void {
 
     // If the renderer is managing a vsync on its own, we only draw
     // when we're forced to via `now`.
-    if (!now and self.renderer.hasVsync()) return;
+    // Win32: DwmFlush-based VSync jitters under DWM load. Allow
+    // change-driven draws to bypass the VSync gate so that terminal
+    // output is rendered immediately instead of waiting for the next
+    // DwmFlush cycle. The VSync thread still provides steady-state
+    // frame pacing via draw_now notifications.
+    const vsync_dominates = comptime (builtin.os.tag != .windows);
+    if (!now and vsync_dominates and self.renderer.hasVsync()) return;
 
     if (must_draw_from_app_thread) {
         _ = self.app_mailbox.push(
@@ -562,8 +568,15 @@ fn drawNowCallback(
         return .rearm;
     };
 
-    // Draw immediately
+    // Update frame data and draw immediately.
+    // Without updateFrame, VSync-driven draws would paint stale content
+    // whenever new terminal output arrived between vblanks.
     const t = self_.?;
+    t.renderer.updateFrame(
+        t.state,
+        t.flags.cursor_blink_visible,
+    ) catch |err|
+        log.warn("error updating frame in drawNow err={}", .{err});
     t.drawFrame(true);
 
     return .rearm;
