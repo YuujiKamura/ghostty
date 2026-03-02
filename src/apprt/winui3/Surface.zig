@@ -90,9 +90,17 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     defer winrt.deleteHString(panel_class);
     const panel = try winrt.activateInstance(panel_class);
     self.swap_chain_panel = panel;
+    errdefer {
+        _ = panel.release();
+        self.swap_chain_panel = null;
+    }
 
     // Get the native interface for later swap chain binding.
     self.swap_chain_panel_native = try panel.queryInterface(com.ISwapChainPanelNative);
+    errdefer {
+        self.swap_chain_panel_native.?.release();
+        self.swap_chain_panel_native = null;
+    }
 
     // NOTE: SwapChainPanel is set as TabViewItem content by App.newTab(),
     // not here. We only create the panel and query the native interface.

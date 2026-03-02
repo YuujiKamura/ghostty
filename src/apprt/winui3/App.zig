@@ -825,6 +825,7 @@ fn newTab(self: *App) !void {
     var surface = try alloc.create(Surface);
     errdefer alloc.destroy(surface);
     try surface.init(self, self.core_app, &config);
+    errdefer surface.deinit();
 
     try self.surfaces.append(alloc, surface);
     errdefer _ = self.surfaces.pop();
@@ -865,8 +866,13 @@ pub fn closeTab(self: *App, idx: usize) void {
 
     // Remove from TabView.
     if (self.tab_view) |tv| {
-        const tab_items = tv.getTabItems() catch return;
-        tab_items.removeAt(@intCast(idx)) catch {};
+        const tab_items = tv.getTabItems() catch |err| {
+            log.warn("closeTab: getTabItems failed: {}", .{err});
+            return;
+        };
+        tab_items.removeAt(@intCast(idx)) catch |err| {
+            log.warn("closeTab: removeAt({}) failed: {}", .{ idx, err });
+        };
     }
 
     // Cleanup surface.
@@ -910,7 +916,16 @@ fn onSelectionChanged(self: *App, _: *anyopaque, _: *anyopaque) void {
     if (self.tab_view) |tv| {
         const idx = tv.getSelectedIndex() catch return;
         if (idx >= 0 and @as(usize, @intCast(idx)) < self.surfaces.items.len) {
-            self.active_surface_idx = @intCast(idx);
+            const new_idx: usize = @intCast(idx);
+            // Notify old surface it lost focus.
+            if (new_idx != self.active_surface_idx) {
+                if (self.active_surface_idx < self.surfaces.items.len) {
+                    self.surfaces.items[self.active_surface_idx].core_surface.focusCallback(false) catch {};
+                }
+            }
+            self.active_surface_idx = new_idx;
+            // Notify new surface it gained focus.
+            self.surfaces.items[new_idx].core_surface.focusCallback(true) catch {};
         }
     }
 }
@@ -935,6 +950,15 @@ fn activateXamlType(self: *App, comptime class_name: [:0]const u8) !*winrt.IInsp
     const name = try winrt.hstring(class_name);
     defer winrt.deleteHString(name);
     return winrt.activateInstance(name);
+}
+
+/// Box an HSTRING as an IInspectable via Windows.Foundation.PropertyValue.CreateString.
+fn boxString(_: *App, str: winrt.HSTRING) !*winrt.IInspectable {
+    const class_name = try winrt.hstring("Windows.Foundation.PropertyValue");
+    defer winrt.deleteHString(class_name);
+    const factory = try winrt.getActivationFactory(com.IPropertyValueStatics, class_name);
+    defer factory.release();
+    return factory.createString(str);
 }
 
 /// Load XamlControlsResources into Application.Resources.
@@ -1004,10 +1028,24 @@ fn drainMailbox(self: *App) void {
 }
 
 fn setTitle(self: *App, title: [:0]const u8) void {
+    const h = winrt.hstringRuntime(title) catch return;
+    defer winrt.deleteHString(h);
+
+    // Update window title bar.
     if (self.window) |window| {
-        const h = winrt.hstringRuntime(title) catch return;
-        defer winrt.deleteHString(h);
         window.putTitle(h) catch {};
+    }
+
+    // Update active tab header.
+    if (self.activeSurface()) |surface| {
+        if (surface.tab_view_item_inspectable) |tvi_insp| {
+            const tvi = tvi_insp.queryInterface(com.ITabViewItem) catch return;
+            defer tvi.release();
+            // Box the string as IInspectable for the Header property.
+            const boxed = self.boxString(h) catch return;
+            defer _ = boxed.release();
+            tvi.putHeader(@ptrCast(boxed)) catch {};
+        }
     }
 }
 
@@ -1514,10 +1552,20 @@ fn inputWndProc(
         os.WM_ERASEBKGND => return 1, // Don't erase — transparent overlay.
         os.WM_SETFOCUS => {
             log.info("inputWndProc: WM_SETFOCUS received on input HWND=0x{x}", .{@intFromPtr(hwnd)});
+            if (app.activeSurface()) |surface| {
+                surface.core_surface.focusCallback(true) catch |err| {
+                    log.warn("focusCallback(true) error: {}", .{err});
+                };
+            }
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
         os.WM_KILLFOCUS => {
             log.info("inputWndProc: WM_KILLFOCUS on input HWND=0x{x}, new focus=0x{x}", .{ @intFromPtr(hwnd), wparam });
+            if (app.activeSurface()) |surface| {
+                surface.core_surface.focusCallback(false) catch |err| {
+                    log.warn("focusCallback(false) error: {}", .{err});
+                };
+            }
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
         else => {},

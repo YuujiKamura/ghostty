@@ -787,3 +787,62 @@ pub const IApplicationOverrides = extern struct {
         _ = self.lpVtbl.Release(@ptrCast(self));
     }
 };
+
+// ============================================================================
+// IPropertyValueStatics — Windows.Foundation.IPropertyValueStatics
+// NOT from WinMD — maintained manually (Windows SDK, not WinUI3 SDK)
+// Used for boxing primitive values (strings, ints, etc.) as IInspectable.
+// ============================================================================
+
+pub const IPropertyValueStatics = extern struct {
+    pub const IID = GUID{
+        .Data1 = 0x629bdbc8,
+        .Data2 = 0xd932,
+        .Data3 = 0x4ff4,
+        .Data4 = .{ 0x96, 0xb9, 0x8d, 0x96, 0xc5, 0xc1, 0xe8, 0x58 },
+    };
+
+    lpVtbl: *const VTable,
+
+    const VTable = extern struct {
+        // IUnknown (slots 0-2)
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        // IInspectable (slots 3-5)
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        // IPropertyValueStatics (slots 6-25)
+        CreateEmpty: VtblPlaceholder, // 6
+        CreateUInt8: VtblPlaceholder, // 7
+        CreateInt16: VtblPlaceholder, // 8
+        CreateUInt16: VtblPlaceholder, // 9
+        CreateInt32: VtblPlaceholder, // 10
+        CreateUInt32: VtblPlaceholder, // 11
+        CreateInt64: VtblPlaceholder, // 12
+        CreateUInt64: VtblPlaceholder, // 13
+        CreateSingle: VtblPlaceholder, // 14
+        CreateDouble: VtblPlaceholder, // 15
+        CreateChar16: VtblPlaceholder, // 16
+        CreateBoolean: VtblPlaceholder, // 17
+        CreateString: *const fn (*anyopaque, ?HSTRING, *?*IInspectable) callconv(.winapi) HRESULT, // 18
+        CreateInspectable: VtblPlaceholder, // 19
+        CreateGuid: VtblPlaceholder, // 20
+        CreateDateTime: VtblPlaceholder, // 21
+        CreateTimeSpan: VtblPlaceholder, // 22
+        CreatePoint: VtblPlaceholder, // 23
+        CreateSize: VtblPlaceholder, // 24
+        CreateRect: VtblPlaceholder, // 25
+    };
+
+    pub fn createString(self: *IPropertyValueStatics, value: ?HSTRING) WinRTError!*IInspectable {
+        var result: ?*IInspectable = null;
+        try hrCheck(self.lpVtbl.CreateString(@ptrCast(self), value, &result));
+        return result orelse error.WinRTFailed;
+    }
+
+    pub fn release(self: *IPropertyValueStatics) void {
+        _ = self.lpVtbl.Release(@ptrCast(self));
+    }
+};
