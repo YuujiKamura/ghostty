@@ -511,18 +511,16 @@ fn initXaml(self: *App) !void {
     }
 
     // Step 7.5: Create TabView and set as Window content.
-    // TabView requires XamlControlsResources to be loaded in Application.Resources.
-    // If TabView creation fails (E_NOTIMPL), fall back to direct SwapChainPanel content.
-    log.info("initXaml step 7.5: Creating TabView...", .{});
+    // WinUI3 custom controls need XAML type system activation (IXamlType.ActivateInstance).
+    // RoActivateInstance returns E_NOTIMPL for these controls.
+    log.info("initXaml step 7.5: Creating TabView via XAML type system...", .{});
     const tab_view: ?*com.ITabView = blk: {
-        const tv_class = winrt.hstring("Microsoft.UI.Xaml.Controls.TabView") catch break :blk null;
-        defer winrt.deleteHString(tv_class);
-        const tv_inspectable = winrt.activateInstance(tv_class) catch |err| {
+        const tv_inspectable = self.activateXamlType("Microsoft.UI.Xaml.Controls.TabView") catch |err| {
             log.warn("TabView creation failed ({}), falling back to single-tab mode", .{err});
             break :blk null;
         };
         const tv = tv_inspectable.queryInterface(com.ITabView) catch |err| {
-            log.warn("TabView QI failed ({}), falling back to single-tab mode", .{err});
+            log.warn("TabView QI for ITabView failed ({}), falling back to single-tab mode", .{err});
             break :blk null;
         };
         window.putContent(@ptrCast(tv_inspectable)) catch |err| {
@@ -562,9 +560,7 @@ fn initXaml(self: *App) !void {
     if (surface.swap_chain_panel) |panel| {
         if (tab_view) |tv| {
             // TabView mode: wrap in TabViewItem.
-            const tvi_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.TabViewItem");
-            defer winrt.deleteHString(tvi_class);
-            const tvi_inspectable = try winrt.activateInstance(tvi_class);
+            const tvi_inspectable = try self.activateXamlType("Microsoft.UI.Xaml.Controls.TabViewItem");
 
             const content_control = try tvi_inspectable.queryInterface(com.IContentControl);
             defer content_control.release();
@@ -837,9 +833,7 @@ fn newTab(self: *App) !void {
 
     // Create TabViewItem and add to TabView.
     const tab_view = self.tab_view orelse return error.AppInitFailed;
-    const tvi_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.TabViewItem");
-    defer winrt.deleteHString(tvi_class);
-    const tvi_inspectable = try winrt.activateInstance(tvi_class);
+    const tvi_inspectable = try self.activateXamlType("Microsoft.UI.Xaml.Controls.TabViewItem");
 
     // Set tab content to the Surface's SwapChainPanel via IContentControl.
     const content_control = try tvi_inspectable.queryInterface(com.IContentControl);
@@ -926,6 +920,24 @@ fn onSelectionChanged(self: *App, _: *anyopaque, _: *anyopaque) void {
 // ---------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------
+
+/// Activate a XAML type by name. Tries XAML type system first (via IXamlMetadataProvider),
+/// falls back to RoActivateInstance for built-in types.
+fn activateXamlType(self: *App, comptime class_name: [:0]const u8) !*winrt.IInspectable {
+    // Try XAML type system first (required for WinUI3 custom controls like TabView).
+    if (self.app_outer.provider) |provider| {
+        const name = try winrt.hstring(class_name);
+        defer winrt.deleteHString(name);
+        if (provider.getXamlType(name)) |xaml_type| {
+            defer xaml_type.release();
+            return xaml_type.activateInstance();
+        } else |_| {}
+    }
+    // Fallback to RoActivateInstance (works for base framework types).
+    const name = try winrt.hstring(class_name);
+    defer winrt.deleteHString(name);
+    return winrt.activateInstance(name);
+}
 
 /// Load XamlControlsResources into Application.Resources.
 /// This enables WinUI 3 custom controls (TabView, NavigationView, etc.)
