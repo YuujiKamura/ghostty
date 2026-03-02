@@ -1,18 +1,15 @@
 //! WinUI 3 COM interface definitions for Zig.
 //!
-//! Each interface is an extern struct whose first field is a pointer to
-//! its vtable. WinRT interfaces use IInspectable (6 base slots) instead
-//! of IUnknown (3 base slots).
+//! VTable definitions are auto-generated from Microsoft.UI.Xaml.winmd by winmd2zig.
+//! Slot ordering matches ECMA-335 metadata exactly.
 //!
-//! IMPORTANT: vtable slot order MUST match the Windows SDK headers exactly.
-//! A single missing or misplaced slot will silently call the wrong function.
+//! To regenerate vtables:
+//!   cd tools/winmd2zig && zig build run -- <path>/Microsoft.UI.Xaml.winmd \
+//!     IApplicationStatics IApplicationFactory IApplication IWindow \
+//!     ITabView ITabViewItem IContentControl
 //!
-//! Slot ordering references:
-//!   - microsoft.ui.xaml.h from Windows App SDK
-//!   - microsoft.ui.xaml.controls.h from Windows App SDK
-//!   - Inspectable.h from Windows SDK
-//!
-//! Pattern follows src/renderer/d3d11/com.zig.
+//! Non-WinMD interfaces (IWindowNative, ISwapChainPanelNative, IVector) are
+//! maintained manually — they come from Windows SDK headers, not .winmd files.
 
 const std = @import("std");
 const winrt = @import("winrt.zig");
@@ -28,18 +25,14 @@ const WinRTError = winrt.WinRTError;
 
 // ============================================================================
 // IApplicationStatics — Microsoft.UI.Xaml.IApplicationStatics
-// Used to call Application.Start(callback)
+// Generated from WinMD
 // ============================================================================
 
 pub const IApplicationStatics = extern struct {
-    // IID: Microsoft.UI.Xaml.IApplicationStatics
-    // WinMD blob: 01 00 F5 09 0D 4E 58 43 2C 51 A9 87 50 3B 52 84 8E 95
-    pub const IID = GUID{
-        .Data1 = 0x4e0d09f5,
-        .Data2 = 0x4358,
-        .Data3 = 0x512c,
-        .Data4 = .{ 0xa9, 0x87, 0x50, 0x3b, 0x52, 0x84, 0x8e, 0x95 },
-    };
+    // WinMD: Microsoft.UI.Xaml.IApplicationStatics
+    // Blob: 01 00 f5 09 0d 4e 58 43 2c 51 a9 87 50 3b 52 84 8e 95 00 00
+    pub const IID = GUID{ .Data1 = 0x4e0d09f5, .Data2 = 0x4358, .Data3 = 0x512c,
+        .Data4 = .{ 0xa9, 0x87, 0x50, 0x3b, 0x52, 0x84, 0x8e, 0x95 } };
 
     lpVtbl: *const VTable,
 
@@ -70,17 +63,14 @@ pub const IApplicationStatics = extern struct {
 
 // ============================================================================
 // IApplicationFactory — Microsoft.UI.Xaml.IApplicationFactory
-// Used to create Application instances
+// Generated from WinMD
 // ============================================================================
 
 pub const IApplicationFactory = extern struct {
-    // WinMD blob: 01 00 57 66 D9 9F 94 52 65 5A A1 DB 4F EA 14 35 97 DA
-    pub const IID = GUID{
-        .Data1 = 0x9fd96657,
-        .Data2 = 0x5294,
-        .Data3 = 0x5a65,
-        .Data4 = .{ 0xa1, 0xdb, 0x4f, 0xea, 0x14, 0x35, 0x97, 0xda },
-    };
+    // WinMD: Microsoft.UI.Xaml.IApplicationFactory
+    // Blob: 01 00 57 66 d9 9f 94 52 65 5a a1 db 4f ea 14 35 97 da 00 00
+    pub const IID = GUID{ .Data1 = 0x9fd96657, .Data2 = 0x5294, .Data3 = 0x5a65,
+        .Data4 = .{ 0xa1, 0xdb, 0x4f, 0xea, 0x14, 0x35, 0x97, 0xda } };
 
     lpVtbl: *const VTable,
 
@@ -111,16 +101,14 @@ pub const IApplicationFactory = extern struct {
 
 // ============================================================================
 // IApplication — Microsoft.UI.Xaml.IApplication
+// Generated from WinMD
 // ============================================================================
 
 pub const IApplication = extern struct {
-    // WinMD blob: 01 00 E7 F4 A8 06 46 11 AF 55 82 0D EB D5 56 43 B0 21
-    pub const IID = GUID{
-        .Data1 = 0x06a8f4e7,
-        .Data2 = 0x1146,
-        .Data3 = 0x55af,
-        .Data4 = .{ 0x82, 0x0d, 0xeb, 0xd5, 0x56, 0x43, 0xb0, 0x21 },
-    };
+    // WinMD: Microsoft.UI.Xaml.IApplication
+    // Blob: 01 00 e7 f4 a8 06 46 11 af 55 82 0d eb d5 56 43 b0 21 00 00
+    pub const IID = GUID{ .Data1 = 0x06a8f4e7, .Data2 = 0x1146, .Data3 = 0x55af,
+        .Data4 = .{ 0x82, 0x0d, 0xeb, 0xd5, 0x56, 0x43, 0xb0, 0x21 } };
 
     lpVtbl: *const VTable,
 
@@ -133,7 +121,7 @@ pub const IApplication = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        // IApplication (slots 6+)
+        // IApplication (slots 6-17)
         get_Resources: VtblPlaceholder, // 6
         put_Resources: VtblPlaceholder, // 7
         get_DebugSettings: VtblPlaceholder, // 8
@@ -159,17 +147,14 @@ pub const IApplication = extern struct {
 
 // ============================================================================
 // IWindow — Microsoft.UI.Xaml.IWindow
-// Slot ordering from microsoft.ui.xaml.h
+// Generated from WinMD
 // ============================================================================
 
 pub const IWindow = extern struct {
-    // WinMD blob: 01 00 79 EC F0 61 52 5D B5 56 86 FB 40 FA 4A F2 88 B0
-    pub const IID = GUID{
-        .Data1 = 0x61f0ec79,
-        .Data2 = 0x5d52,
-        .Data3 = 0x56b5,
-        .Data4 = .{ 0x86, 0xfb, 0x40, 0xfa, 0x4a, 0xf2, 0x88, 0xb0 },
-    };
+    // WinMD: Microsoft.UI.Xaml.IWindow
+    // Blob: 01 00 79 ec f0 61 52 5d b5 56 86 fb 40 fa 4a f2 88 b0 00 00
+    pub const IID = GUID{ .Data1 = 0x61f0ec79, .Data2 = 0x5d52, .Data3 = 0x56b5,
+        .Data4 = .{ 0x86, 0xfb, 0x40, 0xfa, 0x4a, 0xf2, 0x88, 0xb0 } };
 
     lpVtbl: *const VTable,
 
@@ -182,15 +167,14 @@ pub const IWindow = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        // IWindow (slots 6-28) — ordered per WinMD metadata
-        // WinMD source: Microsoft.UI.Xaml.IWindow (line 193400 in winmd_dump.il)
+        // IWindow (slots 6-28)
         get_Bounds: VtblPlaceholder, // 6
         get_Visible: VtblPlaceholder, // 7
         get_Content: VtblPlaceholder, // 8
         put_Content: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT, // 9
-        get_CoreWindow: VtblPlaceholder, // 10  (deprecated, always null)
+        get_CoreWindow: VtblPlaceholder, // 10
         get_Compositor: VtblPlaceholder, // 11
-        get_Dispatcher: VtblPlaceholder, // 12  (deprecated, always null — still occupies slot!)
+        get_Dispatcher: VtblPlaceholder, // 12
         get_DispatcherQueue: VtblPlaceholder, // 13
         get_Title: VtblPlaceholder, // 14
         put_Title: *const fn (*anyopaque, ?HSTRING) callconv(.winapi) HRESULT, // 15
@@ -251,6 +235,7 @@ pub const IWindow = extern struct {
 // ============================================================================
 // IWindowNative — classic COM interface (not WinRT) for getting HWND
 // IID: {EECDBF0E-BAE9-4CB6-A68E-9598E1CB57BB}
+// NOT from WinMD — from Windows SDK headers
 // ============================================================================
 
 pub const IWindowNative = extern struct {
@@ -286,7 +271,7 @@ pub const IWindowNative = extern struct {
 // ============================================================================
 // ISwapChainPanelNative — classic COM interface for binding DXGI swap chain
 // IID: {63AAD0B8-7C24-40FF-85A8-640D944CC325}
-// From microsoft.ui.xaml.media.dxinterop.h
+// NOT from WinMD — from microsoft.ui.xaml.media.dxinterop.h
 // ============================================================================
 
 pub const ISwapChainPanelNative = extern struct {
@@ -319,17 +304,14 @@ pub const ISwapChainPanelNative = extern struct {
 
 // ============================================================================
 // ITabView — Microsoft.UI.Xaml.Controls.ITabView
-// IID: {07B509E1-1D38-551B-95F4-4732B049F6A6}
-// Slot ordering extracted from Microsoft.UI.Xaml.winmd (Windows App SDK 1.6)
+// Generated from WinMD
 // ============================================================================
 
 pub const ITabView = extern struct {
-    pub const IID = GUID{
-        .Data1 = 0x07b509e1,
-        .Data2 = 0x1d38,
-        .Data3 = 0x551b,
-        .Data4 = .{ 0x95, 0xf4, 0x47, 0x32, 0xb0, 0x49, 0xf6, 0xa6 },
-    };
+    // WinMD: Microsoft.UI.Xaml.Controls.ITabView
+    // Blob: 01 00 e1 09 b5 07 38 1d 1b 55 95 f4 47 32 b0 49 f6 a6 00 00
+    pub const IID = GUID{ .Data1 = 0x07b509e1, .Data2 = 0x1d38, .Data3 = 0x551b,
+        .Data4 = .{ 0x95, 0xf4, 0x47, 0x32, 0xb0, 0x49, 0xf6, 0xa6 } };
 
     lpVtbl: *const VTable,
 
@@ -342,7 +324,7 @@ pub const ITabView = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        // ITabView (slots 6-60) — ordered per WinMD metadata
+        // ITabView (slots 6-60)
         get_TabWidthMode: VtblPlaceholder, // 6
         put_TabWidthMode: VtblPlaceholder, // 7
         get_CloseButtonOverlayMode: VtblPlaceholder, // 8
@@ -447,17 +429,14 @@ pub const ITabView = extern struct {
 
 // ============================================================================
 // ITabViewItem — Microsoft.UI.Xaml.Controls.ITabViewItem
-// IID: {64980AFA-97AF-5190-90B3-4BA277B1113D}
-// Slot ordering extracted from Microsoft.UI.Xaml.winmd
+// Generated from WinMD
 // ============================================================================
 
 pub const ITabViewItem = extern struct {
-    pub const IID = GUID{
-        .Data1 = 0x64980afa,
-        .Data2 = 0x97af,
-        .Data3 = 0x5190,
-        .Data4 = .{ 0x90, 0xb3, 0x4b, 0xa2, 0x77, 0xb1, 0x11, 0x3d },
-    };
+    // WinMD: Microsoft.UI.Xaml.Controls.ITabViewItem
+    // Blob: 01 00 fa 0a 98 64 af 97 90 51 90 b3 4b a2 77 b1 11 3d 00 00
+    pub const IID = GUID{ .Data1 = 0x64980afa, .Data2 = 0x97af, .Data3 = 0x5190,
+        .Data4 = .{ 0x90, 0xb3, 0x4b, 0xa2, 0x77, 0xb1, 0x11, 0x3d } };
 
     lpVtbl: *const VTable,
 
@@ -470,7 +449,7 @@ pub const ITabViewItem = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        // ITabViewItem (slots 6-16) — ordered per WinMD metadata
+        // ITabViewItem (slots 6-16)
         get_Header: VtblPlaceholder, // 6
         put_Header: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT, // 7
         get_HeaderTemplate: VtblPlaceholder, // 8
@@ -505,17 +484,14 @@ pub const ITabViewItem = extern struct {
 
 // ============================================================================
 // IContentControl — Microsoft.UI.Xaml.Controls.IContentControl
-// IID: {07E81761-11B2-52AE-8F8B-4D53D2B5900A}
-// Used to set TabViewItem.Content (TabViewItem inherits ContentControl)
+// Generated from WinMD
 // ============================================================================
 
 pub const IContentControl = extern struct {
-    pub const IID = GUID{
-        .Data1 = 0x07e81761,
-        .Data2 = 0x11b2,
-        .Data3 = 0x52ae,
-        .Data4 = .{ 0x8f, 0x8b, 0x4d, 0x53, 0xd2, 0xb5, 0x90, 0x0a },
-    };
+    // WinMD: Microsoft.UI.Xaml.Controls.IContentControl
+    // Blob: 01 00 61 17 e8 07 b2 11 ae 52 8f 8b 4d 53 d2 b5 90 0a 00 00
+    pub const IID = GUID{ .Data1 = 0x07e81761, .Data2 = 0x11b2, .Data3 = 0x52ae,
+        .Data4 = .{ 0x8f, 0x8b, 0x4d, 0x53, 0xd2, 0xb5, 0x90, 0x0a } };
 
     lpVtbl: *const VTable,
 
@@ -528,7 +504,7 @@ pub const IContentControl = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        // IContentControl (slots 6-14) — ordered per WinMD metadata
+        // IContentControl (slots 6-14)
         get_Content: VtblPlaceholder, // 6
         put_Content: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT, // 7
         get_ContentTemplate: VtblPlaceholder, // 8
@@ -552,7 +528,7 @@ pub const IContentControl = extern struct {
 // ============================================================================
 // IVector — Windows.Foundation.Collections.IVector<IInspectable>
 // IID: {B32BDCA4-5E52-5B27-BC5D-D66A1A268C2A} (pinterface computed)
-// Used for TabView.TabItems collection
+// NOT from WinMD — maintained manually
 // ============================================================================
 
 pub const IVector = extern struct {
@@ -574,7 +550,7 @@ pub const IVector = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        // IVector<IInspectable> (slots 6-17) — standard WinRT collection
+        // IVector<IInspectable> (slots 6-17)
         GetAt: *const fn (*anyopaque, u32, *?*anyopaque) callconv(.winapi) HRESULT, // 6
         get_Size: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT, // 7
         GetView: VtblPlaceholder, // 8
