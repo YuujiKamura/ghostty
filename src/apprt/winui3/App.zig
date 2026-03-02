@@ -772,6 +772,13 @@ pub fn performAction(
             // MVP: single window only
             return false;
         },
+        .close_all_windows => {
+            self.running = false;
+            if (self.xaml_app) |xa| {
+                xa.exit() catch {};
+            }
+            return true;
+        },
         .new_tab => {
             self.newTab() catch |err| {
                 log.err("Failed to create new tab: {}", .{err});
