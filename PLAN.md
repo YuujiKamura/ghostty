@@ -176,10 +176,11 @@ zig build -Dapp-runtime=win32 -Drenderer=opengl
 - 検証済み: IWindow, IApplication, IApplicationStatics, IApplicationFactory, ITabView
 - 全 IID + slot 順序が WinMD と完全一致
 
-### Phase 1: winmd2zig で com.zig を再生成 — 未着手
-- winmd2zig の出力で `src/apprt/winui3/com.zig` を置き換える
-- 手書きバグ12件が全て解消されることを確認
-- ビルドが通ることを確認
+### Phase 1: winmd2zig で com.zig を再生成 — 完了 (2026-03-02)
+- winmd2zig 生成 vtable と手書き版を統合 → 機能的変更なし（Phase 0 手動修正が既に正しかった）
+- 7 WinRT インターフェース全て WinMD blob コメント付き
+- ビルド確認: `zig build -Dapp-runtime=winui3 -Drenderer=d3d11` 成功
+- 注: `-Drenderer=opengl` は winui3 未対応（D3D11 必須）
 
 ### Phase 2: WinUI3 ウィンドウ表示 — 未着手
 - 正しい COM vtable でウィンドウが表示されることを確認
