@@ -176,18 +176,53 @@ zig build -Dapp-runtime=win32 -Drenderer=opengl
 - 検証済み: IWindow, IApplication, IApplicationStatics, IApplicationFactory, ITabView
 - 全 IID + slot 順序が WinMD と完全一致
 
-### Phase 1: winmd2zig で com.zig を再生成 — 完了 (2026-03-02)
-- winmd2zig 生成 vtable と手書き版を統合 → 機能的変更なし（Phase 0 手動修正が既に正しかった）
-- 7 WinRT インターフェース全て WinMD blob コメント付き
+### Phase 1: winmd2zig で com.zig を検証 — 結果: 機能的変更なし (2026-03-02)
+- winmd2zig 出力と手書き com.zig を突合 → IID・スロット順序が完全一致
+- Phase 0 の手動修正が既に正しかったため、コメント追加のみで機能変更ゼロ
+- **反省**: Phase 丸ごと使って実質コメント追加だけ。ウィンドウ表示に進捗なし
 - ビルド確認: `zig build -Dapp-runtime=winui3 -Drenderer=d3d11` 成功
-- 注: `-Drenderer=opengl` は winui3 未対応（D3D11 必須）
 
-### Phase 2: WinUI3 ウィンドウ表示 — 未着手
-- 正しい COM vtable でウィンドウが表示されることを確認
-- Application.Start + IApplicationFactory.CreateInstance の順序修正
+### Phase 2: WinUI3 ウィンドウ表示 + ターミナル描画 — 動作確認 (2026-03-02)
+- initXaml 後に Surface (CoreSurface + SwapChainPanel) を作成
+- SwapChainPanel を IWindow.putContent で直接設定 (TabView スキップ、MVP)
+- **問題: `ISwapChainPanelNative::SetSwapChain` が `RPC_E_WRONG_THREAD` (0x8001010e)**
+  - 原因: D3D11 renderer thread から UI thread 専用 COM を呼んでいた
+  - 修正: `bindSwapChain` を非同期化。ポインタ保持 + `WM_USER+1` で UI thread に転送
+- **結果**:
+  - D3D11 device 作成 ✓, swap chain (composition) 作成 ✓
+  - renderer thread 起動、~62fps (709 frames/11.5s)
+  - cmd.exe シェル起動、ターミナルタイトル変更動作
+  - JetBrains Mono フォントロード成功
+  - **exit 時 segfault あり** (timeout 強制終了時。close 順序の問題、要修正)
+- 未確認: 画面に実際にターミナルテキストが見えるか (ログ上は描画成功)
 
-### Phase 3: レンダラ統合 — 未着手
-- D3D11 or OpenGL レンダラと CoreSurface の統合
+### Phase 3: キーボード入力 — 英語OK・日本語NG (2026-03-02)
+- **問題: 親HWNDにキーイベントが来ない**
+  - 原因: WinUI3が子HWNDを作り、そこにキーボードフォーカスを設定
+  - 修正: 子HWNDにもサブクラスを設置 (`GetWindow(GW_CHILD)` → `SetWindowSubclass`)
+- **結果**: 英語キーボード入力OK、cmd.exeに文字が送られる
+- **未解決: 日本語IME入力不可**
+- exit時segfault残存（timeout強制終了時のみ）
 
-### Phase 4: 入力・イベント処理 — 未着手
-- キーボード、マウス、リサイズ、DPI
+### Phase 4: IME・Tab・安定化 — 実装完了 (2026-03-02)
+- **IME (日本語入力) 修正**
+  - 原因: WinUI3 の TSF (Text Services Framework) が子HWND上のIMM32メッセージを横取り
+  - 修正: 専用入力HWND (`GhosttyInputOverlay`) を作成し、WinUI3のXAML入力ツリー外でIMEメッセージを受信
+  - WM_IME_STARTCOMPOSITION/COMPOSITION/ENDCOMPOSITION → preeditCallback + WM_CHAR で確定文字送信
+  - WM_SETFOCUS リダイレクトで input_hwnd にフォーカスを集約
+- **exit時segfault修正**
+  - 原因: Application.Start() のXAMLメッセージループが終了せず、強制killで解放済みメモリにアクセス
+  - 修正: IApplication.Exit() でメッセージループを正常終了。terminate()のクリーンアップ順序を修正（サブクラス除去→surfaces→COM→WinRT）
+- **TabView復活**
+  - initXaml step 7.5 で TabView 作成、Window.putContent に設定
+  - 初期Surface を TabViewItem として追加
+  - TabCloseRequested/AddTabButtonClick/SelectionChanged イベント登録
+  - Ctrl+T (新規タブ) / Ctrl+W (閉じる) は performAction 経由で接続済み
+- **未確認**: 実機テスト（IME動作、TabView表示、segfault解消）
+
+### Phase 5: 実機テスト・安定化 — 未着手
+- IME 日本語入力の実機確認
+- TabView の表示・切り替え確認
+- exit segfault が解消されたか確認
+- リサイズ動作確認
+- ReleaseSafe ビルドでの動作確認
