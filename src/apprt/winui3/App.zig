@@ -641,12 +641,6 @@ fn onWindowClosed(self: *App, _: *anyopaque, _: *anyopaque) void {
     }
 }
 
-fn hardExitNow() noreturn {
-    // Last-resort workaround for WinUI3 teardown crash on this branch.
-    _ = windows.kernel32.TerminateProcess(windows.kernel32.GetCurrentProcess(), 0);
-    unreachable;
-}
-
 /// D3D11 doesn't use GL context — no-op for WinUI 3.
 pub fn releaseGLContext(_: *App) void {}
 
