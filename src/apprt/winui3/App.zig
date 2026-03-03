@@ -24,6 +24,7 @@ const os = @import("os.zig");
 const com_aggregation = @import("com_aggregation.zig");
 const input_overlay = @import("input_overlay.zig");
 const ime = @import("ime.zig");
+const debug_harness = @import("debug_harness.zig");
 
 const log = std.log.scoped(.winui3);
 
@@ -36,6 +37,7 @@ const guidEql = com_aggregation.guidEql;
 
 /// The core application.
 core_app: *CoreApp,
+debug_cfg: debug_harness.RuntimeDebugConfig = .{},
 
 /// COM aggregation outer object that implements IXamlMetadataProvider.
 /// Must be kept alive for the lifetime of the Application.
@@ -101,6 +103,13 @@ pub fn init(
 ) !void {
     _ = opts;
 
+    // Allocate a debug console so log output is visible for GUI apps.
+    os.attachDebugConsole();
+
+    // Install a Vectored Exception Handler to capture details of
+    // STATUS_STOWED_EXCEPTION before the process terminates.
+    _ = os.AddVectoredExceptionHandler(1, &stowedExceptionHandler);
+
     // Request 1ms timer resolution for smooth animation timing.
     _ = os.timeBeginPeriod(1);
 
@@ -127,9 +136,11 @@ pub fn init(
 
     self.* = .{
         .core_app = core_app,
+        .debug_cfg = debug_harness.RuntimeDebugConfig.load(),
         .surfaces = .{},
         .running = true,
     };
+    self.debug_cfg.log(log);
 
     // Window/UI creation happens inside run() via Application.Start(callback).
     // WinUI 3 requires Window creation on the XAML thread which is set up by Start().
@@ -172,9 +183,14 @@ pub fn initXaml(self: *App) !void {
     }
 
     // Create Application with outer IUnknown for aggregation.
+    log.info("initXaml step 0: getActivationFactory(IApplicationFactory)...", .{});
     const app_factory = try winrt.getActivationFactory(com.IApplicationFactory, app_class);
     defer app_factory.release();
+    log.info("initXaml step 0: calling CreateInstance(outer=0x{x})...", .{@intFromPtr(self.app_outer.outerPtr())});
     const result = try app_factory.createInstance(self.app_outer.outerPtr());
+    log.info("initXaml step 0: CreateInstance returned inner=0x{x} instance=0x{x}", .{
+        @intFromPtr(result.inner), @intFromPtr(result.instance),
+    });
     self.app_outer.inner = result.inner;
 
     // QI for IApplication so we can call Exit() during shutdown and access Resources.
@@ -234,15 +250,19 @@ pub fn initXaml(self: *App) !void {
     // Step 7.25: Load XamlControlsResources into Application.Resources.
     // Must be done AFTER Window creation/activation — the Application's Resources
     // property returns E_UNEXPECTED before the XAML framework is fully initialized.
-    if (self.xaml_app) |xa| {
-        loadXamlResources(xa);
+    if (self.debug_cfg.enable_xaml_resources) {
+        if (self.xaml_app) |xa| {
+            loadXamlResources(xa);
+        }
+    } else {
+        log.info("initXaml step 7.25: SKIPPED (GHOSTTY_WINUI3_ENABLE_XAML_RESOURCES=false)", .{});
     }
 
     // Step 7.5: Create TabView and set as Window content.
     // WinUI3 custom controls need XAML type system activation (IXamlType.ActivateInstance).
     // RoActivateInstance returns E_NOTIMPL for these controls.
-    log.info("initXaml step 7.5: Creating TabView via XAML type system...", .{});
-    const tab_view: ?*com.ITabView = blk: {
+    const tab_view: ?*com.ITabView = if (self.debug_cfg.enable_tabview) blk: {
+        log.info("initXaml step 7.5: Creating TabView via XAML type system...", .{});
         const tv_inspectable = self.activateXamlType("Microsoft.UI.Xaml.Controls.TabView") catch |err| {
             log.warn("TabView creation failed ({}), falling back to single-tab mode", .{err});
             break :blk null;
@@ -258,21 +278,16 @@ pub fn initXaml(self: *App) !void {
         };
         log.info("initXaml step 7.5 OK: TabView set as Window content", .{});
         break :blk tv;
+    } else blk: {
+        log.info("initXaml step 7.5: SKIPPED (GHOSTTY_WINUI3_ENABLE_TABVIEW=false)", .{});
+        break :blk null;
     };
     self.tab_view = tab_view;
 
-    // Register TabView event handlers (only if TabView was created).
-    if (tab_view != null) {
-        self.tab_close_handler = try event.SimpleEventHandler(App).create(alloc, self, &onTabCloseRequested);
-        self.tab_close_token = try tab_view.?.addTabCloseRequested(self.tab_close_handler.?.comPtr());
-        self.add_tab_handler = try event.SimpleEventHandler(App).create(alloc, self, &onAddTabButtonClick);
-        self.add_tab_token = try tab_view.?.addAddTabButtonClick(self.add_tab_handler.?.comPtr());
-        self.selection_changed_handler = try event.SimpleEventHandler(App).create(alloc, self, &onSelectionChanged);
-        self.selection_changed_token = try tab_view.?.addSelectionChanged(self.selection_changed_handler.?.comPtr());
-        log.info("initXaml step 7.5 OK: TabView event handlers registered", .{});
-    }
-
     // Step 8: Create the initial Surface (terminal) inside a TabViewItem.
+    if (self.debug_cfg.tabview_empty and tab_view != null) {
+        log.info("initXaml step 8: SKIPPED (GHOSTTY_WINUI3_TABVIEW_EMPTY=true)", .{});
+    } else {
     log.info("initXaml step 8: Creating initial Surface...", .{});
     var config = try configpkg.Config.load(alloc);
     defer config.deinit();
@@ -289,24 +304,79 @@ pub fn initXaml(self: *App) !void {
         if (tab_view) |tv| {
             // TabView mode: wrap in TabViewItem.
             const tvi_inspectable = try self.activateXamlType("Microsoft.UI.Xaml.Controls.TabViewItem");
+            const tvi = try tvi_inspectable.queryInterface(com.ITabViewItem);
+            defer tvi.release();
 
-            const content_control = try tvi_inspectable.queryInterface(com.IContentControl);
-            defer content_control.release();
-            try content_control.putContent(@ptrCast(panel));
+            // Match the reference setup: initialize basic TabViewItem properties
+            // before appending it to TabView.
+            const initial_title = try winrt.hstring("Terminal");
+            defer winrt.deleteHString(initial_title);
+            const boxed_title = try self.boxString(initial_title);
+            defer _ = boxed_title.release();
+            try tvi.putHeader(@ptrCast(boxed_title));
+            try tvi.putIsClosable(false);
 
-            const tab_items = try tv.getTabItems();
-            try tab_items.append(@ptrCast(tvi_inspectable));
+            if (!self.debug_cfg.tabview_item_no_content) {
+                const content_control = try tvi_inspectable.queryInterface(com.IContentControl);
+                defer content_control.release();
+                try content_control.putContent(@ptrCast(panel));
+                log.info("initXaml step 8: putContent done", .{});
+            } else {
+                log.info("initXaml step 8: SKIPPING putContent (GHOSTTY_WINUI3_TABVIEW_ITEM_NO_CONTENT=true)", .{});
+            }
 
-            surface.tab_view_item_inspectable = tvi_inspectable;
+            if (!self.debug_cfg.tabview_append_item) {
+                log.info("initXaml step 8: STOP at level 1 (create+putContent only, no append)", .{});
+            } else {
+                const tab_items = try tv.getTabItems();
+                try tab_items.append(@ptrCast(tvi_inspectable));
+                log.info("initXaml step 8: append done", .{});
 
-            try tv.putSelectedIndex(0);
-            log.info("initXaml step 8 OK: Surface + TabViewItem added to TabView", .{});
+                surface.tab_view_item_inspectable = tvi_inspectable;
+
+                if (!self.debug_cfg.tabview_select_first) {
+                    log.info("initXaml step 8: STOP at level 2 (create+putContent+append, no selectedIndex)", .{});
+                } else {
+                    try tv.putSelectedIndex(0);
+                    log.info("initXaml step 8 OK: full (create+putContent+append+selectedIndex)", .{});
+                }
+            }
         } else {
             // Fallback: set SwapChainPanel directly as Window content.
             try window.putContent(@ptrCast(panel));
             log.info("initXaml step 8 OK: Surface + SwapChainPanel set as Window content (single-tab)", .{});
         }
     }
+    } // end TABVIEW_EMPTY else
+
+    // Step 8.5: Register TabView event handlers after control tree creation.
+    // Register TabView event handlers (only if TabView was created).
+    if (tab_view != null and self.debug_cfg.enable_tabview_handlers) {
+        if (self.debug_cfg.enable_handler_close) {
+            self.tab_close_handler = try event.SimpleEventHandler(App).createWithIid(alloc, self, &onTabCloseRequested, &com.IID_TypedEventHandler_TabCloseRequested);
+            self.tab_close_token = try tab_view.?.addTabCloseRequested(self.tab_close_handler.?.comPtr());
+            log.info("initXaml step 7.5: TabCloseRequested handler registered", .{});
+        }
+        if (self.debug_cfg.enable_handler_addtab) {
+            self.add_tab_handler = try event.SimpleEventHandler(App).createWithIid(alloc, self, &onAddTabButtonClick, &com.IID_TypedEventHandler_AddTabButtonClick);
+            self.add_tab_token = try tab_view.?.addAddTabButtonClick(self.add_tab_handler.?.comPtr());
+            log.info("initXaml step 7.5: AddTabButtonClick handler registered", .{});
+        }
+        if (self.debug_cfg.enable_handler_selection) {
+            self.selection_changed_handler = try event.SimpleEventHandler(App).createWithIid(alloc, self, &onSelectionChanged, &com.IID_SelectionChangedEventHandler);
+            self.selection_changed_token = try tab_view.?.addSelectionChanged(self.selection_changed_handler.?.comPtr());
+            log.info("initXaml step 7.5: SelectionChanged handler registered", .{});
+        }
+        log.info("initXaml step 7.5 OK: TabView event handlers registered (close={} addtab={} selection={})", .{
+            self.debug_cfg.enable_handler_close,
+            self.debug_cfg.enable_handler_addtab,
+            self.debug_cfg.enable_handler_selection,
+        });
+    } else if (tab_view != null) {
+        log.info("initXaml step 7.5: TabView event handlers SKIPPED (GHOSTTY_WINUI3_ENABLE_TABVIEW_HANDLERS=false)", .{});
+    }
+
+
 
     log.info("WinUI 3 Window created and activated (HWND=0x{x})", .{@intFromPtr(self.hwnd.?)});
 
@@ -529,6 +599,7 @@ pub fn performAction(
             return true;
         },
         .set_title => {
+            log.info("performAction: set_title", .{});
             self.setTitle(value.title);
             return true;
         },
@@ -572,11 +643,21 @@ fn newTab(self: *App) !void {
     // Create TabViewItem and add to TabView.
     const tab_view = self.tab_view orelse return error.AppInitFailed;
     const tvi_inspectable = try self.activateXamlType("Microsoft.UI.Xaml.Controls.TabViewItem");
+    const tvi = try tvi_inspectable.queryInterface(com.ITabViewItem);
+    defer tvi.release();
+
+    const initial_title = try winrt.hstring("Terminal");
+    defer winrt.deleteHString(initial_title);
+    const boxed_title = try self.boxString(initial_title);
+    defer _ = boxed_title.release();
+    try tvi.putHeader(@ptrCast(boxed_title));
+    try tvi.putIsClosable(false);
 
     // Set tab content to the Surface's SwapChainPanel via IContentControl.
+    const panel = surface.swap_chain_panel orelse return error.AppInitFailed;
     const content_control = try tvi_inspectable.queryInterface(com.IContentControl);
     defer content_control.release();
-    try content_control.putContent(@ptrCast(surface.swap_chain_panel));
+    try content_control.putContent(@ptrCast(panel));
 
     // Add to TabItems collection.
     const tab_items = try tab_view.getTabItems();
@@ -656,16 +737,19 @@ pub fn activeSurface(self: *App) ?*Surface {
 // ---------------------------------------------------------------
 
 fn onTabCloseRequested(self: *App, _: *anyopaque, _: *anyopaque) void {
+    log.info("onTabCloseRequested", .{});
     self.closeActiveTab();
 }
 
 fn onAddTabButtonClick(self: *App, _: *anyopaque, _: *anyopaque) void {
+    log.info("onAddTabButtonClick", .{});
     self.newTab() catch |err| {
         log.err("Failed to create new tab: {}", .{err});
     };
 }
 
 fn onSelectionChanged(self: *App, _: *anyopaque, _: *anyopaque) void {
+    log.info("onSelectionChanged", .{});
     if (self.tab_view) |tv| {
         const idx = tv.getSelectedIndex() catch return;
         if (idx >= 0 and @as(usize, @intCast(idx)) < self.surfaces.items.len) {
@@ -707,11 +791,15 @@ fn activateXamlType(self: *App, comptime class_name: [:0]const u8) !*winrt.IInsp
 
 /// Box an HSTRING as an IInspectable via Windows.Foundation.PropertyValue.CreateString.
 fn boxString(_: *App, str: winrt.HSTRING) !*winrt.IInspectable {
+    log.info("boxString: getActivationFactory(IPropertyValueStatics)...", .{});
     const class_name = try winrt.hstring("Windows.Foundation.PropertyValue");
     defer winrt.deleteHString(class_name);
     const factory = try winrt.getActivationFactory(com.IPropertyValueStatics, class_name);
     defer factory.release();
-    return factory.createString(str);
+    log.info("boxString: createString...", .{});
+    const result = try factory.createString(str);
+    log.info("boxString: OK", .{});
+    return result;
 }
 
 /// Toggle fullscreen mode using Win32 borderless window approach.
@@ -765,80 +853,104 @@ fn loadXamlResources(xa: *com.IApplication) void {
     // 4. Append XamlControlsResources to the ResourceDictionary's MergedDictionaries
     // This matches the C++/WinRT pattern: Resources().MergedDictionaries().Append(XamlControlsResources())
 
+    log.info("loadXamlResources: starting...", .{});
+
     // Step 1: Create a ResourceDictionary.
     const rd_class = winrt.hstring("Microsoft.UI.Xaml.ResourceDictionary") catch {
-        log.warn("Failed to create ResourceDictionary HSTRING", .{});
+        log.err("loadXamlResources: Failed to create ResourceDictionary HSTRING", .{});
         return;
     };
     defer winrt.deleteHString(rd_class);
     const rd_inspectable = winrt.activateInstance(rd_class) catch |err| {
-        log.warn("ResourceDictionary creation failed: {}", .{err});
+        log.err("loadXamlResources step 1: ResourceDictionary creation failed: {}", .{err});
         return;
     };
+    log.info("loadXamlResources step 1 OK: ResourceDictionary created", .{});
 
     // Step 2: Set it as Application.Resources.
     xa.putResources(@ptrCast(rd_inspectable)) catch |err| {
-        log.warn("Application.put_Resources failed: {}", .{err});
+        log.err("loadXamlResources step 2: Application.put_Resources failed: {}", .{err});
         return;
     };
-    log.info("loadXamlResources: ResourceDictionary set on Application", .{});
+    log.info("loadXamlResources step 2 OK: ResourceDictionary set on Application", .{});
 
     // Step 3: QI for IResourceDictionary to get MergedDictionaries.
     const res_dict = rd_inspectable.queryInterface(com.IResourceDictionary) catch |err| {
-        log.warn("ResourceDictionary QI failed: {}", .{err});
+        log.err("loadXamlResources step 3a: ResourceDictionary QI failed: {}", .{err});
         return;
     };
     defer res_dict.release();
 
     const merged = res_dict.getMergedDictionaries() catch |err| {
-        log.warn("get_MergedDictionaries failed: {}", .{err});
+        log.err("loadXamlResources step 3b: get_MergedDictionaries failed: {}", .{err});
         return;
     };
+    log.info("loadXamlResources step 3 OK: got MergedDictionaries", .{});
 
     // Step 4: Create XamlControlsResources and append to MergedDictionaries.
     const xcr_class = winrt.hstring("Microsoft.UI.Xaml.Controls.XamlControlsResources") catch {
-        log.warn("Failed to create XamlControlsResources HSTRING", .{});
+        log.err("loadXamlResources step 4: Failed to create XamlControlsResources HSTRING", .{});
         return;
     };
     defer winrt.deleteHString(xcr_class);
     const xcr = winrt.activateInstance(xcr_class) catch |err| {
-        log.warn("XamlControlsResources creation failed: {}", .{err});
+        log.err("loadXamlResources step 4: XamlControlsResources creation failed: {}", .{err});
         return;
     };
+    log.info("loadXamlResources step 4a OK: XamlControlsResources created", .{});
 
     merged.append(@ptrCast(xcr)) catch |err| {
-        log.warn("MergedDictionaries.Append failed: {}", .{err});
+        log.err("loadXamlResources step 4b: MergedDictionaries.Append failed: {}", .{err});
         return;
     };
-    log.info("initXaml step 0.5 OK: XamlControlsResources loaded via MergedDictionaries", .{});
+    log.info("loadXamlResources OK: XamlControlsResources loaded via MergedDictionaries", .{});
 }
 
 fn drainMailbox(self: *App) void {
+    log.info("drainMailbox: tick...", .{});
     self.core_app.tick(self) catch |err| {
         log.warn("tick error: {}", .{err});
     };
+    log.info("drainMailbox: tick done", .{});
 }
 
 fn setTitle(self: *App, title: [:0]const u8) void {
-    const h = winrt.hstringRuntime(self.core_app.alloc, title) catch return;
+    log.info("setTitle: \"{s}\"", .{title});
+    const h = winrt.hstringRuntime(self.core_app.alloc, title) catch |err| {
+        log.warn("setTitle: hstringRuntime failed: {}", .{err});
+        return;
+    };
     defer winrt.deleteHString(h);
 
     // Update window title bar.
     if (self.window) |window| {
+        log.info("setTitle: putTitle...", .{});
         window.putTitle(h) catch {};
+        log.info("setTitle: putTitle done", .{});
     }
 
     // Update active tab header.
     if (self.activeSurface()) |surface| {
         if (surface.tab_view_item_inspectable) |tvi_insp| {
-            const tvi = tvi_insp.queryInterface(com.ITabViewItem) catch return;
+            log.info("setTitle: QI for ITabViewItem...", .{});
+            const tvi = tvi_insp.queryInterface(com.ITabViewItem) catch |err| {
+                log.warn("setTitle: QI ITabViewItem failed: {}", .{err});
+                return;
+            };
             defer tvi.release();
             // Box the string as IInspectable for the Header property.
-            const boxed = self.boxString(h) catch return;
+            log.info("setTitle: boxString...", .{});
+            const boxed = self.boxString(h) catch |err| {
+                log.warn("setTitle: boxString failed: {}", .{err});
+                return;
+            };
             defer _ = boxed.release();
+            log.info("setTitle: putHeader...", .{});
             tvi.putHeader(@ptrCast(boxed)) catch {};
+            log.info("setTitle: putHeader done", .{});
         }
     }
+    log.info("setTitle: completed", .{});
 }
 
 // ---------------------------------------------------------------
@@ -894,7 +1006,7 @@ fn subclassProc(
         os.WM_MOUSEHWHEEL => return handleScroll(app, hwnd, msg, wparam, lparam, .horizontal),
         os.WM_DPICHANGED => return handleDpiChanged(app, hwnd, msg, wparam, lparam),
         os.WM_USER => return handleWakeup(app, hwnd, msg, wparam, lparam),
-        os.WM_APP_BIND_SWAP_CHAIN => return handleBindSwapChain(wparam, lparam),
+        os.WM_APP_BIND_SWAP_CHAIN => return handleBindSwapChain(app, wparam, lparam),
         // IME messages only handled in subclass as fallback (when input_hwnd failed).
         // When input_hwnd is active, IME messages go directly to inputWndProc.
         os.WM_IME_STARTCOMPOSITION => return ime.handleIMEStartComposition(app, hwnd, msg, wparam, lparam),
@@ -1050,16 +1162,111 @@ fn handleDpiChanged(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, l
 }
 
 fn handleWakeup(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
+    log.info("handleWakeup: drainMailbox...", .{});
     app.drainMailbox();
+    log.info("handleWakeup: drainMailbox done", .{});
     return os.DefSubclassProc(hwnd, msg, wparam, lparam);
 }
 
 /// Handle WM_APP_BIND_SWAP_CHAIN: complete swap chain binding on the UI thread.
 /// wparam carries the swap chain pointer, lparam carries the Surface pointer.
-fn handleBindSwapChain(wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
+fn handleBindSwapChain(app: *App, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
     const surface: *Surface = @ptrFromInt(@as(usize, @bitCast(lparam)));
     const swap_chain: *anyopaque = @ptrFromInt(@as(usize, @bitCast(wparam)));
+
+    // Drop stale bind requests that arrive after a surface was removed.
+    var alive = false;
+    for (app.surfaces.items) |s| {
+        if (s == surface) {
+            alive = true;
+            break;
+        }
+    }
+    if (!alive) {
+        log.warn("handleBindSwapChain: drop stale surface ptr=0x{x}", .{@intFromPtr(surface)});
+        return 0;
+    }
+
     surface.completeBindSwapChain(swap_chain);
     return 0;
 }
+
+// ---------------------------------------------------------------
+// Vectored Exception Handler — capture STATUS_STOWED_EXCEPTION details
+// ---------------------------------------------------------------
+
+fn writeRaw(msg: []const u8) void {
+    const K32 = std.os.windows.kernel32;
+    const handle = K32.GetStdHandle(@bitCast(@as(i32, -12))); // STD_ERROR_HANDLE
+    if (handle != std.os.windows.INVALID_HANDLE_VALUE and handle != null) {
+        _ = K32.WriteFile(handle.?, msg.ptr, @intCast(msg.len), null, null);
+    }
+}
+
+fn stowedExceptionHandler(info: *os.EXCEPTION_POINTERS) callconv(.winapi) c_long {
+    const record = info.ExceptionRecord orelse return os.EXCEPTION_CONTINUE_SEARCH;
+
+    // Only intercept STATUS_STOWED_EXCEPTION (0xC000027B).
+    if (record.ExceptionCode != os.STATUS_STOWED_EXCEPTION) return os.EXCEPTION_CONTINUE_SEARCH;
+
+    // Use direct WriteFile to bypass Zig's log locking (may be held when crash occurs).
+    writeRaw("=== STATUS_STOWED_EXCEPTION caught ===\n");
+
+    log.err("=== STATUS_STOWED_EXCEPTION caught ===", .{});
+    log.err("  ExceptionAddress: 0x{x}", .{@intFromPtr(record.ExceptionAddress)});
+    log.err("  NumberParameters: {}", .{record.NumberParameters});
+
+    // Dump raw exception parameters.
+    const n = @min(record.NumberParameters, 15);
+    for (0..n) |i| {
+        log.err("  ExceptionInformation[{}]: 0x{x}", .{ i, record.ExceptionInformation[i] });
+    }
+
+    // Try to parse stowed exception entries.
+    // Common layout: ExceptionInformation[0] = count, ExceptionInformation[1] = pointer to array of pointers.
+    if (record.NumberParameters >= 2) {
+        const count = record.ExceptionInformation[0];
+        const array_ptr = record.ExceptionInformation[1];
+
+        if (count > 0 and count < 100 and array_ptr != 0) {
+            log.err("  Attempting to read {} stowed exception(s) from 0x{x}...", .{ count, array_ptr });
+            const entries: [*]const usize = @ptrFromInt(array_ptr);
+            for (0..count) |i| {
+                const entry_ptr = entries[i];
+                if (entry_ptr == 0) {
+                    log.err("  [{}] null entry", .{i});
+                    continue;
+                }
+                const entry: *const os.STOWED_EXCEPTION_INFORMATION_V2 = @ptrFromInt(entry_ptr);
+                log.err("  [{}] size={} sig=0x{x} HRESULT=0x{x} form={}", .{
+                    i,
+                    entry.size,
+                    entry.signature,
+                    @as(u32, @bitCast(entry.result_code)),
+                    entry.exception_form,
+                });
+            }
+        }
+    }
+
+    // Also try: ExceptionInformation[0] = pointer to single STOWED_EXCEPTION_INFORMATION_V2.
+    if (record.NumberParameters >= 1 and record.ExceptionInformation[0] != 0) {
+        const maybe_entry: *const os.STOWED_EXCEPTION_INFORMATION_V2 = @ptrFromInt(record.ExceptionInformation[0]);
+        // Check for "SE02" (0x32304553) or "SE01" (0x31304553) signature.
+        if (maybe_entry.signature == 0x32304553 or maybe_entry.signature == 0x31304553) {
+            log.err("  Direct stowed entry: HRESULT=0x{x} (sig=0x{x})", .{
+                @as(u32, @bitCast(maybe_entry.result_code)),
+                maybe_entry.signature,
+            });
+        }
+    }
+
+    log.err("=== End stowed exception dump ===", .{});
+
+    return os.EXCEPTION_CONTINUE_SEARCH;
+}
+
+
+
+
 

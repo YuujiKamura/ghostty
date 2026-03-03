@@ -359,3 +359,56 @@ pub extern "user32" fn GetMonitorInfoW(hMonitor: HANDLE, lpmi: *MONITORINFO) cal
 // --- winmm extern declarations ---
 pub extern "winmm" fn timeBeginPeriod(uPeriod: UINT) callconv(.winapi) UINT;
 pub extern "winmm" fn timeEndPeriod(uPeriod: UINT) callconv(.winapi) UINT;
+
+// --- Vectored Exception Handling ---
+pub const EXCEPTION_RECORD = extern struct {
+    ExceptionCode: DWORD,
+    ExceptionFlags: DWORD,
+    ExceptionRecord: ?*EXCEPTION_RECORD,
+    ExceptionAddress: ?*anyopaque,
+    NumberParameters: DWORD,
+    ExceptionInformation: [15]usize,
+};
+
+pub const EXCEPTION_POINTERS = extern struct {
+    ExceptionRecord: ?*EXCEPTION_RECORD,
+    ContextRecord: ?*anyopaque,
+};
+
+pub const EXCEPTION_CONTINUE_SEARCH: c_long = 0;
+pub const STATUS_STOWED_EXCEPTION: DWORD = 0xC000027B;
+
+/// Stowed exception info v2 header — first 8 bytes of each entry.
+pub const STOWED_EXCEPTION_INFORMATION_V2 = extern struct {
+    size: u32,
+    signature: u32, // "SE02" = 0x32304553, "SE01" = 0x31304553
+    result_code: i32, // HRESULT
+    exception_form: u32,
+    // ... more fields follow but we only need result_code
+};
+
+pub const VectoredExceptionHandler = *const fn (*EXCEPTION_POINTERS) callconv(.winapi) c_long;
+pub extern "kernel32" fn AddVectoredExceptionHandler(first: u32, handler: VectoredExceptionHandler) callconv(.winapi) ?*anyopaque;
+pub extern "kernel32" fn RemoveVectoredExceptionHandler(handle: *anyopaque) callconv(.winapi) u32;
+
+// --- Debug logging: redirect stderr to a file for GUI apps ---
+pub extern "kernel32" fn SetStdHandle(nStdHandle: DWORD, hHandle: HANDLE) callconv(.winapi) BOOL;
+pub const STD_ERROR_HANDLE: DWORD = @as(DWORD, @bitCast(@as(i32, -12)));
+
+const CreateFileW = win32.kernel32.CreateFileW;
+pub fn attachDebugConsole() void {
+    // Redirect stderr to a log file next to the exe.
+    const name = std.unicode.utf8ToUtf16LeStringLiteral("C:\\Users\\yuuji\\ghostty-win\\debug.log");
+    const h = CreateFileW(
+        name,
+        win32.GENERIC_WRITE,
+        win32.FILE_SHARE_READ,
+        null,
+        win32.CREATE_ALWAYS,
+        0,
+        null,
+    );
+    if (h != win32.INVALID_HANDLE_VALUE) {
+        _ = SetStdHandle(STD_ERROR_HANDLE, h);
+    }
+}

@@ -1,4 +1,4 @@
-//! WinUI 3 COM interface definitions for Zig.
+﻿//! WinUI 3 COM interface definitions for Zig.
 //!
 //! VTable definitions are auto-generated from Microsoft.UI.Xaml.winmd by winmd2zig.
 //! Slot ordering matches ECMA-335 metadata exactly.
@@ -9,7 +9,7 @@
 //!     ITabView ITabViewItem IContentControl
 //!
 //! Non-WinMD interfaces (IWindowNative, ISwapChainPanelNative, IVector) are
-//! maintained manually — they come from Windows SDK headers, not .winmd files.
+//! maintained manually 窶・they come from Windows SDK headers, not .winmd files.
 
 const std = @import("std");
 const winrt = @import("winrt.zig");
@@ -24,7 +24,7 @@ const hrCheck = winrt.hrCheck;
 const WinRTError = winrt.WinRTError;
 
 // ============================================================================
-// IApplicationStatics — Microsoft.UI.Xaml.IApplicationStatics
+// IApplicationStatics 窶・Microsoft.UI.Xaml.IApplicationStatics
 // Generated from WinMD
 // ============================================================================
 
@@ -60,7 +60,7 @@ pub const IApplicationStatics = extern struct {
 };
 
 // ============================================================================
-// IApplicationFactory — Microsoft.UI.Xaml.IApplicationFactory
+// IApplicationFactory 窶・Microsoft.UI.Xaml.IApplicationFactory
 // Generated from WinMD
 // ============================================================================
 
@@ -102,7 +102,7 @@ pub const IApplicationFactory = extern struct {
 };
 
 // ============================================================================
-// IApplication — Microsoft.UI.Xaml.IApplication
+// IApplication 窶・Microsoft.UI.Xaml.IApplication
 // Generated from WinMD
 // ============================================================================
 
@@ -156,7 +156,7 @@ pub const IApplication = extern struct {
 };
 
 // ============================================================================
-// IWindow — Microsoft.UI.Xaml.IWindow
+// IWindow 窶・Microsoft.UI.Xaml.IWindow
 // Generated from WinMD
 // ============================================================================
 
@@ -239,9 +239,9 @@ pub const IWindow = extern struct {
 };
 
 // ============================================================================
-// IWindowNative — classic COM interface (not WinRT) for getting HWND
+// IWindowNative 窶・classic COM interface (not WinRT) for getting HWND
 // IID: {EECDBF0E-BAE9-4CB6-A68E-9598E1CB57BB}
-// NOT from WinMD — from Windows SDK headers
+// NOT from WinMD 窶・from Windows SDK headers
 // ============================================================================
 
 pub const IWindowNative = extern struct {
@@ -274,9 +274,9 @@ pub const IWindowNative = extern struct {
 };
 
 // ============================================================================
-// ISwapChainPanelNative — classic COM interface for binding DXGI swap chain
+// ISwapChainPanelNative 窶・classic COM interface for binding DXGI swap chain
 // IID: {63AAD0B8-7C24-40FF-85A8-640D944CC325}
-// NOT from WinMD — from microsoft.ui.xaml.media.dxinterop.h
+// NOT from WinMD 窶・from microsoft.ui.xaml.media.dxinterop.h
 // ============================================================================
 
 pub const ISwapChainPanelNative = extern struct {
@@ -307,7 +307,7 @@ pub const ISwapChainPanelNative = extern struct {
 };
 
 // ============================================================================
-// ITabView — Microsoft.UI.Xaml.Controls.ITabView
+// ITabView 窶・Microsoft.UI.Xaml.Controls.ITabView
 // Generated from WinMD
 // ============================================================================
 
@@ -436,7 +436,7 @@ pub const ITabView = extern struct {
 };
 
 // ============================================================================
-// ITabViewItem — Microsoft.UI.Xaml.Controls.ITabViewItem
+// ITabViewItem 窶・Microsoft.UI.Xaml.Controls.ITabViewItem
 // Generated from WinMD
 // ============================================================================
 
@@ -483,7 +483,7 @@ pub const ITabViewItem = extern struct {
 };
 
 // ============================================================================
-// IContentControl — Microsoft.UI.Xaml.Controls.IContentControl
+// IContentControl 窶・Microsoft.UI.Xaml.Controls.IContentControl
 // Generated from WinMD
 // ============================================================================
 
@@ -524,9 +524,9 @@ pub const IContentControl = extern struct {
 };
 
 // ============================================================================
-// IVector — Windows.Foundation.Collections.IVector<IInspectable>
+// IVector 窶・Windows.Foundation.Collections.IVector<IInspectable>
 // IID: {B32BDCA4-5E52-5B27-BC5D-D66A1A268C2A} (pinterface computed)
-// NOT from WinMD — maintained manually
+// NOT from WinMD 窶・maintained manually
 // ============================================================================
 
 pub const IVector = extern struct {
@@ -592,7 +592,7 @@ pub const IVector = extern struct {
 };
 
 // ============================================================================
-// IResourceDictionary — Microsoft.UI.Xaml.IResourceDictionary
+// IResourceDictionary 窶・Microsoft.UI.Xaml.IResourceDictionary
 // Generated from WinMD
 // ============================================================================
 
@@ -630,7 +630,7 @@ pub const IResourceDictionary = extern struct {
 };
 
 // ============================================================================
-// IXamlMetadataProvider — Microsoft.UI.Xaml.Markup.IXamlMetadataProvider
+// IXamlMetadataProvider 窶・Microsoft.UI.Xaml.Markup.IXamlMetadataProvider
 // Generated from WinMD
 // ============================================================================
 
@@ -659,7 +659,7 @@ pub const IXamlMetadataProvider = extern struct {
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
 
-    /// Call GetXamlType(fullName) → IXamlType (slot 7).
+    /// Call GetXamlType(fullName) 竊・IXamlType (slot 7).
     pub fn getXamlType(self: *IXamlMetadataProvider, full_name: ?HSTRING) WinRTError!*IXamlType {
         var result: ?*anyopaque = null;
         try hrCheck(self.lpVtbl.GetXamlType_2(@ptrCast(self), full_name, &result));
@@ -668,7 +668,7 @@ pub const IXamlMetadataProvider = extern struct {
 };
 
 // ============================================================================
-// IXamlType — Microsoft.UI.Xaml.Markup.IXamlType
+// IXamlType 窶・Microsoft.UI.Xaml.Markup.IXamlType
 // Used to activate WinUI3 custom controls via XAML type system instead of
 // RoActivateInstance (which returns E_NOTIMPL for controls like TabView).
 // ============================================================================
@@ -690,7 +690,7 @@ pub const IXamlType = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        // IXamlType (slots 6-24) — generated by winmd2zig
+        // IXamlType (slots 6-24) 窶・generated by winmd2zig
         get_BaseType: VtblPlaceholder, // 6
         get_ContentProperty: VtblPlaceholder, // 7
         get_FullName: VtblPlaceholder, // 8
@@ -724,7 +724,7 @@ pub const IXamlType = extern struct {
 };
 
 // ============================================================================
-// IApplicationOverrides — Microsoft.UI.Xaml.IApplicationOverrides
+// IApplicationOverrides 窶・Microsoft.UI.Xaml.IApplicationOverrides
 // Generated from WinMD
 // ============================================================================
 
@@ -754,8 +754,8 @@ pub const IApplicationOverrides = extern struct {
 };
 
 // ============================================================================
-// IPropertyValueStatics — Windows.Foundation.IPropertyValueStatics
-// NOT from WinMD — maintained manually (Windows SDK, not WinUI3 SDK)
+// IPropertyValueStatics 窶・Windows.Foundation.IPropertyValueStatics
+// NOT from WinMD 窶・maintained manually (Windows SDK, not WinUI3 SDK)
 // Used for boxing primitive values (strings, ints, etc.) as IInspectable.
 // ============================================================================
 
@@ -812,7 +812,7 @@ pub const IPropertyValueStatics = extern struct {
 };
 
 // ============================================================================
-// Common COM helpers — reduce release/queryInterface boilerplate
+// Common COM helpers 窶・reduce release/queryInterface boilerplate
 // ============================================================================
 
 /// Release a COM object. Works with any interface struct that has lpVtbl.Release.
@@ -826,3 +826,25 @@ pub inline fn comQueryInterface(self: anytype, comptime T: type) WinRTError!*T {
     try hrCheck(self.lpVtbl.QueryInterface(@ptrCast(self), &T.IID, &result));
     return @ptrCast(@alignCast(result orelse return error.WinRTFailed));
 }
+
+// ============================================================================
+// TypedEventHandler delegate IIDs (parameterized)
+//
+// WinRT delegates are COM objects with IUnknown + Invoke.
+// The framework QIs for the specific delegate IID before calling Invoke.
+// These IIDs are computed from WinMD by winmd2zig --emit-tabview-delegate-zig.
+// Verified against windows-rs shadow parity (28/28 IID match, 0 fail).
+// ============================================================================
+
+/// TypedEventHandler<TabView, TabViewTabCloseRequestedEventArgs>
+/// Generated: winmd2zig --emit-tabview-delegate-zig Microsoft.UI.Xaml.winmd
+pub const IID_TypedEventHandler_TabCloseRequested = GUID{ .Data1 = 0x7093974b, .Data2 = 0x0900, .Data3 = 0x52ae, .Data4 = .{ 0xaf, 0xd8, 0x70, 0xe5, 0x62, 0x3f, 0x45, 0x95 } };
+
+/// TypedEventHandler<TabView, Object> (AddTabButtonClick)
+/// Generated: winmd2zig --emit-tabview-delegate-zig Microsoft.UI.Xaml.winmd
+pub const IID_TypedEventHandler_AddTabButtonClick = GUID{ .Data1 = 0x13df6907, .Data2 = 0xbbb4, .Data3 = 0x5f16, .Data4 = .{ 0xbe, 0xac, 0x29, 0x38, 0xc1, 0x5e, 0x1d, 0x85 } };
+
+/// SelectionChangedEventHandler
+/// Generated: winmd2zig --emit-tabview-delegate-zig Microsoft.UI.Xaml.winmd
+pub const IID_SelectionChangedEventHandler = GUID{ .Data1 = 0xa232390d, .Data2 = 0x0e34, .Data3 = 0x595e, .Data4 = .{ 0x89, 0x31, 0xfa, 0x92, 0x8a, 0x99, 0x09, 0xf4 } };
+

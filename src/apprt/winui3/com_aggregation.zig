@@ -114,9 +114,10 @@ pub const AppOuter = struct {
     iunknown: IUnknownVtblPtr,
     /// The IXamlMetadataProvider vtable pointer — at offset 8.
     imetadata: IMetadataVtblPtr,
-    /// Reference count (non-atomic: AppOuter is only used on the STA thread
-    /// and is embedded in App, so it is never shared across threads).
-    ref_count: u32,
+    /// Reference count. Must be atomic because we expose IXamlMetadataProvider
+    /// to the XAML framework, which may call AddRef/Release from background
+    /// threads during template resolution and layout.
+    ref_count: std.atomic.Value(u32),
     /// The inner (non-delegating) IInspectable from Application.
     inner: ?*winrt.IInspectable,
     /// XamlControlsXamlMetaDataProvider instance for IXamlMetadataProvider delegation.
@@ -171,7 +172,7 @@ pub const AppOuter = struct {
         self.* = .{
             .iunknown = .{ .lpVtbl = &iunknown_vtable },
             .imetadata = .{ .lpVtbl = &imetadata_vtable },
-            .ref_count = 1,
+            .ref_count = std.atomic.Value(u32).init(1),
             .inner = null,
             .provider = null,
         };
@@ -196,17 +197,31 @@ pub const AppOuter = struct {
     fn outerQueryInterface(this: *anyopaque, riid: *const winrt.GUID, ppv: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
         const self = fromIUnknownPtr(this);
         const IID_IUnknown = winrt.GUID{ .Data1 = 0x00000000, .Data2 = 0x0000, .Data3 = 0x0000, .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
-        const IID_IAgileObject = winrt.GUID{ .Data1 = 0x94ea2b94, .Data2 = 0xe9cc, .Data3 = 0x49e0, .Data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+
+        // Log EVERY QI request with IID and inner state for crash diagnosis.
+        log.info("outerQI: iid={{{x:0>8}-{x:0>4}-{x:0>4}-{x:0>2}{x:0>2}-{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}}} inner={}", .{
+            riid.Data1,      riid.Data2,      riid.Data3,
+            riid.Data4[0],   riid.Data4[1],   riid.Data4[2], riid.Data4[3],
+            riid.Data4[4],   riid.Data4[5],   riid.Data4[6], riid.Data4[7],
+            @intFromPtr(self.inner),
+        });
 
         // IXamlMetadataProvider → return our metadata interface
         if (guidEql(riid, &com.IXamlMetadataProvider.IID)) {
+            log.info("outerQI: -> IXamlMetadataProvider (handled by outer)", .{});
             ppv.* = @ptrCast(&self.imetadata);
             _ = outerAddRef(this);
             return 0; // S_OK
         }
 
-        // IUnknown or IAgileObject → return outer
-        if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+        // IUnknown → return outer (the controlling unknown).
+        // NOTE: IAgileObject is intentionally NOT handled here. We delegate it
+        // to the inner Application object, which decides its own apartment model.
+        // Previously we claimed agile, which told WinRT it could call us from any
+        // thread — but our IXamlMetadataProvider callbacks delegate to the provider
+        // which may not be thread-safe.
+        if (guidEql(riid, &IID_IUnknown)) {
+            log.info("outerQI: -> IUnknown (handled by outer)", .{});
             ppv.* = this;
             _ = outerAddRef(this);
             return 0; // S_OK
@@ -214,23 +229,25 @@ pub const AppOuter = struct {
 
         // Everything else → delegate to inner (non-delegating QI)
         if (self.inner) |inner| {
-            return inner.lpVtbl.QueryInterface(@ptrCast(inner), riid, ppv);
+            const hr = inner.lpVtbl.QueryInterface(@ptrCast(inner), riid, ppv);
+            log.info("outerQI: -> delegated to inner, hr=0x{x:0>8}", .{@as(u32, @bitCast(hr))});
+            return hr;
         }
 
         ppv.* = null;
+        log.info("outerQI: -> NO INNER, returning E_NOINTERFACE", .{});
         return @bitCast(@as(u32, 0x80004002)); // E_NOINTERFACE
     }
 
     fn outerAddRef(this: *anyopaque) callconv(.winapi) u32 {
         const self = fromIUnknownPtr(this);
-        self.ref_count += 1;
-        return self.ref_count;
+        return self.ref_count.fetchAdd(1, .monotonic) + 1;
     }
 
     fn outerRelease(this: *anyopaque) callconv(.winapi) u32 {
         const self = fromIUnknownPtr(this);
-        self.ref_count -= 1;
-        return self.ref_count;
+        const prev = self.ref_count.fetchSub(1, .monotonic);
+        return prev - 1;
     }
 
     // --- IXamlMetadataProvider interface (delegating IUnknown to outer) ---
@@ -267,18 +284,24 @@ pub const AppOuter = struct {
     }
 
     fn metadataGetXamlType(this: *anyopaque, type_name: [*]const u8, result: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
+        log.info("metadataGetXamlType called (slot 6, TypeName overload)", .{});
         const self = fromIMetadataPtr(this);
         if (self.provider) |provider| {
-            return provider.lpVtbl.GetXamlType(@ptrCast(provider), type_name, result);
+            const hr = provider.lpVtbl.GetXamlType(@ptrCast(provider), type_name, result);
+            log.info("metadataGetXamlType delegated, hr=0x{x}", .{@as(u32, @bitCast(hr))});
+            return hr;
         }
         result.* = null;
         return 0; // S_OK — return null IXamlType (type not found)
     }
 
     fn metadataGetXamlType2(this: *anyopaque, full_name: ?winrt.HSTRING, result: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
+        log.info("metadataGetXamlType2 called (slot 7, HSTRING overload)", .{});
         const self = fromIMetadataPtr(this);
         if (self.provider) |provider| {
-            return provider.lpVtbl.GetXamlType_2(@ptrCast(provider), full_name, result);
+            const hr = provider.lpVtbl.GetXamlType_2(@ptrCast(provider), full_name, result);
+            log.info("metadataGetXamlType2 delegated, hr=0x{x}", .{@as(u32, @bitCast(hr))});
+            return hr;
         }
         result.* = null;
         return 0; // S_OK — return null IXamlType (type not found)
