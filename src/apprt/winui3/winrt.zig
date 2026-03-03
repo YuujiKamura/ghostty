@@ -11,6 +11,7 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const os = @import("os.zig");
 const log = std.log.scoped(.winui3);
 
 // --- Windows base types ---
@@ -94,9 +95,9 @@ pub const IInspectable = extern struct {
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
         // IInspectable (slots 3-5)
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
+        GetIids: *const fn (*anyopaque, *u32, *?*GUID) callconv(.winapi) HRESULT,
+        GetRuntimeClassName: *const fn (*anyopaque, *?HSTRING) callconv(.winapi) HRESULT,
+        GetTrustLevel: *const fn (*anyopaque, *anyopaque) callconv(.winapi) HRESULT,
     };
 
     pub fn queryInterface(self: *IInspectable, comptime T: type) WinRTError!*T {
@@ -111,6 +112,12 @@ pub const IInspectable = extern struct {
 
     pub fn release(self: *IInspectable) u32 {
         return self.lpVtbl.Release(@ptrCast(self));
+    }
+
+    pub fn getRuntimeClassName(self: *IInspectable) WinRTError!HSTRING {
+        var result: ?HSTRING = null;
+        try hrCheck(self.lpVtbl.GetRuntimeClassName(@ptrCast(self), &result));
+        return result orelse error.WinRTFailed;
     }
 };
 
@@ -199,39 +206,26 @@ var fn_RoGetActivationFactory: ?RoGetActivationFactoryFn = null;
 var fn_WindowsCreateString: ?WindowsCreateStringFn = null;
 var fn_WindowsDeleteString: ?WindowsDeleteStringFn = null;
 
+var combase_module: ?HANDLE = null;
+
 fn loadCombase() WinRTError!void {
     if (combase_loaded.load(.acquire)) return;
 
+    // Use a simple spinlock or atomic check to ensure only one thread loads.
+    // In a GUI app, this is usually called once during startup on the main thread anyway.
     const dll_name = std.unicode.utf8ToUtf16LeStringLiteral("combase.dll");
     const module = std.os.windows.kernel32.LoadLibraryW(dll_name) orelse {
         log.err("Failed to load combase.dll", .{});
         return error.WinRTFailed;
     };
+    combase_module = module;
 
-    fn_RoInitialize = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "RoInitialize") orelse {
-        log.err("RoInitialize not found in combase.dll", .{});
-        return error.WinRTFailed;
-    });
-    fn_RoUninitialize = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "RoUninitialize") orelse {
-        log.err("RoUninitialize not found in combase.dll", .{});
-        return error.WinRTFailed;
-    });
-    fn_RoActivateInstance = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "RoActivateInstance") orelse {
-        log.err("RoActivateInstance not found in combase.dll", .{});
-        return error.WinRTFailed;
-    });
-    fn_RoGetActivationFactory = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "RoGetActivationFactory") orelse {
-        log.err("RoGetActivationFactory not found in combase.dll", .{});
-        return error.WinRTFailed;
-    });
-    fn_WindowsCreateString = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "WindowsCreateString") orelse {
-        log.err("WindowsCreateString not found in combase.dll", .{});
-        return error.WinRTFailed;
-    });
-    fn_WindowsDeleteString = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "WindowsDeleteString") orelse {
-        log.err("WindowsDeleteString not found in combase.dll", .{});
-        return error.WinRTFailed;
-    });
+    fn_RoInitialize = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "RoInitialize") orelse return error.WinRTFailed);
+    fn_RoUninitialize = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "RoUninitialize") orelse return error.WinRTFailed);
+    fn_RoActivateInstance = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "RoActivateInstance") orelse return error.WinRTFailed);
+    fn_RoGetActivationFactory = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "RoGetActivationFactory") orelse return error.WinRTFailed);
+    fn_WindowsCreateString = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "WindowsCreateString") orelse return error.WinRTFailed);
+    fn_WindowsDeleteString = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "WindowsDeleteString") orelse return error.WinRTFailed);
 
     combase_loaded.store(true, .release);
 }
@@ -292,4 +286,10 @@ pub fn createDispatcherQueueController(options: *const DispatcherQueueOptions) W
     var controller: ?*IInspectable = null;
     try hrCheck(create_fn(options, &controller));
     return controller orelse error.WinRTFailed;
+}
+
+extern "ole32" fn CoTaskMemFree(pv: ?*anyopaque) callconv(.winapi) void;
+
+pub inline fn coTaskMemFree(pv: ?*anyopaque) void {
+    CoTaskMemFree(pv);
 }

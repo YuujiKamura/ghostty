@@ -8,5 +8,12 @@ const internal_os = @import("../os/main.zig");
 pub const resourcesDir = internal_os.resourcesDir;
 
 test {
+    _ = @import("winui3/Config.zig");
+    _ = @import("winui3/util.zig");
+    _ = @import("winui3/WeakRef.zig");
+    _ = @import("winui3/key.zig");
+    _ = @import("winui3/input_overlay.zig");
+    _ = @import("winui3/debug_harness.zig");
+    _ = @import("winui3/com_runtime.zig");
     @import("std").testing.refAllDecls(@This());
 }

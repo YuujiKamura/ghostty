@@ -24,9 +24,32 @@ const hrCheck = winrt.hrCheck;
 const WinRTError = winrt.WinRTError;
 
 // ============================================================================
-// IApplicationStatics 窶・Microsoft.UI.Xaml.IApplicationStatics
-// Generated from WinMD
+// IUnknown
 // ============================================================================
+
+pub const IUnknown = extern struct {
+    pub const IID = GUID{
+        .Data1 = 0x00000000,
+        .Data2 = 0x0000,
+        .Data3 = 0x0000,
+        .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 },
+    };
+
+    lpVtbl: *const VTable,
+
+    const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+    };
+
+    pub fn release(self: *IUnknown) void {
+        _ = self.lpVtbl.Release(@ptrCast(self));
+    }
+};
+
+// ============================================================================
+// IApplicationStatics — Microsoft.UI.Xaml.IApplicationStatics
 
 pub const IApplicationStatics = extern struct {
     // WinMD: Microsoft.UI.Xaml.IApplicationStatics
@@ -483,6 +506,53 @@ pub const ITabViewItem = extern struct {
 };
 
 // ============================================================================
+// ITabViewTabCloseRequestedEventArgs ・Microsoft.UI.Xaml.Controls.ITabViewTabCloseRequestedEventArgs
+// Generated from WinMD
+// ============================================================================
+
+pub const ITabViewTabCloseRequestedEventArgs = extern struct {
+    // WinMD: Microsoft.UI.Xaml.Controls.ITabViewTabCloseRequestedEventArgs
+    // Blob: 01 00 b2 b9 6a d5 64 e2 7e 5c a1 cb e4 1a 16 a6 c6 c6
+    pub const IID = GUID{
+        .Data1 = 0xd56ab9b2,
+        .Data2 = 0xe264,
+        .Data3 = 0x5c7e,
+        .Data4 = .{ 0xa1, 0xcb, 0xe4, 0x1a, 0x16, 0xa6, 0xc6, 0xc6 },
+    };
+
+    lpVtbl: *const VTable,
+
+    const VTable = extern struct {
+        // IUnknown (slots 0-2)
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        // IInspectable (slots 3-5)
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        // ITabViewTabCloseRequestedEventArgs (slots 6-7)
+        get_Item: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT, // 6
+        get_Tab: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT, // 7
+    };
+
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
+    pub fn getItem(self: *ITabViewTabCloseRequestedEventArgs) WinRTError!*winrt.IInspectable {
+        var result: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.get_Item(@ptrCast(self), &result));
+        return @ptrCast(@alignCast(result orelse return error.WinRTFailed));
+    }
+
+    pub fn getTab(self: *ITabViewTabCloseRequestedEventArgs) WinRTError!*winrt.IInspectable {
+        var result: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.get_Tab(@ptrCast(self), &result));
+        return @ptrCast(@alignCast(result orelse return error.WinRTFailed));
+    }
+};
+
+// ============================================================================
 // IContentControl 窶・Microsoft.UI.Xaml.Controls.IContentControl
 // Generated from WinMD
 // ============================================================================
@@ -524,9 +594,9 @@ pub const IContentControl = extern struct {
 };
 
 // ============================================================================
-// IVector 窶・Windows.Foundation.Collections.IVector<IInspectable>
+// IVector ・ Windows.Foundation.Collections.IVector<IInspectable>
 // IID: {B32BDCA4-5E52-5B27-BC5D-D66A1A268C2A} (pinterface computed)
-// NOT from WinMD 窶・maintained manually
+// NOT from WinMD ・ maintained manually
 // ============================================================================
 
 pub const IVector = extern struct {
@@ -588,6 +658,93 @@ pub const IVector = extern struct {
 
     pub fn append(self: *IVector, item: ?*anyopaque) WinRTError!void {
         try hrCheck(self.lpVtbl.Append(@ptrCast(self), item));
+    }
+};
+
+// ============================================================================
+// IControl ・ Microsoft.UI.Xaml.Controls.IControl
+// ============================================================================
+
+pub const IControl = extern struct {
+    pub const IID = GUID{ .Data1 = 0xb260ae6d, .Data2 = 0xfa98, .Data3 = 0x51fb, .Data4 = .{ 0x90, 0xb3, 0x4b, 0xa2, 0x77, 0xb1, 0x11, 0x3d } };
+
+    lpVtbl: *const VTable,
+
+    const VTable = extern struct {
+        // IUnknown (slots 0-2)
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        // IInspectable (slots 3-5)
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        // IControl (slots 6-25)
+        get_FontSize: VtblPlaceholder, // 6
+        put_FontSize: VtblPlaceholder, // 7
+        get_FontFamily: VtblPlaceholder, // 8
+        put_FontFamily: VtblPlaceholder, // 9
+        get_FontWeight: VtblPlaceholder, // 10
+        put_FontWeight: VtblPlaceholder, // 11
+        get_FontStyle: VtblPlaceholder, // 12
+        put_FontStyle: VtblPlaceholder, // 13
+        get_FontStretch: VtblPlaceholder, // 14
+        put_FontStretch: VtblPlaceholder, // 15
+        get_CharacterSpacing: VtblPlaceholder, // 16
+        put_CharacterSpacing: VtblPlaceholder, // 17
+        get_Foreground: VtblPlaceholder, // 18
+        put_Foreground: VtblPlaceholder, // 19
+        get_IsTextScaleFactorEnabled: VtblPlaceholder, // 20
+        put_IsTextScaleFactorEnabled: VtblPlaceholder, // 21
+        get_Background: VtblPlaceholder, // 22
+        put_Background: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT, // 23
+        get_TabNavigation: VtblPlaceholder, // 24
+        put_TabNavigation: VtblPlaceholder, // 25
+    };
+
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
+    pub fn putBackground(self: *IControl, brush: ?*anyopaque) WinRTError!void {
+        try hrCheck(self.lpVtbl.put_Background(@ptrCast(self), brush));
+    }
+};
+
+// ============================================================================
+// ISolidColorBrush ・ Microsoft.UI.Xaml.Media.ISolidColorBrush
+// ============================================================================
+
+pub const ISolidColorBrush = extern struct {
+    pub const IID = GUID{ .Data1 = 0x166690fa, .Data2 = 0x97af, .Data3 = 0x5190, .Data4 = .{ 0x90, 0xb3, 0x4b, 0xa2, 0x77, 0xb1, 0x11, 0x3d } };
+
+    lpVtbl: *const VTable,
+
+    const VTable = extern struct {
+        // IUnknown (slots 0-2)
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        // IInspectable (slots 3-5)
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        // ISolidColorBrush (slots 6-7)
+        get_Color: VtblPlaceholder, // 6
+        put_Color: *const fn (*anyopaque, Color) callconv(.winapi) HRESULT, // 7
+    };
+
+    pub const Color = extern struct {
+        a: u8,
+        r: u8,
+        g: u8,
+        b: u8,
+    };
+
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
+    pub fn putColor(self: *ISolidColorBrush, color: Color) WinRTError!void {
+        try hrCheck(self.lpVtbl.put_Color(@ptrCast(self), color));
     }
 };
 
@@ -812,7 +969,116 @@ pub const IPropertyValueStatics = extern struct {
 };
 
 // ============================================================================
-// Common COM helpers 窶・reduce release/queryInterface boilerplate
+// IPropertyValue — Windows.Foundation.IPropertyValue
+// Used to extract boxed primitive values.
+// ============================================================================
+
+pub const IPropertyValue = extern struct {
+    pub const IID = GUID{
+        .Data1 = 0x4bd682dd,
+        .Data2 = 0x7554,
+        .Data3 = 0x40e9,
+        .Data4 = .{ 0x9a, 0x9b, 0x82, 0x65, 0x4e, 0xde, 0x7e, 0x62 },
+    };
+
+    lpVtbl: *const VTable,
+
+    const VTable = extern struct {
+        // IUnknown (0-2)
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        // IInspectable (3-5)
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        // IPropertyValue (slots 6-25) — only implementing getString for now
+        get_Type: VtblPlaceholder,
+        get_IsNumericScalar: VtblPlaceholder,
+        GetUInt8: VtblPlaceholder,
+        GetInt16: VtblPlaceholder,
+        GetUInt16: VtblPlaceholder,
+        GetInt32: VtblPlaceholder,
+        GetUInt32: VtblPlaceholder,
+        GetInt64: VtblPlaceholder,
+        GetUInt64: VtblPlaceholder,
+        GetSingle: VtblPlaceholder,
+        GetDouble: VtblPlaceholder,
+        GetChar16: VtblPlaceholder,
+        GetBoolean: VtblPlaceholder,
+        GetString: *const fn (*anyopaque, *?HSTRING) callconv(.winapi) HRESULT,
+    };
+
+    pub fn release(self: *IPropertyValue) void { comRelease(self); }
+
+    pub fn getString(self: *IPropertyValue) WinRTError!HSTRING {
+        var result: ?HSTRING = null;
+        try hrCheck(self.lpVtbl.GetString(@ptrCast(self), &result));
+        return result orelse error.WinRTFailed;
+    }
+};
+
+// ============================================================================
+// IWeakReferenceSource / IWeakReference
+// ============================================================================
+
+pub const IWeakReferenceSource = extern struct {
+    pub const IID = GUID{
+        .Data1 = 0x00000038,
+        .Data2 = 0x0000,
+        .Data3 = 0x0000,
+        .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 },
+    };
+
+    lpVtbl: *const VTable,
+
+    const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        GetWeakReference: *const fn (*anyopaque, *?*IWeakReference) callconv(.winapi) HRESULT,
+    };
+
+    pub fn release(self: *IWeakReferenceSource) void { comRelease(self); }
+    pub fn getWeakReference(self: *IWeakReferenceSource) WinRTError!*IWeakReference {
+        var result: ?*IWeakReference = null;
+        try hrCheck(self.lpVtbl.GetWeakReference(@ptrCast(self), &result));
+        return result orelse error.WinRTFailed;
+    }
+};
+
+pub const IWeakReference = extern struct {
+    pub const IID = GUID{
+        .Data1 = 0x00000037,
+        .Data2 = 0x0000,
+        .Data3 = 0x0000,
+        .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 },
+    };
+
+    lpVtbl: *const VTable,
+
+    const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        Resolve: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+
+    pub fn release(self: *IWeakReference) void { comRelease(self); }
+    pub fn resolve(self: *IWeakReference, comptime T: type) WinRTError!?*T {
+        var result: ?*anyopaque = null;
+        const hr = self.lpVtbl.Resolve(@ptrCast(self), &T.IID, &result);
+        if (hr < 0) return error.WinRTFailed;
+        if (result == null) return null;
+        return @ptrCast(@alignCast(result));
+    }
+};
+
+// ============================================================================
+// Common COM helpers — reduce release/queryInterface boilerplate
 // ============================================================================
 
 /// Release a COM object. Works with any interface struct that has lpVtbl.Release.
@@ -847,4 +1113,83 @@ pub const IID_TypedEventHandler_AddTabButtonClick = GUID{ .Data1 = 0x13df6907, .
 /// SelectionChangedEventHandler
 /// Generated: winmd2zig --emit-tabview-delegate-zig Microsoft.UI.Xaml.winmd
 pub const IID_SelectionChangedEventHandler = GUID{ .Data1 = 0xa232390d, .Data2 = 0x0e34, .Data3 = 0x595e, .Data4 = .{ 0x89, 0x31, 0xfa, 0x92, 0x8a, 0x99, 0x09, 0xf4 } };
+/// TypedEventHandler<Window, WindowEventArgs> for IWindow.Closed.
+pub const IID_TypedEventHandler_WindowClosed = GUID{ .Data1 = 0x2a954d28, .Data2 = 0x7f8b, .Data3 = 0x5479, .Data4 = .{ 0x8c, 0xe9, 0x90, 0x04, 0x24, 0xa0, 0x40, 0x9f } };
+
+test "COM infrastructure" {
+    const testing = std.testing;
+
+    const MockCOM = extern struct {
+        const Self = @This();
+        lpVtbl: *const VTable = &vtable_instance,
+        ref_count: u32 = 1,
+        qi_called: bool = false,
+
+        const VTable = extern struct {
+            QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+            AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+            Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        };
+
+        const vtable_instance = VTable{
+            .QueryInterface = QueryInterface,
+            .AddRef = AddRef,
+            .Release = Release,
+        };
+
+        fn QueryInterface(p: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const self: *Self = @ptrCast(@alignCast(p));
+            self.qi_called = true;
+            if (std.mem.eql(u8, std.mem.asBytes(riid), std.mem.asBytes(&IUnknown.IID))) {
+                _ = AddRef(p);
+                ppv.* = p;
+                return 0;
+            }
+            return @bitCast(@as(u32, 0x80004002)); // E_NOINTERFACE
+        }
+
+        fn AddRef(p: *anyopaque) callconv(.winapi) u32 {
+            const self: *Self = @ptrCast(@alignCast(p));
+            self.ref_count += 1;
+            return self.ref_count;
+        }
+
+        fn Release(p: *anyopaque) callconv(.winapi) u32 {
+            const self: *Self = @ptrCast(@alignCast(p));
+            self.ref_count -= 1;
+            return self.ref_count;
+        }
+    };
+
+    var mock = MockCOM{};
+    const p: *IUnknown = @ptrCast(&mock);
+
+    // Test comRelease
+    comRelease(@as(*IUnknown, @ptrCast(p)));
+    try testing.expectEqual(@as(u32, 0), mock.ref_count);
+
+    // Reset for next test
+    mock.ref_count = 1;
+    mock.qi_called = false;
+
+    // Test comQueryInterface
+    const p2 = try comQueryInterface(@as(*IUnknown, @ptrCast(p)), IUnknown);
+    try testing.expect(mock.qi_called);
+    try testing.expectEqual(@as(u32, 2), mock.ref_count);
+    p2.release();
+    try testing.expectEqual(@as(u32, 1), mock.ref_count);
+}
+
+test "WinRT ABI critical IIDs are correct" {
+    const testing = std.testing;
+
+    try testing.expectEqual(@as(u32, 0x4bd682dd), IPropertyValue.IID.Data1);
+    try testing.expectEqual(@as(u16, 0x7554), IPropertyValue.IID.Data2);
+    try testing.expectEqual(@as(u16, 0x40e9), IPropertyValue.IID.Data3);
+
+    try testing.expectEqual(@as(u32, 0x00000037), IWeakReference.IID.Data1);
+    try testing.expectEqual(@as(u32, 0x00000038), IWeakReferenceSource.IID.Data1);
+    try testing.expectEqualDeep(IWeakReference.IID.Data4, IWeakReferenceSource.IID.Data4);
+}
+
 
