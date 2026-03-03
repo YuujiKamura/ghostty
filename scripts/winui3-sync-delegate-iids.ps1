@@ -30,10 +30,15 @@ if (-not (Test-Path -LiteralPath $WinmdPath)) {
     throw "WinMD not found: $WinmdPath"
 }
 
-$toolDir = Join-Path $RepoRoot "tools\winmd2zig"
+$externalToolDir = Join-Path (Split-Path -Parent $RepoRoot) "win-zig-bindgen"
+$localToolDir = Join-Path $RepoRoot "tools\winmd2zig"
+$toolDir = if (Test-Path -LiteralPath $externalToolDir) { $externalToolDir } else { $localToolDir }
 $comPath = Join-Path $RepoRoot "src\apprt\winui3\com.zig"
 if (-not (Test-Path -LiteralPath $comPath)) {
     throw "com.zig not found: $comPath"
+}
+if (-not (Test-Path -LiteralPath $toolDir)) {
+    throw "winmd2zig tool dir not found: $toolDir"
 }
 
 $generated = $null

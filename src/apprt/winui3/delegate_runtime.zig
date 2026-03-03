@@ -4,6 +4,26 @@ const marshaler = @import("marshaler_runtime.zig");
 
 const log = std.log.scoped(.winui3);
 
+fn shouldLogUnknownIid(riid: *const rt.GUID) bool {
+    // Frequently probed by WinUI/COM runtime; returning E_NOINTERFACE is expected.
+    const ignored = [_]rt.GUID{
+        // INoMarshal
+        .{ .Data1 = 0xecc8691b, .Data2 = 0xc1db, .Data3 = 0x4dc0, .Data4 = .{ 0x85, 0x5e, 0x65, 0xf6, 0xc5, 0x51, 0xaf, 0x49 } },
+        // IGlobalInterfaceTable
+        .{ .Data1 = 0x00000039, .Data2 = 0x0000, .Data3 = 0x0000, .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } },
+        // IStdMarshalInfo
+        .{ .Data1 = 0x0000001b, .Data2 = 0x0000, .Data3 = 0x0000, .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } },
+        // Runtime probes observed on TabView event handlers; not delegate IIDs.
+        .{ .Data1 = 0xe7beaee7, .Data2 = 0x160e, .Data3 = 0x50f7, .Data4 = .{ 0x87, 0x89, 0xd6, 0x34, 0x63, 0xf9, 0x79, 0xfa } },
+        .{ .Data1 = 0x02dd3ad0, .Data2 = 0xb9de, .Data3 = 0x4b55, .Data4 = .{ 0xa0, 0xc3, 0x50, 0x72, 0x35, 0xea, 0xe8, 0xea } },
+        .{ .Data1 = 0x64bd43f8, .Data2 = 0xbfee, .Data3 = 0x4ec4, .Data4 = .{ 0xb7, 0xeb, 0x29, 0x35, 0x15, 0x8d, 0xae, 0x21 } },
+    };
+    for (ignored) |iid| {
+        if (rt.guidEql(riid, &iid)) return false;
+    }
+    return true;
+}
+
 pub fn TypedDelegate(comptime Context: type, comptime CallbackFn: type) type {
     return struct {
         const Self = @This();
@@ -98,19 +118,21 @@ pub fn TypedDelegate(comptime Context: type, comptime CallbackFn: type) type {
                 return marshaler.queryInterfaceAsMarshaler(self.allocator, this, ppv);
             }
 
-            log.warn("delegate QI unknown iid={{{x:0>8}-{x:0>4}-{x:0>4}-{x:0>2}{x:0>2}-{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}}}", .{
-                riid.Data1,
-                riid.Data2,
-                riid.Data3,
-                riid.Data4[0],
-                riid.Data4[1],
-                riid.Data4[2],
-                riid.Data4[3],
-                riid.Data4[4],
-                riid.Data4[5],
-                riid.Data4[6],
-                riid.Data4[7],
-            });
+            if (shouldLogUnknownIid(riid)) {
+                log.warn("delegate QI unknown iid={{{x:0>8}-{x:0>4}-{x:0>4}-{x:0>2}{x:0>2}-{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}}}", .{
+                    riid.Data1,
+                    riid.Data2,
+                    riid.Data3,
+                    riid.Data4[0],
+                    riid.Data4[1],
+                    riid.Data4[2],
+                    riid.Data4[3],
+                    riid.Data4[4],
+                    riid.Data4[5],
+                    riid.Data4[6],
+                    riid.Data4[7],
+                });
+            }
             ppv.* = null;
             return rt.E_NOINTERFACE;
         }
