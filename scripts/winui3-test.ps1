@@ -94,6 +94,13 @@ function Find-GhosttyWindowAny {
     return Find-GhosttyWindow -StderrPath $debugLogPath -TimeoutMs $TimeoutMs
 }
 
+function Ensure-Focus {
+    if ($cachedHwnd -ne [IntPtr]::Zero) {
+        [Win32]::ForceForegroundWindow($cachedHwnd) | Out-Null
+        Start-Sleep -Milliseconds 250
+    }
+}
+
 # ── T1: Startup smoke ─────────────────────────────────────────
 if (Should-Run "T1") {
     $pass = $false
@@ -208,6 +215,111 @@ if ((Should-Run "T8") -and -not $skipRemaining) {
         Write-TestResult -Id "T8" -Name "Window resize" -Passed $pass -Detail $(if ($pass) { "survived 3 resizes" } else { "process crashed" })
         $results += @{ Id = "T8"; Passed = $pass }
         if (-not $pass) { $failed += "T8"; Dump-CrashOnce }
+    }
+}
+
+# ── T10: Clipboard paste ──────────────────────────────────────
+if ((Should-Run "T10") -and -not $skipRemaining) {
+    $check = Test-ProcessAlive
+    if (-not $check.Alive) {
+        Out-Line "  [SKIP] T10: Clipboard paste -- process already exited" "Yellow"
+        Dump-CrashOnce; $skipped += "T10"
+    } else {
+        Ensure-Focus
+        try {
+            Set-Clipboard -Value "GHOSTTY_WINUI3_PASTE_TEST"
+            Send-KeyCombo -Modifier 0x11 -Key 0x56 | Out-Null   # Ctrl+V
+            Start-Sleep -Milliseconds 200
+            Send-Keys -Keys ([ushort[]]@(0x0D)) | Out-Null      # Enter
+        } catch {}
+        Start-Sleep -Milliseconds 500
+        $pass = -not $session.Process.HasExited
+        Write-TestResult -Id "T10" -Name "Clipboard paste" -Passed $pass -Detail $(if ($pass) { "process alive" } else { "process crashed" })
+        $results += @{ Id = "T10"; Passed = $pass }
+        if (-not $pass) { $failed += "T10"; Dump-CrashOnce }
+    }
+}
+
+# ── T11: Edit keys ────────────────────────────────────────────
+if ((Should-Run "T11") -and -not $skipRemaining) {
+    $check = Test-ProcessAlive
+    if (-not $check.Alive) {
+        Out-Line "  [SKIP] T11: Edit keys -- process already exited" "Yellow"
+        Dump-CrashOnce; $skipped += "T11"
+    } else {
+        Ensure-Focus
+        try {
+            Send-Keys -Keys ([ushort[]]@(0x45,0x44,0x49,0x54)) | Out-Null  # EDIT
+            Send-Keys -Keys ([ushort[]]@(0x25,0x25,0x08,0x2E,0x0D)) | Out-Null # Left,Left,Backspace,Delete,Enter
+        } catch {}
+        Start-Sleep -Milliseconds 500
+        $pass = -not $session.Process.HasExited
+        Write-TestResult -Id "T11" -Name "Edit keys" -Passed $pass -Detail $(if ($pass) { "process alive" } else { "process crashed" })
+        $results += @{ Id = "T11"; Passed = $pass }
+        if (-not $pass) { $failed += "T11"; Dump-CrashOnce }
+    }
+}
+
+# ── T12: Mouse input ──────────────────────────────────────────
+if ((Should-Run "T12") -and -not $skipRemaining) {
+    $check = Test-ProcessAlive
+    if (-not $check.Alive) {
+        Out-Line "  [SKIP] T12: Mouse input -- process already exited" "Yellow"
+        Dump-CrashOnce; $skipped += "T12"
+    } else {
+        Ensure-Focus
+        try {
+            if ($cachedHwnd -ne [IntPtr]::Zero) {
+                Send-MouseClickCenter -Hwnd $cachedHwnd
+                Start-Sleep -Milliseconds 200
+                Send-MouseWheel -Delta 120
+                Start-Sleep -Milliseconds 150
+                Send-MouseWheel -Delta -120
+            }
+        } catch {}
+        Start-Sleep -Milliseconds 500
+        $pass = -not $session.Process.HasExited
+        Write-TestResult -Id "T12" -Name "Mouse input" -Passed $pass -Detail $(if ($pass) { "process alive" } else { "process crashed" })
+        $results += @{ Id = "T12"; Passed = $pass }
+        if (-not $pass) { $failed += "T12"; Dump-CrashOnce }
+    }
+}
+
+# ── T13: Focus churn ──────────────────────────────────────────
+if ((Should-Run "T13") -and -not $skipRemaining) {
+    $check = Test-ProcessAlive
+    if (-not $check.Alive) {
+        Out-Line "  [SKIP] T13: Focus churn -- process already exited" "Yellow"
+        Dump-CrashOnce; $skipped += "T13"
+    } else {
+        try {
+            $desktop = [Win32]::FindWindowW("Progman", $null)
+            if ($desktop -ne [IntPtr]::Zero) {
+                [Win32]::SetForegroundWindow($desktop) | Out-Null
+                Start-Sleep -Milliseconds 200
+            }
+            Ensure-Focus
+        } catch {}
+        Start-Sleep -Milliseconds 300
+        $pass = -not $session.Process.HasExited
+        Write-TestResult -Id "T13" -Name "Focus churn" -Passed $pass -Detail $(if ($pass) { "process alive" } else { "process crashed" })
+        $results += @{ Id = "T13"; Passed = $pass }
+        if (-not $pass) { $failed += "T13"; Dump-CrashOnce }
+    }
+}
+
+# ── T14: Stability soak (30s) ─────────────────────────────────
+if ((Should-Run "T14") -and -not $skipRemaining) {
+    $check = Test-ProcessAlive
+    if (-not $check.Alive) {
+        Out-Line "  [SKIP] T14: Stability soak -- process already exited" "Yellow"
+        Dump-CrashOnce; $skipped += "T14"
+    } else {
+        Start-Sleep -Seconds 30
+        $pass = -not $session.Process.HasExited
+        Write-TestResult -Id "T14" -Name "Stability soak (30s)" -Passed $pass -Detail $(if ($pass) { "survived 30s" } else { "process crashed" })
+        $results += @{ Id = "T14"; Passed = $pass }
+        if (-not $pass) { $failed += "T14"; Dump-CrashOnce }
     }
 }
 

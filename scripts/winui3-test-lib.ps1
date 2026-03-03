@@ -47,6 +47,14 @@ public struct INPUT {
     public const uint INPUT_KEYBOARD = 1;
 }
 
+[StructLayout(LayoutKind.Sequential)]
+public struct RECT {
+    public int Left;
+    public int Top;
+    public int Right;
+    public int Bottom;
+}
+
 public static class Win32 {
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern IntPtr FindWindowW(string lpClassName, string lpWindowName);
@@ -66,11 +74,25 @@ public static class Win32 {
         int X, int Y, int cx, int cy, uint uFlags);
 
     [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetCursorPos(int X, int Y);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
+
+    [DllImport("user32.dll", SetLastError = true)]
     public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
     public const uint KEYEVENTF_KEYUP      = 0x0002;
     public const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
     public const uint SWP_NOZORDER  = 0x0004;
+    public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+    public const uint MOUSEEVENTF_LEFTUP   = 0x0004;
+    public const uint MOUSEEVENTF_WHEEL    = 0x0800;
 
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
@@ -123,6 +145,25 @@ public static class Win32 {
         inp.u.ki.wVk = vk;
         inp.u.ki.dwFlags = flags;
         return inp;
+    }
+
+    public static bool ClickWindowCenter(IntPtr hWnd) {
+        RECT r;
+        if (!GetWindowRect(hWnd, out r)) {
+            return false;
+        }
+        int cx = r.Left + ((r.Right - r.Left) / 2);
+        int cy = r.Top + ((r.Bottom - r.Top) / 2);
+        if (!SetCursorPos(cx, cy)) {
+            return false;
+        }
+        mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+        mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+        return true;
+    }
+
+    public static void WheelVertical(int delta) {
+        mouse_event(MOUSEEVENTF_WHEEL, 0, 0, (uint)delta, UIntPtr.Zero);
     }
 }
 "@ -ErrorAction SilentlyContinue
@@ -310,6 +351,26 @@ function Send-KeyCombo {
         throw "SendInput returned 0 -- no events injected (is the window focused?)"
     }
     return $sent
+}
+
+function Send-MouseClickCenter {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][IntPtr]$Hwnd
+    )
+
+    if (-not [Win32]::ClickWindowCenter($Hwnd)) {
+        throw "ClickWindowCenter failed"
+    }
+}
+
+function Send-MouseWheel {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][int]$Delta
+    )
+
+    [Win32]::WheelVertical($Delta)
 }
 
 # ---------------------------------------------------------------------------
