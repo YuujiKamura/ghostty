@@ -57,6 +57,11 @@ pub const CustomAttributeRow = struct {
     value: u32,
 };
 
+pub const InterfaceImplRow = struct {
+    class: u32,
+    interface: u32, // TypeDefOrRef coded index
+};
+
 pub const IndexSizes = struct {
     string: u8,
     guid: u8,
@@ -157,6 +162,16 @@ pub const Info = struct {
             .parent = c.readIdx(self.indexes.has_custom_attribute),
             .ca_type = c.readIdx(self.indexes.custom_attribute_type),
             .value = c.readIdx(self.indexes.blob),
+        };
+    }
+
+    pub fn readInterfaceImpl(self: Info, row: u32) TableError!InterfaceImplRow {
+        const t = self.getTable(.InterfaceImpl);
+        if (row == 0 or row > t.row_count) return error.InvalidTableRow;
+        var c = rowCursor(self, .InterfaceImpl, row) catch return error.InvalidTableRow;
+        return .{
+            .class = c.readIdx(simpleSize(self, .TypeDef)),
+            .interface = c.readIdx(self.indexes.tdor),
         };
     }
 };

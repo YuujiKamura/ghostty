@@ -50,9 +50,45 @@ pub fn build(b: *std.Build) !void {
         "test-valgrind",
         "Run tests under valgrind",
     );
+    const winui_contract_step = b.step(
+        "winui-contract",
+        "Run WinUI3 contract fix/check workflow",
+    );
+    const install_winui_validated_step = b.step(
+        "install-winui-validated",
+        "Install artifacts, then run WinUI3 contract fix/check workflow",
+    );
     const translations_step = b.step(
         "update-translations",
         "Update translation files",
+    );
+    const winmd2zig_shadow_sync_step = b.step(
+        "winmd2zig-shadow-sync",
+        "Mirror windows-rs bindgen cases/golden into tools/winmd2zig/shadow",
+    );
+    const winmd2zig_shadow_check_step = b.step(
+        "winmd2zig-shadow-check",
+        "Verify tools/winmd2zig/shadow is in sync with windows-rs references",
+    );
+    const winmd2zig_shadow_ref_test_step = b.step(
+        "winmd2zig-shadow-ref-test",
+        "Run windows-rs tool_bindgen and verify mirrored shadow golden files",
+    );
+    const winmd2zig_iid_shadow_test_step = b.step(
+        "winmd2zig-iid-shadow-test",
+        "Compare interface IID extraction against windows-rs shadow corpus",
+    );
+    const winmd2zig_iid_shadow_complete_step = b.step(
+        "winmd2zig-iid-shadow-complete",
+        "Require zero-skip interface IID shadow parity",
+    );
+    const winmd2zig_abi_shadow_test_step = b.step(
+        "winmd2zig-abi-shadow-test",
+        "Compare interface ABI shape against windows-rs shadow corpus",
+    );
+    const winmd2zig_abi_shadow_complete_step = b.step(
+        "winmd2zig-abi-shadow-complete",
+        "Require zero-skip interface ABI shadow parity",
     );
 
     // Ghostty resources like terminfo, shell integration, themes, etc.
@@ -143,6 +179,111 @@ pub fn build(b: *std.Build) !void {
             libghostty_shared.install("libghostty.so");
             libghostty_static.install("libghostty.a");
         }
+    }
+
+    // WinUI3 contract validation workflow. This is intentionally a dedicated step
+    // so regular builds on other platforms/runtime modes are unaffected.
+    if (config.target.result.os.tag == .windows and config.app_runtime == .winui3) {
+        const contract_cmd = b.addSystemCommand(&.{
+            "pwsh",
+            "-File",
+            b.pathFromRoot("scripts/winui3-contract-run.ps1"),
+            "-Fix",
+        });
+        winui_contract_step.dependOn(&contract_cmd.step);
+
+        // Validated install: build/install first, then run the contract workflow.
+        contract_cmd.step.dependOn(b.getInstallStep());
+        install_winui_validated_step.dependOn(&contract_cmd.step);
+    }
+
+    // winmd2zig full-shadow sync/check helpers (Windows host oriented).
+    if (builtin.os.tag == .windows) {
+        const sync_cmd = b.addSystemCommand(&.{
+            "pwsh",
+            "-File",
+            b.pathFromRoot("scripts/sync-windowsrs-shadow.ps1"),
+            "-RepoRoot",
+            b.pathFromRoot("."),
+            "-WindowsRsRoot",
+            b.pathFromRoot("../winrt-projection-refs/windows-rs"),
+        });
+        winmd2zig_shadow_sync_step.dependOn(&sync_cmd.step);
+
+        const check_cmd = b.addSystemCommand(&.{
+            "pwsh",
+            "-File",
+            b.pathFromRoot("scripts/sync-windowsrs-shadow.ps1"),
+            "-RepoRoot",
+            b.pathFromRoot("."),
+            "-WindowsRsRoot",
+            b.pathFromRoot("../winrt-projection-refs/windows-rs"),
+            "-Check",
+        });
+        winmd2zig_shadow_check_step.dependOn(&check_cmd.step);
+
+        const ref_test_cmd = b.addSystemCommand(&.{
+            "pwsh",
+            "-File",
+            b.pathFromRoot("scripts/run-windowsrs-shadow-ref-test.ps1"),
+            "-RepoRoot",
+            b.pathFromRoot("."),
+            "-WindowsRsRoot",
+            b.pathFromRoot("../winrt-projection-refs/windows-rs"),
+        });
+        // Always validate shadow sync before running the reference test.
+        ref_test_cmd.step.dependOn(&check_cmd.step);
+        winmd2zig_shadow_ref_test_step.dependOn(&ref_test_cmd.step);
+
+        const iid_shadow_cmd = b.addSystemCommand(&.{
+            "pwsh",
+            "-File",
+            b.pathFromRoot("scripts/run-winmd2zig-iid-shadow-test.ps1"),
+            "-RepoRoot",
+            b.pathFromRoot("."),
+            "-WindowsRsRoot",
+            b.pathFromRoot("../winrt-projection-refs/windows-rs"),
+        });
+        iid_shadow_cmd.step.dependOn(&check_cmd.step);
+        winmd2zig_iid_shadow_test_step.dependOn(&iid_shadow_cmd.step);
+
+        const iid_shadow_complete_cmd = b.addSystemCommand(&.{
+            "pwsh",
+            "-File",
+            b.pathFromRoot("scripts/run-winmd2zig-iid-shadow-test.ps1"),
+            "-RepoRoot",
+            b.pathFromRoot("."),
+            "-WindowsRsRoot",
+            b.pathFromRoot("../winrt-projection-refs/windows-rs"),
+            "-RequireComplete",
+        });
+        iid_shadow_complete_cmd.step.dependOn(&check_cmd.step);
+        winmd2zig_iid_shadow_complete_step.dependOn(&iid_shadow_complete_cmd.step);
+
+        const abi_shadow_cmd = b.addSystemCommand(&.{
+            "pwsh",
+            "-File",
+            b.pathFromRoot("scripts/run-winmd2zig-abi-shadow-test.ps1"),
+            "-RepoRoot",
+            b.pathFromRoot("."),
+            "-WindowsRsRoot",
+            b.pathFromRoot("../winrt-projection-refs/windows-rs"),
+        });
+        abi_shadow_cmd.step.dependOn(&check_cmd.step);
+        winmd2zig_abi_shadow_test_step.dependOn(&abi_shadow_cmd.step);
+
+        const abi_shadow_complete_cmd = b.addSystemCommand(&.{
+            "pwsh",
+            "-File",
+            b.pathFromRoot("scripts/run-winmd2zig-abi-shadow-test.ps1"),
+            "-RepoRoot",
+            b.pathFromRoot("."),
+            "-WindowsRsRoot",
+            b.pathFromRoot("../winrt-projection-refs/windows-rs"),
+            "-RequireComplete",
+        });
+        abi_shadow_complete_cmd.step.dependOn(&check_cmd.step);
+        winmd2zig_abi_shadow_complete_step.dependOn(&abi_shadow_complete_cmd.step);
     }
 
     // macOS only artifacts. These will error if they're initialized for
