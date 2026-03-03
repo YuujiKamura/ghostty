@@ -734,6 +734,17 @@ jobs:
           Write-Host "Zig installed."
           .\zig\zig.exe version
 
+      - name: Add Zig to PATH
+        shell: pwsh
+        run: |
+          "$pwd\zig" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Checkout windows-rs references
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "..\winrt-projection-refs" -Force | Out-Null
+          git clone --depth 1 https://github.com/microsoft/windows-rs.git ..\winrt-projection-refs\windows-rs
+
       - name: Generate build testing script
         shell: pwsh
         run: |
@@ -767,6 +778,12 @@ jobs:
       - name: Build Windows
         shell: pwsh
         run: .\zigbuild.ps1 -ErrorAction SilentlyContinue
+
+      - name: Winmd2zig Shadow Complete
+        shell: pwsh
+        run: |
+          .\zig\zig.exe build winmd2zig-iid-shadow-complete 2>&1 | Out-File -FilePath "build.log" -Append
+          .\zig\zig.exe build winmd2zig-abi-shadow-complete 2>&1 | Out-File -FilePath "build.log" -Append
 
       - name: Dump logs
         shell: pwsh
