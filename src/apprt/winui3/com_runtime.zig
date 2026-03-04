@@ -106,3 +106,21 @@ test "IResourceDictionary IID matches WinUI3 oracle" {
     try testing.expectEqual(@as(u16, 0x5783), iid.Data3);
     try testing.expect(std.mem.eql(u8, &iid.Data4, &[_]u8{ 0xa6, 0xe1, 0x15, 0x83, 0x6f, 0x61, 0x86, 0xc2 }));
 }
+
+test "IPropertyValueStatics IID matches Windows.Foundation oracle" {
+    const testing = std.testing;
+    const iid = com.IPropertyValueStatics.IID;
+    try testing.expectEqual(@as(u32, 0x629bdbc8), iid.Data1);
+    try testing.expectEqual(@as(u16, 0xd932), iid.Data2);
+    try testing.expectEqual(@as(u16, 0x4ff4), iid.Data3);
+    try testing.expect(std.mem.eql(u8, &iid.Data4, &[_]u8{ 0x96, 0xb9, 0x8d, 0x96, 0xc5, 0xc1, 0xe8, 0x58 }));
+}
+
+test "IVector<IInspectable> IID matches Windows.Foundation.Collections oracle" {
+    const testing = std.testing;
+    const iid = com.IVector.IID;
+    try testing.expectEqual(@as(u32, 0xb32bdca4), iid.Data1);
+    try testing.expectEqual(@as(u16, 0x5e52), iid.Data2);
+    try testing.expectEqual(@as(u16, 0x5b27), iid.Data3);
+    try testing.expect(std.mem.eql(u8, &iid.Data4, &[_]u8{ 0xbc, 0x5d, 0xd6, 0x6a, 0x1a, 0x26, 0x8c, 0x2a }));
+}

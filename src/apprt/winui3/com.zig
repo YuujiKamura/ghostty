@@ -203,21 +203,42 @@ pub const ITabView = extern struct {
 };
 
 pub const IVector = extern struct {
-    pub const IID = GUID{ .Data1 = 0x4560503e, .Data2 = 0x130d, .Data3 = 0x4830, .Data4 = .{ 0xbc, 0x00, 0x1e, 0x08, 0x1d, 0x07, 0x56, 0xdc } };
+    // Windows.Foundation.Collections.IVector<IInspectable>
+    // pinterface({913337e9-11a1-4345-a3a2-4e7f956e222d};cinterface(IInspectable))
+    pub const IID = GUID{
+        .Data1 = 0xb32bdca4,
+        .Data2 = 0x5e52,
+        .Data3 = 0x5b27,
+        .Data4 = .{ 0xbc, 0x5d, 0xd6, 0x6a, 0x1a, 0x26, 0x8c, 0x2a },
+    };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetAt: *const fn (*anyopaque, u32, *?*anyopaque) callconv(.winapi) HRESULT,
-        get_Size: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
-        Append: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        RemoveAt: *const fn (*anyopaque, u32) callconv(.winapi) HRESULT,
+        // IInspectable (slots 3-5)
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        // IVector<IInspectable> (slots 6-17)
+        GetAt: *const fn (*anyopaque, u32, *?*anyopaque) callconv(.winapi) HRESULT, // 6
+        get_Size: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT, // 7
+        GetView: VtblPlaceholder, // 8
+        IndexOf: VtblPlaceholder, // 9
+        SetAt: VtblPlaceholder, // 10
+        InsertAt: *const fn (*anyopaque, u32, ?*anyopaque) callconv(.winapi) HRESULT, // 11
+        RemoveAt: *const fn (*anyopaque, u32) callconv(.winapi) HRESULT, // 12
+        Append: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT, // 13
+        RemoveAtEnd: VtblPlaceholder, // 14
+        Clear: VtblPlaceholder, // 15
+        GetMany: VtblPlaceholder, // 16
+        ReplaceAll: VtblPlaceholder, // 17
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
     pub fn getSize(self: *@This()) WinRTError!u32 { var out: u32 = 0; try hrCheck(self.lpVtbl.get_Size(self, &out)); return out; }
     pub fn getAt(self: *@This(), i: u32) WinRTError!*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetAt(self, i, &out)); return out.?; }
+    pub fn insertAt(self: *@This(), i: u32, item: ?*anyopaque) WinRTError!void { try hrCheck(self.lpVtbl.InsertAt(self, i, item)); }
     pub fn append(self: *@This(), item: ?*anyopaque) WinRTError!void { try hrCheck(self.lpVtbl.Append(self, item)); }
     pub fn removeAt(self: *@This(), i: u32) WinRTError!void { try hrCheck(self.lpVtbl.RemoveAt(self, i)); }
 };
@@ -365,20 +386,46 @@ pub const ITextBox = extern struct {
 };
 
 pub const IPropertyValueStatics = extern struct {
-    pub const IID = GUID{ .Data1 = 0x49673f30, .Data2 = 0x28fb, .Data3 = 0x45e0, .Data4 = .{ 0xaa, 0x30, 0x03, 0x2e, 0x93, 0x1f, 0xeb, 0x45 } };
+    // Windows.Foundation.IPropertyValueStatics (Windows SDK)
+    pub const IID = GUID{ .Data1 = 0x629bdbc8, .Data2 = 0xd932, .Data3 = 0x4ff4, .Data4 = .{ 0x96, 0xb9, 0x8d, 0x96, 0xc5, 0xc1, 0xe8, 0x58 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        p3: VtblPlaceholder, p4: VtblPlaceholder, p5: VtblPlaceholder, p6: VtblPlaceholder,
-        p7: VtblPlaceholder, p8: VtblPlaceholder, p9: VtblPlaceholder, p10: VtblPlaceholder,
-        p11: VtblPlaceholder, p12: VtblPlaceholder,
-        CreateString: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+        // IInspectable (slots 3-5)
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        // IPropertyValueStatics (slots 6-25)
+        CreateEmpty: VtblPlaceholder, // 6
+        CreateUInt8: VtblPlaceholder, // 7
+        CreateInt16: VtblPlaceholder, // 8
+        CreateUInt16: VtblPlaceholder, // 9
+        CreateInt32: VtblPlaceholder, // 10
+        CreateUInt32: VtblPlaceholder, // 11
+        CreateInt64: VtblPlaceholder, // 12
+        CreateUInt64: VtblPlaceholder, // 13
+        CreateSingle: VtblPlaceholder, // 14
+        CreateDouble: VtblPlaceholder, // 15
+        CreateChar16: VtblPlaceholder, // 16
+        CreateBoolean: VtblPlaceholder, // 17
+        CreateString: *const fn (*anyopaque, ?HSTRING, *?*IInspectable) callconv(.winapi) HRESULT, // 18
+        CreateInspectable: VtblPlaceholder, // 19
+        CreateGuid: VtblPlaceholder, // 20
+        CreateDateTime: VtblPlaceholder, // 21
+        CreateTimeSpan: VtblPlaceholder, // 22
+        CreatePoint: VtblPlaceholder, // 23
+        CreateSize: VtblPlaceholder, // 24
+        CreateRect: VtblPlaceholder, // 25
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
-    pub fn createString(self: *@This(), s: HSTRING) WinRTError!*winrt.IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateString(self, s, &out)); return @ptrCast(@alignCast(out.?)); }
+    pub fn createString(self: *@This(), s: HSTRING) WinRTError!*winrt.IInspectable {
+        var out: ?*IInspectable = null;
+        try hrCheck(self.lpVtbl.CreateString(self, s, &out));
+        return @ptrCast(@alignCast(out orelse return error.WinRTFailed));
+    }
 };
 
 pub const ISolidColorBrush = extern struct {
@@ -429,7 +476,11 @@ pub const IResourceDictionary = extern struct {
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
-    pub fn getMergedDictionaries(self: *@This()) WinRTError!*IVector { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.get_MergedDictionaries(self, &out)); return @ptrCast(@alignCast(out.?)); }
+    pub fn getMergedDictionaries(self: *@This()) WinRTError!*IVector {
+        var out: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.get_MergedDictionaries(self, &out));
+        return @ptrCast(@alignCast(out orelse return error.WinRTFailed));
+    }
 };
 
 pub const ISwapChainPanelNative = extern struct {
