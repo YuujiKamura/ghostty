@@ -36,6 +36,15 @@ content_scale: apprt.ContentScale = .{ .x = 1.0, .y = 1.0 },
 /// Whether the core surface has been initialized.
 core_initialized: bool = false,
 
+/// Whether the SwapChainPanel has fired its Loaded event.
+loaded: bool = false,
+
+/// Holds a swap chain from the renderer thread if it arrives before Loaded.
+pending_swap_chain: ?*anyopaque = null,
+
+/// Token for the Loaded event registration.
+loaded_token: i64 = 0,
+
 /// The SwapChainPanel for composition rendering.
 swap_chain_panel: ?*winrt.IInspectable = null,
 
@@ -118,6 +127,17 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     // Set SwapChainPanel background to black.
     self.app.setControlBackground(panel, .{ .a = 255, .r = 0, .g = 0, .b = 0 });
 
+    // Register Loaded handler to defer SetSwapChain until the panel is ready.
+    const framework_element = try panel.queryInterface(com.IFrameworkElement);
+    defer framework_element.release();
+    const delegate_runtime = @import("delegate_runtime.zig");
+    const LoadedDelegate = delegate_runtime.TypedDelegate(Surface, fn (*Surface, *anyopaque, *anyopaque) void);
+    const loaded_delegate = try LoadedDelegate.createWithIid(self.app.core_app.alloc, self, &onLoaded, &com.IID_RoutedEventHandler);
+    // Note: LoadedDelegate.createWithIid returns a ref-counted COM object.
+    // We pass it to addLoaded which will AddRef it again.
+    defer _ = loaded_delegate.release();
+    self.loaded_token = try framework_element.addLoaded(loaded_delegate.comPtr());
+
     // NOTE: SwapChainPanel is set as TabViewItem content by App.newTab(),
     // not here. We only create the panel and query the native interface.
 
@@ -154,6 +174,15 @@ pub fn deinit(self: *Surface) void {
 
     // Now safe to release COM objects -- renderer thread is stopped.
     if (self.swap_chain_panel_native) |native| {
+        // Unregister Loaded handler if we have a token.
+        if (self.loaded_token != 0) {
+            if (self.swap_chain_panel) |panel| {
+                if (panel.queryInterface(com.IFrameworkElement)) |fe| {
+                    defer fe.release();
+                    fe.removeLoaded(self.loaded_token) catch {};
+                } else |_| {}
+            }
+        }
         native.release();
         self.swap_chain_panel_native = null;
     }
@@ -553,6 +582,13 @@ pub fn handleScroll(self: *Surface, xoffset: f64, yoffset: f64) void {
 /// so we post WM_APP_BIND_SWAP_CHAIN with wparam=swap_chain, lparam=self.
 pub fn bindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
     self.last_swap_chain = swap_chain;
+
+    if (!self.loaded) {
+        log.info("bindSwapChain: panel not yet Loaded, deferring binding until onLoaded", .{});
+        self.pending_swap_chain = swap_chain;
+        return;
+    }
+
     if (self.app.hwnd) |hwnd| {
         _ = os.PostMessageW(
             hwnd,
@@ -567,6 +603,8 @@ pub fn bindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
 /// swap_chain comes from wparam of the posted message.
 pub fn completeBindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
     self.last_swap_chain = swap_chain;
+    self.pending_swap_chain = null;
+
     const native = self.swap_chain_panel_native orelse {
         log.warn("SwapChainPanelNative not available for binding (shutdown race)", .{});
         return;
@@ -576,6 +614,17 @@ pub fn completeBindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
         return;
     };
     log.info("Swap chain bound to SwapChainPanel (UI thread)", .{});
+}
+
+/// Loaded event callback. Triggered when the SwapChainPanel is added to the visual tree.
+fn onLoaded(self: *Surface, _: *anyopaque, _: *anyopaque) void {
+    log.info("SwapChainPanel.Loaded event fired for surface 0x{x}", .{@intFromPtr(self)});
+    self.loaded = true;
+
+    if (self.pending_swap_chain) |sc| {
+        log.info("onLoaded: triggering deferred swap chain binding", .{});
+        self.completeBindSwapChain(sc);
+    }
 }
 
 /// Re-apply the current swap chain to this panel.

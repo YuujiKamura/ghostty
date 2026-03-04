@@ -1,15 +1,15 @@
 ﻿//! WinUI 3 COM interface definitions for Zig.
 //!
-//! VTable definitions are auto-generated from Microsoft.UI.Xaml.winmd by winmd2zig.
+//! VTable definitions are auto-generated from Microsoft.UI.Xaml.winmd by win-zig-bindgen.
 //! Slot ordering matches ECMA-335 metadata exactly.
 //!
 //! To regenerate vtables:
-//!   cd tools/winmd2zig && zig build run -- <path>/Microsoft.UI.Xaml.winmd \
+//!   cd C:\Users\yuuji\win-zig-bindgen && zig build run -- <path>/Microsoft.UI.Xaml.winmd \
 //!     IApplicationStatics IApplicationFactory IApplication IWindow \
 //!     ITabView ITabViewItem IContentControl
 //!
 //! Non-WinMD interfaces (IWindowNative, ISwapChainPanelNative, IVector) are
-//! maintained manually 窶・they come from Windows SDK headers, not .winmd files.
+//! maintained manually — they come from Windows SDK headers, not .winmd files.
 
 const std = @import("std");
 const winrt = @import("winrt.zig");
@@ -340,14 +340,14 @@ pub const IUIElement = extern struct {
 
 // ============================================================================
 // IFrameworkElement (Microsoft.UI.Xaml.IFrameworkElement)
-// IID: {ACCC609F-6063-5003-800E-0066BE006BAE}
+// IID: {FE08F13D-DC6A-5495-9554-AD44C2D8D218}
 // ============================================================================
 pub const IFrameworkElement = extern struct {
     pub const IID = GUID{
-        .Data1 = 0xaccc609f,
-        .Data2 = 0x6063,
-        .Data3 = 0x5003,
-        .Data4 = .{ 0x80, 0x0e, 0x00, 0x66, 0xbe, 0x00, 0x6b, 0xae },
+        .Data1 = 0xfe08f13d,
+        .Data2 = 0xdc6a,
+        .Data3 = 0x5495,
+        .Data4 = .{ 0xad, 0x44, 0xc2, 0xd8, 0xd2, 0x18, 0x63, 0xb0 },
     };
     lpVtbl: *const VTable,
     const VTable = extern struct {
@@ -357,11 +357,51 @@ pub const IFrameworkElement = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        // Methods follow...
+        // IFrameworkElement (6-60 placeholders)
+        p6: VtblPlaceholder, p7: VtblPlaceholder, p8: VtblPlaceholder, p9: VtblPlaceholder, p10: VtblPlaceholder,
+        p11: VtblPlaceholder, p12: VtblPlaceholder, p13: VtblPlaceholder, p14: VtblPlaceholder, p15: VtblPlaceholder,
+        p16: VtblPlaceholder, p17: VtblPlaceholder, p18: VtblPlaceholder, p19: VtblPlaceholder, p20: VtblPlaceholder,
+        p21: VtblPlaceholder, p22: VtblPlaceholder, p23: VtblPlaceholder, p24: VtblPlaceholder, p25: VtblPlaceholder,
+        p26: VtblPlaceholder, p27: VtblPlaceholder, p28: VtblPlaceholder, p29: VtblPlaceholder, p30: VtblPlaceholder,
+        p31: VtblPlaceholder, p32: VtblPlaceholder, p33: VtblPlaceholder, p34: VtblPlaceholder, p35: VtblPlaceholder,
+        p36: VtblPlaceholder, p37: VtblPlaceholder, p38: VtblPlaceholder, p39: VtblPlaceholder, p40: VtblPlaceholder,
+        p41: VtblPlaceholder, p42: VtblPlaceholder, p43: VtblPlaceholder, p44: VtblPlaceholder, p45: VtblPlaceholder,
+        p46: VtblPlaceholder, p47: VtblPlaceholder, p48: VtblPlaceholder, p49: VtblPlaceholder, p50: VtblPlaceholder,
+        p51: VtblPlaceholder, p52: VtblPlaceholder, p53: VtblPlaceholder, p54: VtblPlaceholder, p55: VtblPlaceholder,
+        p56: VtblPlaceholder, p57: VtblPlaceholder, p58: VtblPlaceholder, p59: VtblPlaceholder, p60: VtblPlaceholder,
+        // Events
+        add_Loaded: *const fn (*anyopaque, *anyopaque, *i64) callconv(.winapi) HRESULT, // 61
+        remove_Loaded: *const fn (*anyopaque, i64) callconv(.winapi) HRESULT, // 62
+        add_Unloaded: *const fn (*anyopaque, *anyopaque, *i64) callconv(.winapi) HRESULT, // 63
+        remove_Unloaded: *const fn (*anyopaque, i64) callconv(.winapi) HRESULT, // 64
+        add_DataContextChanged: VtblPlaceholder, // 65
+        remove_DataContextChanged: VtblPlaceholder, // 66
+        add_SizeChanged: VtblPlaceholder, // 67
+        remove_SizeChanged: VtblPlaceholder, // 68
+        add_LayoutUpdated: *const fn (*anyopaque, *anyopaque, *i64) callconv(.winapi) HRESULT, // 69
+        remove_LayoutUpdated: *const fn (*anyopaque, i64) callconv(.winapi) HRESULT, // 70
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
+    pub fn addLoaded(self: *IFrameworkElement, handler: *anyopaque) WinRTError!i64 {
+        var token: i64 = 0;
+        try hrCheck(self.lpVtbl.add_Loaded(@ptrCast(self), handler, &token));
+        return token;
+    }
+
+    pub fn removeLoaded(self: *IFrameworkElement, token: i64) WinRTError!void {
+        try hrCheck(self.lpVtbl.remove_Loaded(@ptrCast(self), token));
+    }
 };
+
+// ... (existing ITextBox) ...
+
+// ============================================================================
+// RoutedEventHandler IID (for Loaded/Unloaded events)
+// ============================================================================
+pub const IID_RoutedEventHandler = GUID{ .Data1 = 0xaf8dae19, .Data2 = 0x0794, .Data3 = 0x5695, .Data4 = .{ 0x96, 0x8a, 0x07, 0x33, 0x3f, 0x92, 0x32, 0xe0 } };
+
 
 // ============================================================================
 // ITextBox (Microsoft.UI.Xaml.Controls.ITextBox)

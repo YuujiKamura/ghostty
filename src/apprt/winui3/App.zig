@@ -701,16 +701,25 @@ pub fn run(self: *App) !void {
     log.info("Calling Application.Start()...", .{});
     try statics.start(callback.comPtr());
     log.info("Application.Start() returned", .{});
+
+    // CRITICAL: Perform full cleanup while WinRT is still active but after loop exit.
+    self.fullCleanup();
 }
 
 pub fn terminate(self: *App) void {
-    // Step 1: Destroy/remove input HWND and subclasses FIRST.
-    // This prevents any further window messages from routing to our
-    // handlers, which reference surfaces that we are about to free.
-    if (self.input_hwnd) |input_hwnd| {
-        _ = os.DestroyWindow(input_hwnd);
-        self.input_hwnd = null;
+    log.info("Termination requested", .{});
+    self.running = false;
+    // Signal XAML to exit the message loop.
+    if (self.xaml_app) |xa| {
+        xa.exit() catch {};
     }
+}
+
+fn fullCleanup(self: *App) void {
+    log.info("Starting full cleanup...", .{});
+    const alloc = self.core_app.alloc;
+
+    // 1. Remove subclasses first.
     if (self.child_hwnd) |child_hwnd| {
         _ = os.RemoveWindowSubclass(child_hwnd, &subclassProc, 2);
         self.child_hwnd = null;
@@ -723,16 +732,14 @@ pub fn terminate(self: *App) void {
         _ = os.RemoveWindowSubclass(hwnd, &subclassProc, 0);
     }
 
-    // Step 2: Close all remaining surfaces.
-    // Surface.deinit() stops renderer and IO threads (joins them) before
-    // freeing surface data, so this is safe after subclass removal.
+    // 2. Close all surfaces (stops threads).
     for (self.surfaces.items) |surface| {
         surface.deinit();
-        self.core_app.alloc.destroy(surface);
+        alloc.destroy(surface);
     }
-    self.surfaces.deinit(self.core_app.alloc);
+    self.surfaces.deinit(alloc);
 
-    // Step 3: Unregister WinRT event handlers before freeing callback objects.
+    // 3. Unregister WinRT events.
     if (self.tab_view) |tv| {
         if (self.tab_close_token) |tok| tv.removeTabCloseRequested(tok) catch {};
         if (self.add_tab_token) |tok| tv.removeAddTabButtonClick(tok) catch {};
@@ -741,42 +748,21 @@ pub fn terminate(self: *App) void {
     if (self.window) |window| {
         if (self.closed_token) |tok| window.removeClosed(tok) catch {};
     }
-    self.tab_close_token = null;
-    self.add_tab_token = null;
-    self.selection_changed_token = null;
-    self.closed_token = null;
 
-    // Step 4: Free callback wrapper objects after unregistration.
-    if (self.closed_handler) |handler| self.core_app.alloc.destroy(handler);
-    if (self.tab_close_handler) |handler| self.core_app.alloc.destroy(handler);
-    if (self.add_tab_handler) |handler| self.core_app.alloc.destroy(handler);
-    if (self.selection_changed_handler) |handler| self.core_app.alloc.destroy(handler);
-    self.closed_handler = null;
-    self.tab_close_handler = null;
-    self.add_tab_handler = null;
-    self.selection_changed_handler = null;
+    // 4. Release COM objects properly.
+    if (self.closed_handler) |h| h.release();
+    if (self.tab_close_handler) |h| h.release();
+    if (self.add_tab_handler) |h| h.release();
+    if (self.selection_changed_handler) |h| h.release();
 
-    // Step 5: Release WinRT/XAML objects.
     if (self.tab_view) |tv| tv.release();
     if (self.window) |window| window.release();
     if (self.xaml_app) |xa| xa.release();
-    // Release COM aggregation resources.
-    if (self.app_outer.provider) |provider| provider.release();
-    self.app_outer.provider = null;
-    // Note: inner is released by the Application itself during shutdown.
-    self.tab_view = null;
-    self.window = null;
-    self.xaml_app = null;
-    self.hwnd = null;
-    self.child_hwnd = null;
+    if (self.app_outer.provider) |p| p.release();
 
-    // Step 6: Shutdown WinRT and Windows App SDK.
-    winrt.RoUninitialize();
-    bootstrap.deinit();
+    if (self.input_hwnd) |h| _ = os.DestroyWindow(h);
 
-    _ = os.timeEndPeriod(1);
-
-    log.info("WinUI 3 application terminated", .{});
+    log.info("Cleanup complete.", .{});
 }
 
 /// Thread-safe wakeup: any thread can call this to unblock the event loop.
