@@ -627,5 +627,29 @@ function Build-AndStageGhosttyExe {
     New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
     Copy-Item -Path $srcExe -Destination $dstExe -Force
 
+    if ($Runtime -eq "winui3") {
+        # Stage Windows App SDK bootstrap runtime next to the exe to avoid
+        # immediate startup failure (WinRT bootstrap not found).
+        $bootstrapName = "Microsoft.WindowsAppRuntime.Bootstrap.dll"
+        $bootstrapCandidates = @(
+            (Join-Path $RepoRoot $bootstrapName),
+            (Join-Path $RepoRoot "scripts\$bootstrapName")
+        )
+
+        $bootstrapSource = $null
+        foreach ($candidate in $bootstrapCandidates) {
+            if (Test-Path $candidate) {
+                $bootstrapSource = $candidate
+                break
+            }
+        }
+
+        if (-not $bootstrapSource) {
+            throw "Required WinUI3 runtime dependency not found: $bootstrapName (checked repo root and scripts/)."
+        }
+
+        Copy-Item -Path $bootstrapSource -Destination (Join-Path $dstDir $bootstrapName) -Force
+    }
+
     return $dstExe
 }

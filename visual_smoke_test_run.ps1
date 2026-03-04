@@ -51,7 +51,7 @@ if (!$p.HasExited) {
 # Runtime assertion from audit log (fail fast if wrong runtime launched).
 if (Test-Path $AuditLog) {
     $expected = if ($Runtime -eq "winui3") { "runtime=.winui3" } else { "runtime=.win32" }
-    $matches = Select-String -Path $AuditLog -Pattern [regex]::Escape($expected) -SimpleMatch
+    $matches = Select-String -Path $AuditLog -Pattern $expected -SimpleMatch
     if (-not $matches) {
         throw "Runtime mismatch: expected '$expected' in $AuditLog"
     }
