@@ -35,6 +35,7 @@ if (-not (Test-Path $debugLog)) {
 
 $step4Ok = Select-String -Path $debugLog -Pattern "initXaml step 4 OK: HWND=0x" -SimpleMatch
 $step4Qi = Select-String -Path $debugLog -Pattern "initXaml step 4: QueryInterface(IWindowNative)" -SimpleMatch
+$resourceStep3bFail = Select-String -Path $debugLog -Pattern "loadXamlResources step 3b: get_MergedDictionaries failed" -SimpleMatch
 $qiFailure = Select-String -Path $debugLog -Pattern "WinRT HRESULT failed: 0x80004002" -SimpleMatch
 
 $countQiFailure = @($qiFailure).Count
@@ -55,6 +56,13 @@ if ($countQiFailure -gt 0) {
         throw "Contract check failed: E_NOINTERFACE count=$countQiFailure"
     }
     Write-Warning "Contract warning: E_NOINTERFACE count=$countQiFailure"
+}
+
+if ($resourceStep3bFail) {
+    if ($Strict) {
+        throw "Contract check failed: ResourceDictionary.get_MergedDictionaries failed (step 3b)."
+    }
+    Write-Warning "Contract warning: ResourceDictionary.get_MergedDictionaries failed (step 3b)."
 }
 
 if (Test-Path $auditLog) {

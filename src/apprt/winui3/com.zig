@@ -472,14 +472,17 @@ pub const IResourceDictionary = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        get_MergedDictionaries: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        get_Source: VtblPlaceholder,
+        put_Source: VtblPlaceholder,
+        get_MergedDictionaries: *const fn (*anyopaque, *?*IVector) callconv(.winapi) HRESULT,
+        get_ThemeDictionaries: VtblPlaceholder,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
     pub fn getMergedDictionaries(self: *@This()) WinRTError!*IVector {
-        var out: ?*anyopaque = null;
+        var out: ?*IVector = null;
         try hrCheck(self.lpVtbl.get_MergedDictionaries(self, &out));
-        return @ptrCast(@alignCast(out orelse return error.WinRTFailed));
+        return out orelse error.WinRTFailed;
     }
 };
 
