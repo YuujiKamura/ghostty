@@ -579,3 +579,53 @@ function Write-TestResult {
     [Console]::WriteLine($msg)
     [Console]::ResetColor()
 }
+
+# ---------------------------------------------------------------------------
+# Runtime-specific binary staging (avoid zig-out runtime mixups)
+# ---------------------------------------------------------------------------
+
+function Get-StagedGhosttyExePath {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [Parameter(Mandatory)][ValidateSet("winui3","win32")][string]$Runtime
+    )
+
+    return (Join-Path $RepoRoot ("tmp\bin\{0}\ghostty.exe" -f $Runtime))
+}
+
+function Build-AndStageGhosttyExe {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [Parameter(Mandatory)][ValidateSet("winui3","win32")][string]$Runtime,
+        [string]$Optimize = "ReleaseSafe"
+    )
+
+    $buildArgs = @("build", "-Dapp-runtime=$Runtime", "-Doptimize=$Optimize")
+    if ($Runtime -eq "winui3") {
+        $buildArgs += "-Drenderer=d3d11"
+    }
+
+    Push-Location $RepoRoot
+    try {
+        & zig @buildArgs
+        if ($LASTEXITCODE -ne 0) {
+            throw "Build failed (exit code $LASTEXITCODE): zig $($buildArgs -join ' ')"
+        }
+    } finally {
+        Pop-Location
+    }
+
+    $srcExe = Join-Path $RepoRoot "zig-out\bin\ghostty.exe"
+    if (-not (Test-Path $srcExe)) {
+        throw "Built binary not found: $srcExe"
+    }
+
+    $dstExe = Get-StagedGhosttyExePath -RepoRoot $RepoRoot -Runtime $Runtime
+    $dstDir = Split-Path -Parent $dstExe
+    New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
+    Copy-Item -Path $srcExe -Destination $dstExe -Force
+
+    return $dstExe
+}

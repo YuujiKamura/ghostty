@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 . "$PSScriptRoot\winui3-test-lib.ps1"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$exePath = Join-Path $repoRoot "zig-out\bin\ghostty.exe"
+$exePath = Build-AndStageGhosttyExe -RepoRoot $repoRoot -Runtime "winui3"
 $tmpDir = Join-Path $repoRoot "tmp"
 $screenshotPath = Join-Path $repoRoot "visual_smoke_test.png"
 $debugLogPath = Join-Path $repoRoot "debug.log"

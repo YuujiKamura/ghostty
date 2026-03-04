@@ -18,19 +18,17 @@ function Out-Line([string]$msg, [string]$Color = "") {
 
 # ── Config ─────────────────────────────────────────────────────
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$exePath  = Join-Path $repoRoot "zig-out\bin\ghostty.exe"
 $tmpDir   = Join-Path $repoRoot "tmp"
 $debugLogPath = Join-Path $repoRoot "debug.log"
+$exePath = Get-StagedGhosttyExePath -RepoRoot $repoRoot -Runtime "winui3"
 
 # ── Build ──────────────────────────────────────────────────────
 if (-not $NoBuild) {
     Out-Line "[BUILD] zig build -Dapp-runtime=winui3 -Drenderer=d3d11 ..."
-    Push-Location $repoRoot
-    try {
-        zig build -Dapp-runtime=winui3 -Drenderer=d3d11
-        if ($LASTEXITCODE -ne 0) { Write-Error "Build failed (exit code $LASTEXITCODE)" }
-    } finally { Pop-Location }
-    Out-Line "[BUILD] OK"
+    $exePath = Build-AndStageGhosttyExe -RepoRoot $repoRoot -Runtime "winui3"
+    Out-Line "[BUILD] OK (staged: $exePath)"
+} elseif (-not (Test-Path $exePath)) {
+    throw "No staged WinUI3 binary found: $exePath (run without -NoBuild first)"
 }
 
 # ── Cleanup old logs ───────────────────────────────────────────
