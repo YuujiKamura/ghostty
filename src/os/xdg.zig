@@ -140,7 +140,8 @@ test "cache directory paths" {
         {
             const cache_path = try cache(alloc, .{ .home = mock_home });
             defer alloc.free(cache_path);
-            try testing.expectEqualStrings("/Users/test/.cache", cache_path);
+            const expected = if (comptime builtin.os.tag == .windows) "/Users/test\\.cache" else "/Users/test/.cache";
+            try testing.expectEqualStrings(expected, cache_path);
         }
 
         // Test with subdir
@@ -150,7 +151,8 @@ test "cache directory paths" {
                 .subdir = "ghostty",
             });
             defer alloc.free(cache_path);
-            try testing.expectEqualStrings("/Users/test/.cache/ghostty", cache_path);
+            const expected = if (comptime builtin.os.tag == .windows) "/Users/test\\.cache\\ghostty" else "/Users/test/.cache/ghostty";
+            try testing.expectEqualStrings(expected, cache_path);
         }
     }
 }

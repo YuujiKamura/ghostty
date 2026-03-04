@@ -150,7 +150,7 @@ pub const IApplication = extern struct {
         put_Resources: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT, // 7
         get_DebugSettings: VtblPlaceholder, // 8
         get_RequestedTheme: VtblPlaceholder, // 9
-        put_RequestedTheme: VtblPlaceholder, // 10
+        put_RequestedTheme: *const fn (*anyopaque, ApplicationTheme) callconv(.winapi) HRESULT, // 10
         get_FocusVisualKind: VtblPlaceholder, // 11
         put_FocusVisualKind: VtblPlaceholder, // 12
         get_HighContrastAdjustment: VtblPlaceholder, // 13
@@ -160,8 +160,18 @@ pub const IApplication = extern struct {
         Exit: *const fn (*anyopaque) callconv(.winapi) HRESULT, // 17
     };
 
+    pub const ApplicationTheme = enum(i32) {
+        light = 0,
+        dark = 1,
+        default = 2,
+    };
+
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
+    pub fn putRequestedTheme(self: *IApplication, theme: ApplicationTheme) WinRTError!void {
+        try hrCheck(self.lpVtbl.put_RequestedTheme(@ptrCast(self), theme));
+    }
 
     pub fn getResources(self: *IApplication) WinRTError!*IInspectable {
         var result: ?*anyopaque = null;
@@ -202,7 +212,7 @@ pub const IWindow = extern struct {
         // IWindow (slots 6-28)
         get_Bounds: VtblPlaceholder, // 6
         get_Visible: VtblPlaceholder, // 7
-        get_Content: VtblPlaceholder, // 8
+        get_Content: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT, // 8
         put_Content: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT, // 9
         get_CoreWindow: VtblPlaceholder, // 10
         get_Compositor: VtblPlaceholder, // 11
@@ -242,6 +252,13 @@ pub const IWindow = extern struct {
 
     pub fn putTitle(self: *IWindow, title: ?HSTRING) WinRTError!void {
         try hrCheck(self.lpVtbl.put_Title(@ptrCast(self), title));
+    }
+
+    pub fn getContent(self: *IWindow) WinRTError!?*IInspectable {
+        var result: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.get_Content(@ptrCast(self), &result));
+        if (result == null) return null;
+        return @ptrCast(@alignCast(result.?));
     }
 
     pub fn addClosed(self: *IWindow, handler: *anyopaque) WinRTError!i64 {
@@ -293,6 +310,92 @@ pub const IWindowNative = extern struct {
         var hwnd: ?HWND = null;
         try hrCheck(self.lpVtbl.get_WindowHandle(@ptrCast(self), &hwnd));
         return hwnd orelse error.WinRTFailed;
+    }
+};
+
+// ============================================================================
+// IUIElement (Microsoft.UI.Xaml.IUIElement)
+// IID: {262BB004-6662-5063-B99F-0ED6FB6CC0EE}
+// ============================================================================
+pub const IUIElement = extern struct {
+    pub const IID = GUID{
+        .Data1 = 0x262bb004,
+        .Data2 = 0x6662,
+        .Data3 = 0x5063,
+        .Data4 = .{ 0xb9, 0x9f, 0x0e, 0xd6, 0xfb, 0x6c, 0xc0, 0xee },
+    };
+    lpVtbl: *const VTable,
+    const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        // Methods follow... (placeholders for now)
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+};
+
+// ============================================================================
+// IFrameworkElement (Microsoft.UI.Xaml.IFrameworkElement)
+// IID: {ACCC609F-6063-5003-800E-0066BE006BAE}
+// ============================================================================
+pub const IFrameworkElement = extern struct {
+    pub const IID = GUID{
+        .Data1 = 0xaccc609f,
+        .Data2 = 0x6063,
+        .Data3 = 0x5003,
+        .Data4 = .{ 0x80, 0x0e, 0x00, 0x66, 0xbe, 0x00, 0x6b, 0xae },
+    };
+    lpVtbl: *const VTable,
+    const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        // Methods follow...
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+};
+
+// ============================================================================
+// ITextBox (Microsoft.UI.Xaml.Controls.ITextBox)
+// IID: {0CC06AC4-0663-5003-800E-0066BE006BAE} (Placeholder IID - needs verification)
+// ============================================================================
+pub const ITextBox = extern struct {
+    pub const IID = GUID{
+        .Data1 = 0x0cc06ac4,
+        .Data2 = 0x0663,
+        .Data3 = 0x5003,
+        .Data4 = .{ 0x80, 0x0e, 0x00, 0x66, 0xbe, 0x00, 0x6b, 0xae },
+    };
+    lpVtbl: *const VTable,
+    const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        // Methods
+        get_Text: VtblPlaceholder,
+        put_Text: VtblPlaceholder,
+        // ... slots for placeholder text etc.
+        get_PlaceholderText: VtblPlaceholder,
+        put_PlaceholderText: *const fn (*anyopaque, ?HSTRING) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
+    pub fn putPlaceholderText(self: *ITextBox, text: ?HSTRING) WinRTError!void {
+        // Verification: placeholderText is usually at a specific offset. 
+        // This is a simplified stub for now.
+        _ = self; _ = text;
     }
 };
 
@@ -501,7 +604,7 @@ pub const ITabViewItem = extern struct {
     }
 
     pub fn putIsClosable(self: *ITabViewItem, closable: bool) WinRTError!void {
-        try hrCheck(self.lpVtbl.put_IsClosable(@ptrCast(self), @intFromBool(closable)));
+        try hrCheck(self.lpVtbl.put_IsClosable(@ptrCast(self), @as(i32, if (closable) 1 else 0)));
     }
 };
 
@@ -574,7 +677,7 @@ pub const IContentControl = extern struct {
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
         // IContentControl (slots 6-14)
-        get_Content: VtblPlaceholder, // 6
+        get_Content: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT, // 6
         put_Content: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT, // 7
         get_ContentTemplate: VtblPlaceholder, // 8
         put_ContentTemplate: VtblPlaceholder, // 9
@@ -590,6 +693,13 @@ pub const IContentControl = extern struct {
 
     pub fn putContent(self: *IContentControl, content: ?*anyopaque) WinRTError!void {
         try hrCheck(self.lpVtbl.put_Content(@ptrCast(self), content));
+    }
+
+    pub fn getContent(self: *IContentControl) WinRTError!?*winrt.IInspectable {
+        var result: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.get_Content(@ptrCast(self), &result));
+        if (result == null) return null;
+        return @ptrCast(@alignCast(result.?));
     }
 };
 
@@ -784,6 +894,131 @@ pub const IResourceDictionary = extern struct {
         try hrCheck(self.lpVtbl.get_MergedDictionaries(@ptrCast(self), &result));
         return result orelse error.WinRTFailed;
     }
+
+    /// Insert a resource into the dictionary. 
+    /// IResourceDictionary implements IMap<HSTRING, IInspectable>.
+    pub fn insert(self: *IResourceDictionary, key: HSTRING, value: ?*anyopaque) WinRTError!void {
+        const map = try self.queryInterface(IMap);
+        defer map.release();
+        var replaced: i32 = 0;
+        try hrCheck(map.lpVtbl.Insert(@ptrCast(map), key, value, &replaced));
+    }
+};
+
+// ============================================================================
+// IMap (Windows.Foundation.Collections.IMap<HSTRING, IInspectable>)
+// IID: {F314115E-8528-5C4D-B13A-427A1EA36418}
+// ============================================================================
+pub const IMap = extern struct {
+    pub const IID = GUID{
+        .Data1 = 0xf314115e,
+        .Data2 = 0x8528,
+        .Data3 = 0x5c4d,
+        .Data4 = .{ 0xb1, 0x3a, 0x42, 0x7a, 0x1e, 0xa3, 0x64, 0x18 },
+    };
+    lpVtbl: *const VTable,
+    const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Lookup: VtblPlaceholder,
+        get_Size: VtblPlaceholder,
+        HasKey: VtblPlaceholder,
+        GetView: VtblPlaceholder,
+        Insert: *const fn (*anyopaque, HSTRING, ?*anyopaque, *i32) callconv(.winapi) HRESULT,
+        Remove: VtblPlaceholder,
+        Clear: VtblPlaceholder,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+};
+
+// ============================================================================
+// IPanel (Microsoft.UI.Xaml.Controls.IPanel)
+// IID: {2B02A69B-5AF7-5BA1-B099-63AF37AF96FF}
+// ============================================================================
+pub const IPanel = extern struct {
+    pub const IID = GUID{
+        .Data1 = 0x2b02a69b,
+        .Data2 = 0x5af7,
+        .Data3 = 0x5ba1,
+        .Data4 = .{ 0xb0, 0x99, 0x63, 0xaf, 0x37, 0xaf, 0x96, 0xff },
+    };
+    lpVtbl: *const VTable,
+    const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_Children: *const fn (*anyopaque, *?*IVector) callconv(.winapi) HRESULT,
+        get_Background: VtblPlaceholder,
+        put_Background: VtblPlaceholder,
+        // ...
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
+    pub fn getChildren(self: *IPanel) WinRTError!*IVector {
+        var result: ?*IVector = null;
+        try hrCheck(self.lpVtbl.get_Children(@ptrCast(self), &result));
+        return result orelse error.WinRTFailed;
+    }
+};
+
+// ============================================================================
+// IBorder (Microsoft.UI.Xaml.Controls.IBorder)
+// IID: {70E6AD60-496F-5916-A1AA-DC97EB2FD57D}
+// ============================================================================
+pub const IBorder = extern struct {
+    pub const IID = GUID{ .Data1 = 0x70e6ad60, .Data2 = 0x496f, .Data3 = 0x5916, .Data4 = .{ 0xa1, 0xaa, 0xdc, 0x97, 0xeb, 0x2f, 0xd5, 0x7d } };
+    lpVtbl: *const VTable,
+    const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_Child: *const fn (*anyopaque, *?*IUIElement) callconv(.winapi) HRESULT, // 6
+        put_Child: *const fn (*anyopaque, ?*IUIElement) callconv(.winapi) HRESULT, // 7
+        // ...
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
+
+    pub fn putChild(self: *IBorder, child: ?*IUIElement) WinRTError!void {
+        try hrCheck(self.lpVtbl.put_Child(@ptrCast(self), child));
+    }
+};
+
+// ============================================================================
+// IGrid (Microsoft.UI.Xaml.Controls.IGrid)
+// IID: {0CC06AC4-0663-5003-800E-0066BE006BAE} (Placeholder IID - needs verification)
+// ============================================================================
+pub const IGrid = extern struct {
+    pub const IID = GUID{
+        .Data1 = 0x0cc06ac4,
+        .Data2 = 0x0663,
+        .Data3 = 0x5003,
+        .Data4 = .{ 0x80, 0x0e, 0x00, 0x66, 0xbe, 0x00, 0x6b, 0xae },
+    };
+    lpVtbl: *const VTable,
+    const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        // Methods follow...
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return comQueryInterface(self, T); }
 };
 
 // ============================================================================

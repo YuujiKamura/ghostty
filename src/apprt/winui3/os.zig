@@ -41,6 +41,7 @@ pub const WM_CHAR: UINT = 0x0102;
 pub const WM_SYSKEYDOWN: UINT = 0x0104;
 pub const WM_SYSKEYUP: UINT = 0x0105;
 pub const WM_TIMER: UINT = 0x0113;
+pub const WM_COMMAND: UINT = 0x0111;
 pub const WM_MOUSEMOVE: UINT = 0x0200;
 pub const WM_LBUTTONDOWN: UINT = 0x0201;
 pub const WM_LBUTTONUP: UINT = 0x0202;
@@ -62,6 +63,7 @@ pub const WM_APP_BIND_SWAP_CHAIN: UINT = WM_USER + 1;
 // --- Window styles ---
 pub const WS_OVERLAPPEDWINDOW: DWORD = 0x00CF0000;
 pub const WS_VISIBLE: DWORD = 0x10000000;
+pub const WS_EX_LAYERED: DWORD = 0x00080000;
 pub const CW_USEDEFAULT: c_int = @bitCast(@as(c_uint, 0x80000000));
 
 // --- Class styles ---
@@ -79,6 +81,10 @@ pub const GWLP_USERDATA: c_int = -21;
 pub const CF_UNICODETEXT: UINT = 13;
 pub const GMEM_MOVEABLE: UINT = 0x0002;
 pub const SC_CLOSE: usize = 0xF060;
+pub const MF_STRING: UINT = 0x0000;
+pub const MF_SEPARATOR: UINT = 0x0800;
+pub const TPM_RIGHTBUTTON: UINT = 0x0002;
+pub const TPM_RETURNCMD: UINT = 0x0100;
 
 // --- MsgWaitForMultipleObjectsEx ---
 pub const QS_ALLINPUT: DWORD = 0x04FF;
@@ -212,6 +218,10 @@ pub extern "user32" fn SetWindowLongPtrW(hWnd: HWND, nIndex: c_int, dwNewLong: u
 pub extern "user32" fn GetWindowLongPtrW(hWnd: HWND, nIndex: c_int) callconv(.winapi) usize;
 pub extern "user32" fn InvalidateRect(hWnd: HWND, lpRect: ?*const RECT, bErase: BOOL) callconv(.winapi) BOOL;
 pub extern "user32" fn GetCursorPos(lpPoint: *POINT) callconv(.winapi) BOOL;
+pub extern "user32" fn CreatePopupMenu() callconv(.winapi) ?HMENU;
+pub extern "user32" fn AppendMenuW(hMenu: HMENU, uFlags: UINT, uIDNewItem: usize, lpNewItem: ?LPCWSTR) callconv(.winapi) BOOL;
+pub extern "user32" fn TrackPopupMenuEx(hmenu: HMENU, uFlags: UINT, x: c_int, y: c_int, hwnd: HWND, lptpm: ?*const anyopaque) callconv(.winapi) UINT;
+pub extern "user32" fn DestroyMenu(hMenu: HMENU) callconv(.winapi) BOOL;
 pub extern "user32" fn ScreenToClient(hWnd: HWND, lpPoint: *POINT) callconv(.winapi) BOOL;
 pub extern "user32" fn SetWindowTextW(hWnd: HWND, lpString: LPCWSTR) callconv(.winapi) BOOL;
 pub extern "user32" fn GetDpiForWindow(hWnd: HWND) callconv(.winapi) UINT;
@@ -253,6 +263,7 @@ pub extern "user32" fn MapVirtualKeyW(uCode: UINT, uMapType: UINT) callconv(.win
 pub extern "user32" fn GetKeyboardLayout(idThread: DWORD) callconv(.winapi) usize;
 
 // --- kernel32 extern declarations ---
+pub extern "kernel32" fn GetLastError() callconv(.winapi) DWORD;
 pub extern "kernel32" fn GetModuleHandleW(lpModuleName: ?LPCWSTR) callconv(.winapi) ?HINSTANCE;
 pub extern "kernel32" fn GlobalAlloc(uFlags: UINT, dwBytes: usize) callconv(.winapi) LPVOID;
 pub extern "kernel32" fn GlobalLock(hMem: LPVOID) callconv(.winapi) LPVOID;
@@ -394,6 +405,9 @@ pub extern "kernel32" fn RemoveVectoredExceptionHandler(handle: *anyopaque) call
 // --- Debug logging: redirect stderr to a file for GUI apps ---
 pub extern "kernel32" fn SetStdHandle(nStdHandle: DWORD, hHandle: HANDLE) callconv(.winapi) BOOL;
 pub const STD_ERROR_HANDLE: DWORD = @as(DWORD, @bitCast(@as(i32, -12)));
+
+pub extern "user32" fn MessageBeep(uType: UINT) callconv(.winapi) BOOL;
+pub const MB_OK: UINT = 0x00000000;
 
 const CreateFileW = win32.kernel32.CreateFileW;
 pub fn attachDebugConsole() void {

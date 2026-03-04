@@ -92,6 +92,8 @@ public static class Win32 {
     public const uint SWP_NOZORDER  = 0x0004;
     public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
     public const uint MOUSEEVENTF_LEFTUP   = 0x0004;
+    public const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
+    public const uint MOUSEEVENTF_RIGHTUP   = 0x0010;
     public const uint MOUSEEVENTF_WHEEL    = 0x0800;
 
     [DllImport("user32.dll")]
@@ -162,11 +164,31 @@ public static class Win32 {
         return true;
     }
 
+    public static bool RightClickWindowCenter(IntPtr hWnd) {
+        RECT r;
+        if (!GetWindowRect(hWnd, out r)) {
+            return false;
+        }
+        int cx = r.Left + ((r.Right - r.Left) / 2);
+        int cy = r.Top + ((r.Bottom - r.Top) / 2);
+        if (!SetCursorPos(cx, cy)) {
+            return false;
+        }
+        mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, UIntPtr.Zero);
+        mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
+        return true;
+    }
+
     public static void WheelVertical(int delta) {
         mouse_event(MOUSEEVENTF_WHEEL, 0, 0, (uint)delta, UIntPtr.Zero);
     }
 }
 "@ -ErrorAction SilentlyContinue
+
+try {
+    Add-Type -AssemblyName System.Drawing | Out-Null
+    Add-Type -AssemblyName System.Windows.Forms | Out-Null
+} catch {}
 
 # ---------------------------------------------------------------------------
 # Exit code decoding
@@ -199,11 +221,16 @@ function Start-Ghostty {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$ExePath,
-        [Parameter(Mandatory)][string]$TmpDir
+        [Parameter(Mandatory)][string]$TmpDir,
+        [string]$WorkingDirectory
     )
 
     if (-not (Test-Path $ExePath)) {
         throw "ghostty.exe not found: $ExePath"
+    }
+
+    if (-not $WorkingDirectory -or [string]::IsNullOrWhiteSpace($WorkingDirectory)) {
+        $WorkingDirectory = Split-Path -Parent $ExePath
     }
 
     New-Item -ItemType Directory -Path $TmpDir -Force | Out-Null
@@ -213,6 +240,7 @@ function Start-Ghostty {
     "" | Set-Content -Path $stderrPath -Encoding utf8
 
     $proc = Start-Process -FilePath $ExePath `
+        -WorkingDirectory $WorkingDirectory `
         -RedirectStandardError $stderrPath `
         -PassThru
 
@@ -329,7 +357,7 @@ function Find-GhosttyWindow {
 function Send-Keys {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][ushort[]]$Keys
+        [Parameter(Mandatory)][UInt16[]]$Keys
     )
 
     $sent = [Win32]::SendKeysSequence($Keys)
@@ -342,8 +370,8 @@ function Send-Keys {
 function Send-KeyCombo {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][ushort]$Modifier,
-        [Parameter(Mandatory)][ushort]$Key
+        [Parameter(Mandatory)][UInt16]$Modifier,
+        [Parameter(Mandatory)][UInt16]$Key
     )
 
     $sent = [Win32]::SendKeyCombo($Modifier, $Key)
@@ -364,6 +392,17 @@ function Send-MouseClickCenter {
     }
 }
 
+function Send-MouseRightClickCenter {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][IntPtr]$Hwnd
+    )
+
+    if (-not [Win32]::RightClickWindowCenter($Hwnd)) {
+        throw "RightClickWindowCenter failed"
+    }
+}
+
 function Send-MouseWheel {
     [CmdletBinding()]
     param(
@@ -371,6 +410,108 @@ function Send-MouseWheel {
     )
 
     [Win32]::WheelVertical($Delta)
+}
+
+function Get-WindowVisualDiffRatio {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][IntPtr]$Hwnd,
+        [int]$DelayMs = 1000,
+        [int]$SampleStep = 8,
+        [int]$ColorThreshold = 30
+    )
+
+    Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue | Out-Null
+
+    $rect = New-Object RECT
+    if (-not [Win32]::GetWindowRect($Hwnd, [ref]$rect)) {
+        throw "GetWindowRect failed for HWND=0x$($Hwnd.ToString('X'))"
+    }
+    $w = [Math]::Max(1, $rect.Right - $rect.Left)
+    $h = [Math]::Max(1, $rect.Bottom - $rect.Top)
+
+    $bmpA = New-Object System.Drawing.Bitmap($w, $h)
+    $gA = [System.Drawing.Graphics]::FromImage($bmpA)
+    $gA.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bmpA.Size)
+    $gA.Dispose()
+
+    Start-Sleep -Milliseconds $DelayMs
+
+    $bmpB = New-Object System.Drawing.Bitmap($w, $h)
+    $gB = [System.Drawing.Graphics]::FromImage($bmpB)
+    $gB.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bmpB.Size)
+    $gB.Dispose()
+
+    $changed = 0
+    $total = 0
+    for ($y = 0; $y -lt $h; $y += $SampleStep) {
+        for ($x = 0; $x -lt $w; $x += $SampleStep) {
+            $c1 = $bmpA.GetPixel($x, $y)
+            $c2 = $bmpB.GetPixel($x, $y)
+            $delta = [Math]::Abs([int]$c1.R - [int]$c2.R) +
+                     [Math]::Abs([int]$c1.G - [int]$c2.G) +
+                     [Math]::Abs([int]$c1.B - [int]$c2.B)
+            if ($delta -ge $ColorThreshold) { $changed++ }
+            $total++
+        }
+    }
+
+    $bmpA.Dispose()
+    $bmpB.Dispose()
+
+    if ($total -le 0) { return 0.0 }
+    return ([double]$changed / [double]$total)
+}
+
+function Get-WindowVisualSnapshot {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][IntPtr]$Hwnd
+    )
+
+    Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue | Out-Null
+
+    $rect = New-Object RECT
+    if (-not [Win32]::GetWindowRect($Hwnd, [ref]$rect)) {
+        throw "GetWindowRect failed for HWND=0x$($Hwnd.ToString('X'))"
+    }
+    $w = [Math]::Max(1, $rect.Right - $rect.Left)
+    $h = [Math]::Max(1, $rect.Bottom - $rect.Top)
+    $bmp = New-Object System.Drawing.Bitmap($w, $h)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bmp.Size)
+    $g.Dispose()
+    return $bmp
+}
+
+function Get-VisualDiffRatioBetween {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Drawing.Bitmap]$Before,
+        [Parameter(Mandatory)][System.Drawing.Bitmap]$After,
+        [int]$SampleStep = 8,
+        [int]$ColorThreshold = 30
+    )
+
+    $w = [Math]::Min($Before.Width, $After.Width)
+    $h = [Math]::Min($Before.Height, $After.Height)
+    if ($w -le 0 -or $h -le 0) { return 0.0 }
+
+    $changed = 0
+    $total = 0
+    for ($y = 0; $y -lt $h; $y += $SampleStep) {
+        for ($x = 0; $x -lt $w; $x += $SampleStep) {
+            $c1 = $Before.GetPixel($x, $y)
+            $c2 = $After.GetPixel($x, $y)
+            $delta = [Math]::Abs([int]$c1.R - [int]$c2.R) +
+                     [Math]::Abs([int]$c1.G - [int]$c2.G) +
+                     [Math]::Abs([int]$c1.B - [int]$c2.B)
+            if ($delta -ge $ColorThreshold) { $changed++ }
+            $total++
+        }
+    }
+    if ($total -le 0) { return 0.0 }
+    return ([double]$changed / [double]$total)
 }
 
 # ---------------------------------------------------------------------------

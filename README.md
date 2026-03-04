@@ -51,6 +51,23 @@ See the [download page](https://ghostty.org/download) on the Ghostty website.
 
 See the [documentation](https://ghostty.org/docs) on the Ghostty website.
 
+## WinUI3 Verification Order (fork workflow)
+
+For this fork's WinUI3 workflow, use this order across sibling repos:
+
+1. `win-zig-metadata`: `zig build test`
+2. `win-zig-bindgen`: `zig build test`
+3. `win-zig-bindgen`: `pwsh -File .\scripts\winui3-sync-delegate-iids.ps1 -Check`
+4. `ghostty-win`: `pwsh -File .\scripts\winui3-delegate-iid-check.ps1`
+5. `ghostty-win`: `pwsh -File .\scripts\winui3-inspect-event-params.ps1`
+6. `win-zig-core`: `pwsh -File .\scripts\winui3-contract-run.ps1 -SkipReference -SkipExtractIids`
+
+One-command orchestration:
+
+```powershell
+pwsh -File ..\win-zig-core\scripts\winui3-verify-all.ps1
+```
+
 ## Contributing and Developing
 
 If you have any ideas, issues, etc. regarding Ghostty, or would like to

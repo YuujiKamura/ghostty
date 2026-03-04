@@ -57,3 +57,25 @@ pub fn unknownAddRef(this: *anyopaque) u32 {
 pub fn unknownRelease(this: *anyopaque) u32 {
     return unknownVTable(this).Release(this);
 }
+
+test "guidEql" {
+    const testing = std.testing;
+    const guid1 = GUID{
+        .Data1 = 0x12345678,
+        .Data2 = 0x9ABC,
+        .Data3 = 0xDEF0,
+        .Data4 = .{ 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0 },
+    };
+    const guid2 = guid1;
+    const guid3 = GUID{
+        .Data1 = 0x00000000,
+        .Data2 = 0x0000,
+        .Data3 = 0x0000,
+        .Data4 = .{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+    };
+
+    try testing.expect(guidEql(&guid1, &guid2));
+    try testing.expect(!guidEql(&guid1, &guid3));
+    try testing.expect(guidEql(&IID_IUnknown, &IID_IUnknown));
+}
+

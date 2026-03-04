@@ -51,16 +51,18 @@ pub fn handleIMEComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.W
                 return imeDefProc(app, hwnd, msg, wparam, lparam);
             defer _ = os.ImmReleaseContext(hwnd, himc);
 
-            // If a result string is ready, clear preedit.
-            // The actual committed text arrives via WM_CHAR from DefWindowProc/DefSubclassProc.
+            // 1. Handle Committed Text (Result String)
+            //
+            // Keep this path side-effect free for committed text injection.
+            // The default proc generates WM_CHAR for commit; if we also inject
+            // key events here, committed text can be duplicated.
             if (lp_flags & os.GCS_RESULTSTR != 0) {
-                log.info("IME: GCS_RESULTSTR — clearing preedit, committed text via WM_CHAR", .{});
-                surface.core_surface.preeditCallback(null) catch |err| {
-                    log.warn("IME preedit clear error: {}", .{err});
-                };
+                log.info("IME: GCS_RESULTSTR present — commit handled via WM_CHAR path", .{});
+                // Clear preedit when committed
+                surface.core_surface.preeditCallback(null) catch {};
             }
 
-            // If a composition string is present, send it as preedit text.
+            // 2. Handle Active Composition (Preedit String)
             if (lp_flags & os.GCS_COMPSTR != 0) {
                 const byte_len = os.ImmGetCompositionStringW(himc, os.GCS_COMPSTR, null, 0);
                 if (byte_len > 0) {
@@ -103,7 +105,7 @@ pub fn handleIMEComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.W
             _ = os.ImmSetCompositionWindow(himc, &cf);
         }
     }
-    // Must call the default handler so the system generates WM_CHAR for committed text.
+
     return imeDefProc(app, hwnd, msg, wparam, lparam);
 }
 
@@ -117,4 +119,9 @@ pub fn handleIMEEndComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: o
         }
     }
     return imeDefProc(app, hwnd, msg, wparam, lparam);
+}
+
+test "IME composition source should not inject keyCallback directly" {
+    const src = @embedFile("ime.zig");
+    try std.testing.expect(std.mem.indexOf(u8, src, "keyCallback(") == null);
 }

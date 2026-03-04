@@ -10221,9 +10221,26 @@ test "clone can then change conditional state" {
         try writer.end();
     }
     var light_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const light = try td.dir.realpath("theme_light", &light_buf);
+    const light_raw = try td.dir.realpath("theme_light", &light_buf);
+    var light_final: [std.fs.max_path_bytes]u8 = undefined;
+    @memcpy(light_final[0..light_raw.len], light_raw);
+    if (comptime builtin.os.tag == .windows) {
+        for (light_final[0..light_raw.len]) |*byte| if (byte.* == '\\') {
+            byte.* = '/';
+        };
+    }
+    const light = light_final[0..light_raw.len];
+
     var dark_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const dark = try td.dir.realpath("theme_dark", &dark_buf);
+    const dark_raw = try td.dir.realpath("theme_dark", &dark_buf);
+    var dark_final: [std.fs.max_path_bytes]u8 = undefined;
+    @memcpy(dark_final[0..dark_raw.len], dark_raw);
+    if (comptime builtin.os.tag == .windows) {
+        for (dark_final[0..dark_raw.len]) |*byte| if (byte.* == '\\') {
+            byte.* = '/';
+        };
+    }
+    const dark = dark_final[0..dark_raw.len];
 
     var cfg_light = try Config.default(alloc);
     defer cfg_light.deinit();
@@ -10353,7 +10370,11 @@ test "theme loading" {
         try writer.end();
     }
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = try td.dir.realpath("theme", &path_buf);
+    const path = if (comptime builtin.os.tag == .windows) blk: {
+        const p = try td.dir.realpath("theme", &path_buf);
+        const sep_idx = std.mem.indexOf(u8, p, "\\") orelse 0;
+        break :blk p[sep_idx..];
+    } else try td.dir.realpath("theme", &path_buf);
 
     var cfg = try Config.default(alloc);
     defer cfg.deinit();
@@ -10392,7 +10413,11 @@ test "theme loading preserves conditional state" {
         try writer.end();
     }
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = try td.dir.realpath("theme", &path_buf);
+    const path = if (comptime builtin.os.tag == .windows) blk: {
+        const p = try td.dir.realpath("theme", &path_buf);
+        const sep_idx = std.mem.indexOf(u8, p, "\\") orelse 0;
+        break :blk p[sep_idx..];
+    } else try td.dir.realpath("theme", &path_buf);
 
     var cfg = try Config.default(alloc);
     defer cfg.deinit();
@@ -10425,7 +10450,11 @@ test "theme priority is lower than config" {
         try writer.end();
     }
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = try td.dir.realpath("theme", &path_buf);
+    const path = if (comptime builtin.os.tag == .windows) blk: {
+        const p = try td.dir.realpath("theme", &path_buf);
+        const sep_idx = std.mem.indexOf(u8, p, "\\") orelse 0;
+        break :blk p[sep_idx..];
+    } else try td.dir.realpath("theme", &path_buf);
 
     var cfg = try Config.default(alloc);
     defer cfg.deinit();
@@ -10469,9 +10498,26 @@ test "theme loading correct light/dark" {
         try writer.end();
     }
     var light_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const light = try td.dir.realpath("theme_light", &light_buf);
+    const light_raw = try td.dir.realpath("theme_light", &light_buf);
+    var light_final: [std.fs.max_path_bytes]u8 = undefined;
+    @memcpy(light_final[0..light_raw.len], light_raw);
+    if (comptime builtin.os.tag == .windows) {
+        for (light_final[0..light_raw.len]) |*byte| if (byte.* == '\\') {
+            byte.* = '/';
+        };
+    }
+    const light = light_final[0..light_raw.len];
+
     var dark_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const dark = try td.dir.realpath("theme_dark", &dark_buf);
+    const dark_raw = try td.dir.realpath("theme_dark", &dark_buf);
+    var dark_final: [std.fs.max_path_bytes]u8 = undefined;
+    @memcpy(dark_final[0..dark_raw.len], dark_raw);
+    if (comptime builtin.os.tag == .windows) {
+        for (dark_final[0..dark_raw.len]) |*byte| if (byte.* == '\\') {
+            byte.* = '/';
+        };
+    }
+    const dark = dark_final[0..dark_raw.len];
 
     // Light
     {

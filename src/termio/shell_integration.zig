@@ -689,10 +689,11 @@ test "xdg: empty XDG_DATA_DIRS" {
         try std.fmt.bufPrint(&path_buf, "{s}/shell-integration", .{res.path}),
         env.get("GHOSTTY_SHELL_INTEGRATION_XDG_DIR").?,
     );
-    try testing.expectEqualStrings(
-        try std.fmt.bufPrint(&path_buf, "{s}/shell-integration:/usr/local/share:/usr/share", .{res.path}),
-        env.get("XDG_DATA_DIRS").?,
-    );
+    const expected = if (comptime @import("builtin").os.tag == .windows)
+        try std.fmt.bufPrint(&path_buf, "{s}/shell-integration;/usr/local/share:/usr/share", .{res.path})
+    else
+        try std.fmt.bufPrint(&path_buf, "{s}/shell-integration:/usr/local/share:/usr/share", .{res.path});
+    try testing.expectEqualStrings(expected, env.get("XDG_DATA_DIRS").?);
 }
 
 test "xdg: existing XDG_DATA_DIRS" {
@@ -717,10 +718,11 @@ test "xdg: existing XDG_DATA_DIRS" {
         try std.fmt.bufPrint(&path_buf, "{s}/shell-integration", .{res.path}),
         env.get("GHOSTTY_SHELL_INTEGRATION_XDG_DIR").?,
     );
-    try testing.expectEqualStrings(
-        try std.fmt.bufPrint(&path_buf, "{s}/shell-integration:/opt/share", .{res.path}),
-        env.get("XDG_DATA_DIRS").?,
-    );
+    const expected = if (comptime @import("builtin").os.tag == .windows)
+        try std.fmt.bufPrint(&path_buf, "{s}/shell-integration;/opt/share", .{res.path})
+    else
+        try std.fmt.bufPrint(&path_buf, "{s}/shell-integration:/opt/share", .{res.path});
+    try testing.expectEqualStrings(expected, env.get("XDG_DATA_DIRS").?);
 }
 
 test "xdg: missing resources" {

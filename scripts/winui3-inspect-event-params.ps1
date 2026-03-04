@@ -1,9 +1,14 @@
 param(
-    [string]$RepoRoot = "C:\Users\yuuji\ghostty-win",
+    [string]$RepoRoot = "",
+    [string]$ToolDir = "",
     [string]$WinmdPath = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+if (-not $RepoRoot) {
+    $RepoRoot = Split-Path -Parent $PSScriptRoot
+}
 
 function Find-Winmd {
     $base = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.windowsappsdk"
@@ -29,14 +34,16 @@ if (-not (Test-Path -LiteralPath $WinmdPath)) {
     throw "WinMD not found: $WinmdPath"
 }
 
-$externalToolDir = Join-Path (Split-Path -Parent $RepoRoot) "win-zig-bindgen"
-$localToolDir = Join-Path $RepoRoot "tools\winmd2zig"
-$toolDir = if (Test-Path -LiteralPath $externalToolDir) { $externalToolDir } else { $localToolDir }
-if (-not (Test-Path -LiteralPath $toolDir)) {
-    throw "winmd2zig tool dir not found: $toolDir"
+if (-not $ToolDir) {
+    $externalToolDir = Join-Path (Split-Path -Parent $RepoRoot) "win-zig-bindgen"
+    $localToolDir = Join-Path $RepoRoot "tools\winmd2zig"
+    $ToolDir = if (Test-Path -LiteralPath $externalToolDir) { $externalToolDir } else { $localToolDir }
+}
+if (-not (Test-Path -LiteralPath $ToolDir)) {
+    throw "winmd2zig tool dir not found: $ToolDir"
 }
 
-Push-Location $toolDir
+Push-Location $ToolDir
 try {
     zig build | Out-Null
 
@@ -58,4 +65,3 @@ try {
 finally {
     Pop-Location
 }
-

@@ -37,7 +37,7 @@ if (-not $NoBuild) {
 Clear-OldLogs -TmpDir $tmpDir -KeepCount 5
 
 # ── Launch ─────────────────────────────────────────────────────
-$session = Start-Ghostty -ExePath $exePath -TmpDir $tmpDir
+$session = Start-Ghostty -ExePath $exePath -TmpDir $tmpDir -WorkingDirectory $repoRoot
 Out-Line ("[START] ghostty.exe (PID={0})" -f $session.Process.Id)
 
 $results  = @()
@@ -162,7 +162,7 @@ if ((Should-Run "T6") -and -not $skipRemaining) {
             Start-Sleep -Milliseconds 300
         }
         try {
-            Send-Keys -Keys ([ushort[]]@(0x45,0x43,0x48,0x4F, 0x20, 0x48,0x45,0x4C,0x4C,0x4F, 0x0D)) | Out-Null
+            Send-Keys -Keys ([UInt16[]]@(0x45,0x43,0x48,0x4F, 0x20, 0x48,0x45,0x4C,0x4C,0x4F, 0x0D)) | Out-Null
         } catch {}
         Start-Sleep -Milliseconds 500
         $pass = -not $session.Process.HasExited
@@ -230,7 +230,7 @@ if ((Should-Run "T10") -and -not $skipRemaining) {
             Set-Clipboard -Value "GHOSTTY_WINUI3_PASTE_TEST"
             Send-KeyCombo -Modifier 0x11 -Key 0x56 | Out-Null   # Ctrl+V
             Start-Sleep -Milliseconds 200
-            Send-Keys -Keys ([ushort[]]@(0x0D)) | Out-Null      # Enter
+            Send-Keys -Keys ([UInt16[]]@(0x0D)) | Out-Null      # Enter
         } catch {}
         Start-Sleep -Milliseconds 500
         $pass = -not $session.Process.HasExited
@@ -249,8 +249,8 @@ if ((Should-Run "T11") -and -not $skipRemaining) {
     } else {
         Ensure-Focus
         try {
-            Send-Keys -Keys ([ushort[]]@(0x45,0x44,0x49,0x54)) | Out-Null  # EDIT
-            Send-Keys -Keys ([ushort[]]@(0x25,0x25,0x08,0x2E,0x0D)) | Out-Null # Left,Left,Backspace,Delete,Enter
+            Send-Keys -Keys ([UInt16[]]@(0x45,0x44,0x49,0x54)) | Out-Null  # EDIT
+            Send-Keys -Keys ([UInt16[]]@(0x25,0x25,0x08,0x2E,0x0D)) | Out-Null # Left,Left,Backspace,Delete,Enter
         } catch {}
         Start-Sleep -Milliseconds 500
         $pass = -not $session.Process.HasExited
@@ -272,6 +272,10 @@ if ((Should-Run "T12") -and -not $skipRemaining) {
             if ($cachedHwnd -ne [IntPtr]::Zero) {
                 Send-MouseClickCenter -Hwnd $cachedHwnd
                 Start-Sleep -Milliseconds 200
+                Send-MouseRightClickCenter -Hwnd $cachedHwnd
+                Start-Sleep -Milliseconds 200
+                Send-Keys -Keys ([UInt16[]]@(0x1B)) | Out-Null # ESC closes context menu
+                Start-Sleep -Milliseconds 150
                 Send-MouseWheel -Delta 120
                 Start-Sleep -Milliseconds 150
                 Send-MouseWheel -Delta -120
@@ -320,6 +324,46 @@ if ((Should-Run "T14") -and -not $skipRemaining) {
         Write-TestResult -Id "T14" -Name "Stability soak (30s)" -Passed $pass -Detail $(if ($pass) { "survived 30s" } else { "process crashed" })
         $results += @{ Id = "T14"; Passed = $pass }
         if (-not $pass) { $failed += "T14"; Dump-CrashOnce }
+    }
+}
+
+# ── T15: Terminal display update (visual diff) ────────────────
+if ((Should-Run "T15") -and -not $skipRemaining) {
+    $check = Test-ProcessAlive
+    if (-not $check.Alive) {
+        Out-Line "  [SKIP] T15: Terminal display update -- process already exited" "Yellow"
+        Dump-CrashOnce; $skipped += "T15"
+    } else {
+        $pass = $false
+        $detail = ""
+        try {
+            if ($cachedHwnd -eq [IntPtr]::Zero) {
+                $cachedHwnd = Find-GhosttyWindowAny -TimeoutMs $Timeout
+            }
+            Ensure-Focus
+            # Clear screen first to get a stable baseline.
+            Send-Keys -Keys ([UInt16[]]@(0x43,0x4C,0x53,0x0D)) | Out-Null # CLS + Enter
+            Start-Sleep -Milliseconds 500
+
+            $before = Get-WindowVisualSnapshot -Hwnd $cachedHwnd
+
+            # Trigger visible terminal output.
+            Send-Keys -Keys ([UInt16[]]@(0x44,0x49,0x52,0x0D)) | Out-Null # DIR + Enter
+            Start-Sleep -Milliseconds 1200
+
+            $after = Get-WindowVisualSnapshot -Hwnd $cachedHwnd
+            $ratio = Get-VisualDiffRatioBetween -Before $before -After $after -SampleStep 8 -ColorThreshold 30
+            $before.Dispose()
+            $after.Dispose()
+            $pass = ($ratio -ge 0.01)
+            $detail = "visual diff ratio=$([Math]::Round($ratio,4))"
+        } catch {
+            $detail = "error: $($_.Exception.Message) @ $($_.InvocationInfo.PositionMessage)"
+            $pass = $false
+        }
+        Write-TestResult -Id "T15" -Name "Terminal display update" -Passed $pass -Detail $detail
+        $results += @{ Id = "T15"; Passed = $pass }
+        if (-not $pass) { $failed += "T15"; Dump-CrashOnce }
     }
 }
 

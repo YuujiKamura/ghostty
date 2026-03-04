@@ -712,6 +712,26 @@ pub const ID3D11DeviceContext = extern struct {
     }
 };
 
+pub const IDXGISwapChain = extern struct {
+    pub const IID = GUID{
+        .Data1 = 0x310d36a0,
+        .Data2 = 0xd2e7,
+        .Data3 = 0x4c0a,
+        .Data4 = .{ 0xaa, 0x04, 0x6a, 0x9d, 0x23, 0xb8, 0x88, 0x6a },
+    };
+
+    lpVtbl: *const VTable,
+    const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT, // 0
+        AddRef: VtblPlaceholder, // 1
+        Release: *const fn (*anyopaque) callconv(.winapi) u32, // 2
+    };
+
+    pub fn release(self: *IDXGISwapChain) void {
+        _ = self.lpVtbl.Release(@ptrCast(self));
+    }
+};
+
 // --- IDXGISwapChain1 ---
 // Inherits: IDXGISwapChain (slots 0-17) -> IDXGIDeviceSubObject -> IDXGIObject -> IUnknown
 // dxgi1_2.h
@@ -720,7 +740,7 @@ pub const IDXGISwapChain1 = extern struct {
 
     const VTable = extern struct {
         // IUnknown (slots 0-2)
-        QueryInterface: VtblPlaceholder, // 0
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT, // 0
         AddRef: VtblPlaceholder, // 1
         Release: *const fn (*anyopaque) callconv(.winapi) u32, // 2
 
@@ -775,6 +795,12 @@ pub const IDXGISwapChain1 = extern struct {
 
     pub fn resizeBuffers(self: *IDXGISwapChain1, count: UINT, width: UINT, height: UINT, format: DXGI_FORMAT, flags: UINT) D3D11Error!void {
         try hrCheck(self.lpVtbl.ResizeBuffers(@ptrCast(self), count, width, height, format, flags));
+    }
+
+    pub fn queryInterface(self: *IDXGISwapChain1, comptime T: type) D3D11Error!*T {
+        var result: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.QueryInterface(@ptrCast(self), &T.IID, &result));
+        return @ptrCast(@alignCast(result orelse return error.D3D11Failed));
     }
 };
 

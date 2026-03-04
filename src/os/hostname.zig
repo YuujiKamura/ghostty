@@ -99,7 +99,21 @@ pub fn isLocal(hostname: []const u8) LocalHostnameValidationError!bool {
     if (std.mem.eql(u8, "localhost", hostname)) return true;
 
     // If hostname is not "localhost" it must match our hostname.
-    var buf: [posix.HOST_NAME_MAX]u8 = undefined;
+    if (comptime @import("builtin").os.tag == .windows) {
+        const windows = std.os.windows;
+        const kernel32 = struct {
+            pub extern "kernel32" fn GetComputerNameW(lpBuffer: [*]u16, nSize: *windows.DWORD) callconv(.winapi) windows.BOOL;
+        };
+        var buf: [256]u16 = undefined;
+        var len: u32 = buf.len;
+        if (kernel32.GetComputerNameW(&buf, &len) == 0) return false;
+        var utf8_buf: [256]u8 = undefined;
+        const utf8_len = std.unicode.utf16LeToUtf8(&utf8_buf, buf[0..len]) catch return false;
+        return std.mem.eql(u8, hostname, utf8_buf[0..utf8_len]);
+    }
+
+    const host_name_max = if (@hasDecl(posix, "HOST_NAME_MAX") and @TypeOf(posix.HOST_NAME_MAX) != void) posix.HOST_NAME_MAX else 256;
+    var buf: [host_name_max]u8 = undefined;
     const ourHostname = try posix.gethostname(&buf);
     return std.mem.eql(u8, hostname, ourHostname);
 }
@@ -109,7 +123,22 @@ test "isLocal returns true when provided hostname is localhost" {
 }
 
 test "isLocal returns true when hostname is local" {
-    var buf: [posix.HOST_NAME_MAX]u8 = undefined;
+    if (comptime @import("builtin").os.tag == .windows) {
+        const windows = std.os.windows;
+        const kernel32 = struct {
+            pub extern "kernel32" fn GetComputerNameW(lpBuffer: [*]u16, nSize: *windows.DWORD) callconv(.winapi) windows.BOOL;
+        };
+        var buf: [256]u16 = undefined;
+        var len: u32 = buf.len;
+        _ = kernel32.GetComputerNameW(&buf, &len);
+        var utf8_buf: [256]u8 = undefined;
+        const utf8_len = std.unicode.utf16LeToUtf8(&utf8_buf, buf[0..len]) catch unreachable;
+        try std.testing.expect(try isLocal(utf8_buf[0..utf8_len]));
+        return;
+    }
+
+    const host_name_max = if (@hasDecl(posix, "HOST_NAME_MAX") and @TypeOf(posix.HOST_NAME_MAX) != void) posix.HOST_NAME_MAX else 256;
+    var buf: [host_name_max]u8 = undefined;
     const localHostname = try posix.gethostname(&buf);
     try std.testing.expect(try isLocal(localHostname));
 }

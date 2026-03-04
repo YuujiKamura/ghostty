@@ -11,11 +11,13 @@ const CoreSurface = @import("../../Surface.zig");
 const CoreApp = @import("../../App.zig");
 const configpkg = @import("../../config.zig");
 const input = @import("../../input.zig");
+const terminal = @import("../../terminal/main.zig");
 const App = @import("App.zig");
 const com = @import("com.zig");
 const winrt = @import("winrt.zig");
 const key = @import("key.zig");
 const os = @import("os.zig");
+const SearchOverlay = @import("search_overlay.zig").SearchOverlay;
 
 const log = std.log.scoped(.winui3);
 
@@ -40,8 +42,18 @@ swap_chain_panel: ?*winrt.IInspectable = null,
 /// Native interface for binding DXGI swap chain to panel.
 swap_chain_panel_native: ?*com.ISwapChainPanelNative = null,
 
+/// Last DXGI swap-chain pointer observed from renderer thread.
+/// Used to rebind when TabView selection changes and panel realization timing differs.
+last_swap_chain: ?*anyopaque = null,
+
 /// The IInspectable of the TabViewItem this surface belongs to (for title updates).
 tab_view_item_inspectable: ?*winrt.IInspectable = null,
+
+/// Current title of the surface, allocated dynamically.
+title: ?[:0]u8 = null,
+
+/// The search overlay UI.
+search_overlay: SearchOverlay,
 
 /// Pending high surrogate from a previous WM_CHAR for characters outside BMP.
 pending_high_surrogate: u16 = 0,
@@ -78,6 +90,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     self.* = .{
         .app = app,
         .core_surface = undefined,
+        .search_overlay = try SearchOverlay.init(self),
         .size = .{ .width = 800, .height = 600 },
         .content_scale = .{ .x = 1.0, .y = 1.0 },
     };
@@ -102,6 +115,9 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         self.swap_chain_panel_native = null;
     }
 
+    // Set SwapChainPanel background to black.
+    self.app.setControlBackground(panel, .{ .a = 255, .r = 0, .g = 0, .b = 0 });
+
     // NOTE: SwapChainPanel is set as TabViewItem content by App.newTab(),
     // not here. We only create the panel and query the native interface.
 
@@ -125,6 +141,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
 }
 
 pub fn deinit(self: *Surface) void {
+    self.search_overlay.deinit();
     // Stop the renderer/IO threads FIRST by tearing down core_surface.
     // This joins the renderer thread, ensuring no further bindSwapChain
     // calls (or WM_APP_BIND_SWAP_CHAIN posts) can occur after we release
@@ -148,6 +165,11 @@ pub fn deinit(self: *Surface) void {
         _ = tvi.release();
         self.tab_view_item_inspectable = null;
     }
+
+    if (self.title) |t| {
+        self.app.core_app.alloc.free(t);
+        self.title = null;
+    }
 }
 
 pub fn core(self: *Surface) *CoreSurface {
@@ -163,8 +185,8 @@ pub fn close(self: *Surface, process_active: bool) void {
     self.app.closeSurface(self);
 }
 
-pub fn getTitle(_: *Surface) ?[:0]const u8 {
-    return null;
+pub fn getTitle(self: *Surface) ?[:0]const u8 {
+    return self.title;
 }
 
 pub fn getContentScale(self: *const Surface) !apprt.ContentScale {
@@ -225,10 +247,11 @@ pub fn clipboardRequest(
 
     self.core_surface.completeClipboardRequest(state, utf8z, false) catch |err| switch (err) {
         error.UnsafePaste, error.UnauthorizedPaste => {
-            self.core_surface.completeClipboardRequest(state, utf8z, true) catch |retry_err| {
-                log.warn("clipboard request failed on confirmed retry: {}", .{retry_err});
-                return false;
-            };
+            // TODO: Implement a proper WinUI 3 dialog to ask the user for confirmation
+            // before retrying with `confirmed = true`.
+            // For now, securely deny the paste.
+            log.warn("unsafe paste blocked pending user confirmation dialog implementation", .{});
+            return false;
         },
         else => {
             log.warn("clipboard request failed: {}", .{err});
@@ -312,12 +335,31 @@ pub fn redrawInspector(_: *Surface) void {
 }
 
 /// Update the TabViewItem header with the given title.
-/// For MVP, this is a no-op because WinRT requires IPropertyValueStatics
-/// to box an HSTRING into IInspectable for put_Header. The window title
-/// is set separately via IWindow.putTitle.
 pub fn setTabTitle(self: *Surface, title: [:0]const u8) void {
-    _ = self;
-    _ = title;
+    const alloc = self.app.core_app.alloc;
+    if (self.title) |old_title| alloc.free(old_title);
+    
+    // Store the title for getTitle() queries
+    self.title = alloc.dupeZ(u8, title) catch null;
+    
+    // Actually update the TabViewItem UI using WinRT PropertyValue
+    if (self.tab_view_item_inspectable) |tvi_insp| {
+        if (tvi_insp.queryInterface(com.ITabViewItem)) |tvi| {
+            defer tvi.release();
+            if (self.title) |t| {
+                const utf16 = std.unicode.utf8ToUtf16LeAlloc(alloc, t) catch return;
+                defer alloc.free(utf16);
+                if (winrt.createHString(utf16)) |hstr| {
+                    defer winrt.deleteHString(hstr);
+                    const util = @import("util.zig");
+                    if (util.boxString(hstr)) |boxed| {
+                        defer boxed.release();
+                        _ = tvi.putHeader(boxed) catch {};
+                    } else |_| {}
+                } else |_| {}
+            }
+        } else |_| {}
+    }
 }
 
 // --- Event handlers called from WndProc ---
@@ -510,6 +552,7 @@ pub fn handleScroll(self: *Surface, xoffset: f64, yoffset: f64) void {
 /// ISwapChainPanelNative::SetSwapChain must be called from the UI thread,
 /// so we post WM_APP_BIND_SWAP_CHAIN with wparam=swap_chain, lparam=self.
 pub fn bindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
+    self.last_swap_chain = swap_chain;
     if (self.app.hwnd) |hwnd| {
         _ = os.PostMessageW(
             hwnd,
@@ -523,6 +566,7 @@ pub fn bindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
 /// Actually perform the swap chain binding. Must be called on the UI thread.
 /// swap_chain comes from wparam of the posted message.
 pub fn completeBindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
+    self.last_swap_chain = swap_chain;
     const native = self.swap_chain_panel_native orelse {
         log.warn("SwapChainPanelNative not available for binding (shutdown race)", .{});
         return;
@@ -533,3 +577,77 @@ pub fn completeBindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
     };
     log.info("Swap chain bound to SwapChainPanel (UI thread)", .{});
 }
+
+/// Re-apply the current swap chain to this panel.
+/// Useful when the panel is reparented/shown by TabView selection changes.
+pub fn rebindSwapChain(self: *Surface) void {
+    const sc = self.last_swap_chain orelse return;
+    self.completeBindSwapChain(sc);
+}
+
+// --- Parity Audit / Apprt interface methods ---
+
+pub fn setMouseShape(self: *Surface, shape: terminal.MouseShape) void {
+    _ = self;
+    log.info("Surface.setMouseShape: {s}", .{@tagName(shape)});
+    // TODO: Implement actual mouse cursor change using Win32 LoadCursor/SetCursor
+}
+
+pub fn setProgressReport(self: *Surface, value: terminal.osc.Command.ProgressReport) void {
+    _ = self;
+    log.info("Surface.setProgressReport: state={s} progress={?}", .{ @tagName(value.state), value.progress });
+    // TODO: Implement WinUI 3 Taskbar/TabView progress indicator
+}
+
+pub fn commandFinished(self: *Surface, value: apprt.Action.Value(.command_finished)) bool {
+    _ = self;
+    log.info("Surface.commandFinished: duration={d}", .{value.duration.ns()});
+    // TODO: Implement Windows toast notification if requested
+    return false;
+}
+
+pub fn setBellRinging(self: *Surface, value: bool) void {
+    _ = self;
+    if (value) {
+        log.info("Surface.setBellRinging: Ringing visual/audio bell", .{});
+        // Win32 MessageBeep or Visual flash
+        _ = os.MessageBeep(os.MB_OK);
+    }
+}
+
+/// Compute a fraction [0.0, 1.0] from the supplied progress, which is clamped
+/// to [0, 100].
+fn computeFraction(progress: u8) f64 {
+    return @as(f64, @floatFromInt(std.math.clamp(progress, 0, 100))) / 100.0;
+}
+
+test "computeFraction" {
+    try std.testing.expectEqual(@as(f64, 1.0), computeFraction(100));
+    try std.testing.expectEqual(@as(f64, 1.0), computeFraction(255));
+    try std.testing.expectEqual(@as(f64, 0.0), computeFraction(0));
+    try std.testing.expectEqual(@as(f64, 0.5), computeFraction(50));
+}
+
+test "Surface title memory management" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var app = App{
+        .core_app = undefined,
+        .surfaces = std.ArrayList(*Surface).init(alloc),
+    };
+    defer app.surfaces.deinit();
+
+    var surface = Surface{
+        .app = &app,
+        .core_surface = undefined,
+    };
+    defer surface.deinit();
+
+    surface.setTabTitle("Test Title 1");
+    try testing.expectEqualStrings("Test Title 1", surface.title.?);
+
+    surface.setTabTitle("Test Title 2 - Long title");
+    try testing.expectEqualStrings("Test Title 2 - Long title", surface.title.?);
+}
+

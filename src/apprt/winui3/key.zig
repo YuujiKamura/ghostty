@@ -237,12 +237,16 @@ pub fn vkToUnshiftedCodepoint(vk: u16) u21 {
     if (mapped != 0) {
         // MapVirtualKeyW returns the unshifted character in the low word.
         // Bit 31 is set for dead keys — mask it off to get the base codepoint.
-        return @intCast(mapped & 0x7FFFFFFF);
+        const cp: u21 = @intCast(mapped & 0x7FFFFFFF);
+        // MapVirtualKeyW typically returns uppercase for alphabet keys.
+        // Ghostty expects lowercase for unshifted codepoints.
+        if (cp >= 'A' and cp <= 'Z') return cp + ('a' - 'A');
+        return cp;
     }
     // Fallback: static US layout table for keys MapVirtualKeyW doesn't resolve.
     return switch (vk) {
-        // A-Z → lowercase a-z
-        0x41...0x5A => @as(u21, vk) | 0x20,
+        // A-Z → 'a'-'z'
+        0x41...0x5A => @as(u21, vk + ('a' - 'A')),
         // 0-9 → '0'-'9'
         0x30...0x39 => @as(u21, vk),
         // Space
@@ -312,4 +316,335 @@ pub fn getModifiers() Mods {
     }
 
     return mods;
+}
+
+/// Returns a GTK accelerator string from a trigger.
+pub fn accelFromTrigger(
+    buf: []u8,
+    trigger: input.Binding.Trigger,
+) !?[:0]const u8 {
+    var writer = std.io.fixedBufferStream(buf);
+    const w = writer.writer();
+
+    // Modifiers
+    if (trigger.mods.shift) try w.writeAll("<Shift>");
+    if (trigger.mods.ctrl) try w.writeAll("<Ctrl>");
+    if (trigger.mods.alt) try w.writeAll("<Alt>");
+    if (trigger.mods.super) try w.writeAll("<Super>");
+
+    // Write our key
+    if (!try writeTriggerKey(w, trigger)) return null;
+
+    // We need to make the string null terminated.
+    const pos = writer.pos;
+    buf[pos] = 0;
+    return buf[0..pos :0];
+}
+
+/// Returns a XDG-compliant shortcuts string from a trigger.
+pub fn xdgShortcutFromTrigger(
+    buf: []u8,
+    trigger: input.Binding.Trigger,
+) !?[:0]const u8 {
+    var writer = std.io.fixedBufferStream(buf);
+    const w = writer.writer();
+
+    // Modifiers
+    if (trigger.mods.shift) try w.writeAll("SHIFT+");
+    if (trigger.mods.ctrl) try w.writeAll("CTRL+");
+    if (trigger.mods.alt) try w.writeAll("ALT+");
+    if (trigger.mods.super) try w.writeAll("LOGO+");
+
+    if (!try writeTriggerKey(w, trigger)) return null;
+
+    // We need to make the string null terminated.
+    const pos = writer.pos;
+    buf[pos] = 0;
+    return buf[0..pos :0];
+}
+
+fn writeTriggerKey(
+    writer: anytype,
+    trigger: input.Binding.Trigger,
+) !bool {
+    switch (trigger.key) {
+        .physical => |k| {
+            const name = normalizedKeyName(k);
+            try writer.writeAll(name);
+        },
+
+        .unicode => |cp| {
+            if (cp == 92) {
+                try writer.writeAll("backslash");
+            } else {
+                try writer.print("{u}", .{cp});
+            }
+        },
+
+        .catch_all => return false,
+    }
+
+    return true;
+}
+
+/// Converts a trigger to a human-readable label for display in UI.
+pub fn labelFromTrigger(
+    writer: anytype,
+    trigger: input.Binding.Trigger,
+) !bool {
+    // Modifiers first, using human-readable format.
+    // Order matches GTK for consistency: Super, Ctrl, Alt, Shift
+    if (trigger.mods.super) try writer.writeAll("Super+");
+    if (trigger.mods.ctrl) try writer.writeAll("Ctrl+");
+    if (trigger.mods.alt) try writer.writeAll("Alt+");
+    if (trigger.mods.shift) try writer.writeAll("Shift+");
+
+    return writeTriggerKeyLabel(writer, trigger);
+}
+
+fn writeTriggerKeyLabel(
+    writer: anytype,
+    trigger: input.Binding.Trigger,
+) !bool {
+    switch (trigger.key) {
+        .physical => |k| {
+            const name = normalizedKeyName(k);
+            // Capitalize the first letter for nicer display
+            if (name.len > 0) {
+                // If it starts with a lowercase letter, capitalize it.
+                // If it's already "Up" or "BackSpace", leave it as is.
+                if (name[0] >= 'a' and name[0] <= 'z') {
+                    try writer.writeByte(name[0] - 'a' + 'A');
+                    if (name.len > 1) try writer.writeAll(name[1..]);
+                } else {
+                    try writer.writeAll(name);
+                }
+            }
+        },
+
+        .unicode => |cp| {
+            if (cp == 92) {
+                try writer.writeAll("Backslash");
+            } else if (cp >= 'a' and cp <= 'z') {
+                try writer.writeByte(@intCast(cp - 'a' + 'A'));
+            } else {
+                try writer.print("{u}", .{cp});
+            }
+        },
+
+        .catch_all => return false,
+    }
+
+    return true;
+}
+
+fn normalizedKeyName(k: input.Key) []const u8 {
+    const name = @tagName(k);
+    if (std.mem.startsWith(u8, name, "key_")) return name[4..];
+    if (std.mem.startsWith(u8, name, "digit_")) return name[6..];
+
+    return switch (k) {
+        .semicolon => "semicolon",
+        .space => "space",
+        .quote => "apostrophe",
+        .comma => "comma",
+        .backquote => "grave",
+        .period => "period",
+        .slash => "slash",
+        .minus => "minus",
+        .equal => "equal",
+        .bracket_left => "bracketleft",
+        .bracket_right => "bracketright",
+        .backslash => "backslash",
+
+        .arrow_up => "Up",
+        .arrow_down => "Down",
+        .arrow_right => "Right",
+        .arrow_left => "Left",
+        .home => "Home",
+        .end => "End",
+        .insert => "Insert",
+        .delete => "Delete",
+        .caps_lock => "Caps_Lock",
+        .scroll_lock => "Scroll_Lock",
+        .num_lock => "Num_Lock",
+        .page_up => "Page_Up",
+        .page_down => "Page_Down",
+        .escape => "Escape",
+        .enter => "Return",
+        .tab => "Tab",
+        .backspace => "BackSpace",
+        .print_screen => "Print",
+        .pause => "Pause",
+
+        else => name,
+    };
+}
+
+const WriteFailed = error{WriteFailed};
+
+test "vkToKey mapping" {
+    const testing = std.testing;
+    try testing.expectEqual(Key.backspace, vkToKey(VK_BACK).?);
+    try testing.expectEqual(Key.tab, vkToKey(VK_TAB).?);
+    try testing.expectEqual(Key.enter, vkToKey(VK_RETURN).?);
+    try testing.expectEqual(Key.escape, vkToKey(VK_ESCAPE).?);
+    try testing.expectEqual(Key.space, vkToKey(VK_SPACE).?);
+
+    // Alphabet A-Z
+    try testing.expectEqual(Key.key_a, vkToKey(0x41).?);
+    try testing.expectEqual(Key.key_z, vkToKey(0x5A).?);
+    try testing.expectEqual(Key.key_m, vkToKey(0x4D).?);
+
+    // Digits 0-9
+    try testing.expectEqual(Key.digit_0, vkToKey(0x30).?);
+    try testing.expectEqual(Key.digit_9, vkToKey(0x39).?);
+
+    // Function keys
+    try testing.expectEqual(Key.f1, vkToKey(VK_F1).?);
+    try testing.expectEqual(Key.f12, vkToKey(VK_F12).?);
+    try testing.expectEqual(Key.f24, vkToKey(VK_F24).?);
+
+    // Navigation
+    try testing.expectEqual(Key.arrow_up, vkToKey(VK_UP).?);
+    try testing.expectEqual(Key.home, vkToKey(VK_HOME).?);
+    try testing.expectEqual(Key.page_down, vkToKey(VK_NEXT).?);
+
+    // Numpad
+    try testing.expectEqual(Key.numpad_0, vkToKey(VK_NUMPAD0).?);
+    try testing.expectEqual(Key.numpad_multiply, vkToKey(VK_MULTIPLY).?);
+    try testing.expectEqual(Key.numpad_divide, vkToKey(VK_DIVIDE).?);
+
+    // Modifiers
+    try testing.expectEqual(Key.shift_left, vkToKey(VK_LSHIFT).?);
+    try testing.expectEqual(Key.control_right, vkToKey(VK_RCONTROL).?);
+    try testing.expectEqual(Key.meta_left, vkToKey(VK_LWIN).?);
+
+    // OEM Keys (US Layout)
+    try testing.expectEqual(Key.semicolon, vkToKey(VK_OEM_1).?);
+    try testing.expectEqual(Key.equal, vkToKey(VK_OEM_PLUS).?);
+    try testing.expectEqual(Key.backslash, vkToKey(VK_OEM_5).?);
+
+    try testing.expectEqual(null, vkToKey(0xFFFF));
+}
+
+test "vkToUnshiftedCodepoint resolution" {
+    const testing = std.testing;
+    // Unshifted alphabetic keys should normalize to lowercase.
+    try testing.expectEqual(@as(u21, 'a'), vkToUnshiftedCodepoint(0x41));
+    try testing.expectEqual(@as(u21, '1'), vkToUnshiftedCodepoint(0x31));
+    try testing.expectEqual(@as(u21, ' '), vkToUnshiftedCodepoint(VK_SPACE));
+}
+
+test "accelFromTrigger" {
+    const testing = std.testing;
+    var buf: [256]u8 = undefined;
+
+    try testing.expectEqualStrings("<Super>q", (try accelFromTrigger(&buf, .{
+        .mods = .{ .super = true },
+        .key = .{ .unicode = 'q' },
+    })).?);
+
+    try testing.expectEqualStrings("<Shift><Ctrl><Alt><Super>backslash", (try accelFromTrigger(&buf, .{
+        .mods = .{ .ctrl = true, .alt = true, .super = true, .shift = true },
+        .key = .{ .unicode = 92 },
+    })).?);
+}
+
+test "xdgShortcutFromTrigger" {
+    const testing = std.testing;
+    var buf: [256]u8 = undefined;
+
+    try testing.expectEqualStrings("LOGO+q", (try xdgShortcutFromTrigger(&buf, .{
+        .mods = .{ .super = true },
+        .key = .{ .unicode = 'q' },
+    })).?);
+
+    try testing.expectEqualStrings("SHIFT+CTRL+ALT+LOGO+backslash", (try xdgShortcutFromTrigger(&buf, .{
+        .mods = .{ .ctrl = true, .alt = true, .super = true, .shift = true },
+        .key = .{ .unicode = 92 },
+    })).?);
+}
+
+test "labelFromTrigger" {
+    const testing = std.testing;
+
+    // Simple unicode key with modifier
+    {
+        var buf: [64]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        try testing.expect(try labelFromTrigger(fbs.writer(), .{
+            .mods = .{ .super = true },
+            .key = .{ .unicode = 'q' },
+        }));
+        try testing.expectEqualStrings("Super+Q", fbs.getWritten());
+    }
+
+    // Multiple modifiers
+    {
+        var buf: [64]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        try testing.expect(try labelFromTrigger(fbs.writer(), .{
+            .mods = .{ .ctrl = true, .alt = true, .super = true, .shift = true },
+            .key = .{ .unicode = 92 },
+        }));
+        try testing.expectEqualStrings("Super+Ctrl+Alt+Shift+Backslash", fbs.getWritten());
+    }
+
+    // Physical key
+    {
+        var buf: [64]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        try testing.expect(try labelFromTrigger(fbs.writer(), .{
+            .mods = .{ .ctrl = true },
+            .key = .{ .physical = .key_a },
+        }));
+        try testing.expectEqualStrings("Ctrl+A", fbs.getWritten());
+    }
+
+    // No modifiers
+    {
+        var buf: [64]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        try testing.expect(try labelFromTrigger(fbs.writer(), .{
+            .mods = .{},
+            .key = .{ .physical = .escape },
+        }));
+        try testing.expectEqualStrings("Escape", fbs.getWritten());
+    }
+
+    // Special Keys (Parity Audit fix)
+    {
+        var buf: [64]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        try testing.expect(try labelFromTrigger(fbs.writer(), .{
+            .mods = .{ .ctrl = true },
+            .key = .{ .physical = .arrow_up },
+        }));
+        try testing.expectEqualStrings("Ctrl+Up", fbs.getWritten());
+
+        fbs.reset();
+        try testing.expect(try labelFromTrigger(fbs.writer(), .{
+            .mods = .{},
+            .key = .{ .physical = .backspace },
+        }));
+        try testing.expectEqualStrings("BackSpace", fbs.getWritten());
+
+        fbs.reset();
+        try testing.expect(try labelFromTrigger(fbs.writer(), .{
+            .mods = .{ .alt = true },
+            .key = .{ .physical = .page_up },
+        }));
+        try testing.expectEqualStrings("Alt+Page_Up", fbs.getWritten());
+    }
+
+    // catch_all returns false
+    {
+        var buf: [64]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        try testing.expect(!try labelFromTrigger(fbs.writer(), .{
+            .mods = .{},
+            .key = .catch_all,
+        }));
+    }
 }

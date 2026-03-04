@@ -47,6 +47,7 @@ blending: configpkg.Config.AlphaBlending,
 device: ?*com.ID3D11Device = null,
 context: ?*com.ID3D11DeviceContext = null,
 swap_chain: ?*com.IDXGISwapChain1 = null,
+swap_chain_base: ?*com.IDXGISwapChain = null,
 factory: ?*com.IDXGIFactory2 = null,
 
 /// The most recently presented target for re-presentation.
@@ -58,6 +59,10 @@ surface_height: u32 = 0,
 
 /// HWND to bind the swap chain to.
 hwnd: ?com.HWND = null,
+use_composition: bool = false,
+
+/// Reference to the surface for size synchronization.
+surface: ?*apprt.Surface = null,
 
 /// Performance stats.
 perf: PerfStats = .{},
@@ -116,6 +121,7 @@ pub fn deinit(self: *D3D11) void {
     self.perf.logSummary();
 
     if (self.swap_chain) |sc| sc.release();
+    if (self.swap_chain_base) |sc| sc.release();
     if (self.factory) |f| f.release();
     if (self.context) |ctx| {
         ctx.clearState();
@@ -142,6 +148,8 @@ pub fn finalizeSurfaceInit(self: *const D3D11, surface: *apprt.Surface) !void {
 
 /// Callback when the renderer thread begins.
 pub fn threadEnter(self: *D3D11, surface: *apprt.Surface) !void {
+    self.surface = surface;
+
     // Device and factory already created in init().
     // Here we only create the swap chain which needs the HWND.
     const app = surface.app;
@@ -149,14 +157,14 @@ pub fn threadEnter(self: *D3D11, surface: *apprt.Surface) !void {
     const hwnd = self.hwnd orelse return error.D3D11InitFailed;
     const device = self.device orelse return error.D3D11InitFailed;
 
-    // Get initial window size.
-    var rect: win32.RECT = .{};
-    _ = win32.GetClientRect(hwnd, &rect);
-    self.surface_width = @intCast(@max(1, rect.right - rect.left));
-    self.surface_height = @intCast(@max(1, rect.bottom - rect.top));
+    // Use surface size instead of HWND client rect.
+    const size = try surface.getSize();
+    self.surface_width = size.width;
+    self.surface_height = size.height;
 
     // Create swap chain — composition path for WinUI 3, HWND path for win32.
     const use_composition = comptime @hasDecl(apprt.Surface, "bindSwapChain");
+    self.use_composition = use_composition;
 
     if (comptime use_composition) {
         // Composition swap chain for WinUI 3 SwapChainPanel
@@ -167,7 +175,8 @@ pub fn threadEnter(self: *D3D11, surface: *apprt.Surface) !void {
             .BufferCount = 2,
             .SwapEffect = .FLIP_DISCARD,
             .Scaling = .STRETCH,
-            .Flags = com.DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING,
+            // Composition swap chains should not rely on tearing flags.
+            .Flags = 0,
         };
         self.swap_chain = self.factory.?.createSwapChainForComposition(
             @ptrCast(device),
@@ -176,8 +185,12 @@ pub fn threadEnter(self: *D3D11, surface: *apprt.Surface) !void {
             log.err("CreateSwapChainForComposition failed", .{});
             return error.D3D11InitFailed;
         };
+        self.swap_chain_base = self.swap_chain.?.queryInterface(com.IDXGISwapChain) catch {
+            log.err("QueryInterface(IDXGISwapChain) failed for composition swap chain", .{});
+            return error.D3D11InitFailed;
+        };
         // Post swap chain binding to the UI thread (async — will happen via WM_USER+1).
-        surface.bindSwapChain(@ptrCast(self.swap_chain.?));
+        surface.bindSwapChain(@ptrCast(self.swap_chain_base.?));
     } else {
         // HWND swap chain (win32 path)
         const sc_desc = com.DXGI_SWAP_CHAIN_DESC1{
@@ -217,14 +230,11 @@ pub fn displayRealized(self: *const D3D11) void {
 pub fn drawFrameStart(self: *D3D11) void {
     self.perf.recordFrameStart();
 
-    // Query actual window size and resize swap chain if needed.
-    if (self.hwnd) |hwnd| {
-        var rect: win32.RECT = .{};
-        _ = win32.GetClientRect(hwnd, &rect);
-        const w: u32 = @intCast(@max(1, rect.right - rect.left));
-        const h: u32 = @intCast(@max(1, rect.bottom - rect.top));
-        if (w != self.surface_width or h != self.surface_height) {
-            self.resizeSwapChain(w, h);
+    // Query actual surface size and resize swap chain if needed.
+    if (self.surface) |s| {
+        const size = s.getSize() catch return;
+        if (size.width != self.surface_width or size.height != self.surface_height) {
+            self.resizeSwapChain(size.width, size.height);
         }
     }
 
@@ -285,9 +295,17 @@ pub fn present(self: *D3D11, target: Target) !void {
         back_buffer.release();
     }
 
-    // Present with ALLOW_TEARING for immediate, non-vsync presentation.
-    // Frame pacing is handled externally by the DwmFlush heartbeat thread.
-    _ = sc.present(0, com.DXGI_PRESENT_ALLOW_TEARING);
+    const present_flags: u32 = if (self.use_composition) 0 else com.DXGI_PRESENT_ALLOW_TEARING;
+    const sync_interval: u32 = if (self.use_composition) 1 else 0;
+    const phr = sc.present(sync_interval, present_flags);
+    if (phr < 0) {
+        log.err("Present failed hr=0x{x} sync={} flags=0x{x} composition={}", .{
+            @as(u32, @bitCast(phr)),
+            sync_interval,
+            present_flags,
+            self.use_composition,
+        });
+    }
 
     self.last_target = target;
 }
@@ -429,7 +447,8 @@ pub fn resizeSwapChain(self: *D3D11, width: u32, height: u32) void {
     if (width == self.surface_width and height == self.surface_height) return;
 
     const sc = self.swap_chain orelse return;
-    sc.resizeBuffers(0, width, height, .UNKNOWN, com.DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING) catch {
+    const resize_flags: u32 = if (self.use_composition) 0 else com.DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+    sc.resizeBuffers(0, width, height, .UNKNOWN, resize_flags) catch {
         log.err("ResizeBuffers failed", .{});
         return;
     };

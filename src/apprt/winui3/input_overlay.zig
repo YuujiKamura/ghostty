@@ -23,9 +23,10 @@ pub fn createInputWindow(parent: os.HWND, app_ptr: usize) ?os.HWND {
     // Register the window class once.
     if (!input_class_registered) {
         const wc = os.WNDCLASSEXW{
-            .style = 0,
+            .style = os.CS_HREDRAW | os.CS_VREDRAW,
             .lpfnWndProc = &inputWndProc,
             .hInstance = os.GetModuleHandleW(null) orelse return null,
+            .hbrBackground = null, // Ensure NO background brush is used (transparent)
             .lpszClassName = INPUT_CLASS_NAME,
         };
         const atom = os.RegisterClassExW(&wc);
@@ -36,21 +37,20 @@ pub fn createInputWindow(parent: os.HWND, app_ptr: usize) ?os.HWND {
         input_class_registered = true;
     }
 
-    // Get parent client rect for initial size.
-    var rc: os.RECT = .{};
-    _ = os.GetClientRect(parent, &rc);
-
     const hinstance = os.GetModuleHandleW(null) orelse return null;
 
+    // Use WS_EX_TRANSPARENT to pass mouse events through.
+    // Removed WS_EX_LAYERED as it can cause failures for child windows on some Windows versions
+    // when combined with certain parent window styles.
     const hwnd = os.CreateWindowExW(
-        0, // no WS_EX_TRANSPARENT — we want this window to receive mouse clicks
+        os.WS_EX_TRANSPARENT,
         INPUT_CLASS_NAME,
-        INPUT_CLASS_NAME, // window name (unused)
-        os.WS_CHILD | os.WS_VISIBLE, // child, visible
+        INPUT_CLASS_NAME,
+        os.WS_CHILD | os.WS_VISIBLE,
         0,
         0,
-        rc.right - rc.left,
-        rc.bottom - rc.top,
+        1,
+        1,
         parent,
         null,
         hinstance,
@@ -61,7 +61,9 @@ pub fn createInputWindow(parent: os.HWND, app_ptr: usize) ?os.HWND {
         _ = os.SetWindowLongPtrW(h, os.GWLP_USERDATA, app_ptr);
         return h;
     }
-    log.err("createInputWindow: CreateWindowExW failed", .{});
+
+    const err = os.GetLastError();
+    log.err("INPUT_OVERLAY_FATAL: CreateWindowExW failed, parent=0x{x}, error=0x{x}", .{ @intFromPtr(parent), err });
     return null;
 }
 
@@ -225,3 +227,24 @@ pub fn imeUtf16ToUtf8(dest: []u8, src: []const u16) usize {
     }
     return dest_i;
 }
+
+test "imeUtf16ToUtf8 conversion" {
+    const testing = std.testing;
+    var buf: [64]u8 = undefined;
+
+    // ASCII
+    const src1 = [_]u16{ 'h', 'e', 'l', 'l', 'o' };
+    const len1 = imeUtf16ToUtf8(&buf, &src1);
+    try testing.expectEqualStrings("hello", buf[0..len1]);
+
+    // Japanese (Hiragana)
+    const src2 = [_]u16{ 0x3042, 0x3044, 0x3046 }; // あいう
+    const len2 = imeUtf16ToUtf8(&buf, &src2);
+    try testing.expectEqualStrings("あいう", buf[0..len2]);
+
+    // Emoji (Surrogate pair)
+    const src3 = [_]u16{ 0xD83D, 0xDE00 }; // 😀
+    const len3 = imeUtf16ToUtf8(&buf, &src3);
+    try testing.expectEqualStrings("😀", buf[0..len3]);
+}
+

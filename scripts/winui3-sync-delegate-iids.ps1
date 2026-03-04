@@ -1,10 +1,16 @@
 param(
-    [string]$RepoRoot = "C:\Users\yuuji\ghostty-win",
+    [string]$RepoRoot = "",
+    [string]$ToolDir = "",
+    [string]$ComPath = "",
     [string]$WinmdPath = "",
     [switch]$Check
 )
 
 $ErrorActionPreference = "Stop"
+
+if (-not $RepoRoot) {
+    $RepoRoot = Split-Path -Parent $PSScriptRoot
+}
 
 function Find-Winmd {
     $base = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.windowsappsdk"
@@ -30,19 +36,23 @@ if (-not (Test-Path -LiteralPath $WinmdPath)) {
     throw "WinMD not found: $WinmdPath"
 }
 
-$externalToolDir = Join-Path (Split-Path -Parent $RepoRoot) "win-zig-bindgen"
-$localToolDir = Join-Path $RepoRoot "tools\winmd2zig"
-$toolDir = if (Test-Path -LiteralPath $externalToolDir) { $externalToolDir } else { $localToolDir }
-$comPath = Join-Path $RepoRoot "src\apprt\winui3\com.zig"
-if (-not (Test-Path -LiteralPath $comPath)) {
-    throw "com.zig not found: $comPath"
+if (-not $ToolDir) {
+    $externalToolDir = Join-Path (Split-Path -Parent $RepoRoot) "win-zig-bindgen"
+    $localToolDir = Join-Path $RepoRoot "tools\winmd2zig"
+    $ToolDir = if (Test-Path -LiteralPath $externalToolDir) { $externalToolDir } else { $localToolDir }
 }
-if (-not (Test-Path -LiteralPath $toolDir)) {
-    throw "winmd2zig tool dir not found: $toolDir"
+if (-not $ComPath) {
+    $ComPath = Join-Path $RepoRoot "src\apprt\winui3\com.zig"
+}
+if (-not (Test-Path -LiteralPath $ComPath)) {
+    throw "com.zig not found: $ComPath"
+}
+if (-not (Test-Path -LiteralPath $ToolDir)) {
+    throw "winmd2zig tool dir not found: $ToolDir"
 }
 
 $generated = $null
-Push-Location $toolDir
+Push-Location $ToolDir
 try {
     $generated = & zig build run -- --emit-tabview-delegate-zig $WinmdPath 2>$null
     if ($LASTEXITCODE -ne 0) {
@@ -53,7 +63,7 @@ finally {
     Pop-Location
 }
 
-$text = Get-Content -Raw -LiteralPath $comPath
+$text = Get-Content -Raw -LiteralPath $ComPath
 
 $map = @{
     "IID_TypedEventHandler_AddTabButtonClick" = ($generated | Select-String "IID_TypedEventHandler_AddTabButtonClick").Line
@@ -87,8 +97,8 @@ if ($Check) {
 }
 
 if ($updated -ne $text) {
-    Set-Content -LiteralPath $comPath -Value $updated -Encoding UTF8
-    Write-Host "Updated: $comPath"
+    Set-Content -LiteralPath $ComPath -Value $updated -Encoding UTF8
+    Write-Host "Updated: $ComPath"
 } else {
-    Write-Host "No changes: $comPath"
+    Write-Host "No changes: $ComPath"
 }
