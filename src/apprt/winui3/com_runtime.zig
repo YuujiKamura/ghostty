@@ -1,5 +1,6 @@
 const std = @import("std");
 const winrt = @import("winrt.zig");
+const com = @import("com.zig");
 
 pub const HRESULT = winrt.HRESULT;
 pub const GUID = winrt.GUID;
@@ -79,3 +80,29 @@ test "guidEql" {
     try testing.expect(guidEql(&IID_IUnknown, &IID_IUnknown));
 }
 
+test "IWindowNative IID matches WinUI3 oracle" {
+    const testing = std.testing;
+    const iid = com.IWindowNative.IID;
+    try testing.expectEqual(@as(u32, 0xeecdbf0e), iid.Data1);
+    try testing.expectEqual(@as(u16, 0xbae9), iid.Data2);
+    try testing.expectEqual(@as(u16, 0x4cb6), iid.Data3);
+    try testing.expect(std.mem.eql(u8, &iid.Data4, &[_]u8{ 0xa6, 0x8e, 0x95, 0x98, 0xe1, 0xcb, 0x57, 0xbb }));
+}
+
+test "ISwapChainPanelNative IID matches WinUI3 oracle" {
+    const testing = std.testing;
+    const iid = com.ISwapChainPanelNative.IID;
+    try testing.expectEqual(@as(u32, 0x63aad0b8), iid.Data1);
+    try testing.expectEqual(@as(u16, 0x7c24), iid.Data2);
+    try testing.expectEqual(@as(u16, 0x40ff), iid.Data3);
+    try testing.expect(std.mem.eql(u8, &iid.Data4, &[_]u8{ 0x85, 0xa8, 0x64, 0x0d, 0x94, 0x4c, 0xc3, 0x25 }));
+}
+
+test "IResourceDictionary IID matches WinUI3 oracle" {
+    const testing = std.testing;
+    const iid = com.IResourceDictionary.IID;
+    try testing.expectEqual(@as(u32, 0x1b690975), iid.Data1);
+    try testing.expectEqual(@as(u16, 0xa710), iid.Data2);
+    try testing.expectEqual(@as(u16, 0x5783), iid.Data3);
+    try testing.expect(std.mem.eql(u8, &iid.Data4, &[_]u8{ 0xa6, 0xe1, 0x15, 0x83, 0x6f, 0x61, 0x86, 0xc2 }));
+}
