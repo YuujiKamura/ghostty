@@ -361,7 +361,7 @@ pub fn initXaml(self: *App) !void {
 
                 // Wrap SwapChainPanel in a Border (Windows Terminal pattern)
                 // Use a catch to allow fallback to direct attachment if Border fails.
-                const wrapped_panel = self.wrapInBorder(@ptrCast(panel)) catch panel;
+                    const wrapped_panel = panel;
                 if (wrapped_panel != @as(*winrt.IInspectable, @ptrCast(panel))) {
                     defer _ = wrapped_panel.release();
                     try content_control.putContent(@ptrCast(wrapped_panel));
@@ -419,7 +419,7 @@ pub fn initXaml(self: *App) !void {
         } else {
             // Fallback: set SwapChainPanel directly as Window content.
             // Wrap in Border for consistency.
-            const wrapped_panel = self.wrapInBorder(@ptrCast(panel)) catch panel;
+            const wrapped_panel = panel;
             if (wrapped_panel != @as(*winrt.IInspectable, @ptrCast(panel))) {
                 defer _ = wrapped_panel.release();
                 try window.putContent(@ptrCast(wrapped_panel));
@@ -750,10 +750,10 @@ fn fullCleanup(self: *App) void {
     }
 
     // 4. Release COM objects properly.
-    if (self.closed_handler) |h| h.release();
-    if (self.tab_close_handler) |h| h.release();
-    if (self.add_tab_handler) |h| h.release();
-    if (self.selection_changed_handler) |h| h.release();
+    if (self.closed_handler) |h| _ = h.com.lpVtbl.Release(h.comPtr());
+    if (self.tab_close_handler) |h| _ = h.com.lpVtbl.Release(h.comPtr());
+    if (self.add_tab_handler) |h| _ = h.com.lpVtbl.Release(h.comPtr());
+    if (self.selection_changed_handler) |h| _ = h.com.lpVtbl.Release(h.comPtr());
 
     if (self.tab_view) |tv| tv.release();
     if (self.window) |window| window.release();
@@ -1110,10 +1110,17 @@ fn onSelectionChanged(self: *App, _: *anyopaque, _: *anyopaque) void {
 
 /// Set the background of a Control to a solid color.
 pub fn setControlBackground(_: *App, control_insp: *winrt.IInspectable, color: com.ISolidColorBrush.Color) void {
-    const control = control_insp.queryInterface(com.IControl) catch |err| {
-        log.warn("setControlBackground: QI IControl failed: {}", .{err});
+    var control_raw: ?*anyopaque = null;
+    const hr = control_insp.lpVtbl.QueryInterface(@ptrCast(control_insp), &com.IControl.IID, &control_raw);
+    if (hr < 0) {
+        // Many WinUI objects we touch here are not Controls (e.g. SwapChainPanel),
+        // so E_NOINTERFACE is expected and should not be logged as a hard error.
+        if (@as(u32, @bitCast(hr)) != 0x80004002) {
+            _ = winrt.hrCheck(hr) catch {};
+        }
         return;
-    };
+    }
+    const control: *com.IControl = @ptrCast(@alignCast(control_raw orelse return));
     defer control.release();
 
     const brush_class = winrt.hstring("Microsoft.UI.Xaml.Media.SolidColorBrush") catch return;
@@ -1285,6 +1292,8 @@ fn loadXamlResources(self: *App, xa: *com.IApplication) void {
     
 
                     // Step 5: Override TabView resources to black (Windows Terminal pattern).
+                    // Temporarily disabled to keep WinUI startup free of expected E_NOINTERFACE noise.
+                    if (false) {
 
     
 
@@ -1395,6 +1404,7 @@ fn loadXamlResources(self: *App, xa: *com.IApplication) void {
         
 
     
+}
 
 fn verifyTabItemHasContent(content_control: *com.IContentControl) !bool {
     const current = try content_control.getContent();
