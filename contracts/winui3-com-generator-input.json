@@ -1,0 +1,46 @@
+{
+  "interfaces": [
+    "IApplicationStatics",
+    "IApplicationFactory",
+    "IApplication",
+    "IWindow",
+    "ITabView",
+    "ITabViewItem",
+    "ITabViewTabCloseRequestedEventArgs",
+    "IContentControl",
+    "IUIElement",
+    "IFrameworkElement",
+    "IXamlMetadataProvider",
+    "IXamlType",
+    "ITextBox",
+    "ISolidColorBrush",
+    "IControl",
+    "IPanel",
+    "IResourceDictionary"
+  ],
+  "optional_interfaces": [],
+  "required_patterns": [
+    "pub const IApplicationFactory = extern struct",
+    "pub fn createInstance(self: *@This(), outer: ?*anyopaque)",
+    "inner: ?*anyopaque, instance: *IInspectable",
+    "pub const ITabView = extern struct",
+    "pub fn getTabItems(self: *@This())",
+    "pub const IResourceDictionary = extern struct",
+    "pub const IXamlMetadataProvider = extern struct"
+  ],
+  "required_regex_patterns": [
+    "pub fn createInstance\\(self: \\*@This\\(\\), outer: \\?\\*anyopaque\\) !struct \\{ inner: \\?\\*anyopaque, instance: \\*IInspectable \\}",
+    "pub fn getTabItems\\(self: \\*@This\\(\\)\\) !\\*IVector",
+    "pub fn addTabCloseRequested\\(self: \\*@This\\(\\), .*\\) !EventRegistrationToken",
+    "pub fn addAddTabButtonClick\\(self: \\*@This\\(\\), .*\\) !EventRegistrationToken",
+    "pub fn addSelectionChanged\\(self: \\*@This\\(\\), .*\\) !EventRegistrationToken",
+    "GetXmlnsDefinitions: \\*const fn \\(\\*anyopaque, \\*u32, \\*\\?\\*anyopaque\\) callconv\\(\\.winapi\\) HRESULT",
+    "pub const IVector = extern struct",
+    "pub const IPropertyValueStatics = extern struct",
+    "pub const IPropertyValue = extern struct"
+  ],
+  "forbidden_patterns": [
+    "pub fn getTabItems(self: *@This()) !void { try hrCheck(self.lpVtbl.get_TabItems(self)); }",
+    "GetXmlnsDefinitions: *const fn (*anyopaque) callconv(.winapi) HRESULT,"
+  ]
+}

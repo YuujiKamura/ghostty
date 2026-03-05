@@ -48,7 +48,8 @@ pub fn boxString(str: winrt.HSTRING) !*winrt.IInspectable {
     defer winrt.deleteHString(class_name);
     const factory = try winrt.getActivationFactory(com.IPropertyValueStatics, class_name);
     defer factory.release();
-    return try factory.createString(str);
+    const boxed = try factory.createString(str);
+    return @ptrCast(@alignCast(boxed));
 }
 
 /// Unbox an IInspectable back into an HSTRING. (Utility for testing/debugging)
