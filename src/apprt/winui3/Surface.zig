@@ -830,7 +830,7 @@ pub fn setProgressReport(self: *Surface, value: terminal.osc.Command.ProgressRep
 
 pub fn commandFinished(self: *Surface, value: apprt.Action.Value(.command_finished)) bool {
     _ = self;
-    log.info("Surface.commandFinished: duration={d}", .{value.duration.ns()});
+    log.info("Surface.commandFinished: duration={}ns", .{value.duration.duration});
 
     // Minimal notification: command failure emits an audible signal.
     if (value.exit_code) |code| {

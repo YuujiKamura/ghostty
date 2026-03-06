@@ -25,7 +25,7 @@ pub const WORD = u16;
 pub const ATOM = u16;
 pub const BYTE = u8;
 pub const LPVOID = ?*anyopaque;
-pub const LPCWSTR = [*:0]const u16;
+pub const LPCWSTR = [*:0]align(1) const u16;
 
 // --- Window messages ---
 pub const WM_CREATE: UINT = 0x0001;
@@ -75,6 +75,8 @@ pub const CS_HREDRAW: UINT = 0x0002;
 pub const CS_VREDRAW: UINT = 0x0001;
 
 // --- Misc constants ---
+// Win32 MAKEINTRESOURCE cursor IDs — these are integer resource IDs cast to
+// pointer type, not real pointers. LPCWSTR is align(1) to allow odd values.
 pub const IDC_ARROW: LPCWSTR = @ptrFromInt(32512);
 pub const IDC_IBEAM: LPCWSTR = @ptrFromInt(32513);
 pub const IDC_WAIT: LPCWSTR = @ptrFromInt(32514);
