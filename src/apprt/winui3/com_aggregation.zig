@@ -212,6 +212,7 @@ pub const AppOuter = struct {
     fn outerQueryInterface(this: *anyopaque, riid: *const winrt.GUID, ppv: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
         const self = fromIUnknownPtr(this);
         const IID_IUnknown = winrt.GUID{ .Data1 = 0x00000000, .Data2 = 0x0000, .Data3 = 0x0000, .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+        const IID_IAgileObject = winrt.GUID{ .Data1 = 0x94ea2b94, .Data2 = 0xe9cc, .Data3 = 0x49e0, .Data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
 
         // Log EVERY QI request with IID and inner state for crash diagnosis.
         log.info("outerQI: iid={{{x:0>8}-{x:0>4}-{x:0>4}-{x:0>2}{x:0>2}-{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}}} inner={}", .{
@@ -229,13 +230,11 @@ pub const AppOuter = struct {
             return 0; // S_OK
         }
 
-        // IUnknown → return outer (the controlling unknown).
-        // NOTE: IAgileObject is intentionally NOT handled here. We delegate it
-        // to the inner Application object, which decides its own apartment model.
-        // Previously we claimed agile, which told WinRT it could call us from any
-        // thread — but our IXamlMetadataProvider callbacks delegate to the provider
-        // which may not be thread-safe.
-        if (guidEql(riid, &IID_IUnknown)) {
+        // IUnknown / IAgileObject → return outer (the controlling unknown).
+        // We intentionally claim IAgileObject here to avoid noisy E_NOINTERFACE
+        // probes during WinUI startup; metadata methods still enforce safe fallback
+        // behavior and never assume cross-thread provider access is mandatory.
+        if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
             log.info("outerQI: -> IUnknown (handled by outer)", .{});
             ppv.* = this;
             _ = outerAddRef(this);
@@ -340,12 +339,18 @@ pub const AppOuter = struct {
     fn metadataGetXamlType2(this: *anyopaque, full_name: ?winrt.HSTRING, result: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
         log.info("metadataGetXamlType2 called (slot 7, HSTRING overload)", .{});
         const self = fromIMetadataPtr(this);
+        result.* = null;
         if (self.provider) |provider| {
             const hr = provider.lpVtbl.GetXamlType_2(@ptrCast(provider), full_name, result);
-            log.info("metadataGetXamlType2 delegated, hr=0x{x}", .{@as(u32, @bitCast(hr))});
+            const hr_u32: u32 = @bitCast(hr);
+            if (hr_u32 == 0x80004002) {
+                log.warn("metadataGetXamlType2: provider returned E_NOINTERFACE, using null-type fallback", .{});
+                result.* = null;
+                return 0; // S_OK fallback contract
+            }
+            log.info("metadataGetXamlType2 delegated, hr=0x{x}", .{hr_u32});
             return hr;
         }
-        result.* = null;
         return 0; // S_OK — return null IXamlType (type not found)
     }
 

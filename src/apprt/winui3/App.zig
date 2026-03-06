@@ -57,21 +57,6 @@ const IApplicationAbi = extern struct {
     };
 };
 
-const IResourceDictionaryAbi = extern struct {
-    lpVtbl: *const VTable,
-    const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const windows.GUID, *?*anyopaque) callconv(.winapi) windows.HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: *const anyopaque,
-        GetRuntimeClassName: *const anyopaque,
-        GetTrustLevel: *const anyopaque,
-        get_Source: *const fn (*anyopaque) callconv(.winapi) windows.HRESULT,
-        put_Source: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) windows.HRESULT,
-        get_MergedDictionaries: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) windows.HRESULT,
-    };
-};
-
 /// The core application.
 core_app: *CoreApp,
 debug_cfg: debug_harness.RuntimeDebugConfig = .{},
@@ -239,14 +224,6 @@ pub fn initXaml(self: *App) !void {
     // QI for IApplication so we can call Exit() during shutdown and access Resources.
     self.xaml_app = result.instance.queryInterface(com.IApplication) catch null;
     log.info("initXaml step 0 OK: Application created with IXamlMetadataProvider", .{});
-    if (self.xaml_app) |xa| {
-        log.info("initXaml step 0.5: loading XamlControlsResources...", .{});
-        self.loadXamlResources(xa);
-        log.info("initXaml step 0.5 OK", .{});
-    } else {
-        log.warn("initXaml step 0.5: skipped (IApplication unavailable)", .{});
-    }
-
     // Step 1: Create a Window via RoActivateInstance.
     const window_class = try winrt.hstring("Microsoft.UI.Xaml.Window");
     defer winrt.deleteHString(window_class);
@@ -325,6 +302,16 @@ pub fn initXaml(self: *App) !void {
 
     // Create our input overlay HWND immediately after activation.
     // ... (rest of setup) ...
+
+    // Step 7.2: load XamlControlsResources after window activation.
+    // Putting resources too early in startup can yield 0x8000ffff in unpackaged runs.
+    if (self.xaml_app) |xa| {
+        log.info("initXaml step 7.2: loading XamlControlsResources...", .{});
+        self.loadXamlResources(xa);
+        log.info("initXaml step 7.2 OK", .{});
+    } else {
+        log.warn("initXaml step 7.2: skipped (IApplication unavailable)", .{});
+    }
 
     const tab_view = try self.createTabViewRoot(window);
     self.tab_view = tab_view;
@@ -1359,11 +1346,14 @@ pub fn setControlBackground(_: *App, control_insp: *winrt.IInspectable, color: c
 
     // SwapChainPanel background assignment can trigger InvalidOperation/E_FAIL in WinUI.
     // Skip this path entirely for SwapChainPanel and let parent containers own visuals.
-    if (control_insp.queryInterface(com.ISwapChainPanelNative)) |scp_native| {
+    var scp_raw: ?*anyopaque = null;
+    const scp_hr = control_insp.lpVtbl.QueryInterface(@ptrCast(control_insp), &com.ISwapChainPanelNative.IID, &scp_raw);
+    if (scp_hr >= 0 and scp_raw != null) {
+        const scp_native: *com.ISwapChainPanelNative = @ptrCast(@alignCast(scp_raw.?));
         defer scp_native.release();
         log.info("setControlBackground: skip for ISwapChainPanelNative target", .{});
         return;
-    } else |_| {}
+    }
 
     const brush_class = winrt.hstring("Microsoft.UI.Xaml.Media.SolidColorBrush") catch return;
     defer winrt.deleteHString(brush_class);
@@ -1489,6 +1479,9 @@ pub fn ensureVisibleSurfaceAttached(self: *App, surface: *Surface) void {
 pub fn activateXamlType(self: *App, comptime class_name: [:0]const u8) !*winrt.IInspectable {
     if (self.debug_cfg.use_ixaml_metadata_provider and self.app_outer.provider != null) {
         // Optional path: can be enabled for parity checks once metadata provider ABI is stable.
+        // We call the provider vtable directly to avoid emitting global WinRT HRESULT
+        // errors on expected provider misses (e.g. E_NOINTERFACE) and then fall back
+        // cleanly to RoActivateInstance.
         const provider = self.app_outer.provider.?;
         const name = try winrt.hstring(class_name);
         defer winrt.deleteHString(name);
@@ -1496,7 +1489,16 @@ pub fn activateXamlType(self: *App, comptime class_name: [:0]const u8) !*winrt.I
             "activateXamlType(provider): class={s} provider=0x{x} name=0x{x} name_len={}",
             .{ class_name, @intFromPtr(provider), @intFromPtr(name), class_name.len },
         );
-        if (provider.getXamlType(name)) |xaml_type| {
+
+        var xaml_type_raw: ?*anyopaque = null;
+        const provider_hr = provider.lpVtbl.GetXamlType_2(@ptrCast(provider), @ptrCast(name), &xaml_type_raw);
+        if (provider_hr < 0) {
+            log.info(
+                "activateXamlType(provider): GetXamlType_2 failed class={s} hr=0x{x:0>8}, fallback",
+                .{ class_name, @as(u32, @bitCast(provider_hr)) },
+            );
+        } else if (xaml_type_raw) |xaml_type_raw_non_null| {
+            const xaml_type: *com.IXamlType = @ptrCast(@alignCast(xaml_type_raw_non_null));
             const xaml_type_ptr = @intFromPtr(xaml_type);
             if (xaml_type_ptr < 0x10000) {
                 log.err("activateXamlType(provider): suspicious IXamlType pointer 0x{x}", .{xaml_type_ptr});
@@ -1515,8 +1517,8 @@ pub fn activateXamlType(self: *App, comptime class_name: [:0]const u8) !*winrt.I
             }
             log.info("activateXamlType(provider): activateInstance=0x{x}", .{instance_ptr});
             return @ptrCast(@alignCast(instance));
-        } else |err| {
-            log.warn("activateXamlType(provider): getXamlType failed class={s} err={}", .{ class_name, err });
+        } else {
+            log.info("activateXamlType(provider): GetXamlType_2 returned null class={s}, fallback", .{class_name});
         }
     }
     // Fallback to RoActivateInstance (works for base framework types).
@@ -1581,7 +1583,7 @@ fn toggleFullscreen(self: *App) void {
 /// This enables WinUI 3 custom controls (TabView, NavigationView, etc.)
 /// to find their XAML templates. Without it, RoActivateInstance returns E_NOTIMPL.
 fn loadXamlResources(self: *App, xa: *com.IApplication) void {
-    log.info("loadXamlResources: starting...", .{});
+    log.info("loadXamlResources: starting deterministic bootstrap...", .{});
     const xcr_class = winrt.hstring("Microsoft.UI.Xaml.Controls.XamlControlsResources") catch {
         log.err("loadXamlResources: Failed to create XamlControlsResources HSTRING", .{});
         return;
@@ -1594,82 +1596,15 @@ fn loadXamlResources(self: *App, xa: *com.IApplication) void {
     if (self.xaml_controls_resources) |old| _ = old.release();
     self.xaml_controls_resources = xcr;
 
-    var app_resources_raw: ?*anyopaque = null;
+    // Canonical single path:
+    // Assign XamlControlsResources directly to Application.Resources.
     const xa_abi: *IApplicationAbi = @ptrCast(xa);
-    if (winrt.hrCheck(xa_abi.lpVtbl.get_Resources(xa, &app_resources_raw))) |_| {} else |err| {
-        log.warn("loadXamlResources: get_Resources failed (fallback to put_Resources): {}", .{err});
-        xa.putResources(xcr) catch |e| {
-            log.err("loadXamlResources: Application.put_Resources fallback failed: {}", .{e});
-            return;
-        };
-        log.info("loadXamlResources fallback OK: XamlControlsResources assigned directly", .{});
+    const put_resources_hr = xa_abi.lpVtbl.put_Resources(xa, @ptrCast(xcr));
+    if (put_resources_hr < 0) {
+        log.err("loadXamlResources: FAIL api=Application.put_Resources(XamlControlsResources) hr=0x{x:0>8}", .{@as(u32, @bitCast(put_resources_hr))});
         return;
     }
-
-    if (app_resources_raw == null) {
-        const rd_class = winrt.hstring("Microsoft.UI.Xaml.ResourceDictionary") catch {
-            log.err("loadXamlResources: ResourceDictionary HSTRING creation failed", .{});
-            return;
-        };
-        defer winrt.deleteHString(rd_class);
-        const rd_insp = winrt.activateInstance(rd_class) catch |err| {
-            log.err("loadXamlResources: ResourceDictionary activation failed: {}", .{err});
-            return;
-        };
-        xa.putResources(rd_insp) catch |err| {
-            log.err("loadXamlResources: put_Resources(new ResourceDictionary) failed: {}", .{err});
-            _ = rd_insp.release();
-            return;
-        };
-        app_resources_raw = @ptrCast(rd_insp);
-    }
-
-    const app_resources_insp: *winrt.IInspectable = @ptrCast(@alignCast(app_resources_raw.?));
-    defer _ = app_resources_insp.release();
-
-    const app_resources = app_resources_insp.queryInterface(com.IResourceDictionary) catch |err| {
-        log.warn("loadXamlResources: QI IResourceDictionary failed (fallback to put_Resources): {}", .{err});
-        xa.putResources(xcr) catch |e| {
-            log.err("loadXamlResources: Application.put_Resources fallback failed: {}", .{e});
-            return;
-        };
-        log.info("loadXamlResources fallback OK: XamlControlsResources assigned directly", .{});
-        return;
-    };
-    defer app_resources.release();
-
-    var merged_raw: ?*anyopaque = null;
-    const resources_abi: *IResourceDictionaryAbi = @ptrCast(app_resources);
-    if (winrt.hrCheck(resources_abi.lpVtbl.get_MergedDictionaries(app_resources, &merged_raw))) |_| {} else |err| {
-        log.warn("loadXamlResources: get_MergedDictionaries failed (fallback to put_Resources): {}", .{err});
-        xa.putResources(xcr) catch |e| {
-            log.err("loadXamlResources: Application.put_Resources fallback failed: {}", .{e});
-            return;
-        };
-        log.info("loadXamlResources fallback OK: XamlControlsResources assigned directly", .{});
-        return;
-    }
-    if (merged_raw) |p| {
-        const merged: *com.IVector = @ptrCast(@alignCast(p));
-        defer merged.release();
-        merged.append(@ptrCast(xcr)) catch |err| {
-            log.warn("loadXamlResources: merged.append failed (fallback to put_Resources): {}", .{err});
-            xa.putResources(xcr) catch |e| {
-                log.err("loadXamlResources: Application.put_Resources fallback failed: {}", .{e});
-                return;
-            };
-            log.info("loadXamlResources fallback OK: XamlControlsResources assigned directly", .{});
-            return;
-        };
-        log.info("loadXamlResources OK: XamlControlsResources added to Application.Resources.MergedDictionaries", .{});
-    } else {
-        log.warn("loadXamlResources: MergedDictionaries returned null (fallback to put_Resources)", .{});
-        xa.putResources(xcr) catch |e| {
-            log.err("loadXamlResources: Application.put_Resources fallback failed: {}", .{e});
-            return;
-        };
-        log.info("loadXamlResources fallback OK: XamlControlsResources assigned directly", .{});
-    }
+    log.info("loadXamlResources: OK primary path (Application.put_Resources(XamlControlsResources))", .{});
 
     // Step 5: Override TabView resources to black (Windows Terminal pattern).
     // This removes the default white/gray backgrounds of the tab strip.

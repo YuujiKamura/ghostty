@@ -144,6 +144,24 @@ test "IXamlMetadataProvider.GetXmlnsDefinitions signature matches aggregation ca
     try testing.expect(Actual == Expected);
 }
 
+test "IXamlMetadataProvider GetXamlType overload signatures remain stable" {
+    const testing = std.testing;
+    const Expected = *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT;
+    const ActualTypeName = @TypeOf(@as(com.IXamlMetadataProvider.VTable, undefined).GetXamlType);
+    const ActualHString = @TypeOf(@as(com.IXamlMetadataProvider.VTable, undefined).GetXamlType_2);
+    try testing.expect(ActualTypeName == Expected);
+    try testing.expect(ActualHString == Expected);
+}
+
+test "IFrameworkElement.addSizeChanged returns EventRegistrationToken" {
+    const testing = std.testing;
+    const Fn = @TypeOf(com.IFrameworkElement.addSizeChanged);
+    const info = @typeInfo(Fn).@"fn";
+    const Ret = info.return_type.?;
+    const ErrUnion = @typeInfo(Ret).error_union;
+    try testing.expect(ErrUnion.payload == i64);
+}
+
 test "IApplicationFactory.createInstance returns structured result" {
     const testing = std.testing;
     const Fn = @TypeOf(com.IApplicationFactory.createInstance);

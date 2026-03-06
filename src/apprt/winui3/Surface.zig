@@ -134,7 +134,17 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         self.swap_chain_panel_native.?.release();
         self.swap_chain_panel_native = null;
     }
-    self.swap_chain_panel_native2 = panel.queryInterface(native_interop.ISwapChainPanelNative2) catch null;
+    var native2_raw: ?*anyopaque = null;
+    const native2_hr = panel.lpVtbl.QueryInterface(@ptrCast(panel), &native_interop.ISwapChainPanelNative2.IID, &native2_raw);
+    if (native2_hr >= 0 and native2_raw != null) {
+        self.swap_chain_panel_native2 = @ptrCast(@alignCast(native2_raw.?));
+    } else {
+        self.swap_chain_panel_native2 = null;
+        const hr_u32: u32 = @bitCast(native2_hr);
+        if (hr_u32 != 0x80004002) {
+            log.warn("SwapChainPanel QI(ISwapChainPanelNative2) failed hr=0x{x:0>8}", .{hr_u32});
+        }
+    }
 
     // Set SwapChainPanel background to black.
     self.app.setControlBackground(panel, .{ .a = 255, .r = 0, .g = 0, .b = 0 });
