@@ -39,23 +39,27 @@ pub fn newTab(self: anytype, tabview_item_class: []const u8, border_class_name: 
     // Create TabViewItem and add to TabView.
     const tab_view = self.tab_view orelse return error.AppInitFailed;
     const tvi_inspectable = try self.activateXamlType(tabview_item_class);
-    const tvi = try tvi_inspectable.queryInterface(com.ITabViewItem);
-    defer tvi.release();
+    var tvi_guard = winrt.ComRef(com.ITabViewItem).init(try tvi_inspectable.queryInterface(com.ITabViewItem));
+    defer tvi_guard.deinit();
+    const tvi = tvi_guard.get();
 
     const initial_title = try winrt.hstring("Terminal");
     defer winrt.deleteHString(initial_title);
-    const boxed_title = try self.boxString(initial_title);
-    defer _ = boxed_title.release();
+    var boxed_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(initial_title));
+    defer boxed_guard.deinit();
+    const boxed_title = boxed_guard.get();
     try tvi.putHeader(@ptrCast(boxed_title));
     try tvi.putIsClosable(false);
 
     // Set placeholder content on tab item. Active panel is attached on selection.
-    const content_control = try tvi_inspectable.queryInterface(com.IContentControl);
-    defer content_control.release();
+    var content_control_guard = winrt.ComRef(com.IContentControl).init(try tvi_inspectable.queryInterface(com.IContentControl));
+    defer content_control_guard.deinit();
+    const content_control = content_control_guard.get();
     const placeholder_class = try winrt.hstring(border_class_name);
     defer winrt.deleteHString(placeholder_class);
-    const placeholder = try winrt.activateInstance(placeholder_class);
-    defer _ = placeholder.release();
+    var placeholder_guard = winrt.ComRef(winrt.IInspectable).init(try winrt.activateInstance(placeholder_class));
+    defer placeholder_guard.deinit();
+    const placeholder = placeholder_guard.get();
     try content_control.putContent(@ptrCast(placeholder));
 
     // Add to TabItems collection.

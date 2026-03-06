@@ -48,6 +48,28 @@ pub const S_OK: HRESULT = 0;
 pub const E_FAIL: HRESULT = @bitCast(@as(u32, 0x80004005));
 pub const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
 
+/// Scoped COM pointer guard. Call `init(ptr)` and `defer guard.deinit()`
+/// to ensure `Release()` is called on scope exit.
+pub fn ComRef(comptime T: type) type {
+    return struct {
+        ptr: *T,
+
+        const Self = @This();
+
+        pub fn init(ptr: *T) Self {
+            return .{ .ptr = ptr };
+        }
+
+        pub fn deinit(self: *Self) void {
+            _ = self.ptr.release();
+        }
+
+        pub fn get(self: *const Self) *T {
+            return self.ptr;
+        }
+    };
+}
+
 pub inline fn hrCheck(hr: HRESULT) WinRTError!void {
     if (hr >= 0) return;
     log.err("WinRT HRESULT failed: 0x{x:0>8}", .{@as(u32, @bitCast(hr))});
