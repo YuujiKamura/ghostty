@@ -51,6 +51,7 @@ const XamlClass = struct {
     const XamlControlsResources = "Microsoft.UI.Xaml.Controls.XamlControlsResources";
     const XamlMetadataProvider = "Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider";
 };
+const InitialTabTitle = "Terminal";
 
 const InitCallback = com_aggregation.InitCallback(App);
 const AppOuter = com_aggregation.AppOuter;
@@ -1004,12 +1005,16 @@ pub fn redrawInspector(_: *App, _: *Surface) void {}
 
 /// Create a new tab with a fresh Surface.
 pub fn newTab(self: *App) !void {
-    return tab_manager.newTab(self, XamlClass.TabViewItem, XamlClass.Border);
+    return tab_manager.newTab(self, XamlClass.TabViewItem, XamlClass.Border, InitialTabTitle);
 }
 
 /// Close the active tab and its surface.
 pub fn closeActiveTab(self: *App) void {
-    tab_manager.closeActiveTab(self);
+    if (tab_manager.closeActiveTab(self)) {
+        log.info("closeActiveTab: no tabs remain, requesting app exit", .{});
+        self.running = false;
+        if (self.xaml_app) |xa| xa.exit() catch {};
+    }
 }
 
 /// Toggle the root container between single SwapChainPanel and TabView.
@@ -1133,7 +1138,11 @@ pub fn toggleTabViewContainer(self: *App) !void {
 
 /// Close a specific tab by index.
 pub fn closeTab(self: *App, idx: usize) void {
-    tab_manager.closeTab(self, idx);
+    if (tab_manager.closeTab(self, idx)) {
+        log.info("closeTab: no tabs remain, requesting app exit", .{});
+        self.running = false;
+        if (self.xaml_app) |xa| xa.exit() catch {};
+    }
 }
 
 /// Close a surface by pointer (called from Surface.close).

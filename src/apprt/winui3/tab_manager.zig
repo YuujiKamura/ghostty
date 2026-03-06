@@ -9,12 +9,17 @@ const input_runtime = @import("input_runtime.zig");
 
 const log = std.log.scoped(.winui3);
 
-pub fn closeActiveTab(self: anytype) void {
-    if (self.surfaces.items.len == 0) return;
-    closeTab(self, self.active_surface_idx);
+pub fn closeActiveTab(self: anytype) bool {
+    if (self.surfaces.items.len == 0) return false;
+    return closeTab(self, self.active_surface_idx);
 }
 
-pub fn newTab(self: anytype, tabview_item_class: []const u8, border_class_name: []const u8) !void {
+pub fn newTab(
+    self: anytype,
+    tabview_item_class: []const u8,
+    border_class_name: []const u8,
+    initial_tab_title: []const u8,
+) !void {
     const alloc = self.core_app.alloc;
     var config = try configpkg.Config.load(alloc);
     defer config.deinit();
@@ -43,7 +48,7 @@ pub fn newTab(self: anytype, tabview_item_class: []const u8, border_class_name: 
     defer tvi_guard.deinit();
     const tvi = tvi_guard.get();
 
-    const initial_title = try winrt.hstring("Terminal");
+    const initial_title = try winrt.hstringRuntime(self.core_app.alloc, initial_tab_title);
     defer winrt.deleteHString(initial_title);
     var boxed_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(initial_title));
     defer boxed_guard.deinit();
@@ -83,8 +88,8 @@ pub fn newTab(self: anytype, tabview_item_class: []const u8, border_class_name: 
     log.info("newTab completed: idx={} total={}", .{ self.active_surface_idx, self.surfaces.items.len });
 }
 
-pub fn closeTab(self: anytype, idx: usize) void {
-    if (idx >= self.surfaces.items.len) return;
+pub fn closeTab(self: anytype, idx: usize) bool {
+    if (idx >= self.surfaces.items.len) return false;
 
     const surface = self.surfaces.items[idx];
 
@@ -92,7 +97,7 @@ pub fn closeTab(self: anytype, idx: usize) void {
     if (self.tab_view) |tv| {
         const tab_items = tv.getTabItems() catch |err| {
             log.warn("closeTab: getTabItems failed: {}", .{err});
-            return;
+            return false;
         };
         tab_items.removeAt(@intCast(idx)) catch |err| {
             log.warn("closeTab: removeAt({}) failed: {}", .{ idx, err });
@@ -104,14 +109,11 @@ pub fn closeTab(self: anytype, idx: usize) void {
     self.core_app.alloc.destroy(surface);
     _ = self.surfaces.orderedRemove(idx);
 
-    // Adjust active index or quit if no tabs remain.
+    // Adjust active index and report whether this closed the final tab.
     if (self.surfaces.items.len == 0) {
-        log.info("closeTab: no tabs remain, requesting app exit", .{});
-        self.running = false;
-        if (self.xaml_app) |xa| {
-            xa.exit() catch {};
-        }
+        return true;
     } else if (tab_index.clampActiveIndex(self.active_surface_idx, self.surfaces.items.len)) |clamped| {
         self.active_surface_idx = clamped;
     }
+    return false;
 }
