@@ -1401,10 +1401,10 @@ pub const IFrameworkElement = extern struct {
         put_MinHeight: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
         get_MaxHeight: *const fn (*anyopaque) callconv(.winapi) HRESULT,
         put_MaxHeight: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
-        get_HorizontalAlignment: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        put_HorizontalAlignment: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        get_VerticalAlignment: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        put_VerticalAlignment: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        get_HorizontalAlignment: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        put_HorizontalAlignment: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
+        get_VerticalAlignment: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        put_VerticalAlignment: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
         get_Margin: *const fn (*anyopaque) callconv(.winapi) HRESULT,
         put_Margin: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
         get_Name: *const fn (*anyopaque) callconv(.winapi) HRESULT,
@@ -1499,14 +1499,14 @@ pub const IFrameworkElement = extern struct {
     pub fn get_MaxHeight(self: *@This()) !void { try self.getMaxHeight(); }
     pub fn putMaxHeight(self: *@This(), p0: f64) !void { try hrCheck(self.lpVtbl.put_MaxHeight(self, p0)); }
     pub fn put_MaxHeight(self: *@This(), p0: f64) !void { try self.putMaxHeight( p0); }
-    pub fn getHorizontalAlignment(self: *@This()) !void { try hrCheck(self.lpVtbl.get_HorizontalAlignment(self)); }
-    pub fn get_HorizontalAlignment(self: *@This()) !void { try self.getHorizontalAlignment(); }
-    pub fn putHorizontalAlignment(self: *@This(), p0: anytype) !void { try hrCheck(self.lpVtbl.put_HorizontalAlignment(self, @ptrCast(p0))); }
-    pub fn put_HorizontalAlignment(self: *@This(), p0: anytype) !void { try self.putHorizontalAlignment( @ptrCast(p0)); }
-    pub fn getVerticalAlignment(self: *@This()) !void { try hrCheck(self.lpVtbl.get_VerticalAlignment(self)); }
-    pub fn get_VerticalAlignment(self: *@This()) !void { try self.getVerticalAlignment(); }
-    pub fn putVerticalAlignment(self: *@This(), p0: anytype) !void { try hrCheck(self.lpVtbl.put_VerticalAlignment(self, @ptrCast(p0))); }
-    pub fn put_VerticalAlignment(self: *@This(), p0: anytype) !void { try self.putVerticalAlignment( @ptrCast(p0)); }
+    pub fn getHorizontalAlignment(self: *@This()) !i32 { var val: i32 = undefined; try hrCheck(self.lpVtbl.get_HorizontalAlignment(self, &val)); return val; }
+    pub fn get_HorizontalAlignment(self: *@This()) !i32 { return self.getHorizontalAlignment(); }
+    pub fn putHorizontalAlignment(self: *@This(), p0: i32) !void { try hrCheck(self.lpVtbl.put_HorizontalAlignment(self, p0)); }
+    pub fn put_HorizontalAlignment(self: *@This(), p0: i32) !void { try self.putHorizontalAlignment(p0); }
+    pub fn getVerticalAlignment(self: *@This()) !i32 { var val: i32 = undefined; try hrCheck(self.lpVtbl.get_VerticalAlignment(self, &val)); return val; }
+    pub fn get_VerticalAlignment(self: *@This()) !i32 { return self.getVerticalAlignment(); }
+    pub fn putVerticalAlignment(self: *@This(), p0: i32) !void { try hrCheck(self.lpVtbl.put_VerticalAlignment(self, p0)); }
+    pub fn put_VerticalAlignment(self: *@This(), p0: i32) !void { try self.putVerticalAlignment(p0); }
     pub fn getMargin(self: *@This()) !void { try hrCheck(self.lpVtbl.get_Margin(self)); }
     pub fn get_Margin(self: *@This()) !void { try self.getMargin(); }
     pub fn putMargin(self: *@This(), p0: anytype) !void { try hrCheck(self.lpVtbl.put_Margin(self, @ptrCast(p0))); }
@@ -2286,6 +2286,20 @@ pub const GridUnitType = struct {
     pub const Pixel: i32 = 0;
     pub const Auto: i32 = 1;
     pub const Star: i32 = 2;
+};
+
+pub const HorizontalAlignment = struct {
+    pub const Left: i32 = 0;
+    pub const Center: i32 = 1;
+    pub const Right: i32 = 2;
+    pub const Stretch: i32 = 3;
+};
+
+pub const VerticalAlignment = struct {
+    pub const Top: i32 = 0;
+    pub const Center: i32 = 1;
+    pub const Bottom: i32 = 2;
+    pub const Stretch: i32 = 3;
 };
 
 pub const GridLength = extern struct {

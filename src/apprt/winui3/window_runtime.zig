@@ -27,13 +27,15 @@ pub fn activateAndLoadResources(self: anytype, window: *com.IWindow) !void {
     } else |_| {}
 
     // Step 7.1: Enable content extension into title bar (Windows Terminal style).
-    if (window.queryInterface(native_interop.IWindow2)) |win2| {
-        var win2_guard = winrt.ComRef(native_interop.IWindow2).init(win2);
-        defer win2_guard.deinit();
-        win2_guard.get().putExtendsContentIntoTitleBar(true) catch |err| {
-            log.warn("initXaml step 7.1: putExtendsContentIntoTitleBar failed: {}", .{err});
-        };
-    } else |_| {}
+    // ExtendsContentIntoTitleBar is on IWindow (v1), not IWindow2.
+    // Since `window` is already *com.IWindow, call directly.
+    // NOTE: Temporarily disabled — enabling this without a fully styled TabView
+    // causes layout issues (white screen in Row 1). Re-enable once TabView
+    // template rendering is confirmed working.
+    // window.putExtendsContentIntoTitleBar(true) catch |err| {
+    //     log.warn("initXaml step 7.1: putExtendsContentIntoTitleBar failed: {}", .{err});
+    // };
+    log.info("initXaml step 7.1: ExtendsContentIntoTitleBar = SKIPPED (pending TabView template fix)", .{});
 
     // Step 7.2: load XamlControlsResources after window activation.
     // Putting resources too early in startup can yield 0x8000ffff in unpackaged runs.
