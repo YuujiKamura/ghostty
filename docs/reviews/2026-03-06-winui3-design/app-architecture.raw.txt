@@ -1,0 +1,45 @@
+warning: function `get_staged_diff` is never used
+  --> src\git.rs:52:8
+   |
+52 | pub fn get_staged_diff(repo_dir: &Path) -> Option<String> {
+   |        ^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `get_staged_files` is never used
+  --> src\git.rs:69:8
+   |
+69 | pub fn get_staged_files(repo_dir: &Path) -> Vec<PathBuf> {
+   |        ^^^^^^^^^^^^^^^^
+
+warning: `ai-code-review` (lib) generated 2 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running `C:\Users\yuuji\ai-code-review\target\debug\review.exe --analyze 'C:\Users\yuuji\ghostty-win\src\apprt\winui3\App.zig' --prompt architecture --backend gemini`
+## Analyze: App.zig
+
+GhosttyのWinUI 3ランタイム実装である`App.zig`の分析結果を簡潔にまとめます。
+
+### 1. 目的と責務
+GhosttyのWindows版において、**WinUI 3（Windows App SDK）フレームワークとGhosttyコアロジックを仲介するエントリポイント**です。
+- **ブートストラップ:** Windows App SDKの初期化、WinRTランタイム、DispatcherQueueのセットアップ。
+- **UI管理:** メインウィンドウの作成、Win32 HWNDの取得とサブクラス化、`TabView`によるマルチタブの管理。
+- **リソース管理:** `Surface`（各タブの実体）のライフサイクル管理、SwapChainのバインド。
+- **入力ルーティング:** WinUIの入力層をバイパスし、IME入力を適切に処理するための「Input Overlay（透明な入力用HWND）」の制御。
+
+### 2. 依存関係
+- **外部:** `Microsoft.UI.Xaml` (WinUI 3), `Windows.Foundation`, Win32 API (`kernel32`, `user32`, `imm32`)。
+- **Ghosttyコア:** `../../App.zig` (CoreApp), `../../Surface.zig` (CoreSurface), `../../config.zig`。
+- **内部サブモジュール:** `winrt.zig` (低層バインディング), `com_aggregation.zig` (COM集約), `os.zig` (Win32抽象化), `Surface.zig` (WinUI版Surface)。
+- **使用元:** Ghostty本体の`apprt`（アプリケーション・ランタイム）インターフェースの実装として呼び出されます。
+
+### 3. 設計パターン
+- **COM Aggregation (集約):** `IXamlMetadataProvider`を実装するために、WinUIの`Application`オブジェクトを自作の`AppOuter`で集約。カスタムコントロール利用に不可欠なパターンです。
+- **Observer (イベントハンドラ):** WinRTの`TypedEventHandler`をZigの関数ポインタにブリッジし、ウィンドウのクローズやタブ切り替えを処理。
+- **Mediator (仲介者):** `App`が`TabView`と個々の`Surface`の状態を同期させる中心的な役割を担っています。
+- **Win32 Subclassing:** WinUI 3のデフォルト挙動をカスタマイズするため、HWNDレベルでメッセージをインターセプトする古典的な手法を併用。
+
+### 4. 改善点
+- **`initXaml`の巨大化:** 初期化手順（Step 0-10）が1つの関数に集中しており、可読性と保守性が低下しています。カテゴリ（ウィンドウ生成、タブ設定、イベント登録）ごとにプライベート関数へ分割すべきです。
+- **手動のCOM管理:** `release()`の呼び出しが手動であり、将来的なメモリリークの温床となります。`std.mem.Allocator`のような、スコープ終了時に自動解放するラッパーの導入が望ましいです。
+- **単一ウィンドウへの固執:** 現在の状態は`App`がウィンドウ情報を1つだけ持つ設計（MVP）ですが、Ghosttyのマルチウィンドウ対応を見据えると、ウィンドウ固有の状態を`Window`構造体に抽出するリファクタリングが必要です。
+- **エラーハンドリングの不透明さ:** `log.warn`でエラーを握り潰している箇所が多く、WinRTの例外（Stowed Exception）が発生した際のデバッグが困難になる可能性があります。

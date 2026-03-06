@@ -1,0 +1,46 @@
+Running parity audit...
+  golden: C:\Users\yuuji\ghostty-win\tmp\parity-corpus\golden-corpus.zig
+  candidate: C:\Users\yuuji\ghostty-win\tmp\parity-corpus\candidate-corpus.zig
+  report: C:\Users\yuuji\ghostty-win\tmp\winui3-test-parity-audit.md
+warning: function `get_staged_diff` is never used
+  --> src\git.rs:52:8
+   |
+52 | pub fn get_staged_diff(repo_dir: &Path) -> Option<String> {
+   |        ^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `get_staged_files` is never used
+  --> src\git.rs:69:8
+   |
+69 | pub fn get_staged_files(repo_dir: &Path) -> Vec<PathBuf> {
+   |        ^^^^^^^^^^^^^^^^
+
+warning: `ai-code-review` (lib) generated 2 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.31s
+     Running `C:\Users\yuuji\ai-code-review\target\debug\review.exe --test-parity-audit --golden 'C:\Users\yuuji\ghostty-win\tmp\parity-corpus\golden-corpus.zig' --candidate 'C:\Users\yuuji\ghostty-win\tmp\parity-corpus\candidate-corpus.zig' --audit-report 'C:\Users\yuuji\ghostty-win\tmp\winui3-test-parity-audit.md' --target 'C:\Users\yuuji\ghostty-win' --backend gemini`
+[target] C:\Users\yuuji\ghostty-win
+=== Test Parity Audit ===
+Golden: C:\Users\yuuji\ghostty-win\tmp\parity-corpus\golden-corpus.zig
+Candidate: C:\Users\yuuji\ghostty-win\tmp\parity-corpus\candidate-corpus.zig
+Mapping: (none)
+
+FINAL_JUDGMENT: PASS
+
+CRITICAL_MISMATCHES:
+- なし。主要なロジック（バージョン比較、キーマッピング、設定型定義）において、ゴールデン側の境界値テストや異常系チェックが正確に移植されています。
+
+WEAK_ASSERTIONS:
+- `actions_compat.zig`: `test "adding actions to an object"` において、GTK版は実際の `GAction` システムとの統合をテストしていますが、移植版は `MockActionMap` を使用した純粋なロジックテストに留まっています。WinUI 3 の XAML 型システムやコマンド実行との実際のバインディングは、ユニットテストの範囲外（`App.zig` の `validateTabViewParity` によるランタイム監査で補完）となっています。
+
+COVERAGE_GAPS:
+- なし。むしろ `key.zig` の `labelFromTrigger` テストにおいて、`Up` や `BackSpace` などの特殊キーの正規化名称チェックが追加されており、検証強度が向上しています。
+
+NOTES:
+- **バージョンテストの完全性**: `atLeast`, `runtimeAtLeast`, `runtimeUntil` の各テストにおいて、`major-1`, `minor+1` などの境界値がゴールデン側と完全に一致しています。
+- **キーマッピングの網羅性**: `vkToKey` のテストにおいて、アルファベット、数字、ファンクションキー、修飾キー、OEMキー（USレイアウト）が具体的に検証されており、移植漏れがないことが確認できます。
+- **WinRT/COM の堅牢性**: `com_runtime.zig` において IID (GUID) や VTable のシグネチャが厳密にテストされており、低レイヤーでの不整合を防ぐ工夫が見られます。
+- **ランタイム監査の導入**: `App.zig` 内の `validateTabViewParity` (Tier 2 Verification) により、静的なテストでは困難な UI ツリーの構造的整合性（タブの生成順序、ハンドラの登録タイミング等）が実機レベルで保証されています。
+[report] C:\Users\yuuji\ghostty-win\tmp\winui3-test-parity-audit.md
+[PASS] test parity audit passed
+wrote audit report: C:\Users\yuuji\ghostty-win\tmp\winui3-test-parity-audit.md

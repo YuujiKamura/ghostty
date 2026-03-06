@@ -1,0 +1,44 @@
+warning: function `get_staged_diff` is never used
+  --> src\git.rs:52:8
+   |
+52 | pub fn get_staged_diff(repo_dir: &Path) -> Option<String> {
+   |        ^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `get_staged_files` is never used
+  --> src\git.rs:69:8
+   |
+69 | pub fn get_staged_files(repo_dir: &Path) -> Vec<PathBuf> {
+   |        ^^^^^^^^^^^^^^^^
+
+warning: `ai-code-review` (lib) generated 2 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running `C:\Users\yuuji\ai-code-review\target\debug\review.exe --analyze 'C:\Users\yuuji\ghostty-win\src\apprt\winui3\com_aggregation.zig' --prompt architecture --backend gemini`
+## Analyze: com_aggregation.zig
+
+`com_aggregation.zig` の分析結果を簡潔にまとめます。
+
+### 1. このコードは何をしているか
+WinUI 3 アプリケーションを Zig で動作させるための **COM/WinRT 相互運用（Interop）レイヤー** です。
+
+*   **`InitCallback`**: `Application.Start` に渡すデリゲートの実装。Zig 側の `initXaml()` を WinRT 側から呼び出すトリガーとなります。
+*   **`AppOuter`**: **COM Aggregation（集約）** を手動実装したラッパーです。WinUI 3 の `Application` オブジェクトを包み込み、本来 XAML コンパイラが行う「カスタムコントロール用メタデータの提供（`IXamlMetadataProvider`）」を Zig 側でインターセプトして処理します。
+
+### 2. 依存関係
+*   **内部依存**:
+    *   `winrt.zig`: GUID, HRESULT, HSTRING などの基本型の定義。
+    *   `com.zig`: `IXamlMetadataProvider` インターフェースの定義。
+    *   `App.zig`: アプリケーション固有のロジック（`initXaml`）の呼び出し。
+*   **外部依存**: WinRT 外部ランタイム。WinUI 3 フレームワークが `QueryInterface` を通じてこのオブジェクトと対話します。
+
+### 3. 設計パターン
+*   **COM Aggregation (Controlling Unknown)**: `AppOuter` が外部（Outer）オブジェクトとなり、WinUI 内部の `Application`（Inner）を制御します。特定のインターフェース要求のみを自身で処理し、それ以外を Inner へ委譲するパターンです。
+*   **VTable Injection**: Zig の `extern struct` と関数ポインタを用いて、C++ ABI 互換の仮想関数テーブル（VTable）を手動で構築しています。
+*   **Atomic Reference Counting**: スレッドセーフな `std.atomic` を用いた COM 参照カウント管理。
+
+### 4. 改善点・注意点
+*   **参照カウントとメモリ解放**: `outerRelease` で `next == 0` になった際、ログを出すだけで実際のメモリ解放（`destroy` 等）が行われていません。このオブジェクトがヒープ確保される場合はメモリリークの可能性があります。
+*   **GUID の共通化**: `IID_IUnknown` や `IID_IAgileObject` が関数内でハードコードされています。`winrt.zig` 等で定数定義すべきです。
+*   **エラーコードのマッピング**: `catch` 時の `E_FAIL` 固定は、デバッグを困難にします。Zig のエラーをより詳細な HRESULT に変換するヘルパーがあると望ましいです。
+*   **ボイラープレートの削減**: `metadataQueryInterface` などの委譲処理は、Zig の `usingnamespace` やマクロ的な共通化の余地がありますが、現状はデバッグログ（`log.info`）が詳細に埋め込まれているため、現在の冗長な記述は「診断のしやすさ」を優先していると見受けられます。
