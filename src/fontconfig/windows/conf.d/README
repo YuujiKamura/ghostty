@@ -1,0 +1,2 @@
+Optional Fontconfig snippets for Windows can be placed here.
+The bundled fonts.conf includes this directory with ignore_missing="yes".

@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const build_config = @import("build_config.zig");
 const cli = @import("cli.zig");
 const internal_os = @import("os/main.zig");
+const fontconfig_env = @import("os/fontconfig_env.zig");
 const fontconfig = @import("fontconfig");
 const glslang = @import("glslang");
 const harfbuzz = @import("harfbuzz");
@@ -173,6 +174,39 @@ pub const GlobalState = struct {
         // hereafter can use this cached value.
         self.resources_dir = try apprt.runtime.resourcesDir(self.alloc);
         errdefer self.resources_dir.deinit(self.alloc);
+
+        if (comptime build_config.font_backend.hasFontconfig()) {
+            if (self.resources_dir.app()) |resources_dir| {
+                var env_vars = try fontconfig_env.buildEnvVars(self.alloc, resources_dir);
+                defer env_vars.deinit(self.alloc);
+
+                if (env_vars.file_value) |file_value| {
+                    const path_value = env_vars.path_value.?;
+                    var file_buf: [std.fs.max_path_bytes]u8 = undefined;
+                    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+
+                    const file_z = std.fmt.bufPrintZ(&file_buf, "{s}", .{file_value}) catch null;
+                    const path_z = std.fmt.bufPrintZ(&path_buf, "{s}", .{path_value}) catch null;
+
+                    if (file_z == null or path_z == null) {
+                        std.log.warn("failed to set fontconfig env: resolved value is too long", .{});
+                    } else if (internal_os.setenv("FONTCONFIG_FILE", file_z.?) < 0 or
+                        internal_os.setenv("FONTCONFIG_PATH", path_z.?) < 0)
+                    {
+                        std.log.warn("failed to export fontconfig env vars", .{});
+                    } else {
+                        std.log.info(
+                            "fontconfig env set file={s} path={s}",
+                            .{ file_value, path_value },
+                        );
+                    }
+                } else {
+                    std.log.warn("fontconfig env not set: resources dir is empty", .{});
+                }
+            } else {
+                std.log.warn("fontconfig env not set: resources dir unavailable", .{});
+            }
+        }
 
         // Setup i18n
         if (self.resources_dir.app()) |v| internal_os.i18n.init(v) catch |err| {

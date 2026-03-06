@@ -9,6 +9,7 @@ const desktop = @import("desktop.zig");
 const env = @import("env.zig");
 const file = @import("file.zig");
 const flatpak = @import("flatpak.zig");
+const fontconfig_env = @import("fontconfig_env.zig");
 const homedir = @import("homedir.zig");
 const locale = @import("locale.zig");
 const mouse = @import("mouse.zig");
@@ -31,6 +32,8 @@ pub const windows = @import("windows.zig");
 pub const macos = @import("macos.zig");
 pub const shell = @import("shell.zig");
 pub const uri = @import("uri.zig");
+pub const fontconfigEnv = fontconfig_env.resolve;
+pub const FontconfigEnv = fontconfig_env.Resolved;
 
 // Functions and types
 pub const CFReleaseThread = @import("cf_release_thread.zig");
