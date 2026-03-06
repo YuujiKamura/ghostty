@@ -26,7 +26,7 @@ pub const RuntimeDebugConfig = struct {
             .use_ixaml_metadata_provider = envBoolWithAlias(
                 "GHOSTTY_WINUI3_USE_IXAML_METADATA_PROVIDER",
                 "GHOSTTY_WINUI3_USE_METADATA_PROVIDER",
-                false,
+                true,
             ),
             .enable_xaml_resources = envBool("GHOSTTY_WINUI3_ENABLE_XAML_RESOURCES", true),
             .tabview_empty = envBool("GHOSTTY_WINUI3_TABVIEW_EMPTY", false),

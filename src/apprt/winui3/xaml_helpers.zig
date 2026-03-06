@@ -65,7 +65,9 @@ pub fn boxString(str: winrt.HSTRING) !*winrt.IInspectable {
 }
 
 pub fn loadXamlResources(self: anytype, xa: *com.IApplication) void {
-    log.info("loadXamlResources: starting deterministic bootstrap...", .{});
+    log.info("loadXamlResources: starting...", .{});
+
+    // 1. Create XamlControlsResources
     const xcr_class = winrt.hstring("Microsoft.UI.Xaml.Controls.XamlControlsResources") catch {
         log.err("loadXamlResources: Failed to create XamlControlsResources HSTRING", .{});
         return;
@@ -78,23 +80,39 @@ pub fn loadXamlResources(self: anytype, xa: *com.IApplication) void {
     if (self.xaml_controls_resources) |old| _ = old.release();
     self.xaml_controls_resources = xcr;
 
+    // 2. Try MergedDictionaries pattern (correct way)
     const xa_abi: *com.IApplicationAbi = @ptrCast(xa);
-    const put_resources_hr = xa_abi.lpVtbl.put_Resources(xa, @ptrCast(xcr));
-    if (put_resources_hr < 0) {
-        log.err("loadXamlResources: FAIL api=Application.put_Resources(XamlControlsResources) hr=0x{x:0>8}", .{@as(u32, @bitCast(put_resources_hr))});
+    if (loadXamlResourcesMerged(xa_abi, xcr)) {
+        log.info("loadXamlResources: OK (MergedDictionaries pattern)", .{});
+        return;
+    } else |err| {
+        log.warn("loadXamlResources: MergedDictionaries pattern failed: {}, falling back to direct put_Resources", .{err});
+    }
+
+    // 3. Fallback: direct put_Resources
+    const put_hr = xa_abi.lpVtbl.put_Resources(xa, @ptrCast(xcr));
+    if (put_hr < 0) {
+        log.err("loadXamlResources: FAIL put_Resources hr=0x{x:0>8}", .{@as(u32, @bitCast(put_hr))});
         return;
     }
-    log.info("loadXamlResources: OK primary path (Application.put_Resources(XamlControlsResources))", .{});
+    log.info("loadXamlResources: OK (fallback direct put_Resources)", .{});
+}
 
-    if (true) {
-        const brush_class = winrt.hstring("Microsoft.UI.Xaml.Media.SolidColorBrush") catch return;
-        defer winrt.deleteHString(brush_class);
-        var brush_insp_guard = winrt.ComRef(winrt.IInspectable).init(winrt.activateInstance(brush_class) catch return);
-        defer brush_insp_guard.deinit();
-        var brush_guard = winrt.ComRef(com.ISolidColorBrush).init(brush_insp_guard.get().queryInterface(com.ISolidColorBrush) catch return);
-        defer brush_guard.deinit();
-        brush_guard.get().putColor(.{ .a = 255, .r = 0, .g = 0, .b = 0 }) catch {};
+fn loadXamlResourcesMerged(xa_abi: *com.IApplicationAbi, xcr: *winrt.IInspectable) !void {
+    // Create a new ResourceDictionary
+    const rd_class = try winrt.hstring("Microsoft.UI.Xaml.ResourceDictionary");
+    defer winrt.deleteHString(rd_class);
+    const rd_insp = try winrt.activateInstance(rd_class);
 
-        log.info("loadXamlResources: TabView resource overrides ready", .{});
-    }
+    // Get IResourceDictionary interface
+    const ird = try rd_insp.queryInterface(com.IResourceDictionary);
+    defer ird.release();
+
+    // Get MergedDictionaries collection and add XamlControlsResources
+    const merged = try ird.getMergedDictionaries();
+    defer merged.release();
+    try merged.append(@ptrCast(xcr));
+
+    // Set the new ResourceDictionary (with XCR merged) as Application.Resources
+    try winrt.hrCheck(xa_abi.lpVtbl.put_Resources(@ptrCast(xa_abi), @ptrCast(rd_insp)));
 }

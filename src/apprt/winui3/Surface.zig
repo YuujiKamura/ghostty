@@ -41,6 +41,9 @@ core_initialized: bool = false,
 /// Whether the SwapChainPanel has fired its Loaded event.
 loaded: bool = false,
 
+/// Guard against re-entrant Loaded events (clear+append in content can re-fire Loaded).
+in_loaded_handler: bool = false,
+
 /// Holds a swap chain from the renderer thread if it arrives before Loaded.
 pending_swap_chain: ?*anyopaque = null,
 /// Holds a swap chain handle from the renderer thread if it arrives before Loaded.
@@ -68,6 +71,7 @@ last_swap_chain_handle: ?usize = null,
 
 /// The IInspectable of the TabViewItem this surface belongs to (for title updates).
 tab_view_item_inspectable: ?*winrt.IInspectable = null,
+
 
 /// Current title of the surface, allocated dynamically.
 title: ?[:0]u8 = null,
@@ -765,6 +769,13 @@ fn maybeBindPendingSwapChainHandle(self: *Surface, caller: []const u8) void {
 
 /// Loaded event callback. Triggered when the SwapChainPanel is added to the visual tree.
 fn onLoaded(self: *Surface, _: *anyopaque, _: *anyopaque) void {
+    // Guard: ensureVisibleSurfaceAttached does clear+append on tab content,
+    // which re-fires Loaded asynchronously via the XAML event queue.
+    // Only run the full handler on the first Loaded event.
+    if (self.loaded) {
+        return;
+    }
+
     log.info(
         "SwapChainPanel.Loaded event fired surface=0x{x} size={}x{} pending_swap_chain={} last_swap_chain={}",
         .{ @intFromPtr(self), self.size.width, self.size.height, self.pending_swap_chain != null, self.last_swap_chain != null },

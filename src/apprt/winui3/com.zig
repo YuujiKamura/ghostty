@@ -101,7 +101,7 @@ pub const IVector = extern struct {
         RemoveAt: *const fn (*anyopaque, u32) callconv(.winapi) HRESULT,
         Append: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
         RemoveAtEnd: VtblPlaceholder,
-        Clear: VtblPlaceholder,
+        Clear: *const fn (*anyopaque) callconv(.winapi) HRESULT,
         GetMany: VtblPlaceholder,
         ReplaceAll: VtblPlaceholder,
     };
@@ -112,6 +112,7 @@ pub const IVector = extern struct {
     pub fn insertAt(self: *@This(), i: u32, item: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertAt(self, i, item)); }
     pub fn append(self: *@This(), item: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Append(self, item)); }
     pub fn removeAt(self: *@This(), i: u32) !void { try hrCheck(self.lpVtbl.RemoveAt(self, i)); }
+    pub fn clear(self: *@This()) !void { try hrCheck(self.lpVtbl.Clear(self)); }
     /// Find item by pointer identity. Returns index or null.
     pub fn indexOf(self: *@This(), target: *anyopaque) !?u32 {
         const count = try self.getSize();
@@ -2248,7 +2249,7 @@ pub const IPanel = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        get_Children: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        get_Children: *const fn (*anyopaque, *?*IVector) callconv(.winapi) HRESULT,
         get_Background: *const fn (*anyopaque) callconv(.winapi) HRESULT,
         put_Background: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
         get_IsItemsHost: *const fn (*anyopaque) callconv(.winapi) HRESULT,
@@ -2259,8 +2260,12 @@ pub const IPanel = extern struct {
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn getChildren(self: *@This()) !void { try hrCheck(self.lpVtbl.get_Children(self)); }
-    pub fn get_Children(self: *@This()) !void { try self.getChildren(); }
+    pub fn getChildren(self: *@This()) !*IVector {
+        var result: ?*IVector = null;
+        try hrCheck(self.lpVtbl.get_Children(self, &result));
+        return result orelse error.WinRTFailed;
+    }
+    pub fn get_Children(self: *@This()) !*IVector { return self.getChildren(); }
     pub fn getBackground(self: *@This()) !void { try hrCheck(self.lpVtbl.get_Background(self)); }
     pub fn get_Background(self: *@This()) !void { try self.getBackground(); }
     pub fn putBackground(self: *@This(), p0: ?*anyopaque) !void { try hrCheck(self.lpVtbl.put_Background(self, p0)); }
@@ -2277,6 +2282,112 @@ pub const IPanel = extern struct {
     pub fn put_BackgroundTransition(self: *@This(), p0: anytype) !void { try self.putBackgroundTransition( @ptrCast(p0)); }
 };
 
+pub const GridUnitType = struct {
+    pub const Pixel: i32 = 0;
+    pub const Auto: i32 = 1;
+    pub const Star: i32 = 2;
+};
+
+pub const GridLength = extern struct {
+    Value: f64,
+    GridUnitType: i32,
+};
+
+pub const IGrid = extern struct {
+    pub const IID = GUID{ .Data1 = 0xc4496219, .Data2 = 0x9014, .Data3 = 0x58a1, .Data4 = .{ 0xb4, 0xad, 0xc5, 0x04, 0x49, 0x13, 0xa5, 0xbb } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_RowDefinitions: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        get_ColumnDefinitions: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        get_BackgroundSizing: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        put_BackgroundSizing: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        get_BorderBrush: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        put_BorderBrush: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        get_BorderThickness: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        put_BorderThickness: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        get_CornerRadius: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        put_CornerRadius: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        get_Padding: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        put_Padding: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        get_RowSpacing: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        put_RowSpacing: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
+        get_ColumnSpacing: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        put_ColumnSpacing: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn getRowDefinitions(self: *@This()) !*IVector {
+        var out: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.get_RowDefinitions(self, &out));
+        return @ptrCast(@alignCast(out orelse return error.WinRTFailed));
+    }
+};
+
+pub const IGridStatics = extern struct {
+    pub const IID = GUID{ .Data1 = 0xef9cf81d, .Data2 = 0xa431, .Data3 = 0x50f4, .Data4 = .{ 0xab, 0xf5, 0x30, 0x23, 0xfe, 0x44, 0x77, 0x04 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_BackgroundSizingProperty: VtblPlaceholder,
+        get_BorderBrushProperty: VtblPlaceholder,
+        get_BorderThicknessProperty: VtblPlaceholder,
+        get_CornerRadiusProperty: VtblPlaceholder,
+        get_PaddingProperty: VtblPlaceholder,
+        get_RowSpacingProperty: VtblPlaceholder,
+        get_ColumnSpacingProperty: VtblPlaceholder,
+        get_RowProperty: VtblPlaceholder,
+        GetRow: VtblPlaceholder,
+        SetRow: *const fn (*anyopaque, ?*anyopaque, i32) callconv(.winapi) HRESULT,
+        get_ColumnProperty: VtblPlaceholder,
+        GetColumn: VtblPlaceholder,
+        SetColumn: *const fn (*anyopaque, ?*anyopaque, i32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn setRow(self: *@This(), element: ?*anyopaque, row: i32) !void {
+        try hrCheck(self.lpVtbl.SetRow(self, element, row));
+    }
+    pub fn setColumn(self: *@This(), element: ?*anyopaque, col: i32) !void {
+        try hrCheck(self.lpVtbl.SetColumn(self, element, col));
+    }
+};
+
+pub const IRowDefinition = extern struct {
+    pub const IID = GUID{ .Data1 = 0xfe870f2f, .Data2 = 0x89ef, .Data3 = 0x5dac, .Data4 = .{ 0x9f, 0x33, 0x96, 0x8d, 0x0d, 0xc5, 0x77, 0xc3 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_Height: *const fn (*anyopaque, *GridLength) callconv(.winapi) HRESULT,
+        put_Height: *const fn (*anyopaque, GridLength) callconv(.winapi) HRESULT,
+        get_MaxHeight: VtblPlaceholder,
+        put_MaxHeight: VtblPlaceholder,
+        get_MinHeight: VtblPlaceholder,
+        put_MinHeight: VtblPlaceholder,
+        get_ActualHeight: VtblPlaceholder,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn putHeight(self: *@This(), h: GridLength) !void {
+        try hrCheck(self.lpVtbl.put_Height(self, h));
+    }
+};
+
 pub const IResourceDictionary = extern struct {
     pub const IID = GUID{ .Data1 = 0x1b690975, .Data2 = 0xa710, .Data3 = 0x5783, .Data4 = .{ 0xa6, 0xe1, 0x15, 0x83, 0x6f, 0x61, 0x86, 0xc2 } };
     lpVtbl: *const VTable,
@@ -2287,19 +2398,19 @@ pub const IResourceDictionary = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        get_Source: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        get_Source: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
         put_Source: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        get_MergedDictionaries: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        get_ThemeDictionaries: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        get_MergedDictionaries: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        get_ThemeDictionaries: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn getSource(self: *@This()) !void { try hrCheck(self.lpVtbl.get_Source(self)); }
-    pub fn get_Source(self: *@This()) !void { try self.getSource(); }
+    pub fn getSource(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.get_Source(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn get_Source(self: *@This()) !*anyopaque { return self.getSource(); }
     pub fn putSource(self: *@This(), p0: anytype) !void { try hrCheck(self.lpVtbl.put_Source(self, @ptrCast(p0))); }
     pub fn put_Source(self: *@This(), p0: anytype) !void { try self.putSource( @ptrCast(p0)); }
-    pub fn getMergedDictionaries(self: *@This()) !void { try hrCheck(self.lpVtbl.get_MergedDictionaries(self)); }
-    pub fn get_MergedDictionaries(self: *@This()) !void { try self.getMergedDictionaries(); }
-    pub fn getThemeDictionaries(self: *@This()) !void { try hrCheck(self.lpVtbl.get_ThemeDictionaries(self)); }
-    pub fn get_ThemeDictionaries(self: *@This()) !void { try self.getThemeDictionaries(); }
+    pub fn getMergedDictionaries(self: *@This()) !*IVector { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.get_MergedDictionaries(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn get_MergedDictionaries(self: *@This()) !*IVector { return self.getMergedDictionaries(); }
+    pub fn getThemeDictionaries(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.get_ThemeDictionaries(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn get_ThemeDictionaries(self: *@This()) !*anyopaque { return self.getThemeDictionaries(); }
 };
