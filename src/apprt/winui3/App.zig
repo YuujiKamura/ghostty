@@ -1035,22 +1035,25 @@ pub fn toggleTabViewContainer(self: *App) !void {
         log.info("toggleTabViewContainer: tab->single start", .{});
         self.unregisterTabViewHandlers(tv);
         if (tv.getTabItems()) |tab_items| {
-            defer tab_items.release();
-            if ((tab_items.getSize() catch 0) > 0) {
-                tab_items.removeAt(0) catch {};
+            var tab_items_guard = winrt.ComRef(com.IVector_IInspectable).init(tab_items);
+            defer tab_items_guard.deinit();
+            if ((tab_items_guard.get().getSize() catch 0) > 0) {
+                tab_items_guard.get().removeAt(0) catch {};
             }
         } else |_| {}
         if (surface.tab_view_item_inspectable) |tvi_insp| {
             if (tvi_insp.queryInterface(com.IContentControl)) |content_control| {
-                defer content_control.release();
-                content_control.putContent(null) catch {};
+                var content_control_guard = winrt.ComRef(com.IContentControl).init(content_control);
+                defer content_control_guard.deinit();
+                content_control_guard.get().putContent(null) catch {};
             } else |_| {}
         }
         window.putContent(null) catch {};
 
         const wrapped_panel = panel;
         if (wrapped_panel != @as(*winrt.IInspectable, @ptrCast(panel))) {
-            defer _ = wrapped_panel.release();
+            var wrapped_panel_guard = winrt.ComRef(winrt.IInspectable).init(wrapped_panel);
+            defer wrapped_panel_guard.deinit();
             window.putContent(@ptrCast(wrapped_panel)) catch |err| {
                 log.warn("toggleTabViewContainer: window.putContent(wrapped_panel) failed: {}", .{err});
                 return err;
@@ -1095,13 +1098,15 @@ pub fn toggleTabViewContainer(self: *App) !void {
     };
 
     const tvi_inspectable = try self.activateXamlType(XamlClass.TabViewItem);
-    const tvi = try tvi_inspectable.queryInterface(com.ITabViewItem);
-    defer tvi.release();
+    var tvi_guard = winrt.ComRef(com.ITabViewItem).init(try tvi_inspectable.queryInterface(com.ITabViewItem));
+    defer tvi_guard.deinit();
+    const tvi = tvi_guard.get();
 
     const initial_title = try winrt.hstring("Terminal");
     defer winrt.deleteHString(initial_title);
-    const boxed_title = try self.boxString(initial_title);
-    defer _ = boxed_title.release();
+    var boxed_title_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(initial_title));
+    defer boxed_title_guard.deinit();
+    const boxed_title = boxed_title_guard.get();
     tvi.putHeader(@ptrCast(boxed_title)) catch |err| {
         log.warn("toggleTabViewContainer: tvi.putHeader failed: {}", .{err});
         return err;
@@ -1111,16 +1116,16 @@ pub fn toggleTabViewContainer(self: *App) !void {
         return err;
     };
 
-    const content_control = try tvi_inspectable.queryInterface(com.IContentControl);
-    defer content_control.release();
-    content_control.putContent(@ptrCast(panel)) catch |err| {
+    var content_control_guard = winrt.ComRef(com.IContentControl).init(try tvi_inspectable.queryInterface(com.IContentControl));
+    defer content_control_guard.deinit();
+    content_control_guard.get().putContent(@ptrCast(panel)) catch |err| {
         log.warn("toggleTabViewContainer: tvi.putContent(panel) failed: {}", .{err});
         return err;
     };
 
-    const tab_items = try tv.getTabItems();
-    defer tab_items.release();
-    tab_items.append(@ptrCast(tvi_inspectable)) catch |err| {
+    var tab_items_guard = winrt.ComRef(com.IVector_IInspectable).init(try tv.getTabItems());
+    defer tab_items_guard.deinit();
+    tab_items_guard.get().append(@ptrCast(tvi_inspectable)) catch |err| {
         log.warn("toggleTabViewContainer: tab_items.append failed: {}", .{err});
         return err;
     };
@@ -1308,25 +1313,27 @@ pub fn setControlBackground(_: *App, control_insp: *winrt.IInspectable, color: c
     var scp_raw: ?*anyopaque = null;
     const scp_hr = control_insp.lpVtbl.QueryInterface(@ptrCast(control_insp), &com.ISwapChainPanelNative.IID, &scp_raw);
     if (scp_hr >= 0 and scp_raw != null) {
-        const scp_native: *com.ISwapChainPanelNative = @ptrCast(@alignCast(scp_raw.?));
-        defer scp_native.release();
+        var scp_native_guard = winrt.ComRef(com.ISwapChainPanelNative).init(@ptrCast(@alignCast(scp_raw.?)));
+        defer scp_native_guard.deinit();
         log.info("setControlBackground: skip for ISwapChainPanelNative target", .{});
         return;
     }
 
     const brush_class = winrt.hstring(XamlClass.SolidColorBrush) catch return;
     defer winrt.deleteHString(brush_class);
-    const brush_insp = winrt.activateInstance(brush_class) catch |err| {
+    var brush_insp_guard = winrt.ComRef(winrt.IInspectable).init(winrt.activateInstance(brush_class) catch |err| {
         log.warn("setControlBackground: SolidColorBrush activation failed: {}", .{err});
         return;
-    };
-    defer _ = brush_insp.release();
+    });
+    defer brush_insp_guard.deinit();
+    const brush_insp = brush_insp_guard.get();
 
-    const brush = brush_insp.queryInterface(com.ISolidColorBrush) catch |err| {
+    var brush_guard = winrt.ComRef(com.ISolidColorBrush).init(brush_insp.queryInterface(com.ISolidColorBrush) catch |err| {
         log.warn("setControlBackground: QI ISolidColorBrush failed: {}", .{err});
         return;
-    };
-    defer brush.release();
+    });
+    defer brush_guard.deinit();
+    const brush = brush_guard.get();
 
     brush.putColor(color) catch |err| {
         log.warn("setControlBackground: putColor failed: {}", .{err});
@@ -1336,8 +1343,9 @@ pub fn setControlBackground(_: *App, control_insp: *winrt.IInspectable, color: c
     var control_raw: ?*anyopaque = null;
     const control_hr = control_insp.lpVtbl.QueryInterface(@ptrCast(control_insp), &com.IControl.IID, &control_raw);
     if (control_hr >= 0 and control_raw != null) {
-        const control: *com.IControl = @ptrCast(@alignCast(control_raw.?));
-        defer control.release();
+        var control_guard = winrt.ComRef(com.IControl).init(@ptrCast(@alignCast(control_raw.?)));
+        defer control_guard.deinit();
+        const control = control_guard.get();
         control.putBackground(@ptrCast(brush)) catch |err| {
             log.warn("setControlBackground: IControl.putBackground failed: {}", .{err});
         };
@@ -1347,8 +1355,9 @@ pub fn setControlBackground(_: *App, control_insp: *winrt.IInspectable, color: c
     var panel_raw: ?*anyopaque = null;
     const panel_hr = control_insp.lpVtbl.QueryInterface(@ptrCast(control_insp), &com.IPanel.IID, &panel_raw);
     if (panel_hr >= 0 and panel_raw != null) {
-        const panel: *com.IPanel = @ptrCast(@alignCast(panel_raw.?));
-        defer panel.release();
+        var panel_guard = winrt.ComRef(com.IPanel).init(@ptrCast(@alignCast(panel_raw.?)));
+        defer panel_guard.deinit();
+        const panel = panel_guard.get();
         panel.putBackground(@ptrCast(brush)) catch |err| {
             log.warn("setControlBackground: IPanel.putBackground failed: {}", .{err});
         };
@@ -1366,11 +1375,12 @@ fn auditActiveTabBinding(self: *App) void {
     const s = self.surfaces.items[self.active_surface_idx];
     const tvi = s.tab_view_item_inspectable orelse return;
     const panel = s.swap_chain_panel orelse return;
-    const cc = tvi.queryInterface(com.IContentControl) catch return;
-    defer cc.release();
-    const cur = cc.getContent() catch return;
+    var cc_guard = winrt.ComRef(com.IContentControl).init(tvi.queryInterface(com.IContentControl) catch return);
+    defer cc_guard.deinit();
+    const cur = cc_guard.get().getContent() catch return;
     if (cur) |c| {
-        defer _ = c.release();
+        var c_guard = winrt.ComRef(winrt.IInspectable).init(c);
+        defer c_guard.deinit();
         log.info(
             "auditActiveTabBinding: idx={} content=0x{x} panel=0x{x} match={}",
             .{ self.active_surface_idx, @intFromPtr(c), @intFromPtr(panel), @intFromPtr(c) == @intFromPtr(panel) },
@@ -1381,8 +1391,9 @@ fn auditActiveTabBinding(self: *App) void {
 }
 
 fn setTabItemContent(_: *App, tvi_insp: *winrt.IInspectable, content: ?*winrt.IInspectable) !void {
-    const cc = try tvi_insp.queryInterface(com.IContentControl);
-    defer cc.release();
+    var cc_guard = winrt.ComRef(com.IContentControl).init(try tvi_insp.queryInterface(com.IContentControl));
+    defer cc_guard.deinit();
+    const cc = cc_guard.get();
     if (content) |c| {
         const wrapped = c;
         if (wrapped != c) {}

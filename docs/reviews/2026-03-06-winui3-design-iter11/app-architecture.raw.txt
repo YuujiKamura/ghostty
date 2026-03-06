@@ -1,0 +1,28 @@
+## Analyze: App.zig
+
+`App.zig` の分析結果を簡潔にまとめます。
+
+### 1. 目的と責務
+Ghostty ターミナルの **WinUI 3 デスクトップランタイムの中核** です。
+*   **初期化:** Windows App SDK (WinRT) のブートストラップと実行環境の構築。
+*   **ウィンドウ管理:** WinUI 3 Window の生成と、Win32 HWND サブクラス化による低レイヤーメッセージ処理。
+*   **UI/タブ管理:** `TabView` を使用したマルチタブ構造の維持と、各タブ（Surface）へのレンダリング（SwapChainPanel）の紐付け。
+*   **入力制御:** WinUI 3 の入力をバイパスし、独自の `input_hwnd` を介して IME やキーボード入力を直接制御。
+
+### 2. 依存関係
+*   **内部 (Ghostty Core):** `CoreApp`, `CoreSurface`, `config` 等のクロスプラットフォーム・コアロジック。
+*   **WinRT/COM:** Windows App SDK の API群。特に `com_aggregation` による COM インターフェースの実装。
+*   **OS/Hardware:** Win32 API (`os.zig`) および `D3D11.zig` (レンダラー)。
+*   **サブモジュール:** `tab_manager`, `window_runtime`, `input_runtime` 等に一部の責務を委譲。
+
+### 3. 設計パターン
+*   **COM Aggregation (COM 集約):** `IXamlMetadataProvider` をアプリケーションオブジェクトに注入するために使用。WinUI 3 のカスタムコントロール動作に必須のトリッキーなパターン。
+*   **Window Subclassing:** WinUI 3 の抽象化を突き破り、Win32 メッセージを直接ハンドリングするためのフック。
+*   **Mediator (仲介者):** `App` が `Surface`, `TabView`, `InputHwnd` 間の相互作用をすべて統制する中央集権型設計。
+*   **Event Delegation:** `SimpleEventHandler` を介した WinRT イベントの Zig 側コールバックへの変換。
+
+### 4. 改善点
+*   **God Object の解消:** `App.zig` が 1000行を超え、初期化・UI構築・イベント処理・タブ管理のすべてに関与しています。`initXaml` 周辺のロジックをさらに `window_runtime` 等へ完全移譲し、`App` は高レベルのオーケストレーションに専念すべきです。
+*   **COM ライフサイクル管理の抽象化:** `release()` の手動呼び出しや `ComRef` の混在が複雑です。Zig の `errdefer` を活用したより一貫性のあるリソース管理ラッパーの導入が検討されます。
+*   **エラー伝播の整理:** `log.err` で警告を出すだけで処理を続行、または握りつぶしている箇所（`validateTabViewParity` 等）があり、致命的な失敗時のフォールバックが不明確です。
+*   **同期/非同期の境界:** XAML スレッド（UIスレッド）内での同期処理が多く、将来的に I/O や重い設定ロードが走る際の UI フリーズリスクがあります。
