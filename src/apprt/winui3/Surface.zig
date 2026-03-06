@@ -150,8 +150,18 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     defer _ = loaded_delegate.com.lpVtbl.Release(loaded_delegate.comPtr());
     self.loaded_token = try framework_element.addLoaded(loaded_delegate.comPtr());
 
-    // SizeChanged hookup is optional with reduced COM bindings.
-    self.size_changed_token = 0;
+    const SizeChangedDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, *anyopaque, *anyopaque) void);
+    const size_changed_delegate = try SizeChangedDelegate.createWithIid(
+        self.app.core_app.alloc,
+        self,
+        &onSizeChanged,
+        &com.IID_SizeChangedEventHandler,
+    );
+    defer _ = size_changed_delegate.com.lpVtbl.Release(size_changed_delegate.comPtr());
+    self.size_changed_token = framework_element.addSizeChanged(size_changed_delegate.comPtr()) catch |err| blk: {
+        log.warn("SwapChainPanel.SizeChanged handler registration failed: {}", .{err});
+        break :blk 0;
+    };
 
     // NOTE: SwapChainPanel is set as TabViewItem content by App.newTab(),
     // not here. We only create the panel and query the native interface.
@@ -198,7 +208,14 @@ pub fn deinit(self: *Surface) void {
             if (self.swap_chain_panel) |panel| {
                 if (panel.queryInterface(com.IFrameworkElement)) |fe| {
                     defer fe.release();
-                    if (self.loaded_token != 0) fe.removeLoaded(self.loaded_token) catch {};
+                    if (self.loaded_token != 0) {
+                        fe.removeLoaded(self.loaded_token) catch {};
+                        self.loaded_token = 0;
+                    }
+                    if (self.size_changed_token != 0) {
+                        fe.removeSizeChanged(self.size_changed_token) catch {};
+                        self.size_changed_token = 0;
+                    }
                 } else |_| {}
             }
         }
@@ -743,6 +760,10 @@ fn onLoaded(self: *Surface, _: *anyopaque, _: *anyopaque) void {
 /// SizeChanged event callback. Triggered when the SwapChainPanel's layout size changes.
 /// This gives us the actual panel dimensions (accounting for TabView header, etc.).
 fn onSizeChanged(self: *Surface, _: *anyopaque, _: *anyopaque) void {
+    log.info(
+        "SwapChainPanel.SizeChanged event fired surface=0x{x} size={}x{} pending_swap_chain={} last_swap_chain={}",
+        .{ @intFromPtr(self), self.size.width, self.size.height, self.pending_swap_chain != null, self.last_swap_chain != null },
+    );
     maybeBindPendingSwapChain(self, "onSizeChanged");
     maybeBindPendingSwapChainHandle(self, "onSizeChanged");
 }

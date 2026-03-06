@@ -338,10 +338,9 @@ pub fn initXaml(self: *App) !void {
         } else |_| {}
     }
 
+    try self.registerTabViewHandlers(tab_view);
     // Step 8: Create the initial terminal content.
     try self.createInitialSurfaceContent(window, tab_view);
-
-    try self.registerTabViewHandlers(tab_view);
 
     // Step 10: Test control logic.
     if (self.debug_cfg.new_tab_on_init) {
@@ -596,38 +595,57 @@ fn validateTabViewParity(self: *App) !void {
     log.info("validateTabViewParity: starting audit...", .{});
     const window = self.window orelse return error.NoWindow;
 
-    // 1. tabview_init_success_sets_window_content
+    // Canonical Step 1: create TabView and set Window content.
     if (self.debug_cfg.enable_tabview) {
         _ = self.tab_view orelse {
-            log.err("PARITY_FAIL: tabview_init_success (self.tab_view is null)", .{});
+            log.err("PARITY_FAIL: step1_create_tabview_root", .{});
             return error.ParityFail;
         };
         const content = try window.getContent();
         if (content) |c| {
             defer _ = c.release();
-            // Check if window content matches tab_view (QI check)
             const content_tv = c.queryInterface(com.ITabView) catch {
-                log.err("PARITY_FAIL: window_content_is_tabview (QI failed)", .{});
+                log.err("PARITY_FAIL: step1_window_content_is_tabview", .{});
                 return error.ParityFail;
             };
             content_tv.release();
         } else {
-            log.err("PARITY_FAIL: window_content_is_null", .{});
+            log.err("PARITY_FAIL: step1_window_content_non_null", .{});
             return error.ParityFail;
         }
-        log.info("validate: [PASS] tabview_init_success_sets_window_content", .{});
+        log.info("validate: [PASS] step1_create_tabview_root", .{});
     }
 
-    // 2. tabview_first_item_has_non_null_content
+    // Canonical Step 2: register handlers before first tab realization.
+    if (self.tab_view != null and self.debug_cfg.enable_tabview_handlers) {
+        const close_ok = self.tab_close_token != null;
+        const add_ok = self.add_tab_token != null;
+        const selection_ok = if (self.debug_cfg.enable_handler_selection) self.selection_changed_token != null else true;
+        if (!(close_ok and add_ok and selection_ok)) {
+            log.err("PARITY_FAIL: step2_handlers_registered_before_first_tab", .{});
+            return error.ParityFail;
+        }
+        log.info("validate: [PASS] step2_handlers_registered_before_first_tab", .{});
+    }
+
+    // Canonical Step 3-5: first item exists, selected, and content attached.
     if (self.tab_view) |tv| {
         const items = try tv.getTabItems();
         defer items.release();
         const size = try items.getSize();
         if (size == 0) {
-            log.err("PARITY_FAIL: tabview_empty", .{});
+            log.err("PARITY_FAIL: step3_first_tab_created", .{});
             return error.ParityFail;
         }
-        
+        log.info("validate: [PASS] step3_first_tab_created", .{});
+
+        const selected_idx = try tv.getSelectedIndex();
+        if (selected_idx < 0) {
+            log.err("PARITY_FAIL: step5_selected_index_valid", .{});
+            return error.ParityFail;
+        }
+        log.info("validate: [PASS] step5_selected_index_valid", .{});
+
         const first_item_insp = try items.getAt(0);
         const first_item = try @as(*winrt.IInspectable, @ptrCast(@alignCast(first_item_insp))).queryInterface(com.ITabViewItem);
         defer first_item.release();
@@ -638,13 +656,23 @@ fn validateTabViewParity(self: *App) !void {
         if (content) |c| {
             _ = c.release();
         } else {
-            log.err("PARITY_FAIL: tabview_first_item_has_no_content", .{});
+            log.err("PARITY_FAIL: step4_first_tab_has_content", .{});
             return error.ParityFail;
         }
-        log.info("validate: [PASS] tabview_first_item_has_non_null_content", .{});
+        log.info("validate: [PASS] step4_first_tab_has_content", .{});
     }
 
-    // 4. tabview_disabled_uses_single_view
+    // Canonical Step 6: Loaded/SizeChanged lifecycle tokens exist on initial surface.
+    if (self.debug_cfg.enable_tabview and self.surfaces.items.len > 0) {
+        const surf = self.surfaces.items[0];
+        if (surf.loaded_token == 0 or surf.size_changed_token == 0) {
+            log.err("PARITY_FAIL: step6_loaded_sizechanged_lifecycle_registered", .{});
+            return error.ParityFail;
+        }
+        log.info("validate: [PASS] step6_loaded_sizechanged_lifecycle_registered", .{});
+    }
+
+    // tabview_disabled_uses_single_view
     if (!self.debug_cfg.enable_tabview) {
         if (self.tab_view != null) {
             log.err("PARITY_FAIL: tabview_not_disabled", .{});
@@ -661,15 +689,6 @@ fn validateTabViewParity(self: *App) !void {
             }
         }
         log.info("validate: [PASS] tabview_disabled_uses_single_view", .{});
-    }
-
-    // 5. tabview_handlers_registered_when_enabled
-    if (self.tab_view != null and self.debug_cfg.enable_tabview_handlers) {
-        if (self.tab_close_token == 0 or self.add_tab_token == 0) {
-            log.err("PARITY_FAIL: tabview_handlers_missing", .{});
-            return error.ParityFail;
-        }
-        log.info("validate: [PASS] tabview_handlers_registered_when_enabled", .{});
     }
 
     log.info("validateTabViewParity: ALL CHECKS PASSED", .{});

@@ -302,7 +302,7 @@ pub const IWindow = extern struct {
         remove_Activated: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
         add_Closed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
         remove_Closed: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        add_SizeChanged: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        add_SizeChanged: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
         remove_SizeChanged: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
         add_VisibilityChanged: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
         remove_VisibilityChanged: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
@@ -344,8 +344,8 @@ pub const IWindow = extern struct {
     pub fn add_Closed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.addClosed(p0); }
     pub fn removeClosed(self: *@This(), p0: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.remove_Closed(self, p0)); }
     pub fn remove_Closed(self: *@This(), p0: EventRegistrationToken) !void { return self.removeClosed(p0); }
-    pub fn addSizeChanged(self: *@This(), p0: anytype) !void { try hrCheck(self.lpVtbl.add_SizeChanged(self, @ptrCast(p0))); }
-    pub fn add_SizeChanged(self: *@This(), p0: anytype) !void { try self.addSizeChanged( @ptrCast(p0)); }
+    pub fn addSizeChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var t: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.add_SizeChanged(self, p0, &t)); return t; }
+    pub fn add_SizeChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.addSizeChanged(p0); }
     pub fn removeSizeChanged(self: *@This(), p0: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.remove_SizeChanged(self, p0)); }
     pub fn remove_SizeChanged(self: *@This(), p0: EventRegistrationToken) !void { return self.removeSizeChanged(p0); }
     pub fn addVisibilityChanged(self: *@This(), p0: anytype) !void { try hrCheck(self.lpVtbl.add_VisibilityChanged(self, @ptrCast(p0))); }
@@ -1406,7 +1406,7 @@ pub const IFrameworkElement = extern struct {
         remove_Unloaded: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
         add_DataContextChanged: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
         remove_DataContextChanged: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        add_SizeChanged: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        add_SizeChanged: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
         remove_SizeChanged: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
         add_LayoutUpdated: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
         remove_LayoutUpdated: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
@@ -1544,8 +1544,8 @@ pub const IFrameworkElement = extern struct {
     pub fn add_DataContextChanged(self: *@This(), p0: anytype) !void { try self.addDataContextChanged( @ptrCast(p0)); }
     pub fn removeDataContextChanged(self: *@This(), p0: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.remove_DataContextChanged(self, p0)); }
     pub fn remove_DataContextChanged(self: *@This(), p0: EventRegistrationToken) !void { return self.removeDataContextChanged(p0); }
-    pub fn addSizeChanged(self: *@This(), p0: anytype) !void { try hrCheck(self.lpVtbl.add_SizeChanged(self, @ptrCast(p0))); }
-    pub fn add_SizeChanged(self: *@This(), p0: anytype) !void { try self.addSizeChanged( @ptrCast(p0)); }
+    pub fn addSizeChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var t: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.add_SizeChanged(self, p0, &t)); return t; }
+    pub fn add_SizeChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.addSizeChanged(p0); }
     pub fn removeSizeChanged(self: *@This(), p0: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.remove_SizeChanged(self, p0)); }
     pub fn remove_SizeChanged(self: *@This(), p0: EventRegistrationToken) !void { return self.removeSizeChanged(p0); }
     pub fn addLayoutUpdated(self: *@This(), p0: anytype) !void { try hrCheck(self.lpVtbl.add_LayoutUpdated(self, @ptrCast(p0))); }
