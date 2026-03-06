@@ -5,6 +5,7 @@ const com = @import("com.zig");
 const winrt = @import("winrt.zig");
 const os = @import("os.zig");
 const tab_index = @import("tab_index.zig");
+const input_runtime = @import("input_runtime.zig");
 
 const log = std.log.scoped(.winui3);
 
@@ -73,7 +74,7 @@ pub fn newTab(self: anytype, tabview_item_class: []const u8, border_class_name: 
     };
 
     // Ensure keyboard focus returns to our input overlay.
-    if (self.input_hwnd) |h| _ = os.SetFocus(h);
+    input_runtime.focusInputOverlay(self);
 
     log.info("newTab completed: idx={} total={}", .{ self.active_surface_idx, self.surfaces.items.len });
 }

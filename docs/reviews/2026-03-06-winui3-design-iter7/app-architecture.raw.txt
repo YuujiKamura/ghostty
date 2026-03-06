@@ -1,0 +1,29 @@
+## Analyze: App.zig
+
+`App.zig` のコード分析結果を簡潔にまとめます。
+
+### 1. 目的と責務
+*   **目的**: Ghostty ターミナルの Windows (WinUI 3) ネイティブ実行基盤の提供。
+*   **主な責務**:
+    *   **ブートストラップ**: Windows App SDK の初期化と WinRT ランタイムのセットアップ。
+    *   **ライフサイクル管理**: メッセージループ（`Application.Start`）の制御とクリーンアップ。
+    *   **UI 構成**: WinUI 3 Window、TabView、および DirectComposition/SwapChainPanel（Surface）の構築。
+    *   **相互運用**: COM 集約（Aggregation）によるメタデータ提供と、HWND サブクラス化による Win32 メッセージの直接処理。
+
+### 2. 依存関係
+*   **内部依存**: `winrt.zig`, `com.zig`, `os.zig` などの低レベル Win32/WinRT ラッパー。
+*   **ロジック委譲**: `tab_manager`, `tabview_runtime`, `input_runtime` に UI 操作ロジックを分散。
+*   **Ghostty コア**: `CoreApp`, `CoreSurface` を通じてターミナル本体のロジックと結合。
+*   **外部**: Windows App SDK (WinUI 3) の動的ライブラリ群。
+
+### 3. 設計パターン
+*   **COM Aggregation**: `IXamlMetadataProvider` を実装するために `AppOuter` を使用し、標準 Application オブジェクトを拡張。
+*   **Strategy (Action Pattern)**: `performAction` により、アプリ操作を列挙型で抽象化して処理。
+*   **Delegation**: UI の詳細設定（TabView や Input）を専用のランタイムモジュールに委譲し、`App.zig` の肥大化を抑制。
+*   **State Tracking**: `StartupStage` による段階的な初期化プロセスの管理。
+
+### 4. 改善点
+*   **COM リソース管理**: `release()` の呼び出しが手動で散在しており、エラー発生時のリークリスクがある。`errdefer` や RAII 的なスマートポインタ（Zig の `usingnamespace` 等を利用したラッパー）の導入が望ましい。
+*   **巨大な初期化関数**: `initXaml` が多くのステップ（1〜10）を含んでおり、各ステップをプライベートなメソッドに分割して、可読性を向上させる余地がある。
+*   **デバッグコードの混在**: `debug_cfg` による条件分岐が本番ロジック内に多く存在するため、デバッグ専用の注入ポイントを明確に分ける（Decorator パターン等）と保守性が高まる。
+*   **エラー処理の統一**: `log.warn` して続行するケースと、`error` を返すケースが混在しており、致命的な失敗の定義を再整理すべき。

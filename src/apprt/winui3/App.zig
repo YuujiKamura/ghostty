@@ -23,12 +23,12 @@ const native_interop = @import("native_interop.zig");
 const event = @import("event.zig");
 const os = @import("os.zig");
 const com_aggregation = @import("com_aggregation.zig");
-const input_overlay = @import("input_overlay.zig");
 const ime = @import("ime.zig");
 const debug_harness = @import("debug_harness.zig");
 const tabview_runtime = @import("tabview_runtime.zig");
 const tab_index = @import("tab_index.zig");
 const tab_manager = @import("tab_manager.zig");
+const input_runtime = @import("input_runtime.zig");
 
 const log = std.log.scoped(.winui3);
 
@@ -486,24 +486,7 @@ fn syncVisualDiagnostics(self: *App) void {
 }
 
 fn setupNativeInputWindows(self: *App) void {
-    // Step 9: Find the WinUI3 child HWND...
-    const child = os.GetWindow(self.hwnd.?, os.GW_CHILD);
-    if (child) |child_hwnd| {
-        self.child_hwnd = child_hwnd;
-        log.info("initXaml step 9: found WinUI3 child HWND=0x{x}", .{@intFromPtr(child_hwnd)});
-        // ALWAYS subclass the WinUI child HWND to redirect focus.
-        _ = os.SetWindowSubclass(child_hwnd, &subclassProc, 2, @intFromPtr(self));
-    }
-
-    // Create our input overlay HWND.
-    self.input_hwnd = input_overlay.createInputWindow(self.hwnd.?, @intFromPtr(self));
-    if (self.input_hwnd) |input_hwnd| {
-        // Enable IME on our input HWND.
-        _ = os.ImmAssociateContextEx(input_hwnd, null, os.IACE_DEFAULT);
-        // Give it initial focus.
-        _ = os.SetFocus(input_hwnd);
-        log.info("initXaml step 9 OK: input HWND=0x{x} created + IME enabled", .{@intFromPtr(input_hwnd)});
-    }
+    input_runtime.setupNativeInputWindows(self, &subclassProc);
 }
 
 fn createTabViewRoot(self: *App, window: *com.IWindow) !?*com.ITabView {
@@ -1192,7 +1175,7 @@ pub fn toggleTabViewContainer(self: *App) !void {
     if (surface.tab_view_item_inspectable) |old| _ = old.release();
     surface.tab_view_item_inspectable = tvi_inspectable;
     surface.rebindSwapChain();
-    if (self.input_hwnd) |h| _ = os.SetFocus(h);
+    input_runtime.focusInputOverlay(self);
     log.info("toggleTabViewContainer: switched to TabView mode", .{});
 }
 
@@ -1340,7 +1323,7 @@ fn onSelectionChanged(self: *App, sender_obj: ?*anyopaque, args_obj: ?*anyopaque
             self.surfaces.items[new_idx].rebindSwapChain();
 
             // Redirect Win32 focus back to our input overlay.
-            if (self.input_hwnd) |h| _ = os.SetFocus(h);
+            input_runtime.focusInputOverlay(self);
         }
     }
 }
