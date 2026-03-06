@@ -1,0 +1,26 @@
+## Analyze: App.zig
+
+GhosttyのWinUI 3ランタイム実装である`App.zig`を分析しました。
+
+### 1. このコードは何をしているか（目的と責務）
+GhosttyをWindowsネイティブ（WinUI 3）で動作させるための**エントリポイントおよびUIオーケストレーター**です。
+*   **ランタイム・ブートストラップ**: Windows App SDKの初期化とWinRTランタイムの起動。
+*   **ウィンドウ・ライフサイクル管理**: WinUI 3 Windowの作成、表示、および終了処理（COM集約によるApplication拡張を含む）。
+*   **マルチタブ管理**: `TabView`コントロールを用いた複数`Surface`（ターミナル画面）の保持と切り替え。
+*   **入力ブリッジ**: WinUI 3の入力層をバイパスし、透過的な子ウィンドウ（`input_hwnd`）を介してIMEやキーボード入力を直接`Surface`へルーティング。
+
+### 2. 依存関係
+*   **Core Logic**: `../../App.zig` (コア側App), `../../Surface.zig` (コア側Surface) に依存し、これらをWinUI 3のコンテキストで具体化します。
+*   **WinRT/COM**: `winrt.zig`, `com.zig`, `com_aggregation.zig` を通じてWindowsのオブジェクトモデルを操作します。
+*   **OS/Hacks**: `os.zig`, `hacks.zig` を使用して、標準のWinUI 3では困難な低レベルなウィンドウ操作（サブクラス化、メッセージ横取り）を行います。
+
+### 3. 設計パターン
+*   **COM Aggregation (集約)**: `IXamlMetadataProvider`を実装するために、WinUI 3 Applicationオブジェクトを外部オブジェクト（`AppOuter`）でラップし、インターフェースを動的に注入しています。
+*   **Subclassing (サブクラス化)**: `subclassProc`を用いて、WinUI 3が生成したHWNDのメッセージループを直接監視・操作するパターンです。
+*   **Event-Driven (イベント駆動)**: WinRTのイベント（`Closed`, `SelectionChanged`等）に対して、`SimpleEventHandler`を介して非同期に応答します。
+
+### 4. 改善点
+*   **`initXaml` の肥大化**: 初期化フロー（ウィンドウ作成、リソース読み込み、タブ構築、入力設定）が単一の関数に集中しています。機能ごとにメソッドを分割し、`StartupStage`の状態遷移をより宣言的に管理する余地があります。
+*   **手動リソース管理の複雑性**: COMの`release()`呼び出しが手動で行われており、例外やエラー発生時のリークリスクが高いです。Zigの`errdefer`は活用されていますが、COM参照カウンタを自動管理するスマートポインタ（またはそれに類するラッパー）の導入が望ましいです。
+*   **一貫性の欠如**: `com.zig`のラッパーを使用している箇所と、`IApplicationAbi`のようにVTableを直接叩いている箇所が混在しています。ABI境界の操作は一箇所に集約すべきです。
+*   **同期の不確実性**: `active_surface_idx` と `surfaces` リストの同期が手動で行われています。インデックス操作をカプセル化した「TabManager」的な抽象化を導入することで、境界外アクセスのリスクを低減できます。
