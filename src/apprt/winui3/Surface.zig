@@ -820,14 +820,23 @@ pub fn setMouseShape(self: *Surface, shape: terminal.MouseShape) void {
 pub fn setProgressReport(self: *Surface, value: terminal.osc.Command.ProgressReport) void {
     _ = self;
     log.info("Surface.setProgressReport: state={s} progress={?}", .{ @tagName(value.state), value.progress });
-    // TODO: Implement WinUI 3 Taskbar/TabView progress indicator
+
+    // Minimal runtime behavior until taskbar integration is implemented:
+    // emit an audible signal on explicit error state.
+    if (value.state == .@"error") {
+        _ = os.MessageBeep(os.MB_OK);
+    }
 }
 
 pub fn commandFinished(self: *Surface, value: apprt.Action.Value(.command_finished)) bool {
     _ = self;
     log.info("Surface.commandFinished: duration={d}", .{value.duration.ns()});
-    // TODO: Implement Windows toast notification if requested
-    return false;
+
+    // Minimal notification: command failure emits an audible signal.
+    if (value.exit_code) |code| {
+        if (code != 0) _ = os.MessageBeep(os.MB_OK);
+    }
+    return true;
 }
 
 pub fn setBellRinging(self: *Surface, value: bool) void {

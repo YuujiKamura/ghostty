@@ -1,0 +1,28 @@
+## Analyze: App.zig
+
+GhosttyのWinUI 3ランタイムの実装ファイルである`App.zig`について分析します。
+
+### 1. このコードは何をしているか（目的と責務）
+GhosttyターミナルをWindowsのネイティブUI（WinUI 3）で動作させるための**エントリポイントおよびライフサイクルマネージャー**です。
+*   **環境構築:** Windows App SDKのブートストラップ、WinRTの初期化、DispatcherQueueの作成。
+*   **UI管理:** WinUI 3 Windowの作成、`TabView`によるマルチタブ管理、サーフェス（ターミナル表示領域）の生成と配置。
+*   **低レイヤー制御:** Win32 HWNDのサブクラス化によるメッセージルーティング、IME/入力用の透明なオーバーレイHWND（`input_hwnd`）の管理。
+*   **ブリッジ:** Ghosttyのコアロジック（`CoreApp`）とWindows固有のUIイベントを接続。
+
+### 2. 依存関係
+*   **上層（Core）:** `../../App.zig` (CoreApp) などのGhosttyコアモジュールに依存し、そのライフサイクルと同期します。
+*   **下層（WinRT/COM）:** `winrt.zig`, `com.zig`, `bootstrap.zig` を介してWindows App SDKのABIを直接叩いています。
+*   **横断（Runtime）:** `Surface.zig` (描画単位), `os.zig` (Win32 API), `com_aggregation.zig` (メタデータプロバイダーの実装) と密に連携します。
+*   **被使用:** 基本的にOSからのエントリポイントとして機能し、他のモジュールからは`wakeup`や`performAction`を通じて操作されます。
+
+### 3. 設計パターン
+*   **COM Aggregation (外殻構成):** `AppOuter` を使用して `IXamlMetadataProvider` を実装し、WinUI 3 Applicationオブジェクトに「注入」しています。これはカスタムコントロールを利用する上で必須のパターンです。
+*   **State Machine:** `StartupStage` エミュータによる初期化フェーズ管理。
+*   **Subclassing:** WinUI 3が隠蔽しているメッセージループに対して、Win32 `SetWindowSubclass` を用いて直接介入する「脱獄」パターン（`hacks.zig`）。
+*   **Overlay Handle:** 複雑なUIフレームワークの入力制限を回避するため、ネイティブの入力専用ウィンドウを重ねるパターン。
+
+### 4. 改善点
+*   **巨大な責務:** タブ管理、ウィンドウ初期化、リソースロード、Win32サブクラス Proc など、1ファイルに責務が集中しています。`TabManager` や `WindowController` への分割が可能です。
+*   **手動の参照管理:** `release()` 呼び出しが至る所にあり、Zigの `errdefer` だけではリークのリスクが高いです。スマートポインタ的なラッパー（`com.Ptr(T)` 等）の導入が望まれます。
+*   **同期的なHSTRING生成:** `winrt.hstring` が各所で呼ばれていますが、頻出するクラス名は定数化またはプールすることでアロケーションを減らせます。
+*   **デバッグコードの混在:** `debug_cfg` による条件分岐が本番ロジックの中に深く入り込んでおり、将来的に見通しが悪くなる可能性があります。

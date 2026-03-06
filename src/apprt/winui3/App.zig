@@ -1067,6 +1067,12 @@ pub fn performAction(
             }
             return true;
         },
+        .command_finished => {
+            switch (target) {
+                .app => return true,
+                .surface => |core| return core.rt_surface.commandFinished(value),
+            }
+        },
         .start_search => {
             switch (target) {
                 .app => {},

@@ -66,10 +66,10 @@ pub fn InitCallback(comptime AppType: type) type {
             if (guidEql(riid, &winrt.IID_IUnknown) or guidEql(riid, &winrt.IID_IAgileObject) or guidEql(riid, &IID_Self)) {
                 ppv.* = this;
                 _ = addRefFn(this);
-                return 0; // S_OK
+                return winrt.S_OK;
             }
             ppv.* = null;
-            return @bitCast(@as(u32, 0x80004002)); // E_NOINTERFACE
+            return winrt.E_NOINTERFACE;
         }
 
         fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
@@ -87,9 +87,9 @@ pub fn InitCallback(comptime AppType: type) type {
             const self = fromComPtr(this);
             self.app.initXaml() catch |err| {
                 log.err("initXaml failed in Application.Start callback: {}", .{err});
-                return @bitCast(@as(u32, 0x80004005)); // E_FAIL
+                return winrt.E_FAIL;
             };
-            return 0; // S_OK
+            return winrt.S_OK;
         }
     };
 }
@@ -226,8 +226,8 @@ pub const AppOuter = struct {
     fn outerQueryInterface(this: *anyopaque, riid: *const winrt.GUID, ppv: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
         const self = fromIUnknownPtr(this);
 
-        // Log EVERY QI request with IID and inner state for crash diagnosis.
-        log.info("outerQI: iid={{{x:0>8}-{x:0>4}-{x:0>4}-{x:0>2}{x:0>2}-{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}}} inner={}", .{
+        // Keep this on debug to avoid noisy startup logs in normal runs.
+        log.debug("outerQI: iid={{{x:0>8}-{x:0>4}-{x:0>4}-{x:0>2}{x:0>2}-{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}}} inner={}", .{
             riid.Data1,    riid.Data2,    riid.Data3,
             riid.Data4[0], riid.Data4[1], riid.Data4[2],
             riid.Data4[3], riid.Data4[4], riid.Data4[5],
@@ -236,10 +236,10 @@ pub const AppOuter = struct {
 
         // IXamlMetadataProvider → return our metadata interface
         if (guidEql(riid, &com.IXamlMetadataProvider.IID)) {
-            log.info("outerQI: -> IXamlMetadataProvider (handled by outer)", .{});
+            log.debug("outerQI: -> IXamlMetadataProvider (handled by outer)", .{});
             ppv.* = @ptrCast(&self.imetadata);
             _ = outerAddRef(this);
-            return 0; // S_OK
+            return winrt.S_OK;
         }
 
         // IUnknown / IAgileObject → return outer (the controlling unknown).
@@ -247,22 +247,22 @@ pub const AppOuter = struct {
         // probes during WinUI startup; metadata methods still enforce safe fallback
         // behavior and never assume cross-thread provider access is mandatory.
         if (guidEql(riid, &winrt.IID_IUnknown) or guidEql(riid, &winrt.IID_IAgileObject)) {
-            log.info("outerQI: -> IUnknown (handled by outer)", .{});
+            log.debug("outerQI: -> IUnknown (handled by outer)", .{});
             ppv.* = this;
             _ = outerAddRef(this);
-            return 0; // S_OK
+            return winrt.S_OK;
         }
 
         // Everything else → delegate to inner (non-delegating QI)
         if (self.inner) |inner| {
             const hr = inner.lpVtbl.QueryInterface(@ptrCast(inner), riid, ppv);
-            log.info("outerQI: -> delegated to inner, hr=0x{x:0>8}", .{@as(u32, @bitCast(hr))});
+            log.debug("outerQI: -> delegated to inner, hr=0x{x:0>8}", .{@as(u32, @bitCast(hr))});
             return hr;
         }
 
         ppv.* = null;
-        log.info("outerQI: -> NO INNER, returning E_NOINTERFACE", .{});
-        return @bitCast(@as(u32, 0x80004002)); // E_NOINTERFACE
+        log.debug("outerQI: -> NO INNER, returning E_NOINTERFACE", .{});
+        return winrt.E_NOINTERFACE;
     }
 
     fn outerAddRef(this: *anyopaque) callconv(.winapi) u32 {
@@ -324,17 +324,17 @@ pub const AppOuter = struct {
     fn metadataGetIids(_: *anyopaque, count: *u32, iids: *?[*]winrt.GUID) callconv(.winapi) winrt.HRESULT {
         count.* = 0;
         iids.* = null;
-        return 0; // S_OK
+        return winrt.S_OK;
     }
 
     fn metadataGetRuntimeClassName(_: *anyopaque, name: *?winrt.HSTRING) callconv(.winapi) winrt.HRESULT {
         name.* = null;
-        return 0; // S_OK
+        return winrt.S_OK;
     }
 
     fn metadataGetTrustLevel(_: *anyopaque, level: *u32) callconv(.winapi) winrt.HRESULT {
         level.* = 0; // BaseTrust
-        return 0; // S_OK
+        return winrt.S_OK;
     }
 
     fn metadataGetXamlType(this: *anyopaque, type_name: TypeName, result: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
@@ -345,7 +345,7 @@ pub const AppOuter = struct {
             name_ptr,
         });
         result.* = null;
-        return 0; // S_OK — return null IXamlType (type not found)
+        return winrt.S_OK; // return null IXamlType (type not found)
     }
 
     fn metadataGetXamlType2(this: *anyopaque, full_name: ?winrt.HSTRING, result: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
@@ -355,15 +355,15 @@ pub const AppOuter = struct {
         if (self.provider) |provider| {
             const hr = provider.lpVtbl.GetXamlType_2(@ptrCast(provider), full_name, result);
             const hr_u32: u32 = @bitCast(hr);
-            if (hr_u32 == 0x80004002) {
+            if (hr_u32 == @as(u32, @bitCast(winrt.E_NOINTERFACE))) {
                 log.warn("metadataGetXamlType2: provider returned E_NOINTERFACE, using null-type fallback", .{});
                 result.* = null;
-                return 0; // S_OK fallback contract
+                return winrt.S_OK; // fallback contract
             }
             log.info("metadataGetXamlType2 delegated, hr=0x{x}", .{hr_u32});
             return hr;
         }
-        return 0; // S_OK — return null IXamlType (type not found)
+        return winrt.S_OK; // return null IXamlType (type not found)
     }
 
     fn metadataGetXmlnsDefinitions(this: *anyopaque, count: *u32, definitions: *?[*]*anyopaque) callconv(.winapi) winrt.HRESULT {
@@ -374,6 +374,6 @@ pub const AppOuter = struct {
         }
         count.* = 0;
         definitions.* = null;
-        return 0; // S_OK
+        return winrt.S_OK;
     }
 };

@@ -44,6 +44,9 @@ pub const IID_IAgileObject = GUID{
 // ============================================================================
 
 pub const WinRTError = error{WinRTFailed};
+pub const S_OK: HRESULT = 0;
+pub const E_FAIL: HRESULT = @bitCast(@as(u32, 0x80004005));
+pub const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
 
 pub inline fn hrCheck(hr: HRESULT) WinRTError!void {
     if (hr >= 0) return;
