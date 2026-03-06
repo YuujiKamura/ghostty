@@ -1,0 +1,30 @@
+## Analyze: App.zig
+
+GhosttyのWinUI 3ランタイム実装である`App.zig`の分析結果を簡潔に報告します。
+
+### 1. 目的と責務
+GhosttyをWindowsネイティブ（WinUI 3）で動かすための**オーケストレーター**です。
+- **環境構築**: Windows App SDKのブートストラップ、WinRT初期化、COM集約（Aggregation）によるメタデータプロバイダーの実装。
+- **ウィンドウ管理**: WinUI 3の`Window`作成、HWNDのサブクラス化によるメッセージルーティング。
+- **タブ管理**: `TabView`による複数ターミナル（Surface）のライフサイクル管理。
+- **入力ブリッジ**: WinUI 3の入力をバイパスし、IME入力を適切に処理するための専用入力HWND（Input Overlay）の制御。
+
+### 2. 依存関係
+- **外部依存**: Windows App SDK, WinRT/COM (Win32 API)。
+- **内部モジュール**: 
+    - `winrt.zig` / `com.zig`: 低レイヤーのABI通信。
+    - `tab_manager.zig` / `tabview_runtime.zig`: UIコンポーネントの操作ロジック。
+    - `hacks.zig`: サブクラス化や例外ハンドリングなどの低レベル処理。
+- **コア**: Ghostty本体（`../../App.zig`）からの要求をWindows環境へ変換するアダプターとして機能。
+
+### 3. 設計パターン
+- **COM Aggregation (集約)**: `IXamlMetadataProvider`を既存の`Application`オブジェクトに注入するために使用。
+- **State Machine (状態管理)**: `StartupStage`および`ExitIntent`により、複雑な非同期初期化と終了シーケンスを制御。
+- **Observer パターン**: `SimpleEventHandler`を通じてWinUIのイベント（閉じられた、タブ追加等）をZig側に通知。
+- **Bridge パターン**: Ghosttyの抽象的なSurface操作を、WinUI 3の`SwapChainPanel`や`TabViewItem`に橋渡し。
+
+### 4. 改善点・リファクタリングの余地
+- **手動リファレンスカウントの複雑性**: `AddRef/Release`が各所で行われており、メモリリークやダングリングポインタのリスクが高い。スマートポインタ的な抽象化が望まれます。
+- **エラー伝播の欠如**: `catch |err| log.warn(...)` でエラーを握り潰している箇所が多く、致命的な失敗がサイレントに無視される可能性があります。
+- **UIロジックの肥大化**: `App.zig`にリソースロード、ウィンドウ設定、入力設定が混在しています。`Window`クラスや`InputSystem`クラスへの責務の切り出しが検討できます。
+- **VTableの直接操作**: 一部で`lpVtbl`を直接叩いており、`winrt.zig`などのラッパー側にロジックを隠蔽することで可読性を向上できます。
