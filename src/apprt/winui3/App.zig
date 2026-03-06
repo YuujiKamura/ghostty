@@ -322,8 +322,9 @@ fn createAggregatedApplication(self: *App) !void {
 
     // Create Application with outer IUnknown for aggregation.
     log.info("initXaml step 0: getActivationFactory(IApplicationFactory)...", .{});
-    const app_factory = try winrt.getActivationFactory(com.IApplicationFactory, app_class);
-    defer app_factory.release();
+    var app_factory_guard = winrt.ComRef(com.IApplicationFactory).init(try winrt.getActivationFactory(com.IApplicationFactory, app_class));
+    defer app_factory_guard.deinit();
+    const app_factory = app_factory_guard.get();
     log.info("initXaml step 0: calling CreateInstance(outer=0x{x})...", .{@intFromPtr(self.app_outer.outerPtr())});
     const result = try app_factory.createInstance(self.app_outer.outerPtr());
     log.info("initXaml step 0: CreateInstance returned inner=0x{x} instance=0x{x}", .{
@@ -341,7 +342,9 @@ fn createWindowAndHooks(self: *App) !*com.IWindow {
     const window_class = try winrt.hstring(XamlClass.Window);
     defer winrt.deleteHString(window_class);
     log.info("initXaml step 1: RoActivateInstance(Window)...", .{});
-    const window_inspectable = try winrt.activateInstance(window_class);
+    var window_inspectable_guard = winrt.ComRef(winrt.IInspectable).init(try winrt.activateInstance(window_class));
+    defer window_inspectable_guard.deinit();
+    const window_inspectable = window_inspectable_guard.get();
     log.info("initXaml step 1 OK: got IInspectable @ 0x{x}", .{@intFromPtr(window_inspectable)});
 
     // Step 2: QI for IWindow.
@@ -359,9 +362,9 @@ fn createWindowAndHooks(self: *App) !*com.IWindow {
 
     // Step 4: Get the native HWND via IWindowNative.
     log.info("initXaml step 4: QueryInterface(IWindowNative)...", .{});
-    const window_native = try window.queryInterface(com.IWindowNative);
-    defer window_native.release();
-    self.hwnd = try window_native.getWindowHandle();
+    var window_native_guard = winrt.ComRef(com.IWindowNative).init(try window.queryInterface(com.IWindowNative));
+    defer window_native_guard.deinit();
+    self.hwnd = try window_native_guard.get().getWindowHandle();
     log.info("initXaml step 4 OK: HWND=0x{x}", .{@intFromPtr(self.hwnd.?)});
 
     // Also track root owner window; close messages are often dispatched there.
@@ -476,7 +479,8 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
             // Test: manually set TabView height.
             if (self.tab_view) |tv| {
                 if (tv.queryInterface(com.IFrameworkElement)) |fe| {
-                    defer fe.release();
+                    var fe_guard = winrt.ComRef(com.IFrameworkElement).init(fe);
+                    defer fe_guard.deinit();
                 } else |_| {}
             }
         }
@@ -485,24 +489,26 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
     if (surface.swap_chain_panel) |panel| {
         if (tab_view) |tv| {
             const tvi_inspectable = try self.activateXamlType(XamlClass.TabViewItem);
-            const tvi = try tvi_inspectable.queryInterface(com.ITabViewItem);
-            defer tvi.release();
+            var tvi_guard = winrt.ComRef(com.ITabViewItem).init(try tvi_inspectable.queryInterface(com.ITabViewItem));
+            defer tvi_guard.deinit();
+            const tvi = tvi_guard.get();
 
             const initial_title = try winrt.hstring("Terminal");
             defer winrt.deleteHString(initial_title);
-            const boxed_title = try self.boxString(initial_title);
-            defer _ = boxed_title.release();
+            var boxed_title_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(initial_title));
+            defer boxed_title_guard.deinit();
+            const boxed_title = boxed_title_guard.get();
             try tvi.putHeader(@ptrCast(boxed_title));
             try tvi.putIsClosable(false);
 
             if (!self.debug_cfg.tabview_item_no_content) {
-                const content_control = try tvi_inspectable.queryInterface(com.IContentControl);
-                defer content_control.release();
+                var content_control_guard = winrt.ComRef(com.IContentControl).init(try tvi_inspectable.queryInterface(com.IContentControl));
+                defer content_control_guard.deinit();
                 const placeholder_class = try winrt.hstring(XamlClass.Border);
                 defer winrt.deleteHString(placeholder_class);
-                const placeholder = try winrt.activateInstance(placeholder_class);
-                defer _ = placeholder.release();
-                try content_control.putContent(@ptrCast(placeholder));
+                var placeholder_guard = winrt.ComRef(winrt.IInspectable).init(try winrt.activateInstance(placeholder_class));
+                defer placeholder_guard.deinit();
+                try content_control_guard.get().putContent(@ptrCast(placeholder_guard.get()));
                 log.info("initXaml step 8: TabViewItem placeholder content set", .{});
             } else {
                 log.info("initXaml step 8: SKIPPING putContent (GHOSTTY_WINUI3_TABVIEW_ITEM_NO_CONTENT=true)", .{});
@@ -511,13 +517,13 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
             if (!self.debug_cfg.tabview_append_item) {
                 log.info("initXaml step 8: STOP at level 1 (create+putContent only, no append)", .{});
             } else {
-                const tab_items = try tv.getTabItems();
-                try tab_items.append(@ptrCast(tvi_inspectable));
+                var tab_items_guard = winrt.ComRef(com.IVector_IInspectable).init(try tv.getTabItems());
+                defer tab_items_guard.deinit();
+                try tab_items_guard.get().append(@ptrCast(tvi_inspectable));
                 log.info("initXaml step 8: append done", .{});
 
-                const items_size = try tab_items.getSize();
+                const items_size = try tab_items_guard.get().getSize();
                 log.info("audit: [PASS] TabItems.getSize() = {}", .{items_size});
-                tab_items.release();
 
                 surface.tab_view_item_inspectable = tvi_inspectable;
 
@@ -545,7 +551,8 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
         } else {
             const wrapped_panel = panel;
             if (wrapped_panel != @as(*winrt.IInspectable, @ptrCast(panel))) {
-                defer _ = wrapped_panel.release();
+                var wrapped_panel_guard = winrt.ComRef(winrt.IInspectable).init(wrapped_panel);
+                defer wrapped_panel_guard.deinit();
                 try window.putContent(@ptrCast(wrapped_panel));
             } else {
                 try window.putContent(@ptrCast(panel));
@@ -606,12 +613,13 @@ fn validateTabViewParity(self: *App) !void {
         };
         const content = try window.getContent();
         if (content) |c| {
-            defer _ = c.release();
-            const content_tv = c.queryInterface(com.ITabView) catch {
+            var content_guard = winrt.ComRef(winrt.IInspectable).init(c);
+            defer content_guard.deinit();
+            var content_tv_guard = winrt.ComRef(com.ITabView).init(content_guard.get().queryInterface(com.ITabView) catch {
                 log.err("PARITY_FAIL: step1_window_content_is_tabview", .{});
                 return error.ParityFail;
-            };
-            content_tv.release();
+            });
+            defer content_tv_guard.deinit();
         } else {
             log.err("PARITY_FAIL: step1_window_content_non_null", .{});
             return error.ParityFail;
@@ -633,9 +641,9 @@ fn validateTabViewParity(self: *App) !void {
 
     // Canonical Step 3-5: first item exists, selected, and content attached.
     if (self.tab_view) |tv| {
-        const items = try tv.getTabItems();
-        defer items.release();
-        const size = try items.getSize();
+        var items_guard = winrt.ComRef(com.IVector_IInspectable).init(try tv.getTabItems());
+        defer items_guard.deinit();
+        const size = try items_guard.get().getSize();
         if (size == 0) {
             log.err("PARITY_FAIL: step3_first_tab_created", .{});
             return error.ParityFail;
@@ -649,15 +657,18 @@ fn validateTabViewParity(self: *App) !void {
         }
         log.info("validate: [PASS] step5_selected_index_valid", .{});
 
-        const first_item_insp = try items.getAt(0);
-        const first_item = try @as(*winrt.IInspectable, @ptrCast(@alignCast(first_item_insp))).queryInterface(com.ITabViewItem);
-        defer first_item.release();
+        const first_item_insp = try items_guard.get().getAt(0);
+        var first_item_guard = winrt.ComRef(com.ITabViewItem).init(
+            try @as(*winrt.IInspectable, @ptrCast(@alignCast(first_item_insp))).queryInterface(com.ITabViewItem),
+        );
+        defer first_item_guard.deinit();
 
-        const content_control = try first_item.queryInterface(com.IContentControl);
-        defer content_control.release();
-        const content = try content_control.getContent();
+        var content_control_guard = winrt.ComRef(com.IContentControl).init(try first_item_guard.get().queryInterface(com.IContentControl));
+        defer content_control_guard.deinit();
+        const content = try content_control_guard.get().getContent();
         if (content) |c| {
-            _ = c.release();
+            var content_guard = winrt.ComRef(winrt.IInspectable).init(c);
+            defer content_guard.deinit();
         } else {
             log.err("PARITY_FAIL: step4_first_tab_has_content", .{});
             return error.ParityFail;
@@ -683,9 +694,14 @@ fn validateTabViewParity(self: *App) !void {
         }
         const content = try window.getContent();
         if (content) |c| {
-            defer _ = c.release();
+            var content_guard = winrt.ComRef(winrt.IInspectable).init(c);
+            defer content_guard.deinit();
             // In single view, it should be a Grid/Border or SwapChainPanel directly
-            const is_tabview = if (c.queryInterface(com.ITabView)) |_| true else |_| false;
+            const is_tabview = if (content_guard.get().queryInterface(com.ITabView)) |content_tv| blk: {
+                var content_tv_guard = winrt.ComRef(com.ITabView).init(content_tv);
+                defer content_tv_guard.deinit();
+                break :blk true;
+            } else |_| false;
             if (is_tabview) {
                 log.err("PARITY_FAIL: single_view_is_tabview", .{});
                 return error.ParityFail;
@@ -700,10 +716,10 @@ fn validateTabViewParity(self: *App) !void {
 fn wrapInBorder(self: *App, element: *winrt.IInspectable) !*winrt.IInspectable {
     log.info("wrapInBorder: creating Border...", .{});
     const border_insp = try self.activateXamlType(XamlClass.Border);
-    const border = try border_insp.queryInterface(com.IBorder);
-    defer border.release();
+    var border_guard = winrt.ComRef(com.IBorder).init(try border_insp.queryInterface(com.IBorder));
+    defer border_guard.deinit();
     log.info("wrapInBorder: putChild...", .{});
-    try border.putChild(@ptrCast(element));
+    try border_guard.get().putChild(@ptrCast(element));
     log.info("wrapInBorder: OK", .{});
     return border_insp;
 }
@@ -712,13 +728,13 @@ fn wrapInGrid(self: *App, element: *winrt.IInspectable) !*winrt.IInspectable {
     log.info("wrapInGrid: creating Grid...", .{});
     const grid_insp = try self.activateXamlType(XamlClass.Grid);
     log.info("wrapInGrid: QI IPanel...", .{});
-    const panel = try grid_insp.queryInterface(com.IPanel);
-    defer panel.release();
+    var panel_guard = winrt.ComRef(com.IPanel).init(try grid_insp.queryInterface(com.IPanel));
+    defer panel_guard.deinit();
     log.info("wrapInGrid: getChildren...", .{});
-    const children = try panel.getChildren();
-    defer children.release();
+    var children_guard = winrt.ComRef(com.IVector_UIElement).init(try panel_guard.get().getChildren());
+    defer children_guard.deinit();
     log.info("wrapInGrid: append child...", .{});
-    try children.append(@ptrCast(element));
+    try children_guard.get().append(@ptrCast(element));
     log.info("wrapInGrid: OK", .{});
     return grid_insp;
 }
@@ -763,8 +779,9 @@ pub fn run(self: *App) !void {
     // Get Application statics to call Start().
     const app_class = try winrt.hstring(XamlClass.Application);
     defer winrt.deleteHString(app_class);
-    const statics = try winrt.getActivationFactory(com.IApplicationStatics, app_class);
-    defer statics.release();
+    var statics_guard = winrt.ComRef(com.IApplicationStatics).init(try winrt.getActivationFactory(com.IApplicationStatics, app_class));
+    defer statics_guard.deinit();
+    const statics = statics_guard.get();
 
     // Create the initialization callback (stack-allocated, used synchronously by Start).
     var callback = InitCallback.create(self);
@@ -1192,24 +1209,26 @@ fn onTabCloseRequested(self: *App, _: ?*anyopaque, args_obj: ?*anyopaque) void {
         self.closeActiveTab();
         return;
     };
-    defer _ = tab_insp.release();
+    var tab_insp_guard = winrt.ComRef(winrt.IInspectable).init(tab_insp);
+    defer tab_insp_guard.deinit();
 
     if (self.tab_view) |tv| {
-        const tab_items = tv.getTabItems() catch {
+        var tab_items_guard = winrt.ComRef(com.IVector_IInspectable).init(tv.getTabItems() catch {
             self.closeActiveTab();
             return;
-        };
-        const count = tab_items.getSize() catch {
+        });
+        defer tab_items_guard.deinit();
+        const count = tab_items_guard.get().getSize() catch {
             self.closeActiveTab();
             return;
         };
 
         var i: u32 = 0;
         while (i < count) : (i += 1) {
-            const item_ptr = tab_items.getAt(i) catch continue;
-            const item_insp: *winrt.IInspectable = @ptrCast(@alignCast(item_ptr));
-            defer _ = item_insp.release();
-            if (@intFromPtr(item_insp) == @intFromPtr(tab_insp)) {
+            const item_ptr = tab_items_guard.get().getAt(i) catch continue;
+            var item_insp_guard = winrt.ComRef(winrt.IInspectable).init(@ptrCast(@alignCast(item_ptr)));
+            defer item_insp_guard.deinit();
+            if (@intFromPtr(item_insp_guard.get()) == @intFromPtr(tab_insp_guard.get())) {
                 self.closeTab(@intCast(i));
                 return;
             }
@@ -1413,9 +1432,9 @@ fn attachSurfaceToTabItem(self: *App, prev_idx_opt: ?usize, idx: usize) !void {
         if (prev_surface.tab_view_item_inspectable) |prev_tvi| {
             const placeholder_class = try winrt.hstring(XamlClass.Border);
             defer winrt.deleteHString(placeholder_class);
-            const placeholder = try winrt.activateInstance(placeholder_class);
-            defer _ = placeholder.release();
-            self.setTabItemContent(prev_tvi, placeholder) catch {};
+            var placeholder_guard = winrt.ComRef(winrt.IInspectable).init(try winrt.activateInstance(placeholder_class));
+            defer placeholder_guard.deinit();
+            self.setTabItemContent(prev_tvi, placeholder_guard.get()) catch {};
         }
     };
 
@@ -1425,7 +1444,8 @@ fn attachSurfaceToTabItem(self: *App, prev_idx_opt: ?usize, idx: usize) !void {
 
     // Ensure the panel fills the tab content area.
     if (panel.queryInterface(com.IFrameworkElement)) |fe| {
-        defer fe.release();
+        var fe_guard = winrt.ComRef(com.IFrameworkElement).init(fe);
+        defer fe_guard.deinit();
     } else |_| {}
 
     log.info("attachSurfaceToTabItem: idx={} panel=0x{x}", .{ idx, @intFromPtr(panel) });
@@ -1478,8 +1498,9 @@ pub fn activateXamlType(self: *App, comptime class_name: [:0]const u8) !*winrt.I
                 log.warn("activateXamlType(provider): unaligned IXamlType pointer 0x{x}", .{xaml_type_ptr});
             }
             log.info("activateXamlType(provider): got IXamlType=0x{x}", .{xaml_type_ptr});
-            defer xaml_type.release();
-            const instance = try xaml_type.activateInstance();
+            var xaml_type_guard = winrt.ComRef(com.IXamlType).init(xaml_type);
+            defer xaml_type_guard.deinit();
+            const instance = try xaml_type_guard.get().activateInstance();
             const instance_ptr = @intFromPtr(instance);
             if (instance_ptr < 0x10000) {
                 log.err("activateXamlType(provider): suspicious activateInstance ptr 0x{x}", .{instance_ptr});
@@ -1502,10 +1523,10 @@ fn boxString(_: *App, str: winrt.HSTRING) !*winrt.IInspectable {
     log.info("boxString: getActivationFactory(IPropertyValueStatics)...", .{});
     const class_name = try winrt.hstring("Windows.Foundation.PropertyValue");
     defer winrt.deleteHString(class_name);
-    const factory = try winrt.getActivationFactory(com.IPropertyValueStatics, class_name);
-    defer factory.release();
+    var factory_guard = winrt.ComRef(com.IPropertyValueStatics).init(try winrt.getActivationFactory(com.IPropertyValueStatics, class_name));
+    defer factory_guard.deinit();
     log.info("boxString: createString...", .{});
-    const result = try factory.createString(str);
+    const result = try factory_guard.get().createString(str);
     log.info("boxString: OK", .{});
     return @ptrCast(@alignCast(result));
 }
@@ -1581,11 +1602,11 @@ fn loadXamlResources(self: *App, xa: *com.IApplication) void {
     if (true) {
         const brush_class = winrt.hstring(XamlClass.SolidColorBrush) catch return;
         defer winrt.deleteHString(brush_class);
-        const brush_insp = winrt.activateInstance(brush_class) catch return;
-        defer _ = brush_insp.release();
-        const brush = brush_insp.queryInterface(com.ISolidColorBrush) catch return;
-        defer brush.release();
-        brush.putColor(.{ .a = 255, .r = 0, .g = 0, .b = 0 }) catch {};
+        var brush_insp_guard = winrt.ComRef(winrt.IInspectable).init(winrt.activateInstance(brush_class) catch return);
+        defer brush_insp_guard.deinit();
+        var brush_guard = winrt.ComRef(com.ISolidColorBrush).init(brush_insp_guard.get().queryInterface(com.ISolidColorBrush) catch return);
+        defer brush_guard.deinit();
+        brush_guard.get().putColor(.{ .a = 255, .r = 0, .g = 0, .b = 0 }) catch {};
 
         // In a real implementation, we would insert these into the dictionary.
         // For now, we've already set the control background in createTabViewRoot.
@@ -1596,7 +1617,8 @@ fn loadXamlResources(self: *App, xa: *com.IApplication) void {
 fn verifyTabItemHasContent(content_control: *com.IContentControl) !bool {
     const current = try content_control.getContent();
     if (current) |insp| {
-        _ = insp.release();
+        var insp_guard = winrt.ComRef(winrt.IInspectable).init(insp);
+        defer insp_guard.deinit();
         return true;
     }
     return false;
@@ -1633,16 +1655,18 @@ fn setTitle(self: *App, title: [:0]const u8) void {
                 log.warn("setTitle: QI ITabViewItem failed: {}", .{err});
                 return;
             };
-            defer tvi.release();
+            var tvi_guard = winrt.ComRef(com.ITabViewItem).init(tvi);
+            defer tvi_guard.deinit();
             // Box the string as IInspectable for the Header property.
             log.info("setTitle: boxString...", .{});
             const boxed = self.boxString(h) catch |err| {
                 log.warn("setTitle: boxString failed: {}", .{err});
                 return;
             };
-            defer _ = boxed.release();
+            var boxed_guard = winrt.ComRef(winrt.IInspectable).init(boxed);
+            defer boxed_guard.deinit();
             log.info("setTitle: putHeader...", .{});
-            tvi.putHeader(@ptrCast(boxed)) catch {};
+            tvi_guard.get().putHeader(@ptrCast(boxed_guard.get())) catch {};
             log.info("setTitle: putHeader done", .{});
         }
     }
