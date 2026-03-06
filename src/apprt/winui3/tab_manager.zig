@@ -16,8 +16,8 @@ pub fn closeActiveTab(self: anytype) bool {
 
 pub fn newTab(
     self: anytype,
-    tabview_item_class: []const u8,
-    border_class_name: []const u8,
+    comptime tabview_item_class: [:0]const u8,
+    comptime border_class_name: [:0]const u8,
     initial_tab_title: []const u8,
 ) !void {
     const alloc = self.core_app.alloc;

@@ -91,6 +91,10 @@ pub fn TypedDelegate(comptime Context: type, comptime CallbackFn: type) type {
             return @ptrCast(&self.com);
         }
 
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
         fn fromComPtr(ptr: *anyopaque) *Self {
             const header: *ComHeader = @ptrCast(@alignCast(ptr));
             return @fieldParentPtr("com", header);

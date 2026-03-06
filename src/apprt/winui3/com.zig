@@ -33,6 +33,27 @@ pub fn hrCheck(hr: HRESULT) !void {
     if (hr < 0) return error.WinRTFailed;
 }
 
+/// IApplication ABI — provides access to Application.Resources (get/put).
+/// Used by xaml_helpers.loadXamlResources to set XamlControlsResources.
+pub const IApplicationAbi = extern struct {
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_Resources: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        put_Resources: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+};
+
+/// Check if a COM pointer looks valid (not null-page, properly aligned).
+pub fn isValidComPtr(ptr: usize) bool {
+    return ptr >= 0x10000;
+}
+
 pub const IUnknown = extern struct {
     pub const IID = GUID{ .Data1 = 0x00000000, .Data2 = 0x0000, .Data3 = 0x0000, .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
     lpVtbl: *const VTable,
@@ -91,6 +112,19 @@ pub const IVector = extern struct {
     pub fn insertAt(self: *@This(), i: u32, item: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertAt(self, i, item)); }
     pub fn append(self: *@This(), item: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Append(self, item)); }
     pub fn removeAt(self: *@This(), i: u32) !void { try hrCheck(self.lpVtbl.RemoveAt(self, i)); }
+    /// Find item by pointer identity. Returns index or null.
+    pub fn indexOf(self: *@This(), target: *anyopaque) !?u32 {
+        const count = try self.getSize();
+        var i: u32 = 0;
+        while (i < count) : (i += 1) {
+            const item = self.getAt(i) catch continue;
+            if (@intFromPtr(item) == @intFromPtr(target)) return i;
+            // Release the queried reference.
+            const unk: *IUnknown = @ptrCast(@alignCast(item));
+            _ = unk.lpVtbl.Release(@ptrCast(unk));
+        }
+        return null;
+    }
 };
 
 pub const IPropertyValue = extern struct {

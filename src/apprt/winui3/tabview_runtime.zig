@@ -4,7 +4,7 @@ const native_interop = @import("native_interop.zig");
 
 const log = std.log.scoped(.winui3);
 
-pub fn createRoot(self: anytype, window: *com.IWindow, tabview_class_name: []const u8) !?*com.ITabView {
+pub fn createRoot(self: anytype, window: *com.IWindow, comptime tabview_class_name: [:0]const u8) !?*com.ITabView {
     return if (self.debug_cfg.enable_tabview) blk: {
         log.info("initXaml step 7.5: Creating TabView via XAML type system...", .{});
         const tv_inspectable = self.activateXamlType(tabview_class_name) catch |err| {

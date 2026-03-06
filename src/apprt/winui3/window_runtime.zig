@@ -52,7 +52,7 @@ pub fn syncVisualDiagnostics(self: anytype) void {
     // Final attempt to force black background on root content.
     if (self.window) |win| {
         if (win.getContent() catch null) |content| {
-            var content_guard = winrt.ComRef(winrt.IInspectable).init(content);
+            var content_guard = winrt.ComRef(winrt.IInspectable).init(@as(*winrt.IInspectable, @ptrCast(content)));
             defer content_guard.deinit();
             // Set Dark theme on the content as well.
             if (content.queryInterface(com.IFrameworkElement)) |fe| {
