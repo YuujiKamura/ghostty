@@ -57,6 +57,27 @@ const IApplicationAbi = extern struct {
     };
 };
 
+const StartupStage = enum {
+    not_started,
+    xaml_entered,
+    application_ready,
+    window_ready,
+    window_activated,
+    content_ready,
+    parity_checked,
+    init_complete,
+    failed,
+};
+
+const ExitIntent = enum {
+    none,
+    window_closed,
+    terminate,
+    request_close_window,
+    quit_action,
+    close_all_windows,
+};
+
 /// The core application.
 core_app: *CoreApp,
 debug_cfg: debug_harness.RuntimeDebugConfig = .{},
@@ -94,6 +115,11 @@ tab_view: ?*com.ITabView = null,
 
 /// Whether the app is running.
 running: bool = false,
+startup_stage: StartupStage = .not_started,
+startup_bootstrapped: bool = false,
+parity_verified: bool = false,
+exit_intent: ExitIntent = .none,
+close_event_seen: bool = false,
 
 /// Whether the user is currently in a modal resize/move loop.
 /// Set by WM_ENTERSIZEMOVE / WM_EXITSIZEMOVE.
@@ -178,7 +204,75 @@ pub fn init(
 /// Called from inside Application.Start() callback — XAML thread is active here.
 pub fn initXaml(self: *App) !void {
     log.info("initXaml: creating Window inside XAML thread", .{});
+    self.startup_bootstrapped = false;
+    self.parity_verified = false;
+    self.setStartupStage(.xaml_entered);
+    errdefer self.setStartupStage(.failed);
 
+    try self.createAggregatedApplication();
+    self.setStartupStage(.application_ready);
+
+    const window = try self.createWindowAndHooks();
+    self.setStartupStage(.window_ready);
+
+    try self.activateWindowAndLoadResources(window);
+    self.setStartupStage(.window_activated);
+
+    try self.createWindowContent(window);
+    try self.scheduleDebugActions();
+    self.syncVisualDiagnostics();
+    self.setupNativeInputWindows();
+    self.startup_bootstrapped = true;
+    self.setStartupStage(.content_ready);
+
+    // --- TabView Parity Validation (Tier 2 Verification) ---
+    self.validateTabViewParity() catch |err| {
+        log.err("validateTabViewParity: CRITICAL_FAIL: {}", .{err});
+        return;
+    };
+    self.parity_verified = true;
+    self.setStartupStage(.parity_checked);
+    self.setStartupStage(.init_complete);
+}
+
+fn setStartupStage(self: *App, stage: StartupStage) void {
+    self.startup_stage = stage;
+    log.info("startup stage: {s}", .{startupStageLabel(stage)});
+}
+
+fn startupStageLabel(stage: StartupStage) []const u8 {
+    return switch (stage) {
+        .not_started => "not_started",
+        .xaml_entered => "xaml_entered",
+        .application_ready => "application_ready",
+        .window_ready => "window_ready",
+        .window_activated => "window_activated",
+        .content_ready => "content_ready",
+        .parity_checked => "parity_checked",
+        .init_complete => "init_complete",
+        .failed => "failed",
+    };
+}
+
+fn setExitIntent(self: *App, intent: ExitIntent) void {
+    if (self.exit_intent == .none) {
+        self.exit_intent = intent;
+    }
+    log.info("exit intent: {s}", .{exitIntentLabel(self.exit_intent)});
+}
+
+fn exitIntentLabel(intent: ExitIntent) []const u8 {
+    return switch (intent) {
+        .none => "none",
+        .window_closed => "window_closed",
+        .terminate => "terminate",
+        .request_close_window => "request_close_window",
+        .quit_action => "quit_action",
+        .close_all_windows => "close_all_windows",
+    };
+}
+
+fn createAggregatedApplication(self: *App) !void {
     // Step 0: Create the Application instance via IApplicationFactory with COM aggregation.
     // Application.Start() does NOT create an Application — the callback must.
     //
@@ -224,6 +318,9 @@ pub fn initXaml(self: *App) !void {
     // QI for IApplication so we can call Exit() during shutdown and access Resources.
     self.xaml_app = result.instance.queryInterface(com.IApplication) catch null;
     log.info("initXaml step 0 OK: Application created with IXamlMetadataProvider", .{});
+}
+
+fn createWindowAndHooks(self: *App) !*com.IWindow {
     // Step 1: Create a Window via RoActivateInstance.
     const window_class = try winrt.hstring("Microsoft.UI.Xaml.Window");
     defer winrt.deleteHString(window_class);
@@ -273,7 +370,10 @@ pub fn initXaml(self: *App) !void {
     );
     self.closed_token = try window.addClosed(self.closed_handler.?.comPtr());
     log.info("initXaml step 6 OK", .{});
+    return window;
+}
 
+fn activateWindowAndLoadResources(self: *App, window: *com.IWindow) !void {
     // Step 7: Activate the window (makes it visible).
     log.info("initXaml step 7: Activate...", .{});
     try window.activate();
@@ -312,7 +412,9 @@ pub fn initXaml(self: *App) !void {
     } else {
         log.warn("initXaml step 7.2: skipped (IApplication unavailable)", .{});
     }
+}
 
+fn createWindowContent(self: *App, window: *com.IWindow) !void {
     const tab_view = try self.createTabViewRoot(window);
     self.tab_view = tab_view;
 
@@ -328,7 +430,9 @@ pub fn initXaml(self: *App) !void {
     try self.registerTabViewHandlers(tab_view);
     // Step 8: Create the initial terminal content.
     try self.createInitialSurfaceContent(window, tab_view);
+}
 
+fn scheduleDebugActions(self: *App) !void {
     // Step 10: Test control logic.
     if (self.debug_cfg.new_tab_on_init) {
         log.info("initXaml step 10: new_tab_on_init triggered", .{});
@@ -357,7 +461,9 @@ pub fn initXaml(self: *App) !void {
         const CLOSE_TAB_TIMER_ID: usize = 998;
         _ = os.SetTimer(self.hwnd.?, CLOSE_TAB_TIMER_ID, ms, null);
     }
+}
 
+fn syncVisualDiagnostics(self: *App) void {
     log.info("WinUI 3 Window created and activated (HWND=0x{x})", .{@intFromPtr(self.hwnd.?)});
 
     // Final attempt to force black background on root content.
@@ -371,7 +477,9 @@ pub fn initXaml(self: *App) !void {
             self.setControlBackground(@ptrCast(content), .{ .a = 255, .r = 0, .g = 0, .b = 0 });
         }
     }
+}
 
+fn setupNativeInputWindows(self: *App) void {
     // Step 9: Find the WinUI3 child HWND...
     const child = os.GetWindow(self.hwnd.?, os.GW_CHILD);
     if (child) |child_hwnd| {
@@ -390,11 +498,6 @@ pub fn initXaml(self: *App) !void {
         _ = os.SetFocus(input_hwnd);
         log.info("initXaml step 9 OK: input HWND=0x{x} created + IME enabled", .{@intFromPtr(input_hwnd)});
     }
-
-    // --- TabView Parity Validation (Tier 2 Verification) ---
-    self.validateTabViewParity() catch |err| {
-        log.err("validateTabViewParity: CRITICAL_FAIL: {}", .{err});
-    };
 }
 
 fn createTabViewRoot(self: *App, window: *com.IWindow) !?*com.ITabView {
@@ -709,6 +812,9 @@ fn wrapInGrid(self: *App, element: *winrt.IInspectable) !*winrt.IInspectable {
 
 /// Closed event callback — triggered when the user closes the window.
 fn onWindowClosed(self: *App, _: ?*anyopaque, _: ?*anyopaque) void {
+    self.close_event_seen = true;
+    self.setExitIntent(.window_closed);
+
     // Tear down window hooks immediately on close event to avoid re-entrancy
     // with WinUI/XAML shutdown internals.
     if (self.input_hwnd) |input_hwnd| {
@@ -754,7 +860,16 @@ pub fn run(self: *App) !void {
     // then enters the XAML message loop. It blocks until the app exits.
     log.info("Calling Application.Start()...", .{});
     try statics.start(callback.comPtr());
-    log.info("Application.Start() returned", .{});
+    log.info(
+        "Application.Start() returned (startup={s} bootstrapped={} parity={} close_event={} exit_intent={s})",
+        .{
+            startupStageLabel(self.startup_stage),
+            self.startup_bootstrapped,
+            self.parity_verified,
+            self.close_event_seen,
+            exitIntentLabel(self.exit_intent),
+        },
+    );
 
     // CRITICAL: Perform full cleanup while WinRT is still active but after loop exit.
     self.fullCleanup();
@@ -762,6 +877,7 @@ pub fn run(self: *App) !void {
 
 pub fn terminate(self: *App) void {
     log.info("Termination requested", .{});
+    self.setExitIntent(.terminate);
     self.running = false;
     // Signal XAML to exit the message loop.
     if (self.xaml_app) |xa| {
@@ -770,7 +886,16 @@ pub fn terminate(self: *App) void {
 }
 
 fn fullCleanup(self: *App) void {
-    log.info("Starting full cleanup...", .{});
+    log.info(
+        "Starting full cleanup (startup={s} bootstrapped={} parity={} close_event={} exit_intent={s})",
+        .{
+            startupStageLabel(self.startup_stage),
+            self.startup_bootstrapped,
+            self.parity_verified,
+            self.close_event_seen,
+            exitIntentLabel(self.exit_intent),
+        },
+    );
     const alloc = self.core_app.alloc;
 
     // 1. Remove subclasses first.
@@ -824,6 +949,7 @@ pub fn wakeup(self: *App) void {
 }
 
 pub fn requestCloseWindow(self: *App) void {
+    self.setExitIntent(.request_close_window);
     self.running = false;
     if (self.window) |window| {
         window.close() catch |err| {
@@ -843,6 +969,7 @@ pub fn performAction(
 ) !bool {
     switch (action) {
         .quit => {
+            self.setExitIntent(.quit_action);
             self.running = false;
             if (self.xaml_app) |xa| {
                 xa.exit() catch {};
@@ -854,6 +981,7 @@ pub fn performAction(
             return false;
         },
         .close_all_windows => {
+            self.setExitIntent(.close_all_windows);
             self.running = false;
             if (self.xaml_app) |xa| {
                 xa.exit() catch {};
@@ -1685,7 +1813,6 @@ fn setTitle(self: *App, title: [:0]const u8) void {
 
 /// Win32 subclass procedure callback.
 /// Installed via SetWindowSubclass on the WinUI 3 window's HWND to intercept
-
 pub const subclassProc = @import("hacks.zig").subclassProc;
 pub const stowedExceptionHandler = @import("hacks.zig").stowedExceptionHandler;
 
