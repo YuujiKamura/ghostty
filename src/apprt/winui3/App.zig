@@ -504,12 +504,12 @@ fn createTabViewRoot(self: *App, window: *com.IWindow) !?*com.ITabView {
     return if (self.debug_cfg.enable_tabview) blk: {
         log.info("initXaml step 7.5: Creating TabView via XAML type system...", .{});
         const tv_inspectable = self.activateXamlType("Microsoft.UI.Xaml.Controls.TabView") catch |err| {
-            log.warn("TabView creation failed ({}), falling back to single-tab mode", .{err});
-            break :blk null;
+            log.err("TabView creation failed ({}), fail-fast because tabview is enabled", .{err});
+            return err;
         };
         const tv = tv_inspectable.queryInterface(com.ITabView) catch |err| {
-            log.warn("TabView QI for ITabView failed ({}), falling back to single-tab mode", .{err});
-            break :blk null;
+            log.err("TabView QI for ITabView failed ({}), fail-fast because tabview is enabled", .{err});
+            return err;
         };
 
         self.setControlBackground(@ptrCast(tv_inspectable), .{ .a = 255, .r = 0, .g = 0, .b = 0 });
@@ -520,9 +520,9 @@ fn createTabViewRoot(self: *App, window: *com.IWindow) !?*com.ITabView {
         } else |_| {}
 
         window.putContent(@ptrCast(tv_inspectable)) catch |err| {
-            log.warn("TabView putContent failed ({}), falling back to single-tab mode", .{err});
+            log.err("TabView putContent failed ({}), fail-fast because tabview is enabled", .{err});
             _ = tv.release();
-            break :blk null;
+            return err;
         };
 
         log.info("initXaml step 7.5 OK: TabView set as Window content", .{});
