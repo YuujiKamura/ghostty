@@ -8,6 +8,8 @@ const com = @import("com.zig");
 const App = @import("App.zig");
 
 const log = std.log.scoped(.winui3);
+const IID_IUnknown = winrt.GUID{ .Data1 = 0x00000000, .Data2 = 0x0000, .Data3 = 0x0000, .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+const IID_IAgileObject = winrt.GUID{ .Data1 = 0x94ea2b94, .Data2 = 0xe9cc, .Data3 = 0x49e0, .Data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
 
 // ---------------------------------------------------------------
 // ApplicationInitializationCallback — WinRT delegate for Application.Start()
@@ -21,6 +23,7 @@ pub fn InitCallback(comptime AppType: type) type {
         /// COM-visible part — extern struct with lpVtbl at offset 0.
         com: Com,
         app: *AppType,
+        ref_count: std.atomic.Value(u32),
 
         const Self = @This();
 
@@ -46,6 +49,7 @@ pub fn InitCallback(comptime AppType: type) type {
             return .{
                 .com = .{ .lpVtbl = &vtable_inst },
                 .app = app,
+                .ref_count = std.atomic.Value(u32).init(1),
             };
         }
 
@@ -59,8 +63,6 @@ pub fn InitCallback(comptime AppType: type) type {
         }
 
         fn qiFn(this: *anyopaque, riid: *const winrt.GUID, ppv: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
-            const IID_IUnknown = winrt.GUID{ .Data1 = 0x00000000, .Data2 = 0x0000, .Data3 = 0x0000, .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
-            const IID_IAgileObject = winrt.GUID{ .Data1 = 0x94ea2b94, .Data2 = 0xe9cc, .Data3 = 0x49e0, .Data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
             const IID_Self = winrt.GUID{ .Data1 = 0xd8eef1c9, .Data2 = 0x1234, .Data3 = 0x56f1, .Data4 = .{ 0x99, 0x63, 0x45, 0xdd, 0x9c, 0x80, 0xa6, 0x61 } };
 
             if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject) or guidEql(riid, &IID_Self)) {
@@ -72,12 +74,15 @@ pub fn InitCallback(comptime AppType: type) type {
             return @bitCast(@as(u32, 0x80004002)); // E_NOINTERFACE
         }
 
-        fn addRefFn(_: *anyopaque) callconv(.winapi) u32 {
-            return 1;
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
         }
 
-        fn releaseFn(_: *anyopaque) callconv(.winapi) u32 {
-            return 1;
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            return prev - 1;
         }
 
         fn invokeFn(this: *anyopaque, _: *anyopaque) callconv(.winapi) winrt.HRESULT {
@@ -193,6 +198,17 @@ pub const AppOuter = struct {
         };
     }
 
+    pub fn deinit(self: *AppOuter) void {
+        if (self.provider) |provider| {
+            provider.release();
+            self.provider = null;
+        }
+        if (self.inner) |inner| {
+            _ = inner.release();
+            self.inner = null;
+        }
+    }
+
     pub fn outerPtr(self: *AppOuter) *anyopaque {
         return @ptrCast(&self.iunknown);
     }
@@ -211,15 +227,13 @@ pub const AppOuter = struct {
 
     fn outerQueryInterface(this: *anyopaque, riid: *const winrt.GUID, ppv: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
         const self = fromIUnknownPtr(this);
-        const IID_IUnknown = winrt.GUID{ .Data1 = 0x00000000, .Data2 = 0x0000, .Data3 = 0x0000, .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
-        const IID_IAgileObject = winrt.GUID{ .Data1 = 0x94ea2b94, .Data2 = 0xe9cc, .Data3 = 0x49e0, .Data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
 
         // Log EVERY QI request with IID and inner state for crash diagnosis.
         log.info("outerQI: iid={{{x:0>8}-{x:0>4}-{x:0>4}-{x:0>2}{x:0>2}-{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}}} inner={}", .{
-            riid.Data1,      riid.Data2,      riid.Data3,
-            riid.Data4[0],   riid.Data4[1],   riid.Data4[2], riid.Data4[3],
-            riid.Data4[4],   riid.Data4[5],   riid.Data4[6], riid.Data4[7],
-            @intFromPtr(self.inner),
+            riid.Data1,    riid.Data2,    riid.Data3,
+            riid.Data4[0], riid.Data4[1], riid.Data4[2],
+            riid.Data4[3], riid.Data4[4], riid.Data4[5],
+            riid.Data4[6], riid.Data4[7], @intFromPtr(self.inner),
         });
 
         // IXamlMetadataProvider → return our metadata interface
@@ -283,7 +297,7 @@ pub const AppOuter = struct {
             },
         );
         if (next == 0) {
-            log.warn("lifetime: outer refcount reached zero", .{});
+            log.warn("lifetime: outer refcount reached zero (AppOuter is stack-owned; explicit deinit handles inner/provider)", .{});
         }
         return next;
     }

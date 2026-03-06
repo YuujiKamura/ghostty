@@ -36,6 +36,17 @@ const CONTEXT_MENU_CLOSE_TAB: usize = 1002;
 const CONTEXT_MENU_PASTE: usize = 1003;
 const CONTEXT_MENU_CLOSE_WINDOW: usize = 1004;
 const APPMODEL_ERROR_NO_PACKAGE: i32 = 15700;
+const XamlClass = struct {
+    const Application = "Microsoft.UI.Xaml.Application";
+    const Window = "Microsoft.UI.Xaml.Window";
+    const TabView = "Microsoft.UI.Xaml.Controls.TabView";
+    const TabViewItem = "Microsoft.UI.Xaml.Controls.TabViewItem";
+    const Border = "Microsoft.UI.Xaml.Controls.Border";
+    const Grid = "Microsoft.UI.Xaml.Controls.Grid";
+    const SolidColorBrush = "Microsoft.UI.Xaml.Media.SolidColorBrush";
+    const XamlControlsResources = "Microsoft.UI.Xaml.Controls.XamlControlsResources";
+    const XamlMetadataProvider = "Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider";
+};
 
 const InitCallback = com_aggregation.InitCallback(App);
 const AppOuter = com_aggregation.AppOuter;
@@ -281,7 +292,7 @@ fn createAggregatedApplication(self: *App) !void {
     // implementation: AppOuter acts as the controlling IUnknown, and when the XAML
     // framework QI's for IXamlMetadataProvider, it gets our implementation which
     // delegates to XamlControlsXamlMetaDataProvider.
-    const app_class = try winrt.hstring("Microsoft.UI.Xaml.Application");
+    const app_class = try winrt.hstring(XamlClass.Application);
     defer winrt.deleteHString(app_class);
     log.info("initXaml step 0: Creating Application with COM aggregation...", .{});
 
@@ -289,7 +300,7 @@ fn createAggregatedApplication(self: *App) !void {
     self.app_outer.init();
 
     // Activate XamlControlsXamlMetaDataProvider for metadata delegation.
-    const provider_class = winrt.hstring("Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider") catch null;
+    const provider_class = winrt.hstring(XamlClass.XamlMetadataProvider) catch null;
     if (provider_class) |pc| {
         defer winrt.deleteHString(pc);
         const provider_inspectable = winrt.activateInstance(pc) catch |err| blk: {
@@ -322,7 +333,7 @@ fn createAggregatedApplication(self: *App) !void {
 
 fn createWindowAndHooks(self: *App) !*com.IWindow {
     // Step 1: Create a Window via RoActivateInstance.
-    const window_class = try winrt.hstring("Microsoft.UI.Xaml.Window");
+    const window_class = try winrt.hstring(XamlClass.Window);
     defer winrt.deleteHString(window_class);
     log.info("initXaml step 1: RoActivateInstance(Window)...", .{});
     const window_inspectable = try winrt.activateInstance(window_class);
@@ -503,7 +514,7 @@ fn setupNativeInputWindows(self: *App) void {
 fn createTabViewRoot(self: *App, window: *com.IWindow) !?*com.ITabView {
     return if (self.debug_cfg.enable_tabview) blk: {
         log.info("initXaml step 7.5: Creating TabView via XAML type system...", .{});
-        const tv_inspectable = self.activateXamlType("Microsoft.UI.Xaml.Controls.TabView") catch |err| {
+        const tv_inspectable = self.activateXamlType(XamlClass.TabView) catch |err| {
             log.err("TabView creation failed ({}), fail-fast because tabview is enabled", .{err});
             return err;
         };
@@ -571,7 +582,7 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
 
     if (surface.swap_chain_panel) |panel| {
         if (tab_view) |tv| {
-            const tvi_inspectable = try self.activateXamlType("Microsoft.UI.Xaml.Controls.TabViewItem");
+            const tvi_inspectable = try self.activateXamlType(XamlClass.TabViewItem);
             const tvi = try tvi_inspectable.queryInterface(com.ITabViewItem);
             defer tvi.release();
 
@@ -585,7 +596,7 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
             if (!self.debug_cfg.tabview_item_no_content) {
                 const content_control = try tvi_inspectable.queryInterface(com.IContentControl);
                 defer content_control.release();
-                const placeholder_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Border");
+                const placeholder_class = try winrt.hstring(XamlClass.Border);
                 defer winrt.deleteHString(placeholder_class);
                 const placeholder = try winrt.activateInstance(placeholder_class);
                 defer _ = placeholder.release();
@@ -786,7 +797,7 @@ fn validateTabViewParity(self: *App) !void {
 
 fn wrapInBorder(self: *App, element: *winrt.IInspectable) !*winrt.IInspectable {
     log.info("wrapInBorder: creating Border...", .{});
-    const border_insp = try self.activateXamlType("Microsoft.UI.Xaml.Controls.Border");
+    const border_insp = try self.activateXamlType(XamlClass.Border);
     const border = try border_insp.queryInterface(com.IBorder);
     defer border.release();
     log.info("wrapInBorder: putChild...", .{});
@@ -797,7 +808,7 @@ fn wrapInBorder(self: *App, element: *winrt.IInspectable) !*winrt.IInspectable {
 
 fn wrapInGrid(self: *App, element: *winrt.IInspectable) !*winrt.IInspectable {
     log.info("wrapInGrid: creating Grid...", .{});
-    const grid_insp = try self.activateXamlType("Microsoft.UI.Xaml.Controls.Grid");
+    const grid_insp = try self.activateXamlType(XamlClass.Grid);
     log.info("wrapInGrid: QI IPanel...", .{});
     const panel = try grid_insp.queryInterface(com.IPanel);
     defer panel.release();
@@ -848,7 +859,7 @@ pub fn makeGLContextCurrent(_: *App) !void {}
 
 pub fn run(self: *App) !void {
     // Get Application statics to call Start().
-    const app_class = try winrt.hstring("Microsoft.UI.Xaml.Application");
+    const app_class = try winrt.hstring(XamlClass.Application);
     defer winrt.deleteHString(app_class);
     const statics = try winrt.getActivationFactory(com.IApplicationStatics, app_class);
     defer statics.release();
@@ -934,7 +945,7 @@ fn fullCleanup(self: *App) void {
     if (self.window) |window| window.release();
     if (self.xaml_app) |xa| xa.release();
     if (self.xaml_controls_resources) |xcr| _ = xcr.release();
-    if (self.app_outer.provider) |p| p.release();
+    self.app_outer.deinit();
 
     if (self.input_hwnd) |h| _ = os.DestroyWindow(h);
 
@@ -1114,7 +1125,7 @@ pub fn newTab(self: *App) !void {
 
     // Create TabViewItem and add to TabView.
     const tab_view = self.tab_view orelse return error.AppInitFailed;
-    const tvi_inspectable = try self.activateXamlType("Microsoft.UI.Xaml.Controls.TabViewItem");
+    const tvi_inspectable = try self.activateXamlType(XamlClass.TabViewItem);
     const tvi = try tvi_inspectable.queryInterface(com.ITabViewItem);
     defer tvi.release();
 
@@ -1128,7 +1139,7 @@ pub fn newTab(self: *App) !void {
     // Set placeholder content on tab item. Active panel is attached on selection.
     const content_control = try tvi_inspectable.queryInterface(com.IContentControl);
     defer content_control.release();
-    const placeholder_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Border");
+    const placeholder_class = try winrt.hstring(XamlClass.Border);
     defer winrt.deleteHString(placeholder_class);
     const placeholder = try winrt.activateInstance(placeholder_class);
     defer _ = placeholder.release();
@@ -1221,7 +1232,7 @@ pub fn toggleTabViewContainer(self: *App) !void {
 
     // single panel -> TabView
     log.info("toggleTabViewContainer: single->tab start", .{});
-    const tv_inspectable = try self.activateXamlType("Microsoft.UI.Xaml.Controls.TabView");
+    const tv_inspectable = try self.activateXamlType(XamlClass.TabView);
     const tv = tv_inspectable.queryInterface(com.ITabView) catch |err| {
         log.warn("toggleTabViewContainer: TabView QI failed: {}", .{err});
         return;
@@ -1238,7 +1249,7 @@ pub fn toggleTabViewContainer(self: *App) !void {
         log.warn("toggleTabViewContainer: register handlers failed: {}", .{err});
     };
 
-    const tvi_inspectable = try self.activateXamlType("Microsoft.UI.Xaml.Controls.TabViewItem");
+    const tvi_inspectable = try self.activateXamlType(XamlClass.TabViewItem);
     const tvi = try tvi_inspectable.queryInterface(com.ITabViewItem);
     defer tvi.release();
 
@@ -1483,7 +1494,7 @@ pub fn setControlBackground(_: *App, control_insp: *winrt.IInspectable, color: c
         return;
     }
 
-    const brush_class = winrt.hstring("Microsoft.UI.Xaml.Media.SolidColorBrush") catch return;
+    const brush_class = winrt.hstring(XamlClass.SolidColorBrush) catch return;
     defer winrt.deleteHString(brush_class);
     const brush_insp = winrt.activateInstance(brush_class) catch |err| {
         log.warn("setControlBackground: SolidColorBrush activation failed: {}", .{err});
@@ -1569,7 +1580,7 @@ fn attachSurfaceToTabItem(self: *App, prev_idx_opt: ?usize, idx: usize) !void {
     if (prev_idx_opt) |prev_idx| if (prev_idx < self.surfaces.items.len and prev_idx != idx) {
         const prev_surface = self.surfaces.items[prev_idx];
         if (prev_surface.tab_view_item_inspectable) |prev_tvi| {
-            const placeholder_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Border");
+            const placeholder_class = try winrt.hstring(XamlClass.Border);
             defer winrt.deleteHString(placeholder_class);
             const placeholder = try winrt.activateInstance(placeholder_class);
             defer _ = placeholder.release();
@@ -1712,7 +1723,7 @@ fn toggleFullscreen(self: *App) void {
 /// to find their XAML templates. Without it, RoActivateInstance returns E_NOTIMPL.
 fn loadXamlResources(self: *App, xa: *com.IApplication) void {
     log.info("loadXamlResources: starting deterministic bootstrap...", .{});
-    const xcr_class = winrt.hstring("Microsoft.UI.Xaml.Controls.XamlControlsResources") catch {
+    const xcr_class = winrt.hstring(XamlClass.XamlControlsResources) catch {
         log.err("loadXamlResources: Failed to create XamlControlsResources HSTRING", .{});
         return;
     };
@@ -1737,7 +1748,7 @@ fn loadXamlResources(self: *App, xa: *com.IApplication) void {
     // Step 5: Override TabView resources to black (Windows Terminal pattern).
     // This removes the default white/gray backgrounds of the tab strip.
     if (true) {
-        const brush_class = winrt.hstring("Microsoft.UI.Xaml.Media.SolidColorBrush") catch return;
+        const brush_class = winrt.hstring(XamlClass.SolidColorBrush) catch return;
         defer winrt.deleteHString(brush_class);
         const brush_insp = winrt.activateInstance(brush_class) catch return;
         defer _ = brush_insp.release();

@@ -417,10 +417,13 @@ pub fn redrawInspector(_: *Surface) void {
 pub fn setTabTitle(self: *Surface, title: [:0]const u8) void {
     const alloc = self.app.core_app.alloc;
     if (self.title) |old_title| alloc.free(old_title);
-    
+
     // Store the title for getTitle() queries
-    self.title = alloc.dupeZ(u8, title) catch null;
-    
+    self.title = alloc.dupeZ(u8, title) catch {
+        log.warn("setTabTitle: failed to allocate title copy (len={})", .{title.len});
+        return;
+    };
+
     // Actually update the TabViewItem UI using WinRT PropertyValue
     if (self.tab_view_item_inspectable) |tvi_insp| {
         if (tvi_insp.queryInterface(com.ITabViewItem)) |tvi| {
@@ -797,7 +800,12 @@ pub fn rebindSwapChain(self: *Surface) void {
 pub fn setMouseShape(self: *Surface, shape: terminal.MouseShape) void {
     _ = self;
     log.info("Surface.setMouseShape: {s}", .{@tagName(shape)});
-    // TODO: Implement actual mouse cursor change using Win32 LoadCursor/SetCursor
+    const cursor_id = cursorIdForShape(shape);
+    const cursor = os.LoadCursorW(null, cursor_id) orelse {
+        log.warn("Surface.setMouseShape: LoadCursorW failed for shape={s}", .{@tagName(shape)});
+        return;
+    };
+    _ = os.SetCursor(cursor);
 }
 
 pub fn setProgressReport(self: *Surface, value: terminal.osc.Command.ProgressReport) void {
@@ -833,6 +841,23 @@ test "computeFraction" {
     try std.testing.expectEqual(@as(f64, 1.0), computeFraction(255));
     try std.testing.expectEqual(@as(f64, 0.0), computeFraction(0));
     try std.testing.expectEqual(@as(f64, 0.5), computeFraction(50));
+}
+
+fn cursorIdForShape(shape: terminal.MouseShape) os.LPCWSTR {
+    return switch (shape) {
+        .default, .context_menu, .pointer, .alias, .copy, .grab, .grabbing, .zoom_in, .zoom_out => os.IDC_ARROW,
+        .text, .vertical_text, .cell => os.IDC_IBEAM,
+        .help => os.IDC_HELP,
+        .progress => os.IDC_APPSTARTING,
+        .wait => os.IDC_WAIT,
+        .crosshair => os.IDC_CROSS,
+        .move, .all_scroll => os.IDC_SIZEALL,
+        .no_drop, .not_allowed => os.IDC_NO,
+        .col_resize, .e_resize, .w_resize, .ew_resize => os.IDC_SIZEWE,
+        .row_resize, .n_resize, .s_resize, .ns_resize => os.IDC_SIZENS,
+        .ne_resize, .sw_resize, .nesw_resize => os.IDC_SIZENESW,
+        .nw_resize, .se_resize, .nwse_resize => os.IDC_SIZENWSE,
+    };
 }
 
 test "Surface title memory management" {

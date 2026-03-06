@@ -76,6 +76,18 @@ pub const CS_VREDRAW: UINT = 0x0001;
 
 // --- Misc constants ---
 pub const IDC_ARROW: LPCWSTR = @ptrFromInt(32512);
+pub const IDC_IBEAM: LPCWSTR = @ptrFromInt(32513);
+pub const IDC_WAIT: LPCWSTR = @ptrFromInt(32514);
+pub const IDC_CROSS: LPCWSTR = @ptrFromInt(32515);
+pub const IDC_SIZEALL: LPCWSTR = @ptrFromInt(32646);
+pub const IDC_SIZENWSE: LPCWSTR = @ptrFromInt(32642);
+pub const IDC_SIZENESW: LPCWSTR = @ptrFromInt(32643);
+pub const IDC_SIZEWE: LPCWSTR = @ptrFromInt(32644);
+pub const IDC_SIZENS: LPCWSTR = @ptrFromInt(32645);
+pub const IDC_NO: LPCWSTR = @ptrFromInt(32648);
+pub const IDC_HAND: LPCWSTR = @ptrFromInt(32649);
+pub const IDC_APPSTARTING: LPCWSTR = @ptrFromInt(32650);
+pub const IDC_HELP: LPCWSTR = @ptrFromInt(32651);
 pub const COLOR_WINDOW: c_int = 5;
 pub const SW_HIDE: c_int = 0;
 pub const SW_SHOWNORMAL: c_int = 1;
@@ -219,6 +231,7 @@ pub extern "user32" fn PostQuitMessage(nExitCode: c_int) callconv(.winapi) void;
 pub extern "user32" fn PostMessageW(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.winapi) BOOL;
 pub extern "user32" fn DefWindowProcW(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.winapi) LRESULT;
 pub extern "user32" fn LoadCursorW(hInstance: ?HINSTANCE, lpCursorName: LPCWSTR) callconv(.winapi) ?HCURSOR;
+pub extern "user32" fn SetCursor(hCursor: ?HCURSOR) callconv(.winapi) ?HCURSOR;
 pub extern "user32" fn GetClientRect(hWnd: HWND, lpRect: *RECT) callconv(.winapi) BOOL;
 pub extern "user32" fn BeginPaint(hWnd: HWND, lpPaint: *PAINTSTRUCT) callconv(.winapi) ?HDC;
 pub extern "user32" fn EndPaint(hWnd: HWND, lpPaint: *const PAINTSTRUCT) callconv(.winapi) BOOL;
