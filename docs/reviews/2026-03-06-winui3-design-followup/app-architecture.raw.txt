@@ -1,0 +1,33 @@
+## Analyze: App.zig
+
+GhosttyのWinUI 3ランタイム実装である`App.zig`の分析結果を簡潔に報告します。
+
+### 1. 目的と責務
+*   **目的:** Windows環境におけるGhosttyのメインエントランスおよびUIマネージャ。
+*   **責務:**
+    *   **ブートストラップ:** Windows App SDKの初期化とWinRTランタイムの起動。
+    *   **ウィンドウ管理:** WinUI 3 Windowの作成と、Win32 HWNDのサブクラス化によるメッセージルーティング。
+    *   **タブ管理:** `TabView`コントロールを使用したマルチタブ（`Surface`）のライフサイクル管理。
+    *   **入力制御:** WinUIの入力をバイパスし、専用の透過HWND（`input_hwnd`）を用いた直接的なIME/キーボード入力のハンドリング。
+
+### 2. 依存関係
+*   **内部依存:**
+    *   `CoreApp` / `CoreSurface`: Ghostty共通のロジック層。
+    *   `Surface.zig`: タブごとのレンダリング・ターミナル実体。
+    *   `winrt.zig` / `com.zig`: 低レベルなWindows Runtime/COM相互運用。
+    *   `hacks.zig`: HWNDサブクラスや例外ハンドラの特殊処理。
+*   **外部依存:**
+    *   **Windows App SDK / WinUI 3:** UIフレームワーク。
+    *   **Kernel32 / User32:** ウィンドウ配置やパッケージ情報の取得。
+
+### 3. 設計パターン
+*   **COM Aggregation (コンポジション):** `IXamlMetadataProvider`を実装するために、WinUIの`Application`オブジェクトを拡張する手法。
+*   **Hybrid Subclassing:** WinUI 3の抽象化レイヤーの下で、Win32メッセージを直接フックして制御する。
+*   **Input Overlay:** 高パフォーマンスな入力処理のため、UIツリーとは別に専用の入力窓を被せるパターン。
+*   **State Machine:** `StartupStage`により、複雑な非同期初期化プロセスを管理。
+
+### 4. 改善点
+*   **`initXaml`の肥大化:** 初期化ロジックが1つの関数に集中しているため、コンポーネントごとの初期化クラスに分離する余地があります。
+*   **手動COM管理:** `AddRef`/`Release`が随所に散在しており、Zigの`errdefer`はあるものの、RAII的なラッパーによる自動化が望まれます。
+*   **エラー伝搬の不一致:** 一部のヘルパー関数でエラーを握り潰してログ出力のみに留めている箇所があり、クリティカルな失敗時の挙動が不明確です。
+*   **定数の外部化:** WinRTクラス名（"Microsoft.UI.Xaml..."）などの文字列がハードコードされているため、一箇所に定義を集約すべきです。
