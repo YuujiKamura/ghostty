@@ -16,76 +16,80 @@ const log = std.log.scoped(.winui3);
 // vtable: IUnknown(0-2) + Invoke(3)
 // ---------------------------------------------------------------
 
-pub const InitCallback = struct {
-    /// COM-visible part — extern struct with lpVtbl at offset 0.
-    com: Com,
-    app: *App,
+pub fn InitCallback(comptime AppType: type) type {
+    return struct {
+        /// COM-visible part — extern struct with lpVtbl at offset 0.
+        com: Com,
+        app: *AppType,
 
-    const Com = extern struct {
-        lpVtbl: *const VTable,
+        const Self = @This();
 
-        const VTable = extern struct {
-            QueryInterface: *const fn (*anyopaque, *const winrt.GUID, *?*anyopaque) callconv(.winapi) winrt.HRESULT,
-            AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-            Release: *const fn (*anyopaque) callconv(.winapi) u32,
-            Invoke: *const fn (*anyopaque, *anyopaque) callconv(.winapi) winrt.HRESULT,
+        const Com = extern struct {
+            lpVtbl: *const VTable,
+
+            const VTable = extern struct {
+                QueryInterface: *const fn (*anyopaque, *const winrt.GUID, *?*anyopaque) callconv(.winapi) winrt.HRESULT,
+                AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+                Release: *const fn (*anyopaque) callconv(.winapi) u32,
+                Invoke: *const fn (*anyopaque, *anyopaque) callconv(.winapi) winrt.HRESULT,
+            };
         };
-    };
 
-    const vtable_inst = Com.VTable{
-        .QueryInterface = &qiFn,
-        .AddRef = &addRefFn,
-        .Release = &releaseFn,
-        .Invoke = &invokeFn,
-    };
-
-    pub fn create(app: *App) InitCallback {
-        return .{
-            .com = .{ .lpVtbl = &vtable_inst },
-            .app = app,
+        const vtable_inst = Com.VTable{
+            .QueryInterface = &qiFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .Invoke = &invokeFn,
         };
-    }
 
-    pub fn comPtr(self: *InitCallback) *anyopaque {
-        return @ptrCast(&self.com);
-    }
+        pub fn create(app: *AppType) Self {
+            return .{
+                .com = .{ .lpVtbl = &vtable_inst },
+                .app = app,
+            };
+        }
 
-    fn fromComPtr(ptr: *anyopaque) *InitCallback {
-        const com_ptr: *Com = @ptrCast(@alignCast(ptr));
-        return @fieldParentPtr("com", com_ptr);
-    }
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
 
-    fn qiFn(this: *anyopaque, riid: *const winrt.GUID, ppv: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
-        const IID_IUnknown = winrt.GUID{ .Data1 = 0x00000000, .Data2 = 0x0000, .Data3 = 0x0000, .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
-        const IID_IAgileObject = winrt.GUID{ .Data1 = 0x94ea2b94, .Data2 = 0xe9cc, .Data3 = 0x49e0, .Data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
-        const IID_Self = winrt.GUID{ .Data1 = 0xd8eef1c9, .Data2 = 0x1234, .Data3 = 0x56f1, .Data4 = .{ 0x99, 0x63, 0x45, 0xdd, 0x9c, 0x80, 0xa6, 0x61 } };
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const com_ptr: *Com = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", com_ptr);
+        }
 
-        if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject) or guidEql(riid, &IID_Self)) {
-            ppv.* = this;
-            _ = addRefFn(this);
+        fn qiFn(this: *anyopaque, riid: *const winrt.GUID, ppv: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
+            const IID_IUnknown = winrt.GUID{ .Data1 = 0x00000000, .Data2 = 0x0000, .Data3 = 0x0000, .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = winrt.GUID{ .Data1 = 0x94ea2b94, .Data2 = 0xe9cc, .Data3 = 0x49e0, .Data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const IID_Self = winrt.GUID{ .Data1 = 0xd8eef1c9, .Data2 = 0x1234, .Data3 = 0x56f1, .Data4 = .{ 0x99, 0x63, 0x45, 0xdd, 0x9c, 0x80, 0xa6, 0x61 } };
+
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject) or guidEql(riid, &IID_Self)) {
+                ppv.* = this;
+                _ = addRefFn(this);
+                return 0; // S_OK
+            }
+            ppv.* = null;
+            return @bitCast(@as(u32, 0x80004002)); // E_NOINTERFACE
+        }
+
+        fn addRefFn(_: *anyopaque) callconv(.winapi) u32 {
+            return 1;
+        }
+
+        fn releaseFn(_: *anyopaque) callconv(.winapi) u32 {
+            return 1;
+        }
+
+        fn invokeFn(this: *anyopaque, _: *anyopaque) callconv(.winapi) winrt.HRESULT {
+            const self = fromComPtr(this);
+            self.app.initXaml() catch |err| {
+                log.err("initXaml failed in Application.Start callback: {}", .{err});
+                return @bitCast(@as(u32, 0x80004005)); // E_FAIL
+            };
             return 0; // S_OK
         }
-        ppv.* = null;
-        return @bitCast(@as(u32, 0x80004002)); // E_NOINTERFACE
-    }
-
-    fn addRefFn(_: *anyopaque) callconv(.winapi) u32 {
-        return 1;
-    }
-
-    fn releaseFn(_: *anyopaque) callconv(.winapi) u32 {
-        return 1;
-    }
-
-    fn invokeFn(this: *anyopaque, _: *anyopaque) callconv(.winapi) winrt.HRESULT {
-        const self = fromComPtr(this);
-        self.app.initXaml() catch |err| {
-            log.err("initXaml failed in Application.Start callback: {}", .{err});
-            return @bitCast(@as(u32, 0x80004005)); // E_FAIL
-        };
-        return 0; // S_OK
-    }
-};
+    };
+}
 
 pub fn guidEql(a: *const winrt.GUID, b: *const winrt.GUID) bool {
     return a.Data1 == b.Data1 and a.Data2 == b.Data2 and a.Data3 == b.Data3 and
@@ -110,6 +114,17 @@ pub fn guidEql(a: *const winrt.GUID, b: *const winrt.GUID) bool {
 // ---------------------------------------------------------------
 
 pub const AppOuter = struct {
+    const TypeKind = enum(i32) {
+        primitive = 0,
+        metadata = 1,
+        custom = 2,
+    };
+
+    const TypeName = extern struct {
+        name: ?winrt.HSTRING,
+        kind: TypeKind,
+    };
+
     /// The COM-visible IUnknown vtable pointer — must be at offset 0.
     iunknown: IUnknownVtblPtr,
     /// The IXamlMetadataProvider vtable pointer — at offset 8.
@@ -145,7 +160,7 @@ pub const AppOuter = struct {
         GetRuntimeClassName: *const fn (*anyopaque, *?winrt.HSTRING) callconv(.winapi) winrt.HRESULT,
         GetTrustLevel: *const fn (*anyopaque, *u32) callconv(.winapi) winrt.HRESULT,
         // IXamlMetadataProvider (slots 6-8)
-        GetXamlType: *const fn (*anyopaque, [*]const u8, *?*anyopaque) callconv(.winapi) winrt.HRESULT,
+        GetXamlType: *const fn (*anyopaque, TypeName, *?*anyopaque) callconv(.winapi) winrt.HRESULT,
         GetXamlType_2: *const fn (*anyopaque, ?winrt.HSTRING, *?*anyopaque) callconv(.winapi) winrt.HRESULT,
         GetXmlnsDefinitions: *const fn (*anyopaque, *u32, *?[*]*anyopaque) callconv(.winapi) winrt.HRESULT,
     };
@@ -241,13 +256,37 @@ pub const AppOuter = struct {
 
     fn outerAddRef(this: *anyopaque) callconv(.winapi) u32 {
         const self = fromIUnknownPtr(this);
-        return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        const next = self.ref_count.fetchAdd(1, .monotonic) + 1;
+        log.info(
+            "lifetime: outerAddRef this=0x{x} ref={} inner=0x{x} provider=0x{x}",
+            .{
+                @intFromPtr(this),
+                next,
+                if (self.inner) |p| @intFromPtr(p) else @as(usize, 0),
+                if (self.provider) |p| @intFromPtr(p) else @as(usize, 0),
+            },
+        );
+        return next;
     }
 
     fn outerRelease(this: *anyopaque) callconv(.winapi) u32 {
         const self = fromIUnknownPtr(this);
         const prev = self.ref_count.fetchSub(1, .monotonic);
-        return prev - 1;
+        const next = prev - 1;
+        log.info(
+            "lifetime: outerRelease this=0x{x} ref={} -> {} inner=0x{x} provider=0x{x}",
+            .{
+                @intFromPtr(this),
+                prev,
+                next,
+                if (self.inner) |p| @intFromPtr(p) else @as(usize, 0),
+                if (self.provider) |p| @intFromPtr(p) else @as(usize, 0),
+            },
+        );
+        if (next == 0) {
+            log.warn("lifetime: outer refcount reached zero", .{});
+        }
+        return next;
     }
 
     // --- IXamlMetadataProvider interface (delegating IUnknown to outer) ---
@@ -259,12 +298,16 @@ pub const AppOuter = struct {
 
     fn metadataAddRef(this: *anyopaque) callconv(.winapi) u32 {
         const self = fromIMetadataPtr(this);
-        return outerAddRef(@ptrCast(&self.iunknown));
+        const next = outerAddRef(@ptrCast(&self.iunknown));
+        log.info("lifetime: metadataAddRef this=0x{x} ref={}", .{ @intFromPtr(this), next });
+        return next;
     }
 
     fn metadataRelease(this: *anyopaque) callconv(.winapi) u32 {
         const self = fromIMetadataPtr(this);
-        return outerRelease(@ptrCast(&self.iunknown));
+        const next = outerRelease(@ptrCast(&self.iunknown));
+        log.info("lifetime: metadataRelease this=0x{x} ref={}", .{ @intFromPtr(this), next });
+        return next;
     }
 
     fn metadataGetIids(_: *anyopaque, count: *u32, iids: *?[*]winrt.GUID) callconv(.winapi) winrt.HRESULT {
@@ -283,14 +326,13 @@ pub const AppOuter = struct {
         return 0; // S_OK
     }
 
-    fn metadataGetXamlType(this: *anyopaque, type_name: [*]const u8, result: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
-        log.info("metadataGetXamlType called (slot 6, TypeName overload)", .{});
-        const self = fromIMetadataPtr(this);
-        if (self.provider) |provider| {
-            const hr = provider.lpVtbl.GetXamlType(@ptrCast(provider), type_name, result);
-            log.info("metadataGetXamlType delegated, hr=0x{x}", .{@as(u32, @bitCast(hr))});
-            return hr;
-        }
+    fn metadataGetXamlType(this: *anyopaque, type_name: TypeName, result: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
+        _ = this;
+        const name_ptr = if (type_name.name) |n| @intFromPtr(n) else @as(usize, 0);
+        log.info("metadataGetXamlType called (slot 6, TypeName overload) kind={} name=0x{x} -> returning null (safe path)", .{
+            @intFromEnum(type_name.kind),
+            name_ptr,
+        });
         result.* = null;
         return 0; // S_OK — return null IXamlType (type not found)
     }
@@ -310,7 +352,8 @@ pub const AppOuter = struct {
     fn metadataGetXmlnsDefinitions(this: *anyopaque, count: *u32, definitions: *?[*]*anyopaque) callconv(.winapi) winrt.HRESULT {
         const self = fromIMetadataPtr(this);
         if (self.provider) |provider| {
-            return provider.lpVtbl.GetXmlnsDefinitions(@ptrCast(provider), count, definitions);
+            // Cast *?[*]*anyopaque to *?*anyopaque to match VTable signature
+            return provider.lpVtbl.GetXmlnsDefinitions(@ptrCast(provider), count, @ptrCast(definitions));
         }
         count.* = 0;
         definitions.* = null;

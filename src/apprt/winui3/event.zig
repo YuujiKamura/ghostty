@@ -9,6 +9,5 @@ pub fn TypedEventHandler(comptime Context: type, comptime CallbackFn: type) type
 }
 
 pub fn SimpleEventHandler(comptime Context: type) type {
-    return delegate.TypedDelegate(Context, *const fn (*Context, *anyopaque, *anyopaque) void);
+    return delegate.TypedDelegate(Context, *const fn (*Context, ?*anyopaque, ?*anyopaque) void);
 }
-

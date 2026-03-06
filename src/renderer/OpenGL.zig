@@ -4,6 +4,7 @@ pub const OpenGL = @This();
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
+const build_config = @import("../build_config.zig");
 const gl = @import("opengl");
 const shadertoy = @import("shadertoy.zig");
 const apprt = @import("../apprt.zig");
@@ -233,21 +234,14 @@ fn prepareContext(getProcAddress: anytype) !void {
 pub fn surfaceInit(surface: *apprt.Surface) !void {
     _ = surface;
 
-    switch (apprt.runtime) {
-        else => @compileError("unsupported app runtime for OpenGL"),
+    switch (build_config.app_runtime) {
+        .none => {},
 
         // GTK uses global OpenGL context so we load from null.
-        apprt.gtk,
-        => try prepareContext(null),
+        .gtk => try prepareContext(null),
 
-        apprt.embedded => {
-            // TODO(mitchellh): this does nothing today to allow libghostty
-            // to compile for OpenGL targets but libghostty is strictly
-            // broken for rendering on this platforms.
-        },
-
-        apprt.win32 => {
-            // Win32 manages its own OpenGL context via WGL.
+        .win32, .winui3 => {
+            // Win32/WinUI 3 manages its own OpenGL context via WGL.
             // The context is already current when this is called.
             try prepareContext(null);
         },
@@ -268,8 +262,8 @@ pub fn surfaceInit(surface: *apprt.Surface) !void {
 pub fn finalizeSurfaceInit(self: *const OpenGL, surface: *apprt.Surface) !void {
     _ = self;
 
-    switch (apprt.runtime) {
-        apprt.win32 => {
+    switch (build_config.app_runtime) {
+        .win32, .winui3 => {
             // Release the OpenGL context from the main thread so the
             // renderer thread can acquire it.
             surface.app.releaseGLContext();
@@ -282,23 +276,10 @@ pub fn finalizeSurfaceInit(self: *const OpenGL, surface: *apprt.Surface) !void {
 pub fn threadEnter(self: *const OpenGL, surface: *apprt.Surface) !void {
     _ = self;
 
-    switch (apprt.runtime) {
-        else => @compileError("unsupported app runtime for OpenGL"),
+    switch (build_config.app_runtime) {
+        .none => {},
 
-        apprt.gtk => {
-            // GTK doesn't support threaded OpenGL operations as far as I can
-            // tell, so we use the renderer thread to setup all the state
-            // but then do the actual draws and texture syncs and all that
-            // on the main thread. As such, we don't do anything here.
-        },
-
-        apprt.embedded => {
-            // TODO(mitchellh): this does nothing today to allow libghostty
-            // to compile for OpenGL targets but libghostty is strictly
-            // broken for rendering on this platforms.
-        },
-
-        apprt.win32 => {
+        .win32, .winui3 => {
             // Make the OpenGL context current on this (renderer) thread.
             try surface.app.makeGLContextCurrent();
             try prepareContext(null);
@@ -324,6 +305,13 @@ pub fn threadEnter(self: *const OpenGL, surface: *apprt.Surface) !void {
                 log.info("swap interval = {}", .{getSwapInterval()});
             }
         },
+
+        .gtk => {
+            // GTK doesn't support threaded OpenGL operations as far as I can
+            // tell, so we use the renderer thread to setup all the state
+            // but then do the actual draws and texture syncs and all that
+            // on the main thread. As such, we don't do anything here.
+        },
     }
 }
 
@@ -331,19 +319,15 @@ pub fn threadEnter(self: *const OpenGL, surface: *apprt.Surface) !void {
 pub fn threadExit(self: *const OpenGL) void {
     _ = self;
 
-    switch (apprt.runtime) {
-        else => @compileError("unsupported app runtime for OpenGL"),
+    switch (build_config.app_runtime) {
+        .none => {},
 
-        apprt.gtk => {
+        .gtk => {
             // We don't need to do any unloading for GTK because we may
             // be sharing the global bindings with other windows.
         },
 
-        apprt.embedded => {
-            // TODO: see threadEnter
-        },
-
-        apprt.win32 => {
+        .win32, .winui3 => {
             // Release the OpenGL context from the renderer thread.
             const win32_gl = struct {
                 extern "opengl32" fn wglMakeCurrent(hdc: ?std.os.windows.HANDLE, hglrc: ?std.os.windows.HANDLE) callconv(.winapi) std.os.windows.BOOL;
@@ -356,15 +340,15 @@ pub fn threadExit(self: *const OpenGL) void {
 pub fn displayRealized(self: *const OpenGL) void {
     _ = self;
 
-    switch (apprt.runtime) {
-        apprt.gtk => prepareContext(null) catch |err| {
+    switch (build_config.app_runtime) {
+        .none, .win32, .winui3 => {},
+
+        .gtk => prepareContext(null) catch |err| {
             log.warn(
                 "Error preparing GL context in displayRealized, err={}",
                 .{err},
             );
         },
-
-        else => @compileError("only GTK should be calling displayRealized"),
     }
 }
 
@@ -374,8 +358,8 @@ pub fn displayRealized(self: *const OpenGL) void {
 /// current window client area, because there is no GLArea equivalent
 /// that does this automatically (unlike GTK).
 pub fn drawFrameStart(self: *OpenGL) void {
-    switch (apprt.runtime) {
-        apprt.win32 => {
+    switch (build_config.app_runtime) {
+        .win32, .winui3 => {
             self.perf.recordFrameStart();
 
             // Wait on the previous frame's GL fence to ensure the GPU
@@ -428,8 +412,8 @@ pub fn drawFrameStart(self: *OpenGL) void {
 
 /// Actions taken after `drawFrame` is done.
 pub fn drawFrameEnd(self: *OpenGL) void {
-    switch (apprt.runtime) {
-        apprt.win32 => {
+    switch (build_config.app_runtime) {
+        .win32, .winui3 => {
             // Swap the front and back buffers to display the rendered frame.
             const win32_gl = struct {
                 extern "opengl32" fn wglGetCurrentDC() callconv(.winapi) ?std.os.windows.HANDLE;
@@ -466,7 +450,7 @@ pub fn initShaders(
 pub fn surfaceSize(self: *const OpenGL) !struct { width: u32, height: u32 } {
     // On Win32, use the cached viewport from drawFrameStart to avoid
     // a redundant glGetIntegerv call every frame.
-    if (comptime apprt.runtime == apprt.win32) {
+    if (comptime build_config.app_runtime == .win32 or build_config.app_runtime == .winui3) {
         return .{
             .width = self.cached_viewport_width,
             .height = self.cached_viewport_height,

@@ -30,13 +30,37 @@
     {
       "file": "src/apprt/winui3/com.zig",
       "pattern": "IID_SelectionChangedEventHandler"
+    },
+    {
+      "file": "src/apprt/winui3/com.zig",
+      "pattern": "IID_SizeChangedEventHandler"
+    },
+    {
+      "file": "src/apprt/winui3/com.zig",
+      "pattern": "pub const IPanel = extern struct"
+    },
+    {
+      "file": "src/apprt/winui3/com.zig",
+      "pattern": "pub fn createInstance(self: *@This(), outer: ?*anyopaque) WinRTError!struct { inner: ?*anyopaque, instance: *IInspectable }"
+    },
+    {
+      "file": "src/apprt/winui3/com_runtime.zig",
+      "pattern": "IApplicationFactory.createInstance returns structured result"
+    },
+    {
+      "file": "src/apprt/winui3/com_runtime.zig",
+      "pattern": "ITabView surface methods required by App are present"
+    },
+    {
+      "file": "src/apprt/winui3/com_runtime.zig",
+      "pattern": "delegate/event IID constants required by runtime are present"
     }
   ],
   "line_order_checks": [
     {
       "file": "src/apprt/winui3/App.zig",
-      "first_pattern": "Step 8: Create the initial Surface",
-      "second_pattern": "Register TabView event handlers",
+      "first_pattern": "Step 8: Create the initial terminal content.",
+      "second_pattern": "try self.registerTabViewHandlers(tab_view);",
       "expectation": "first_before_second",
       "description": "Control tree creation should be completed before handler registration."
     }

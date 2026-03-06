@@ -67,6 +67,9 @@ public static class Win32 {
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetWindowPos(
@@ -87,6 +90,10 @@ public static class Win32 {
     [DllImport("user32.dll", SetLastError = true)]
     public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PostMessageW(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
     public const uint KEYEVENTF_KEYUP      = 0x0002;
     public const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
     public const uint SWP_NOZORDER  = 0x0004;
@@ -95,6 +102,10 @@ public static class Win32 {
     public const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
     public const uint MOUSEEVENTF_RIGHTUP   = 0x0010;
     public const uint MOUSEEVENTF_WHEEL    = 0x0800;
+    public const uint WM_CHAR = 0x0102;
+    public const uint WM_KEYDOWN = 0x0100;
+    public const uint WM_KEYUP = 0x0101;
+    public const uint VK_RETURN = 0x0D;
 
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
@@ -118,6 +129,18 @@ public static class Win32 {
             AttachThreadInput(currentTid, targetTid, false);
         }
         return result;
+    }
+
+    public static void PostUnicodeText(IntPtr hWnd, string text) {
+        foreach (char c in text) {
+            PostMessageW(hWnd, WM_CHAR, (IntPtr)c, IntPtr.Zero);
+        }
+    }
+
+    public static void PostEnter(IntPtr hWnd) {
+        PostMessageW(hWnd, WM_KEYDOWN, (IntPtr)VK_RETURN, IntPtr.Zero);
+        PostMessageW(hWnd, WM_CHAR, (IntPtr)'\r', IntPtr.Zero);
+        PostMessageW(hWnd, WM_KEYUP, (IntPtr)VK_RETURN, IntPtr.Zero);
     }
 
     public static uint SendKeysSequence(ushort[] vkCodes) {
@@ -605,6 +628,8 @@ function Build-AndStageGhosttyExe {
     $buildArgs = @("build", "-Dapp-runtime=$Runtime", "-Doptimize=$Optimize")
     if ($Runtime -eq "winui3") {
         $buildArgs += "-Drenderer=d3d11"
+        # Avoid Fontconfig dependency on Windows; use FreeType + DirectWrite discovery path.
+        $buildArgs += "-Dfont-backend=freetype"
     }
 
     Push-Location $RepoRoot
@@ -625,7 +650,22 @@ function Build-AndStageGhosttyExe {
     $dstExe = Get-StagedGhosttyExePath -RepoRoot $RepoRoot -Runtime $Runtime
     $dstDir = Split-Path -Parent $dstExe
     New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
-    Copy-Item -Path $srcExe -Destination $dstExe -Force
+    $copied = $false
+    for ($i = 0; $i -lt 10; $i++) {
+        try {
+            if (Test-Path $dstExe) {
+                Remove-Item -Path $dstExe -Force -ErrorAction SilentlyContinue
+            }
+            Copy-Item -Path $srcExe -Destination $dstExe -Force
+            $copied = $true
+            break
+        } catch {
+            Start-Sleep -Milliseconds 250
+        }
+    }
+    if (-not $copied) {
+        throw "Failed to stage binary (file lock): $dstExe"
+    }
 
     if ($Runtime -eq "winui3") {
         # Stage Windows App SDK bootstrap runtime next to the exe to avoid

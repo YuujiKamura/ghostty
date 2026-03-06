@@ -36,7 +36,7 @@ pub fn TypedDelegate(comptime Context: type, comptime CallbackFn: type) type {
             QueryInterface: *const fn (*anyopaque, *const rt.GUID, *?*anyopaque) callconv(.winapi) rt.HRESULT,
             AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
             Release: *const fn (*anyopaque) callconv(.winapi) u32,
-            Invoke: *const fn (*anyopaque, *anyopaque, *anyopaque) callconv(.winapi) rt.HRESULT,
+            Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) rt.HRESULT,
         };
 
         com: ComHeader,
@@ -150,9 +150,31 @@ pub fn TypedDelegate(comptime Context: type, comptime CallbackFn: type) type {
             return next;
         }
 
-        fn invokeFn(this: *anyopaque, sender: *anyopaque, args: *anyopaque) callconv(.winapi) rt.HRESULT {
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) rt.HRESULT {
             const self = fromComPtr(this);
-            self.callback(self.context, sender, args);
+            const iid_d1: u32 = if (self.delegate_iid) |iid| iid.Data1 else 0;
+            const sender_ptr = if (sender) |p| @intFromPtr(p) else @as(usize, 0);
+            const args_ptr = if (args) |p| @intFromPtr(p) else @as(usize, 0);
+            log.info("delegate invoke enter iid_d1=0x{x} sender=0x{x} args=0x{x}", .{ iid_d1, sender_ptr, args_ptr });
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return rt.S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return rt.S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return rt.S_OK;
+                const a = args orelse return rt.S_OK;
+                self.callback(self.context, s, a);
+            }
+            log.info("delegate invoke exit iid_d1=0x{x}", .{iid_d1});
             return rt.S_OK;
         }
     };

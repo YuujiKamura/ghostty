@@ -68,6 +68,24 @@ pub fn init() winrt.WinRTError!void {
         WINDOWSAPPSDK_RUNTIME_VERSION_UINT64,
     );
 
+    std.debug.print(
+        "bootstrap: MddBootstrapInitialize hr=0x{x:0>8} majorMinor=0x{x:0>8} minVersion=0x{x:0>16}\n",
+        .{
+            @as(u32, @bitCast(hr)),
+            WINDOWSAPPSDK_RELEASE_MAJORMINOR,
+            WINDOWSAPPSDK_RUNTIME_VERSION_UINT64,
+        },
+    );
+
+    log.err(
+        "MddBootstrapInitialize hr=0x{x:0>8} majorMinor=0x{x:0>8} minVersion=0x{x:0>16}",
+        .{
+            @as(u32, @bitCast(hr)),
+            WINDOWSAPPSDK_RELEASE_MAJORMINOR,
+            WINDOWSAPPSDK_RUNTIME_VERSION_UINT64,
+        },
+    );
+
     if (hr < 0) {
         log.err("MddBootstrapInitialize failed: 0x{x:0>8}. Is Windows App SDK 1.4+ installed?", .{@as(u32, @bitCast(hr))});
         return error.WinRTFailed;

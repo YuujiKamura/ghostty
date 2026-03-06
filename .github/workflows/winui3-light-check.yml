@@ -60,6 +60,10 @@ jobs:
         shell: pwsh
         run: ./scripts/winui3-inspect-event-params.ps1 -RepoRoot $env:GITHUB_WORKSPACE
 
+      - name: WinMD IID parity check (no manual drift)
+        shell: pwsh
+        run: ./scripts/winui3-winmd-iid-check.ps1 -RepoRoot $env:GITHUB_WORKSPACE
+
       - name: COM runtime ABI tests
         shell: pwsh
         run: zig test ./src/apprt/winui3/com_runtime.zig

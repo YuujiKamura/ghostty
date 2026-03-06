@@ -18,6 +18,7 @@ pub const WPARAM = win32.WPARAM;
 pub const LRESULT = win32.LRESULT;
 pub const BOOL = win32.BOOL;
 pub const UINT = c_uint;
+pub const UINT_PTR = usize;
 pub const DWORD = win32.DWORD;
 pub const LONG = c_long;
 pub const WORD = u16;
@@ -59,6 +60,8 @@ pub const WM_USER: UINT = 0x0400;
 // --- Application-defined messages (WM_USER + N) ---
 /// Posted by the renderer thread to request swap chain binding on the UI thread.
 pub const WM_APP_BIND_SWAP_CHAIN: UINT = WM_USER + 1;
+/// Posted by the renderer thread to request swap chain HANDLE binding on the UI thread.
+pub const WM_APP_BIND_SWAP_CHAIN_HANDLE: UINT = WM_USER + 2;
 
 // --- Window styles ---
 pub const WS_OVERLAPPEDWINDOW: DWORD = 0x00CF0000;
@@ -74,6 +77,10 @@ pub const CS_VREDRAW: UINT = 0x0001;
 // --- Misc constants ---
 pub const IDC_ARROW: LPCWSTR = @ptrFromInt(32512);
 pub const COLOR_WINDOW: c_int = 5;
+pub const SW_HIDE: c_int = 0;
+pub const SW_SHOWNORMAL: c_int = 1;
+pub const SW_SHOWMINIMIZED: c_int = 2;
+pub const SW_SHOWMAXIMIZED: c_int = 3;
 pub const SW_SHOW: c_int = 5;
 pub const PM_REMOVE: UINT = 0x0001;
 pub const PM_NOREMOVE: UINT = 0x0000;
@@ -203,6 +210,7 @@ pub extern "user32" fn CreateWindowExW(
 pub extern "user32" fn DestroyWindow(hWnd: HWND) callconv(.winapi) BOOL;
 pub extern "user32" fn ShowWindow(hWnd: HWND, nCmdShow: c_int) callconv(.winapi) BOOL;
 pub extern "user32" fn UpdateWindow(hWnd: HWND) callconv(.winapi) BOOL;
+pub extern "user32" fn SetForegroundWindow(hWnd: HWND) callconv(.winapi) BOOL;
 pub extern "user32" fn GetMessageW(lpMsg: *MSG, hWnd: ?HWND, wMsgFilterMin: UINT, wMsgFilterMax: UINT) callconv(.winapi) BOOL;
 pub extern "user32" fn PeekMessageW(lpMsg: *MSG, hWnd: ?HWND, wMsgFilterMin: UINT, wMsgFilterMax: UINT, wRemoveMsg: UINT) callconv(.winapi) BOOL;
 pub extern "user32" fn TranslateMessage(lpMsg: *const MSG) callconv(.winapi) BOOL;
@@ -264,6 +272,7 @@ pub extern "user32" fn GetKeyboardLayout(idThread: DWORD) callconv(.winapi) usiz
 
 // --- kernel32 extern declarations ---
 pub extern "kernel32" fn GetLastError() callconv(.winapi) DWORD;
+pub extern "kernel32" fn ExitProcess(uExitCode: UINT) callconv(.winapi) noreturn;
 pub extern "kernel32" fn GetModuleHandleW(lpModuleName: ?LPCWSTR) callconv(.winapi) ?HINSTANCE;
 pub extern "kernel32" fn GlobalAlloc(uFlags: UINT, dwBytes: usize) callconv(.winapi) LPVOID;
 pub extern "kernel32" fn GlobalLock(hMem: LPVOID) callconv(.winapi) LPVOID;

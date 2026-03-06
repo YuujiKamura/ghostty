@@ -18,6 +18,7 @@ const com = @import("d3d11/com.zig");
 const win32 = @import("d3d11/win32.zig");
 
 const Renderer = rendererpkg.GenericRenderer(D3D11);
+const windows = std.os.windows;
 
 pub const GraphicsAPI = D3D11;
 pub const Target = @import("d3d11/Target.zig");
@@ -63,11 +64,34 @@ use_composition: bool = false,
 
 /// Reference to the surface for size synchronization.
 surface: ?*apprt.Surface = null,
+/// Composition surface handle used by ISwapChainPanelNative2::SetSwapChainHandle.
+composition_surface_handle: ?com.HANDLE = null,
 
 /// Performance stats.
 perf: PerfStats = .{},
+present_count: u64 = 0,
 
 const PerfStats = @import("perf_stats.zig").PerfStats;
+
+const DCompositionCreateSurfaceHandleFn = *const fn (
+    desired_access: u32,
+    security_attributes: ?*anyopaque,
+    surface_handle: *?com.HANDLE,
+) callconv(.winapi) com.HRESULT;
+
+fn createCompositionSurfaceHandle() !com.HANDLE {
+    const dcomp_name = std.unicode.utf8ToUtf16LeStringLiteral("dcomp.dll");
+    const module = windows.kernel32.LoadLibraryW(dcomp_name) orelse return error.D3D11InitFailed;
+    defer _ = windows.kernel32.FreeLibrary(module);
+
+    const proc = windows.kernel32.GetProcAddress(module, "DCompositionCreateSurfaceHandle") orelse return error.D3D11InitFailed;
+    const create_fn: DCompositionCreateSurfaceHandleFn = @ptrCast(proc);
+    var h: ?com.HANDLE = null;
+    // dcomp.h: COMPOSITIONSURFACE_ALL_ACCESS = 0x0003L
+    const hr = create_fn(0x0003, null, &h);
+    if (hr < 0 or h == null) return error.D3D11InitFailed;
+    return h.?;
+}
 
 pub fn init(alloc: Allocator, opts: rendererpkg.Options) !D3D11 {
     // Create D3D11 device eagerly — GenericRenderer needs it for buffer/texture creation.
@@ -129,6 +153,7 @@ pub fn deinit(self: *D3D11) void {
         ctx.release();
     }
     if (self.device) |dev| dev.release();
+    if (self.composition_surface_handle) |h| _ = windows.CloseHandle(h);
     self.* = undefined;
 }
 
@@ -175,6 +200,7 @@ pub fn threadEnter(self: *D3D11, surface: *apprt.Surface) !void {
             .BufferCount = 2,
             .SwapEffect = .FLIP_DISCARD,
             .Scaling = .STRETCH,
+            .AlphaMode = .PREMULTIPLIED,
             // Composition swap chains should not rely on tearing flags.
             .Flags = 0,
         };
@@ -298,9 +324,17 @@ pub fn present(self: *D3D11, target: Target) !void {
     const present_flags: u32 = if (self.use_composition) 0 else com.DXGI_PRESENT_ALLOW_TEARING;
     const sync_interval: u32 = if (self.use_composition) 1 else 0;
     const phr = sc.present(sync_interval, present_flags);
+    self.present_count += 1;
     if (phr < 0) {
         log.err("Present failed hr=0x{x} sync={} flags=0x{x} composition={}", .{
             @as(u32, @bitCast(phr)),
+            sync_interval,
+            present_flags,
+            self.use_composition,
+        });
+    } else if (self.present_count <= 3 or (self.present_count % 120) == 0) {
+        log.info("Present OK frame={} sync={} flags=0x{x} composition={}", .{
+            self.present_count,
             sync_interval,
             present_flags,
             self.use_composition,

@@ -124,3 +124,57 @@ test "IVector<IInspectable> IID matches Windows.Foundation.Collections oracle" {
     try testing.expectEqual(@as(u16, 0x5b27), iid.Data3);
     try testing.expect(std.mem.eql(u8, &iid.Data4, &[_]u8{ 0xbc, 0x5d, 0xd6, 0x6a, 0x1a, 0x26, 0x8c, 0x2a }));
 }
+
+test "WinUI3 COM contract surface exists for critical interfaces" {
+    const testing = std.testing;
+    try testing.expect(@hasDecl(com, "IVector"));
+    try testing.expect(@hasDecl(com, "IXamlMetadataProvider"));
+    try testing.expect(@hasDecl(com, "ISolidColorBrush"));
+    try testing.expect(@hasDecl(com, "IPropertyValueStatics"));
+    try testing.expect(@hasDecl(com, "IApplicationFactory"));
+    try testing.expect(@hasDecl(com, "ITabView"));
+    try testing.expect(@hasDecl(com, "IPanel"));
+    try testing.expect(@hasDecl(com.ISolidColorBrush, "Color"));
+}
+
+test "IXamlMetadataProvider.GetXmlnsDefinitions signature matches aggregation call-site" {
+    const testing = std.testing;
+    const Expected = *const fn (*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT;
+    const Actual = @TypeOf(@as(com.IXamlMetadataProvider.VTable, undefined).GetXmlnsDefinitions);
+    try testing.expect(Actual == Expected);
+}
+
+test "IApplicationFactory.createInstance returns structured result" {
+    const testing = std.testing;
+    const Fn = @TypeOf(com.IApplicationFactory.createInstance);
+    const info = @typeInfo(Fn).@"fn";
+    const Ret = info.return_type.?;
+    const ErrUnion = @typeInfo(Ret).error_union;
+    const Payload = ErrUnion.payload;
+    try testing.expect(@hasField(Payload, "inner"));
+    try testing.expect(@hasField(Payload, "instance"));
+}
+
+test "ITabView surface methods required by App are present" {
+    const testing = std.testing;
+    try testing.expect(@hasDecl(com.ITabView, "getTabItems"));
+    try testing.expect(@hasDecl(com.ITabView, "putSelectedIndex"));
+    try testing.expect(@hasDecl(com.ITabView, "addTabCloseRequested"));
+    try testing.expect(@hasDecl(com.ITabView, "addAddTabButtonClick"));
+    try testing.expect(@hasDecl(com.ITabView, "addSelectionChanged"));
+}
+
+test "IPanel methods required by App are present" {
+    const testing = std.testing;
+    try testing.expect(@hasDecl(com.IPanel, "getChildren"));
+    try testing.expect(@hasDecl(com.IPanel, "putBackground"));
+}
+
+test "delegate/event IID constants required by runtime are present" {
+    const testing = std.testing;
+    try testing.expect(@hasDecl(com, "IID_RoutedEventHandler"));
+    try testing.expect(@hasDecl(com, "IID_SizeChangedEventHandler"));
+    try testing.expect(@hasDecl(com, "IID_TypedEventHandler_TabCloseRequested"));
+    try testing.expect(@hasDecl(com, "IID_TypedEventHandler_AddTabButtonClick"));
+    try testing.expect(@hasDecl(com, "IID_SelectionChangedEventHandler"));
+}

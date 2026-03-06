@@ -10,7 +10,7 @@
 //! code when absolutely necessary.
 const build_config = @import("build_config.zig");
 
-const structs = @import("apprt/structs.zig");
+pub const structs = @import("apprt/structs.zig");
 
 pub const action = @import("apprt/action.zig");
 pub const ipc = @import("apprt/ipc.zig");

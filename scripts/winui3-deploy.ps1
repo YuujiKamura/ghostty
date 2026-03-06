@@ -6,6 +6,58 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Ensure-WindowsAppRuntimeBootstrapDll {
+    param(
+        [Parameter(Mandatory = $true)][string]$GhosttyBinDir,
+        [Parameter(Mandatory = $true)][string]$RepoRoot
+    )
+
+    $dllName = "Microsoft.WindowsAppRuntime.Bootstrap.dll"
+    $dst = Join-Path $GhosttyBinDir $dllName
+    if (Test-Path -LiteralPath $dst) {
+        Write-Host "Bootstrap already present: $dst"
+        return
+    }
+
+    $candidates = @(
+        (Join-Path $RepoRoot "third_party\windowsappruntime\$dllName"),
+        (Join-Path $RepoRoot "deps\windowsappruntime\$dllName"),
+        (Join-Path $RepoRoot $dllName),
+        (Join-Path $env:ProgramFiles "Microsoft\WindowsAppRuntime\$dllName"),
+        (Join-Path $env:ProgramFiles "WindowsApps\$dllName")
+    )
+
+    if ($env:ProgramFiles -and ${env:ProgramFiles(x86)}) {
+        $candidates += (Join-Path ${env:ProgramFiles(x86)} "Microsoft\WindowsAppRuntime\$dllName")
+    }
+    if ($env:LOCALAPPDATA) {
+        $candidates += (Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\$dllName")
+    }
+
+    $searchRoots = @(
+        (Join-Path $env:ProgramFiles "WindowsApps"),
+        $env:ProgramFiles,
+        ${env:ProgramFiles(x86)}
+    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+
+    foreach ($root in $searchRoots) {
+        try {
+            $hit = Get-ChildItem -Path $root -Filter $dllName -Recurse -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            if ($hit) { $candidates += $hit.FullName }
+        } catch {}
+    }
+
+    $src = $candidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+    if (-not $src) {
+        throw "Missing $dllName. Looked in: $($candidates -join '; ')"
+    }
+
+    New-Item -ItemType Directory -Path $GhosttyBinDir -Force | Out-Null
+    Copy-Item -LiteralPath $src -Destination $dst -Force
+    Write-Host "Copied $dllName -> $dst (from $src)"
+}
+
 if (-not (Test-Path -LiteralPath $RepoRoot)) {
     throw "RepoRoot not found: $RepoRoot"
 }
@@ -46,6 +98,8 @@ try {
         Write-Host "[6/6] zig build -Dtarget=x86_64-windows -Dapp-runtime=winui3 -Drenderer=d3d11"
         & zig build -Dtarget=x86_64-windows -Dapp-runtime=winui3 -Drenderer=d3d11
         if ($LASTEXITCODE -ne 0) { throw "ghostty build failed (exit=$LASTEXITCODE)" }
+        $ghosttyBin = Join-Path $RepoRoot "zig-out\bin"
+        Ensure-WindowsAppRuntimeBootstrapDll -GhosttyBinDir $ghosttyBin -RepoRoot $RepoRoot
     } else {
         Write-Host "[6/6] Skipped ghostty build"
     }

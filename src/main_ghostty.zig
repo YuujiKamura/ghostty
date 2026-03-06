@@ -99,7 +99,10 @@ pub fn main() !MainReturn {
 
     // Create our runtime app
     var app_runtime: apprt.App = undefined;
-    try app_runtime.init(app, .{});
+    app_runtime.init(app, .{}) catch |err| {
+        std.log.err("runtime init failed error={}", .{err});
+        posix.exit(1);
+    };
     defer app_runtime.terminate();
 
     // Since - by definition - there are no surfaces when first started, the
@@ -108,7 +111,10 @@ pub fn main() !MainReturn {
     if (@hasDecl(apprt.App, "startQuitTimer")) app_runtime.startQuitTimer();
 
     // Run the GUI event loop
-    try app_runtime.run();
+    app_runtime.run() catch |err| {
+        std.log.err("runtime run failed error={}", .{err});
+        posix.exit(1);
+    };
 }
 
 // The function std.log will call.

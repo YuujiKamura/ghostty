@@ -2,6 +2,7 @@ const std = @import("std");
 
 pub const RuntimeDebugConfig = struct {
     enable_tabview: bool = true,
+    use_ixaml_metadata_provider: bool = false,
     enable_xaml_resources: bool = true,
     tabview_empty: bool = false,
     tabview_item_no_content: bool = false,
@@ -22,6 +23,11 @@ pub const RuntimeDebugConfig = struct {
     pub fn load() RuntimeDebugConfig {
         return .{
             .enable_tabview = envBool("GHOSTTY_WINUI3_ENABLE_TABVIEW", true),
+            .use_ixaml_metadata_provider = envBoolWithAlias(
+                "GHOSTTY_WINUI3_USE_IXAML_METADATA_PROVIDER",
+                "GHOSTTY_WINUI3_USE_METADATA_PROVIDER",
+                false,
+            ),
             .enable_xaml_resources = envBool("GHOSTTY_WINUI3_ENABLE_XAML_RESOURCES", true),
             .tabview_empty = envBool("GHOSTTY_WINUI3_TABVIEW_EMPTY", false),
             .tabview_item_no_content = envBool("GHOSTTY_WINUI3_TABVIEW_ITEM_NO_CONTENT", false),
@@ -41,9 +47,10 @@ pub const RuntimeDebugConfig = struct {
 
     pub fn log(self: RuntimeDebugConfig, logger: anytype) void {
         logger.info(
-            "winui3 debug config: tabview={} xaml_resources={} tabview_empty={} item_no_content={} handlers={} close={} addtab={} selection={} append={} select={} close_after={}ms close_tab_after={}ms new_tab={} test_resize={}",
+            "winui3 debug config: tabview={} metadata_provider={} xaml_resources={} tabview_empty={} item_no_content={} handlers={} close={} addtab={} selection={} append={} select={} close_after={}ms close_tab_after={}ms new_tab={} test_resize={}",
             .{
                 self.enable_tabview,
+                self.use_ixaml_metadata_provider,
                 self.enable_xaml_resources,
                 self.tabview_empty,
                 self.tabview_item_no_content,
@@ -89,6 +96,30 @@ fn envBool(name: [:0]const u8, default_value: bool) bool {
     return default_value;
 }
 
+fn envBoolWithAlias(primary: [:0]const u8, alias: [:0]const u8, default_value: bool) bool {
+    const primary_value = std.process.getEnvVarOwned(std.heap.page_allocator, primary) catch null;
+    if (primary_value) |v| {
+        defer std.heap.page_allocator.free(v);
+        if (std.ascii.eqlIgnoreCase(v, "1") or
+            std.ascii.eqlIgnoreCase(v, "true") or
+            std.ascii.eqlIgnoreCase(v, "yes") or
+            std.ascii.eqlIgnoreCase(v, "on"))
+        {
+            return true;
+        }
+        if (std.ascii.eqlIgnoreCase(v, "0") or
+            std.ascii.eqlIgnoreCase(v, "false") or
+            std.ascii.eqlIgnoreCase(v, "no") or
+            std.ascii.eqlIgnoreCase(v, "off"))
+        {
+            return false;
+        }
+        return default_value;
+    }
+
+    return envBool(alias, default_value);
+}
+
 test "RuntimeDebugConfig load" {
     const testing = std.testing;
 
@@ -108,4 +139,3 @@ test "RuntimeDebugConfig load" {
     const config2 = RuntimeDebugConfig.load();
     try testing.expectEqual(false, config2.enable_tabview);
 }
-

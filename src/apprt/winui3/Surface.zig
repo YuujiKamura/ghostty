@@ -15,8 +15,10 @@ const terminal = @import("../../terminal/main.zig");
 const App = @import("App.zig");
 const com = @import("com.zig");
 const winrt = @import("winrt.zig");
+const native_interop = @import("native_interop.zig");
 const key = @import("key.zig");
 const os = @import("os.zig");
+
 const SearchOverlay = @import("search_overlay.zig").SearchOverlay;
 
 const log = std.log.scoped(.winui3);
@@ -41,19 +43,28 @@ loaded: bool = false,
 
 /// Holds a swap chain from the renderer thread if it arrives before Loaded.
 pending_swap_chain: ?*anyopaque = null,
+/// Holds a swap chain handle from the renderer thread if it arrives before Loaded.
+pending_swap_chain_handle: ?usize = null,
 
 /// Token for the Loaded event registration.
 loaded_token: i64 = 0,
+
+/// Token for the SizeChanged event registration.
+size_changed_token: i64 = 0,
 
 /// The SwapChainPanel for composition rendering.
 swap_chain_panel: ?*winrt.IInspectable = null,
 
 /// Native interface for binding DXGI swap chain to panel.
 swap_chain_panel_native: ?*com.ISwapChainPanelNative = null,
+/// Native2 interface for binding composition surface handles.
+swap_chain_panel_native2: ?*native_interop.ISwapChainPanelNative2 = null,
 
 /// Last DXGI swap-chain pointer observed from renderer thread.
 /// Used to rebind when TabView selection changes and panel realization timing differs.
 last_swap_chain: ?*anyopaque = null,
+/// Last composition surface handle observed from renderer thread.
+last_swap_chain_handle: ?usize = null,
 
 /// The IInspectable of the TabViewItem this surface belongs to (for title updates).
 tab_view_item_inspectable: ?*winrt.IInspectable = null,
@@ -123,6 +134,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         self.swap_chain_panel_native.?.release();
         self.swap_chain_panel_native = null;
     }
+    self.swap_chain_panel_native2 = panel.queryInterface(native_interop.ISwapChainPanelNative2) catch null;
 
     // Set SwapChainPanel background to black.
     self.app.setControlBackground(panel, .{ .a = 255, .r = 0, .g = 0, .b = 0 });
@@ -131,12 +143,15 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     const framework_element = try panel.queryInterface(com.IFrameworkElement);
     defer framework_element.release();
     const delegate_runtime = @import("delegate_runtime.zig");
-    const LoadedDelegate = delegate_runtime.TypedDelegate(Surface, fn (*Surface, *anyopaque, *anyopaque) void);
+    const LoadedDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, *anyopaque, *anyopaque) void);
     const loaded_delegate = try LoadedDelegate.createWithIid(self.app.core_app.alloc, self, &onLoaded, &com.IID_RoutedEventHandler);
     // Note: LoadedDelegate.createWithIid returns a ref-counted COM object.
     // We pass it to addLoaded which will AddRef it again.
-    defer _ = loaded_delegate.release();
+    defer _ = loaded_delegate.com.lpVtbl.Release(loaded_delegate.comPtr());
     self.loaded_token = try framework_element.addLoaded(loaded_delegate.comPtr());
+
+    // SizeChanged hookup is optional with reduced COM bindings.
+    self.size_changed_token = 0;
 
     // NOTE: SwapChainPanel is set as TabViewItem content by App.newTab(),
     // not here. We only create the panel and query the native interface.
@@ -173,13 +188,17 @@ pub fn deinit(self: *Surface) void {
     }
 
     // Now safe to release COM objects -- renderer thread is stopped.
+    if (self.swap_chain_panel_native2) |native2| {
+        native2.release();
+        self.swap_chain_panel_native2 = null;
+    }
     if (self.swap_chain_panel_native) |native| {
-        // Unregister Loaded handler if we have a token.
-        if (self.loaded_token != 0) {
+        // Unregister event handlers if we have tokens.
+        if (self.loaded_token != 0 or self.size_changed_token != 0) {
             if (self.swap_chain_panel) |panel| {
                 if (panel.queryInterface(com.IFrameworkElement)) |fe| {
                     defer fe.release();
-                    fe.removeLoaded(self.loaded_token) catch {};
+                    if (self.loaded_token != 0) fe.removeLoaded(self.loaded_token) catch {};
                 } else |_| {}
             }
         }
@@ -228,6 +247,10 @@ pub fn getSize(self: *const Surface) !apprt.SurfaceSize {
 
 pub fn getCursorPos(self: *const Surface) !apprt.CursorPos {
     return self.cursor_pos;
+}
+
+pub fn supportsSwapChainHandle(self: *const Surface) bool {
+    return self.swap_chain_panel_native2 != null;
 }
 
 pub fn supportsClipboard(
@@ -582,11 +605,13 @@ pub fn handleScroll(self: *Surface, xoffset: f64, yoffset: f64) void {
 /// so we post WM_APP_BIND_SWAP_CHAIN with wparam=swap_chain, lparam=self.
 pub fn bindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
     self.last_swap_chain = swap_chain;
+    log.info(
+        "bindSwapChain: loaded={} pending_before={} swap_chain=0x{x}",
+        .{ self.loaded, self.pending_swap_chain != null, @intFromPtr(swap_chain) },
+    );
 
     if (!self.loaded) {
-        log.info("bindSwapChain: panel not yet Loaded, deferring binding until onLoaded", .{});
-        self.pending_swap_chain = swap_chain;
-        return;
+        log.info("bindSwapChain: panel not yet Loaded, attempting immediate binding (flip start)", .{});
     }
 
     if (self.app.hwnd) |hwnd| {
@@ -594,6 +619,28 @@ pub fn bindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
             hwnd,
             os.WM_APP_BIND_SWAP_CHAIN,
             @bitCast(@intFromPtr(swap_chain)),
+            @bitCast(@intFromPtr(self)),
+        );
+    }
+}
+
+/// Bind a composition surface handle to the SwapChainPanel via ISwapChainPanelNative2.
+pub fn bindSwapChainHandle(self: *Surface, swap_chain_handle: usize) void {
+    self.last_swap_chain_handle = swap_chain_handle;
+    log.info(
+        "bindSwapChainHandle: loaded={} pending_before={} handle=0x{x}",
+        .{ self.loaded, self.pending_swap_chain_handle != null, swap_chain_handle },
+    );
+
+    if (!self.loaded) {
+        log.info("bindSwapChainHandle: panel not yet Loaded, attempting immediate binding", .{});
+    }
+
+    if (self.app.hwnd) |hwnd| {
+        _ = os.PostMessageW(
+            hwnd,
+            os.WM_APP_BIND_SWAP_CHAIN_HANDLE,
+            @bitCast(swap_chain_handle),
             @bitCast(@intFromPtr(self)),
         );
     }
@@ -616,22 +663,102 @@ pub fn completeBindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
     log.info("Swap chain bound to SwapChainPanel (UI thread)", .{});
 }
 
+/// Actually perform swap chain HANDLE binding. Must be called on the UI thread.
+pub fn completeBindSwapChainHandle(self: *Surface, swap_chain_handle: usize) void {
+    self.last_swap_chain_handle = swap_chain_handle;
+    self.pending_swap_chain_handle = null;
+
+    const native2 = self.swap_chain_panel_native2 orelse {
+        log.warn("SwapChainPanelNative2 not available for SetSwapChainHandle", .{});
+        return;
+    };
+    const handle: os.HANDLE = @ptrFromInt(swap_chain_handle);
+    native2.setSwapChainHandle(handle) catch |err| {
+        log.err("ISwapChainPanelNative2::SetSwapChainHandle failed: {}", .{err});
+        return;
+    };
+    log.info("Swap chain handle bound to SwapChainPanel (UI thread)", .{});
+}
+
+const min_bind_dimension: u32 = 2;
+
+fn maybeBindPendingSwapChain(self: *Surface, caller: []const u8) void {
+    const sc = self.pending_swap_chain orelse return;
+    if (!self.loaded) {
+        log.info("{s}: panel not loaded yet, keeping swap chain deferred", .{caller});
+        return;
+    }
+    if (self.size.width >= min_bind_dimension and self.size.height >= min_bind_dimension) {
+        log.info(
+            "{s}: binding deferred swap chain at size {}x{}",
+            .{ caller, self.size.width, self.size.height },
+        );
+        self.completeBindSwapChain(sc);
+        return;
+    }
+
+    log.info(
+        "{s}: keeping swap chain deferred until panel size is >= {}x{} (current={}x{})",
+        .{ caller, min_bind_dimension, min_bind_dimension, self.size.width, self.size.height },
+    );
+}
+
+fn maybeBindPendingSwapChainHandle(self: *Surface, caller: []const u8) void {
+    const h = self.pending_swap_chain_handle orelse return;
+    if (!self.loaded) {
+        log.info("{s}: panel not loaded yet, keeping swap chain handle deferred", .{caller});
+        return;
+    }
+    if (self.size.width >= min_bind_dimension and self.size.height >= min_bind_dimension) {
+        log.info(
+            "{s}: binding deferred swap chain handle at size {}x{}",
+            .{ caller, self.size.width, self.size.height },
+        );
+        self.completeBindSwapChainHandle(h);
+        return;
+    }
+
+    log.info(
+        "{s}: keeping swap chain handle deferred until panel size is >= {}x{} (current={}x{})",
+        .{ caller, min_bind_dimension, min_bind_dimension, self.size.width, self.size.height },
+    );
+}
+
 /// Loaded event callback. Triggered when the SwapChainPanel is added to the visual tree.
 fn onLoaded(self: *Surface, _: *anyopaque, _: *anyopaque) void {
-    log.info("SwapChainPanel.Loaded event fired for surface 0x{x}", .{@intFromPtr(self)});
+    log.info(
+        "SwapChainPanel.Loaded event fired surface=0x{x} size={}x{} pending_swap_chain={} last_swap_chain={}",
+        .{ @intFromPtr(self), self.size.width, self.size.height, self.pending_swap_chain != null, self.last_swap_chain != null },
+    );
     self.loaded = true;
 
-    if (self.pending_swap_chain) |sc| {
-        log.info("onLoaded: triggering deferred swap chain binding", .{});
-        self.completeBindSwapChain(sc);
-    }
+    // Keep deferred binding until we have a non-trivial cached size.
+    // `onSizeChanged` may fire before `Loaded`, so we also retry here.
+    maybeBindPendingSwapChain(self, "onLoaded");
+    maybeBindPendingSwapChainHandle(self, "onLoaded");
+    // In TabView mode, enforce that the active tab item still points to this panel.
+    self.app.ensureVisibleSurfaceAttached(self);
+}
+
+/// SizeChanged event callback. Triggered when the SwapChainPanel's layout size changes.
+/// This gives us the actual panel dimensions (accounting for TabView header, etc.).
+fn onSizeChanged(self: *Surface, _: *anyopaque, _: *anyopaque) void {
+    maybeBindPendingSwapChain(self, "onSizeChanged");
+    maybeBindPendingSwapChainHandle(self, "onSizeChanged");
 }
 
 /// Re-apply the current swap chain to this panel.
 /// Useful when the panel is reparented/shown by TabView selection changes.
 pub fn rebindSwapChain(self: *Surface) void {
+    if (self.last_swap_chain_handle) |h| {
+        self.bindSwapChainHandle(h);
+        return;
+    }
     const sc = self.last_swap_chain orelse return;
-    self.completeBindSwapChain(sc);
+    // Rebind requests may arrive before the panel is realized (e.g. TabView
+    // selection changes during initial layout). Route through bindSwapChain
+    // so Loaded-gating remains effective.
+    self.bindSwapChain(sc);
 }
 
 // --- Parity Audit / Apprt interface methods ---
@@ -699,4 +826,3 @@ test "Surface title memory management" {
     surface.setTabTitle("Test Title 2 - Long title");
     try testing.expectEqualStrings("Test Title 2 - Long title", surface.title.?);
 }
-

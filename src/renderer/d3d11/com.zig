@@ -488,8 +488,8 @@ pub const ID3D11DeviceContext = extern struct {
 
     const VTable = extern struct {
         // IUnknown (slots 0-2)
-        QueryInterface: VtblPlaceholder, // 0
-        AddRef: VtblPlaceholder, // 1
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT, // 0
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32, // 1
         Release: *const fn (*anyopaque) callconv(.winapi) u32, // 2
 
         // ID3D11DeviceChild (slots 3-6)
@@ -819,8 +819,8 @@ pub const IDXGIFactory2 = extern struct {
 
     const VTable = extern struct {
         // IUnknown (slots 0-2)
-        QueryInterface: VtblPlaceholder, // 0
-        AddRef: VtblPlaceholder, // 1
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT, // 0
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32, // 1
         Release: *const fn (*anyopaque) callconv(.winapi) u32, // 2
 
         // IDXGIObject (slots 3-6)
@@ -876,6 +876,47 @@ pub const IDXGIFactory2 = extern struct {
     ) D3D11Error!*IDXGISwapChain1 {
         var sc: ?*IDXGISwapChain1 = null;
         try hrCheck(self.lpVtbl.CreateSwapChainForComposition(@ptrCast(self), device, desc, null, &sc));
+        return sc orelse error.D3D11Failed;
+    }
+
+    pub fn queryInterface(self: *IDXGIFactory2, comptime T: type) D3D11Error!*T {
+        var result: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.QueryInterface(@ptrCast(self), &T.IID, &result));
+        return @ptrCast(@alignCast(result orelse return error.D3D11Failed));
+    }
+};
+
+// --- IDXGIFactoryMedia ---
+// dxgi1_3.h
+pub const IDXGIFactoryMedia = extern struct {
+    pub const IID = GUID{
+        .Data1 = 0x41e7d1f2,
+        .Data2 = 0xa591,
+        .Data3 = 0x4f7b,
+        .Data4 = .{ 0xa2, 0xe5, 0xfa, 0x9c, 0x84, 0x3e, 0x1c, 0x12 },
+    };
+
+    lpVtbl: *const VTable,
+    const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        CreateSwapChainForCompositionSurfaceHandle: *const fn (*anyopaque, *anyopaque, HANDLE, *const DXGI_SWAP_CHAIN_DESC1, ?*anyopaque, *?*IDXGISwapChain1) callconv(.winapi) HRESULT,
+        CreateDecodeSwapChainForCompositionSurfaceHandle: VtblPlaceholder,
+    };
+
+    pub fn release(self: *IDXGIFactoryMedia) void {
+        _ = self.lpVtbl.Release(@ptrCast(self));
+    }
+
+    pub fn createSwapChainForCompositionSurfaceHandle(
+        self: *IDXGIFactoryMedia,
+        device: *anyopaque,
+        surface_handle: HANDLE,
+        desc: *const DXGI_SWAP_CHAIN_DESC1,
+    ) D3D11Error!*IDXGISwapChain1 {
+        var sc: ?*IDXGISwapChain1 = null;
+        try hrCheck(self.lpVtbl.CreateSwapChainForCompositionSurfaceHandle(@ptrCast(self), device, surface_handle, desc, null, &sc));
         return sc orelse error.D3D11Failed;
     }
 };

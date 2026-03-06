@@ -11,6 +11,7 @@ const CONTEXT_MENU_NEW_TAB: usize = 1;
 const CONTEXT_MENU_CLOSE_TAB: usize = 2;
 const CONTEXT_MENU_PASTE: usize = 3;
 const CONTEXT_MENU_CLOSE_WINDOW: usize = 4;
+const CONTEXT_MENU_TOGGLE_TABVIEW: usize = 5;
 const RESIZE_TIMER_ID: usize = 1;
 
 /// Installed via SetWindowSubclass on the WinUI 3 window's HWND to intercept
@@ -59,6 +60,7 @@ pub fn subclassProc(
         os.WM_DPICHANGED => return handleDpiChanged(app, hwnd, msg, wparam, lparam),
         os.WM_USER => return handleWakeup(app, hwnd, msg, wparam, lparam),
         os.WM_APP_BIND_SWAP_CHAIN => return handleBindSwapChain(app, wparam, lparam),
+        os.WM_APP_BIND_SWAP_CHAIN_HANDLE => return handleBindSwapChainHandle(app, wparam, lparam),
         // IME messages only handled in subclass as fallback (when input_hwnd failed).
         // When input_hwnd is active, IME messages go directly to inputWndProc.
         os.WM_IME_STARTCOMPOSITION => return ime.handleIMEStartComposition(app, hwnd, msg, wparam, lparam),
@@ -195,11 +197,13 @@ fn showContextMenu(app: *App, hwnd: os.HWND) void {
     const close_tab = std.unicode.utf8ToUtf16LeStringLiteral("Close Tab");
     const paste = std.unicode.utf8ToUtf16LeStringLiteral("Paste");
     const close_window = std.unicode.utf8ToUtf16LeStringLiteral("Close Window");
+    const toggle_tabview = std.unicode.utf8ToUtf16LeStringLiteral("Toggle TabView Container");
 
     _ = os.AppendMenuW(menu, os.MF_STRING, CONTEXT_MENU_NEW_TAB, new_tab);
     _ = os.AppendMenuW(menu, os.MF_STRING, CONTEXT_MENU_CLOSE_TAB, close_tab);
     _ = os.AppendMenuW(menu, os.MF_SEPARATOR, 0, null);
     _ = os.AppendMenuW(menu, os.MF_STRING, CONTEXT_MENU_PASTE, paste);
+    _ = os.AppendMenuW(menu, os.MF_STRING, CONTEXT_MENU_TOGGLE_TABVIEW, toggle_tabview);
     _ = os.AppendMenuW(menu, os.MF_SEPARATOR, 0, null);
     _ = os.AppendMenuW(menu, os.MF_STRING, CONTEXT_MENU_CLOSE_WINDOW, close_window);
 
@@ -225,6 +229,7 @@ fn handleCommand(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lpar
         CONTEXT_MENU_NEW_TAB,
         CONTEXT_MENU_CLOSE_TAB,
         CONTEXT_MENU_PASTE,
+        CONTEXT_MENU_TOGGLE_TABVIEW,
         CONTEXT_MENU_CLOSE_WINDOW,
         => {
             handleContextCommand(app, cmd_id);
@@ -244,6 +249,11 @@ fn handleContextCommand(app: *App, cmd_id: usize) void {
             if (app.activeSurface()) |surface| {
                 _ = surface.clipboardRequest(.standard, .{ .paste = {} }) catch {};
             }
+        },
+        CONTEXT_MENU_TOGGLE_TABVIEW => {
+            app.toggleTabViewContainer() catch |err| {
+                log.warn("context menu toggle tabview failed: {}", .{err});
+            };
         },
         CONTEXT_MENU_CLOSE_WINDOW => app.requestCloseWindow(),
         else => {},
@@ -318,6 +328,28 @@ fn handleBindSwapChain(app: *App, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESU
     }
 
     surface.completeBindSwapChain(swap_chain);
+    return 0;
+}
+
+/// Handle WM_APP_BIND_SWAP_CHAIN_HANDLE: complete handle-based binding on the UI thread.
+/// wparam carries the composition surface handle, lparam carries the Surface pointer.
+fn handleBindSwapChainHandle(app: *App, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
+    const surface: *Surface = @ptrFromInt(@as(usize, @bitCast(lparam)));
+    const swap_chain_handle: usize = @as(usize, @bitCast(wparam));
+
+    var alive = false;
+    for (app.surfaces.items) |s| {
+        if (s == surface) {
+            alive = true;
+            break;
+        }
+    }
+    if (!alive) {
+        log.warn("handleBindSwapChainHandle: drop stale surface ptr=0x{x}", .{@intFromPtr(surface)});
+        return 0;
+    }
+
+    surface.completeBindSwapChainHandle(swap_chain_handle);
     return 0;
 }
 

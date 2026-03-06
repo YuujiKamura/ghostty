@@ -5,6 +5,7 @@ const GUID = std.os.windows.GUID;
 const HRESULT = std.os.windows.HRESULT;
 const HSTRING = ?*anyopaque;
 const EventRegistrationToken = i64;
+const log = std.log.scoped(.winui3_com);
 
 pub const VtblPlaceholder = ?*const anyopaque;
 
@@ -1587,9 +1588,49 @@ pub const IXamlMetadataProvider = extern struct {
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn getXamlType(self: *@This(), p0: ?*anyopaque) !*IXamlType { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetXamlType(self, p0, &out)); return @ptrCast(@alignCast(out.?)); }
+    // HSTRING overload (string class name) should use GetXamlType_2 slot.
+    pub fn getXamlType(self: *@This(), p0: ?*anyopaque) !*IXamlType {
+        var out: ?*anyopaque = null;
+        const self_ptr = @intFromPtr(self);
+        const in_ptr = if (p0) |v| @intFromPtr(v) else @as(usize, 0);
+        const out_addr = @intFromPtr(&out);
+        log.info("IXamlMetadataProvider.GetXamlType(HSTRING) call self=0x{x} in=0x{x} out_addr=0x{x}", .{ self_ptr, in_ptr, out_addr });
+        const hr = self.lpVtbl.GetXamlType_2(self, p0, &out);
+        const out_ptr = if (out) |v| @intFromPtr(v) else @as(usize, 0);
+        log.info("IXamlMetadataProvider.GetXamlType(HSTRING) ret hr=0x{x} out=0x{x}", .{ @as(u32, @bitCast(hr)), out_ptr });
+        try hrCheck(hr);
+        if (out == null) return error.WinRTFailed;
+        if (out_ptr < 0x10000) {
+            log.err("IXamlMetadataProvider.GetXamlType(HSTRING) suspicious out pointer: 0x{x}", .{out_ptr});
+            return error.WinRTFailed;
+        }
+        if ((out_ptr & 0x7) != 0) {
+            log.warn("IXamlMetadataProvider.GetXamlType(HSTRING) unaligned out pointer: 0x{x}", .{out_ptr});
+        }
+        return @ptrCast(@alignCast(out.?));
+    }
     pub fn GetXamlType(self: *@This(), p0: ?*anyopaque) !*IXamlType { return self.getXamlType(p0); }
-    pub fn getXamlType_1(self: *@This(), p0: ?*anyopaque) !*IXamlType { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetXamlType_2(self, p0, &out)); return @ptrCast(@alignCast(out.?)); }
+    // TypeName overload (kept for completeness).
+    pub fn getXamlType_1(self: *@This(), p0: ?*anyopaque) !*IXamlType {
+        var out: ?*anyopaque = null;
+        const self_ptr = @intFromPtr(self);
+        const in_ptr = if (p0) |v| @intFromPtr(v) else @as(usize, 0);
+        const out_addr = @intFromPtr(&out);
+        log.info("IXamlMetadataProvider.GetXamlType(TypeName) call self=0x{x} in=0x{x} out_addr=0x{x}", .{ self_ptr, in_ptr, out_addr });
+        const hr = self.lpVtbl.GetXamlType(self, p0, &out);
+        const out_ptr = if (out) |v| @intFromPtr(v) else @as(usize, 0);
+        log.info("IXamlMetadataProvider.GetXamlType(TypeName) ret hr=0x{x} out=0x{x}", .{ @as(u32, @bitCast(hr)), out_ptr });
+        try hrCheck(hr);
+        if (out == null) return error.WinRTFailed;
+        if (out_ptr < 0x10000) {
+            log.err("IXamlMetadataProvider.GetXamlType(TypeName) suspicious out pointer: 0x{x}", .{out_ptr});
+            return error.WinRTFailed;
+        }
+        if ((out_ptr & 0x7) != 0) {
+            log.warn("IXamlMetadataProvider.GetXamlType(TypeName) unaligned out pointer: 0x{x}", .{out_ptr});
+        }
+        return @ptrCast(@alignCast(out.?));
+    }
     pub fn GetXamlType_2(self: *@This(), p0: ?*anyopaque) !*IXamlType { return self.getXamlType_1(p0); }
     pub fn getXmlnsDefinitions(self: *@This()) !struct { count: u32, definitions: ?*anyopaque } { var count: u32 = 0; var definitions: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetXmlnsDefinitions(self, &count, &definitions)); return .{ .count = count, .definitions = definitions }; }
     pub fn GetXmlnsDefinitions(self: *@This()) !struct { count: u32, definitions: ?*anyopaque } { return self.getXmlnsDefinitions(); }
@@ -2228,4 +2269,3 @@ pub const IResourceDictionary = extern struct {
     pub fn getThemeDictionaries(self: *@This()) !void { try hrCheck(self.lpVtbl.get_ThemeDictionaries(self)); }
     pub fn get_ThemeDictionaries(self: *@This()) !void { try self.getThemeDictionaries(); }
 };
-

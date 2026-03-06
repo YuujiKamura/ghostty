@@ -129,6 +129,26 @@ pub fn build(b: *std.Build) !void {
     // Helpgen
     if (config.emit_helpgen) deps.help_strings.install();
 
+    // Basal Test (WinUI 3)
+    if (builtin.os.tag == .windows) {
+        const basal_test_exe = b.addExecutable(.{
+            .name = "basal_test",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/basal_test.zig"),
+                .target = config.target,
+                .optimize = config.optimize,
+            }),
+        });
+        _ = try deps.add(basal_test_exe);
+        basal_test_exe.root_module.addImport("build_config", b.createModule(.{
+            .root_source_file = b.path("src/build/uucode_config.zig"),
+        }));
+        // Note: deps.add already adds build_options, so we don't need to add it manually here.
+        const basal_test_install = b.addInstallArtifact(basal_test_exe, .{});
+        const basal_test_step = b.step("basal-test", "Build WinUI 3 basal infrastructure test");
+        basal_test_step.dependOn(&basal_test_install.step);
+    }
+
     // Runtime "none" is libghostty, anything else is an executable.
     if (config.app_runtime != .none) {
         if (config.emit_exe) {
