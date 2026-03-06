@@ -18,7 +18,9 @@
 
 ## Verification
 - `zig build` executed and passed (`zig-build.raw.txt`, `EXIT_CODE=0`).
-- `review-crate` command availability check recorded (`app-architecture.raw.txt`), currently unavailable in PATH.
+- AI architecture review executed via `ai-code-review`:
+  - command: `cargo run --bin review -- --analyze C:\\Users\\yuuji\\ghostty-win\\src\\apprt\\winui3\\App.zig --backend gemini --prompt architecture --context`
+  - raw output: `app-architecture.raw.txt` (`EXIT_CODE=0`)
 
 ## Remaining Explicit release() Sites in App.zig
 - Full-cleanup ownership releases and state-transition releases intentionally left as-is:
