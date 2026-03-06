@@ -1,0 +1,28 @@
+## Analyze: App.zig
+
+`App.zig` は、Ghostty ターミナルの **WinUI 3 ランタイムの実装コア** です。
+
+### 1. このコードは何をしているか（目的と責務）
+*   **ブートストラップ:** Windows App SDK の初期化と WinRT ランタイムの起動。
+*   **UI ライフサイクル管理:** WinUI 3 の `Application` と `Window` の生成、およびメッセージループの制御。
+*   **マルチタブ管理:** `TabView` コントロールを使用して、複数のターミナル `Surface`（タブ）を保持・切り替え。
+*   **ハイブリッド入力制御:** WinUI 3 の XAML 要素と、Win32 HWND サブクラス化（`hacks.zig`）による低レベルメッセージ処理を統合。
+*   **Ghostty コアとの仲介:** 共通の `CoreApp` 信号を Windows 固有の操作（タイトル変更、フルスクリーン、終了処理等）に変換。
+
+### 2. 依存関係
+*   **Ghostty Core:** `../../App.zig` (コア論理), `../../Surface.zig` (共通描画インタフェース)。
+*   **WinRT/COM:** `winrt.zig` (プロジェクション), `com.zig` (ABI定義), `com_aggregation.zig` (COM集約)。
+*   **Windows SDK:** `bootstrap.zig` (SDK初期化), `os.zig` (Win32 API)。
+*   **内部コンポーネント:** `Surface.zig` (WinUI 3版サーフェス), `input_overlay.zig` (入力用透過ウィンドウ)。
+
+### 3. 設計パターン
+*   **COM Aggregation (集約):** `IXamlMetadataProvider` を実装するために、ネイティブの `Application` オブジェクトをラップ・拡張。
+*   **Subclassing (サブクラス化):** WinUI 3 のウィンドウメッセージを横取りし、カスタム入力を処理する Win32 の伝統的手法。
+*   **State Machine:** `StartupStage` エナムによる段階的な初期化プロセスの管理。
+*   **Observer パターン:** COM イベントハンドラ（`SimpleEventHandler`）を用いた XAML イベントの購読。
+
+### 4. 改善点
+*   **COM リソース管理の簡略化:** `release()` の手動呼び出しが多く、リークのリスクがある。Zig 0.15.x 等の機能を活かした `defer` による自動解放の抽象化が望ましい。
+*   **`initXaml` の肥大化:** 初期化手順が非常に長いため、リソースロード、ウィンドウ設定、イベント登録などの論理単位で関数をさらに分割すべき。
+*   **エラーハンドリングの不一致:** `hrCheck` で即死する箇所と、`log.warn` で握りつぶす箇所が混在している。リカバリ戦略の統一が必要。
+*   **同期的な `boxString`:** 文字列のボクシング（`IInspectable` 化）が頻繁に行われるが、頻出する文字列（"Terminal" 等）はキャッシュ可能。

@@ -1,0 +1,24 @@
+## Analyze: com_aggregation.zig
+
+`com_aggregation.zig` の分析結果を簡潔にまとめます。
+
+### 1. このコードは何をしているか（目的と責務）
+*   **WinUI 3のCOM集約 (Aggregation) の実装:** XAMLコンパイラ（C++/WinRT等）が自動生成する `Application` オブジェクトの動作をZigで手動実装しています。
+*   **IXamlMetadataProviderの注入:** WinUI 3のカスタムコントロールやテンプレート（`XamlControlsResources`）を解決するために必要なインターフェースを、既存の `Application` オブジェクトに「外付け」します。
+*   **Application.Start コールバック:** アプリ起動時に呼ばれる WinRT デリゲート (`InitCallback`) を提供します。
+
+### 2. 依存関係
+*   **内部:** `winrt.zig` (GUID, HRESULT), `com.zig` (インターフェース定義), `App.zig` (アプリロジック)。
+*   **外部:** WinUI 3 ランタイム (`Microsoft.UI.Xaml.dll`)。
+*   **使用元:** `App.zig` での起動処理、`com_runtime.zig` でのCOM管理などで参照されます。
+
+### 3. 設計パターン
+*   **COM Aggregation:** `AppOuter` が "Outer (Controlling) Unknown" となり、WinUI内部の `Application` インスタンスを "Inner" として保持し、必要に応じてインターフェースを委譲します。
+*   **Manual VTable Layout:** C++ ABI互換のため、構造体の先頭に `lpVtbl` を配置するバイナリレイアウトを再現しています。
+*   **Delegating/Non-delegating IUnknown:** COMの集約ルールに基づき、`QueryInterface` を外側のオブジェクトに転送する実装になっています。
+
+### 4. 改善点
+*   **エラー定数の抽象化:** `@bitCast(@as(u32, 0x80004002))` などのハードコードが散見されるため、`winrt.HRESULT.E_NOINTERFACE` 等の定数を使用すべきです。
+*   **GUID比較の最適化:** `guidEql` は GUID 全体を `std.mem.eql` で一括比較するか、`std.mem.asBytes` を使った方が簡潔かつ高速です。
+*   **ログレベルの調整:** `outerQueryInterface` 内で全ての QI 要請を `info` レベルで出力しており、実行時に非常にノイジーになる可能性があります。デバッグ時以外は `debug` レベルに下げるべきです。
+*   **メモリ所有権の明確化:** `outerRelease` で `next == 0` の際に「スタック所有である」との警告がありますが、COM の原則（参照カウントが 0 で自己破壊）と Zig のスタック管理が混在しており、誤用のリスクがあります。

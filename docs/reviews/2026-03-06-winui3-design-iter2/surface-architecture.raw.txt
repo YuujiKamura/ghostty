@@ -1,0 +1,27 @@
+## Analyze: Surface.zig
+
+GhosttyのWinUI 3フロントエンドにおける「Surface（描画領域/タブ内容）」の実装コードを分析しました。
+
+### 1. このコードは何をしているか（目的と責務）
+WinUI 3の**`SwapChainPanel`を管理し、GhosttyのターミナルコアとWindows UIフレームワークを仲介する**ことが主な役割です。
+- **描画ブリッジ:** DirectX（レンダラ）からのスワップチェーンをWinUI 3のパネルにバインドし、描画を可能にする。
+- **入力処理:** Win32の複雑なキーボードイベント（`WM_KEYDOWN`と`WM_CHAR`の協調）やマウス入力を、Ghosttyコアが理解できる形式に変換・転送する。
+- **ライフサイクル管理:** タブ（`TabViewItem`）としての状態管理、DPIスケールへの追従、ウィンドウサイズ変更の同期。
+- **プラットフォーム機能:** クリップボードの読み書き、マウスカーソルの形状変更、ベル音の再生など。
+
+### 2. 依存関係
+- **Ghosttyコア (`../../...`):** `CoreSurface`, `apprt.zig`, `terminal/main.zig` などに強く依存し、インターフェースを実装。
+- **Windows API/WinRT:** `com.zig`, `winrt.zig`, `os.zig` を通じて、COM/WinRTオブジェクト（`IInspectable`, `ISwapChainPanelNative`）を直接操作。
+- **内部ユーティリティ:** `key.zig`（キーマッピング）、`search_overlay.zig`（検索画面）、`delegate_runtime.zig`（イベント処理）。
+
+### 3. 設計パターン
+- **Bridge / Adapter パターン:** Ghostty共通の`CoreSurface`とWinUI 3固有のUIコントロールを接続。
+- **State パターン（入力）:** `PendingKeydown`（union enum）を用いて、キー入力の状態（未処理、消費済み、保留中）を管理し、テキスト入力の重複を防止。
+- **Proxy (UI Thread Marshalling):** `bindSwapChain`において、レンダラースレッドからUIスレッドへ`PostMessage`を用いて処理を委譲。
+- **RAII / 参照カウンタ:** COMオブジェクトの`Release`を`deinit`で行う手動管理。
+
+### 4. 改善点
+- **クリップボードのWinRT化:** 現在は生のWin32 API（`GlobalAlloc`等）を使用していますが、WinUI 3環境であれば`Windows.ApplicationModel.DataTransfer`（WinRT）を使用する方が現代的かつ安全です。
+- **エラーハンドリングの徹底:** `setTabTitle`内の`util.boxString`など、いくつかの場所でエラーを無視（`|_| {}`）している箇所があり、UIが更新されない原因の特定を困難にする可能性があります。
+- **リソース管理の抽象化:** `errdefer`によるCOMリリースの記述が多いため、Zigの`defer`と相性の良いスマートポインタ的なラッパーがあると、`init`時のリーク耐性が向上します。
+- **未実装のTODO:** `setProgressReport`（タスクバーの進捗）や`commandFinished`（トースト通知）がMVP（実用最小限の製品）として空の実装になっており、UX向上の余地があります。

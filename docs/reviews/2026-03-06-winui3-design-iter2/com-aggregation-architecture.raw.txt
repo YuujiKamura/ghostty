@@ -1,0 +1,24 @@
+## Analyze: com_aggregation.zig
+
+`com_aggregation.zig` の分析結果を簡潔にまとめます。
+
+### 1. 目的と責務
+WinUI 3 アプリケーションを XAML コンパイラなしで実行するための **COM Aggregation（集約）の実装**を担います。
+*   **`InitCallback`**: `Application.Start` に渡すデリゲート（コールバック）の実装。
+*   **`AppOuter`**: Windows 実行時オブジェクト（`Application`）を包む「外側」のオブジェクト。WinUI フレームワークが要求する `IXamlMetadataProvider` インターフェースを横取りし、コントロールの XAML テンプレート解決を可能にします。
+
+### 2. 依存関係
+*   **内部依存**: `winrt.zig` (GUID/HRESULT定義), `com.zig` (インターフェース定義), `App.zig` (アプリケーションロジック)。
+*   **外部依存**: WinRT/COM ランタイム（`IUnknown`, `IAgileObject`, `IInspectable`）。
+*   **被使用**: 主に `App.zig` の初期化プロセス（`Application.Start` 周辺）で使用されます。
+
+### 3. 設計パターン
+*   **COM Aggregation**: 「外側」が `IXamlMetadataProvider` を処理し、それ以外を「内側（WinRT純正Application）」に委譲するパターン。
+*   **Manual VTable Mapping**: Zig の `extern struct` と関数ポインタを使用して COM インターフェースを低レイヤーで手動構築。
+*   **Atomic Reference Counting**: XAML フレームワークのマルチスレッドアクセスに対応するため、`std.atomic` によるスレッドセーフな参照カウント管理。
+
+### 4. 改善点
+*   **GUID の一元管理**: `IID_IUnknown` や `IAgileObject` がファイル内にハードコードされています。`winrt.zig` 等の共通定義に集約すべきです。
+*   **メモリ管理の安全性**: `AppOuter` のコメントに「stack-owned（スタック所有）」とありますが、参照カウントが 0 になった際に警告を出すだけで、自身の解放ロジックがありません。所有権の境界をより明確にする必要があります。
+*   **ボイラープレートの削減**: `fromIUnknownPtr` などのポインタ変換ロジックは、ジェネリックなヘルパー関数（または `com.zig` の機能）に抽象化できる余地があります。
+*   **エラー伝搬**: `invokeFn` でのエラーがログ出力のみで `E_FAIL` を返していますが、エラー詳細を HRESULT に変換する仕組みがあるとデバッグが容易になります。

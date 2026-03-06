@@ -8,8 +8,6 @@ const com = @import("com.zig");
 const App = @import("App.zig");
 
 const log = std.log.scoped(.winui3);
-const IID_IUnknown = winrt.GUID{ .Data1 = 0x00000000, .Data2 = 0x0000, .Data3 = 0x0000, .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
-const IID_IAgileObject = winrt.GUID{ .Data1 = 0x94ea2b94, .Data2 = 0xe9cc, .Data3 = 0x49e0, .Data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
 
 // ---------------------------------------------------------------
 // ApplicationInitializationCallback — WinRT delegate for Application.Start()
@@ -65,7 +63,7 @@ pub fn InitCallback(comptime AppType: type) type {
         fn qiFn(this: *anyopaque, riid: *const winrt.GUID, ppv: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
             const IID_Self = winrt.GUID{ .Data1 = 0xd8eef1c9, .Data2 = 0x1234, .Data3 = 0x56f1, .Data4 = .{ 0x99, 0x63, 0x45, 0xdd, 0x9c, 0x80, 0xa6, 0x61 } };
 
-            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject) or guidEql(riid, &IID_Self)) {
+            if (guidEql(riid, &winrt.IID_IUnknown) or guidEql(riid, &winrt.IID_IAgileObject) or guidEql(riid, &IID_Self)) {
                 ppv.* = this;
                 _ = addRefFn(this);
                 return 0; // S_OK
@@ -248,7 +246,7 @@ pub const AppOuter = struct {
         // We intentionally claim IAgileObject here to avoid noisy E_NOINTERFACE
         // probes during WinUI startup; metadata methods still enforce safe fallback
         // behavior and never assume cross-thread provider access is mandatory.
-        if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+        if (guidEql(riid, &winrt.IID_IUnknown) or guidEql(riid, &winrt.IID_IAgileObject)) {
             log.info("outerQI: -> IUnknown (handled by outer)", .{});
             ppv.* = this;
             _ = outerAddRef(this);

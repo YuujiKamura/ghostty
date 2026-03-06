@@ -26,6 +26,18 @@ pub const HMODULE = std.os.windows.HANDLE;
 
 /// Placeholder for vtable slots we don't call.
 pub const VtblPlaceholder = *const anyopaque;
+pub const IID_IUnknown = GUID{
+    .Data1 = 0x00000000,
+    .Data2 = 0x0000,
+    .Data3 = 0x0000,
+    .Data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 },
+};
+pub const IID_IAgileObject = GUID{
+    .Data1 = 0x94ea2b94,
+    .Data2 = 0xe9cc,
+    .Data3 = 0x49e0,
+    .Data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 },
+};
 
 // ============================================================================
 // HRESULT checking

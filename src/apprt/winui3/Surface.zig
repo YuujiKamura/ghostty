@@ -429,16 +429,25 @@ pub fn setTabTitle(self: *Surface, title: [:0]const u8) void {
         if (tvi_insp.queryInterface(com.ITabViewItem)) |tvi| {
             defer tvi.release();
             if (self.title) |t| {
-                const utf16 = std.unicode.utf8ToUtf16LeAlloc(alloc, t) catch return;
+                const utf16 = std.unicode.utf8ToUtf16LeAlloc(alloc, t) catch {
+                    log.warn("setTabTitle: utf8ToUtf16LeAlloc failed", .{});
+                    return;
+                };
                 defer alloc.free(utf16);
                 if (winrt.createHString(utf16)) |hstr| {
                     defer winrt.deleteHString(hstr);
                     const util = @import("util.zig");
                     if (util.boxString(hstr)) |boxed| {
                         defer boxed.release();
-                        _ = tvi.putHeader(boxed) catch {};
-                    } else |_| {}
-                } else |_| {}
+                        _ = tvi.putHeader(boxed) catch |err| {
+                            log.warn("setTabTitle: putHeader failed: {}", .{err});
+                        };
+                    } else |err| {
+                        log.warn("setTabTitle: boxString failed: {}", .{err});
+                    }
+                } else |err| {
+                    log.warn("setTabTitle: createHString failed: {}", .{err});
+                }
             }
         } else |_| {}
     }
