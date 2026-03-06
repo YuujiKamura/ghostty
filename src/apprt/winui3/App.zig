@@ -27,6 +27,7 @@ const input_overlay = @import("input_overlay.zig");
 const ime = @import("ime.zig");
 const debug_harness = @import("debug_harness.zig");
 const tabview_runtime = @import("tabview_runtime.zig");
+const tab_index = @import("tab_index.zig");
 
 const log = std.log.scoped(.winui3);
 
@@ -997,12 +998,7 @@ pub fn performAction(
             if (self.tab_view) |tv| {
                 const tab_count = self.surfaces.items.len;
                 if (tab_count == 0) return true;
-                const new_idx: usize = switch (value) {
-                    .previous => if (self.active_surface_idx > 0) self.active_surface_idx - 1 else tab_count - 1,
-                    .next => if (self.active_surface_idx + 1 < tab_count) self.active_surface_idx + 1 else 0,
-                    .last => tab_count - 1,
-                    _ => @min(@as(usize, @intCast(@intFromEnum(value))), tab_count - 1),
-                };
+                const new_idx = tab_index.computeGotoIndex(self.active_surface_idx, tab_count, value);
                 tv.putSelectedIndex(@intCast(new_idx)) catch {};
                 self.active_surface_idx = new_idx;
             }
@@ -1290,8 +1286,8 @@ pub fn closeTab(self: *App, idx: usize) void {
         if (self.xaml_app) |xa| {
             xa.exit() catch {};
         }
-    } else if (self.active_surface_idx >= self.surfaces.items.len) {
-        self.active_surface_idx = self.surfaces.items.len - 1;
+    } else if (tab_index.clampActiveIndex(self.active_surface_idx, self.surfaces.items.len)) |clamped| {
+        self.active_surface_idx = clamped;
     }
 }
 
@@ -1312,7 +1308,7 @@ pub fn closeSurface(self: *App, surface: *Surface) void {
 /// Get the currently active Surface, or null if none.
 pub fn activeSurface(self: *App) ?*Surface {
     if (self.surfaces.items.len == 0) return null;
-    if (self.active_surface_idx >= self.surfaces.items.len) return null;
+    if (!tab_index.isValid(self.active_surface_idx, self.surfaces.items.len)) return null;
     return self.surfaces.items[self.active_surface_idx];
 }
 

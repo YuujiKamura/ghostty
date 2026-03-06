@@ -1,0 +1,27 @@
+## Analyze: App.zig
+
+`App.zig`の分析結果を簡潔にまとめます。
+
+### 1. 目的と責務
+Ghosttyターミナルの**WinUI 3（Windows App SDK）ランタイムの基盤**です。
+*   **SDKブートストラップ**: Windows App SDKの初期化とWinRTランタイムの起動。
+*   **ウィンドウ・UI管理**: WinUI 3 Windowと`TabView`（タブ管理）の生成、ライフサイクル管理。
+*   **低レイヤブリッジ**: COM Aggregationによる`IXamlMetadataProvider`の実装、HWNDサブクラス化によるメッセージルーティング。
+*   **入力制御**: WinUI 3の入力をバイパスし、IME入力を適切に処理するための専用入力HWND（`input_overlay`）の管理。
+
+### 2. 依存関係
+*   **コアロジック**: `../../App.zig` (CoreApp) および `../../Surface.zig` (CoreSurface) と密結合し、描画とターミナル機能を委譲。
+*   **Win32/WinRT**: `os.zig` (HWND操作), `winrt.zig` (HSTRING/RoInitialize), `com.zig` (ABI定義) に依存。
+*   **内部コンポーネント**: `Surface.zig` (タブごとの描画), `tabview_runtime.zig` (UI構築), `hacks.zig` (低層フック)。
+
+### 3. 設計パターン
+*   **COM Aggregation**: WinUI 3 `Application` オブジェクトを拡張し、メタデータプロバイダーを注入する高度なCOMパターン。
+*   **State Machine**: `StartupStage` による段階的な初期化状態の管理。
+*   **Command Pattern**: `performAction` により、コアからの抽象的な操作（新タブ、クローズ等）をWinUI 3の具体的な操作に変換。
+*   **Proxy/Overlay**: 入力処理をWinUIから分離し、ネイティブHWNDでプロキシする「Input Overlay」パターン。
+
+### 4. 改善点
+*   **巨大な初期化関数**: `initXaml` や `createInitialSurfaceContent` が肥大化しており、UI構築ロジックを `tabview_runtime.zig` 等へさらに委譲し、宣言的に記述できる余地があります。
+*   **手動の参照カウンタ管理**: COMの `AddRef/Release` が手動で行われており、Zigの `errdefer` と組み合わせたリソース管理をより安全にする（RAIIラッパーの導入など）検討が必要です。
+*   **タブ管理ロジックの分散**: `newTab` や `closeTab` のロジックが `App.zig` 内に多く残っており、これらを `TabManager` 的な構造体に分離すると見通しが良くなります。
+*   **エラー回復**: `catch |err| log.warn(...)` でエラーを握り潰している箇所が多く、クリティカルなUI生成失敗時のリカバリ戦略が限定的です。
