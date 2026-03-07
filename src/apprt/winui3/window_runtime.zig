@@ -34,6 +34,14 @@ pub fn activateAndLoadResources(self: anytype, window: *com.IWindow) !void {
         } else {
             log.warn("initXaml: DwmExtendFrameIntoClientArea failed: hr=0x{x}", .{@as(u32, @bitCast(hr))});
         }
+
+        // Enable dark mode for DWM caption buttons (white icons on dark background).
+        const dark_mode: u32 = 1;
+        _ = os.DwmSetWindowAttribute(h, os.DWMWA_USE_IMMERSIVE_DARK_MODE, @ptrCast(&dark_mode), @sizeOf(u32));
+        // Set caption color to black to match our background.
+        const caption_color: u32 = 0x00000000; // COLORREF: 0x00BBGGRR
+        _ = os.DwmSetWindowAttribute(h, os.DWMWA_CAPTION_COLOR, @ptrCast(&caption_color), @sizeOf(u32));
+        log.info("initXaml: DWM dark mode + caption color set", .{});
     }
 
     // Set initial size
@@ -42,16 +50,10 @@ pub fn activateAndLoadResources(self: anytype, window: *com.IWindow) !void {
         defer fe_guard.deinit();
     } else |_| {}
 
-    // Step 7.1: Enable content extension into title bar (Windows Terminal style).
-    // ExtendsContentIntoTitleBar is on IWindow (v1), not IWindow2.
-    // Since `window` is already *com.IWindow, call directly.
-    // NOTE: Temporarily disabled — enabling this without a fully styled TabView
-    // causes layout issues (white screen in Row 1). Re-enable once TabView
-    // template rendering is confirmed working.
-    // window.putExtendsContentIntoTitleBar(true) catch |err| {
-    //     log.warn("initXaml step 7.1: putExtendsContentIntoTitleBar failed: {}", .{err});
-    // };
-    log.info("initXaml step 7.1: ExtendsContentIntoTitleBar = SKIPPED (pending TabView template fix)", .{});
+    // Step 7.1: ExtendsContentIntoTitleBar — PERMANENTLY DISABLED.
+    // Causes UI thread freeze on mouse hover regardless of WM_NCHITTEST handling
+    // (Issue #42, 6 attempts all failed). Caption buttons will be XAML-drawn instead.
+    log.info("initXaml step 7.1: ExtendsContentIntoTitleBar = DISABLED (Issue #42)", .{});
 
     // Step 7.2: load XamlControlsResources after window activation.
     // Putting resources too early in startup can yield 0x8000ffff in unpackaged runs.
