@@ -769,6 +769,10 @@ fn maybeBindPendingSwapChainHandle(self: *Surface, caller: []const u8) void {
 
 /// Loaded event callback. Triggered when the SwapChainPanel is added to the visual tree.
 fn onLoaded(self: *Surface, _: *anyopaque, _: *anyopaque) void {
+    if (self.in_loaded_handler) return;
+    self.in_loaded_handler = true;
+    defer self.in_loaded_handler = false;
+
     // Guard: ensureVisibleSurfaceAttached does clear+append on tab content,
     // which re-fires Loaded asynchronously via the XAML event queue.
     // Only run the full handler on the first Loaded event.

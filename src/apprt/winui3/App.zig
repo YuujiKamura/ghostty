@@ -118,6 +118,10 @@ active_surface_idx: usize = 0,
 /// The TabView control that manages tabs.
 tab_view: ?*com.ITabView = null,
 
+/// The content grid (Row 1 of RootGrid) where SwapChainPanel is placed.
+/// In Issue #28 architecture, SwapChainPanel lives here, NOT in TabViewItem.Content.
+tab_content_grid: ?*winrt.IInspectable = null,
+
 /// Whether the app is running.
 running: bool = false,
 startup_stage: StartupStage = .not_started,
@@ -386,17 +390,22 @@ fn activateWindowAndLoadResources(self: *App, window: *com.IWindow) !void {
 }
 
 fn createWindowContent(self: *App, window: *com.IWindow) !void {
-    const tab_view = try self.createTabViewRoot(window);
-    self.tab_view = tab_view;
-    tabview_runtime.configureDefaults(tab_view);
+    // Step 7.5: Create TabView root (RootGrid) if enabled, otherwise single-panel.
+    const tv = try self.createTabViewRoot(window);
+    self.tab_view = tv;
 
-    try self.registerTabViewHandlers(tab_view);
-    // Step 8: Create the initial terminal content.
-    try self.createInitialSurfaceContent(window, tab_view);
+    if (tv) |tab_view| {
+        tabview_runtime.configureDefaults(tab_view);
+        try self.registerTabViewHandlers(tab_view);
+    }
+
+    // Step 8: Create initial Surface and content.
+    try self.createInitialSurfaceContent(window, tv);
 }
 
 fn scheduleDebugActions(self: *App) !void {
     // Step 10: Test control logic.
+    // TabView is now created during createWindowContent, no deferred toggle needed.
     if (self.debug_cfg.new_tab_on_init) {
         log.info("initXaml step 10: new_tab_on_init triggered", .{});
         self.newTab() catch |err| log.warn("new_tab_on_init failed: {}", .{err});
@@ -464,90 +473,74 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
         if (w > 0 and h > 0) {
             surface.updateSize(w, h);
             log.info("initXaml step 8: synced surface size to {}x{}", .{ w, h });
-
-            // Test: manually set TabView height.
-            if (self.tab_view) |tv| {
-                if (tv.queryInterface(com.IFrameworkElement)) |fe| {
-                    var fe_guard = winrt.ComRef(com.IFrameworkElement).init(fe);
-                    defer fe_guard.deinit();
-                } else |_| {}
-            }
         }
     }
 
-    if (surface.swap_chain_panel) |panel| {
-        if (tab_view) |tv| {
-            const tvi_inspectable = try self.activateXamlType(XamlClass.TabViewItem);
-            var tvi_guard = winrt.ComRef(com.ITabViewItem).init(try tvi_inspectable.queryInterface(com.ITabViewItem));
-            defer tvi_guard.deinit();
-            const tvi = tvi_guard.get();
+    const panel = surface.swap_chain_panel orelse return;
 
-            const initial_title = try winrt.hstring("Terminal");
-            defer winrt.deleteHString(initial_title);
-            var boxed_title_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(initial_title));
-            defer boxed_title_guard.deinit();
-            const boxed_title = boxed_title_guard.get();
-            try tvi.putHeader(@ptrCast(boxed_title));
-            try tvi.putIsClosable(false);
+    if (tab_view) |tv| {
+        // Issue #28 architecture: TabViewItem.Content = dummy Border,
+        // SwapChainPanel goes into tab_content_grid (Row 1 of RootGrid).
+        const tvi_inspectable = try self.activateXamlType(XamlClass.TabViewItem);
+        var tvi_guard = winrt.ComRef(com.ITabViewItem).init(try tvi_inspectable.queryInterface(com.ITabViewItem));
+        defer tvi_guard.deinit();
+        const tvi = tvi_guard.get();
 
-            if (!self.debug_cfg.tabview_item_no_content) {
-                var content_control_guard = winrt.ComRef(com.IContentControl).init(try tvi_inspectable.queryInterface(com.IContentControl));
-                defer content_control_guard.deinit();
-                const placeholder_class = try winrt.hstring(XamlClass.Border);
-                defer winrt.deleteHString(placeholder_class);
-                var placeholder_guard = winrt.ComRef(winrt.IInspectable).init(try winrt.activateInstance(placeholder_class));
-                defer placeholder_guard.deinit();
-                try content_control_guard.get().putContent(@ptrCast(placeholder_guard.get()));
-                log.info("initXaml step 8: TabViewItem placeholder content set", .{});
-            } else {
-                log.info("initXaml step 8: SKIPPING putContent (GHOSTTY_WINUI3_TABVIEW_ITEM_NO_CONTENT=true)", .{});
-            }
+        const initial_title = try winrt.hstring("Terminal");
+        defer winrt.deleteHString(initial_title);
+        var boxed_title_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(initial_title));
+        defer boxed_title_guard.deinit();
+        try tvi.putHeader(boxed_title_guard.get());
+        try tvi.putIsClosable(false);
 
-            if (!self.debug_cfg.tabview_append_item) {
-                log.info("initXaml step 8: STOP at level 1 (create+putContent only, no append)", .{});
-            } else {
-                var tab_items_guard = winrt.ComRef(com.IVector).init(try tv.getTabItems());
-                defer tab_items_guard.deinit();
-                try tab_items_guard.get().append(@ptrCast(tvi_inspectable));
-                log.info("initXaml step 8: append done", .{});
-
-                const items_size = try tab_items_guard.get().getSize();
-                log.info("audit: [PASS] TabItems.getSize() = {}", .{items_size});
-
-                surface.tab_view_item_inspectable = tvi_inspectable;
-
-                if (!self.debug_cfg.tabview_select_first) {
-                    log.info("initXaml step 8: STOP at level 2 (create+putContent+append, no selectedIndex)", .{});
-                } else {
-                    try tv.putSelectedIndex(0);
-                    self.attachSurfaceToTabItem(null, 0) catch |err| {
-                        log.warn("initXaml step 8: attachSurfaceToTabItem(0) failed: {}", .{err});
-                    };
-                    const actual_idx = try tv.getSelectedIndex();
-                    log.info(
-                        "initXaml step 8: rebindSwapChain(before) loaded={} last_swap_chain={}",
-                        .{ surface.loaded, surface.last_swap_chain != null },
-                    );
-                    surface.rebindSwapChain();
-                    log.info(
-                        "initXaml step 8: rebindSwapChain(after) loaded={} last_swap_chain={}",
-                        .{ surface.loaded, surface.last_swap_chain != null },
-                    );
-                    log.info("audit: [PASS] TabView.getSelectedIndex() = {}", .{actual_idx});
-                    log.info("initXaml step 8 OK: full (create+putContent+append+selectedIndex)", .{});
-                }
-            }
-        } else {
-            const wrapped_panel = panel;
-            if (wrapped_panel != @as(*winrt.IInspectable, @ptrCast(panel))) {
-                var wrapped_panel_guard = winrt.ComRef(winrt.IInspectable).init(wrapped_panel);
-                defer wrapped_panel_guard.deinit();
-                try window.putContent(@ptrCast(wrapped_panel));
-            } else {
-                try window.putContent(@ptrCast(panel));
-            }
-            log.info("initXaml step 8 OK: Surface + SwapChainPanel set as Window content (single-tab)", .{});
+        // Set dummy Border as TabViewItem.Content (required for drag-drop, not for rendering).
+        if (!self.debug_cfg.tabview_item_no_content) {
+            var cc_guard = winrt.ComRef(com.IContentControl).init(try tvi_inspectable.queryInterface(com.IContentControl));
+            defer cc_guard.deinit();
+            const border_class = try winrt.hstring(XamlClass.Border);
+            defer winrt.deleteHString(border_class);
+            var border_guard = winrt.ComRef(winrt.IInspectable).init(try winrt.activateInstance(border_class));
+            defer border_guard.deinit();
+            try cc_guard.get().putContent(@as(?*anyopaque, @ptrCast(border_guard.get())));
+            log.info("initXaml step 8: TabViewItem dummy Border content set", .{});
         }
+
+        if (!self.debug_cfg.tabview_append_item) {
+            log.info("initXaml step 8: STOP at level 1 (no append)", .{});
+            return;
+        }
+
+        var tab_items_guard = winrt.ComRef(com.IVector).init(try tv.getTabItems());
+        defer tab_items_guard.deinit();
+        try tab_items_guard.get().append(@ptrCast(tvi_inspectable));
+        surface.tab_view_item_inspectable = tvi_inspectable;
+
+        const items_size = try tab_items_guard.get().getSize();
+        log.info("initXaml step 8: TabViewItem appended, TabItems.size={}", .{items_size});
+
+        if (!self.debug_cfg.tabview_select_first) {
+            log.info("initXaml step 8: STOP at level 2 (no selectedIndex)", .{});
+            return;
+        }
+
+        try tv.putSelectedIndex(0);
+
+        // Place SwapChainPanel into tab_content_grid (Row 1).
+        const tab_content = self.tab_content_grid orelse return error.AppInitFailed;
+        const content_panel = try tab_content.queryInterface(com.IPanel);
+        defer content_panel.release();
+        const content_children_raw = try content_panel.getChildren();
+        const content_children: *com.IVector = @ptrCast(@alignCast(content_children_raw));
+        defer content_children.release();
+        try content_children.append(@ptrCast(panel));
+        log.info("initXaml step 8: SwapChainPanel added to tab_content_grid", .{});
+
+        surface.rebindSwapChain();
+        log.info("initXaml step 8 OK: full (TabViewItem+append+selectedIndex+SwapChainPanel in tab_content_grid)", .{});
+    } else {
+        // Single-panel mode: SwapChainPanel directly as Window.Content.
+        try window.putContent(@as(?*anyopaque, @ptrCast(panel)));
+        log.info("initXaml step 8 OK: SwapChainPanel set as Window content (single-tab)", .{});
     }
 }
 
@@ -594,26 +587,31 @@ fn validateTabViewParity(self: *App) !void {
     log.info("validateTabViewParity: starting audit...", .{});
     const window = self.window orelse return error.NoWindow;
 
-    // Canonical Step 1: create TabView and set Window content.
+    // Canonical Step 1: RootGrid set as Window.Content, tab_content_grid exists.
     if (self.debug_cfg.enable_tabview) {
         _ = self.tab_view orelse {
             log.err("PARITY_FAIL: step1_create_tabview_root", .{});
+            return error.ParityFail;
+        };
+        _ = self.tab_content_grid orelse {
+            log.err("PARITY_FAIL: step1_tab_content_grid_exists", .{});
             return error.ParityFail;
         };
         const content = try window.getContent();
         if (content) |c| {
             var content_guard = winrt.ComRef(winrt.IInspectable).init(@as(*winrt.IInspectable, @ptrCast(c)));
             defer content_guard.deinit();
-            var content_tv_guard = winrt.ComRef(com.ITabView).init(content_guard.get().queryInterface(com.ITabView) catch {
-                log.err("PARITY_FAIL: step1_window_content_is_tabview", .{});
+            // Window.Content should be a Grid (RootGrid), not TabView directly.
+            var grid_guard = winrt.ComRef(com.IGrid).init(content_guard.get().queryInterface(com.IGrid) catch {
+                log.err("PARITY_FAIL: step1_window_content_is_rootgrid", .{});
                 return error.ParityFail;
             });
-            defer content_tv_guard.deinit();
+            defer grid_guard.deinit();
         } else {
             log.err("PARITY_FAIL: step1_window_content_non_null", .{});
             return error.ParityFail;
         }
-        log.info("validate: [PASS] step1_create_tabview_root", .{});
+        log.info("validate: [PASS] step1_rootgrid_architecture", .{});
     }
 
     // Canonical Step 2: register handlers before first tab realization.
@@ -985,7 +983,7 @@ pub fn redrawInspector(_: *App, _: *Surface) void {}
 
 /// Create a new tab with a fresh Surface.
 pub fn newTab(self: *App) !void {
-    return tab_manager.newTab(self, XamlClass.TabViewItem, XamlClass.Border, InitialTabTitle);
+    return tab_manager.newTab(self, XamlClass.TabViewItem, InitialTabTitle);
 }
 
 /// Close the active tab and its surface.
@@ -1011,9 +1009,24 @@ pub fn toggleTabViewContainer(self: *App) !void {
     const panel = surface.swap_chain_panel orelse return error.AppInitFailed;
 
     if (self.tab_view) |tv| {
-        // TabView -> single panel
+        // TabView -> single panel: tear down RootGrid, set panel as Window.Content directly.
         log.info("toggleTabViewContainer: tab->single start", .{});
         self.unregisterTabViewHandlers(tv);
+
+        // Remove panel from tab_content_grid first.
+        if (self.tab_content_grid) |tcg| {
+            if (tcg.queryInterface(com.IPanel)) |p| {
+                defer p.release();
+                if (p.getChildren()) |c_raw| {
+                    const c: *com.IVector = @ptrCast(@alignCast(c_raw));
+                    defer c.release();
+                    c.clear() catch {};
+                } else |_| {}
+            } else |_| {}
+            _ = tcg.release();
+            self.tab_content_grid = null;
+        }
+
         if (tv.getTabItems()) |tab_items| {
             var tab_items_guard = winrt.ComRef(com.IVector).init(tab_items);
             defer tab_items_guard.deinit();
@@ -1021,29 +1034,12 @@ pub fn toggleTabViewContainer(self: *App) !void {
                 tab_items_guard.get().removeAt(0) catch {};
             }
         } else |_| {}
-        if (surface.tab_view_item_inspectable) |tvi_insp| {
-            if (tvi_insp.queryInterface(com.IContentControl)) |content_control| {
-                var content_control_guard = winrt.ComRef(com.IContentControl).init(content_control);
-                defer content_control_guard.deinit();
-                content_control_guard.get().putContent(null) catch {};
-            } else |_| {}
-        }
-        window.putContent(null) catch {};
 
-        const wrapped_panel = panel;
-        if (wrapped_panel != @as(*winrt.IInspectable, @ptrCast(panel))) {
-            var wrapped_panel_guard = winrt.ComRef(winrt.IInspectable).init(wrapped_panel);
-            defer wrapped_panel_guard.deinit();
-            window.putContent(@ptrCast(wrapped_panel)) catch |err| {
-                log.warn("toggleTabViewContainer: window.putContent(wrapped_panel) failed: {}", .{err});
-                return err;
-            };
-        } else {
-            window.putContent(@ptrCast(panel)) catch |err| {
-                log.warn("toggleTabViewContainer: window.putContent(panel) failed: {}", .{err});
-                return err;
-            };
-        }
+        window.putContent(null) catch {};
+        window.putContent(@ptrCast(panel)) catch |err| {
+            log.warn("toggleTabViewContainer: window.putContent(panel) failed: {}", .{err});
+            return err;
+        };
 
         if (surface.tab_view_item_inspectable) |tvi| {
             _ = tvi.release();
@@ -1058,25 +1054,21 @@ pub fn toggleTabViewContainer(self: *App) !void {
         return;
     }
 
-    // single panel -> TabView
+    // single panel -> TabView: create RootGrid with Issue #28 architecture.
     log.info("toggleTabViewContainer: single->tab start", .{});
-    const tv_inspectable = try self.activateXamlType(XamlClass.TabView);
-    const tv = tv_inspectable.queryInterface(com.ITabView) catch |err| {
-        log.warn("toggleTabViewContainer: TabView QI failed: {}", .{err});
-        return;
-    };
 
-    self.setControlBackground(@ptrCast(tv_inspectable), .{ .a = 255, .r = 0, .g = 0, .b = 0 });
-    window.putContent(@ptrCast(tv_inspectable)) catch |err| {
-        log.warn("toggleTabViewContainer: window.putContent(TabView) failed: {}", .{err});
-        return err;
-    };
+    // Remove panel from Window.Content before re-parenting.
+    window.putContent(null) catch {};
+
+    // Use tabview_runtime.createRoot to build the RootGrid.
+    const tv = try self.createTabViewRoot(window) orelse return error.AppInitFailed;
     self.tab_view = tv;
     self.active_surface_idx = 0;
     self.registerTabViewHandlers(tv) catch |err| {
         log.warn("toggleTabViewContainer: register handlers failed: {}", .{err});
     };
 
+    // Create TabViewItem with dummy Border.
     const tvi_inspectable = try self.activateXamlType(XamlClass.TabViewItem);
     var tvi_guard = winrt.ComRef(com.ITabViewItem).init(try tvi_inspectable.queryInterface(com.ITabViewItem));
     defer tvi_guard.deinit();
@@ -1086,8 +1078,7 @@ pub fn toggleTabViewContainer(self: *App) !void {
     defer winrt.deleteHString(initial_title);
     var boxed_title_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(initial_title));
     defer boxed_title_guard.deinit();
-    const boxed_title = boxed_title_guard.get();
-    tvi.putHeader(@ptrCast(boxed_title)) catch |err| {
+    tvi.putHeader(boxed_title_guard.get()) catch |err| {
         log.warn("toggleTabViewContainer: tvi.putHeader failed: {}", .{err});
         return err;
     };
@@ -1096,10 +1087,13 @@ pub fn toggleTabViewContainer(self: *App) !void {
         return err;
     };
 
-    var content_control_guard = winrt.ComRef(com.IContentControl).init(try tvi_inspectable.queryInterface(com.IContentControl));
-    defer content_control_guard.deinit();
-    content_control_guard.get().putContent(@ptrCast(panel)) catch |err| {
-        log.warn("toggleTabViewContainer: tvi.putContent(panel) failed: {}", .{err});
+    // Dummy Border in TabViewItem.Content.
+    const border_class = try winrt.hstring(XamlClass.Border);
+    defer winrt.deleteHString(border_class);
+    var border_guard = winrt.ComRef(winrt.IInspectable).init(try winrt.activateInstance(border_class));
+    defer border_guard.deinit();
+    surface_binding.setTabItemContent(tvi_inspectable, border_guard.get()) catch |err| {
+        log.warn("toggleTabViewContainer: setTabItemContent failed: {}", .{err});
         return err;
     };
 
@@ -1116,9 +1110,25 @@ pub fn toggleTabViewContainer(self: *App) !void {
 
     if (surface.tab_view_item_inspectable) |old| _ = old.release();
     surface.tab_view_item_inspectable = tvi_inspectable;
+
+    // Place SwapChainPanel into tab_content_grid.
+    self.attachSurfaceToTabItem(null, 0) catch |err| {
+        log.warn("toggleTabViewContainer: attachSurfaceToTabItem failed: {}", .{err});
+    };
+
     surface.rebindSwapChain();
     input_runtime.focusInputOverlay(self);
-    log.info("toggleTabViewContainer: switched to TabView mode", .{});
+    log.info("toggleTabViewContainer: switched to TabView mode (Issue #28 RootGrid)", .{});
+    if (self.hwnd) |hwnd| {
+        var rect: os.RECT = .{};
+        if (os.GetClientRect(hwnd, &rect) != 0) {
+            const w = rect.right - rect.left;
+            const h = rect.bottom - rect.top;
+            _ = os.SetWindowPos(hwnd, null, 0, 0, w + 1, h, os.SWP_NOMOVE | os.SWP_NOZORDER | os.SWP_NOACTIVATE);
+            _ = os.SetWindowPos(hwnd, null, 0, 0, w, h, os.SWP_NOMOVE | os.SWP_NOZORDER | os.SWP_NOACTIVATE);
+            log.info("toggleTabViewContainer: forced Win32-level resize refresh", .{});
+        }
+    }
 }
 
 /// Close a specific tab by index.
@@ -1252,7 +1262,7 @@ pub fn setControlBackground(_: *App, control_insp: *winrt.IInspectable, color: c
         var control_guard = winrt.ComRef(com.IControl).init(@ptrCast(@alignCast(control_raw.?)));
         defer control_guard.deinit();
         const control = control_guard.get();
-        control.putBackground(@ptrCast(brush)) catch |err| {
+        control.putBackground(brush) catch |err| {
             log.warn("setControlBackground: IControl.putBackground failed: {}", .{err});
         };
         return;
@@ -1264,7 +1274,7 @@ pub fn setControlBackground(_: *App, control_insp: *winrt.IInspectable, color: c
         var panel_guard = winrt.ComRef(com.IPanel).init(@ptrCast(@alignCast(panel_raw.?)));
         defer panel_guard.deinit();
         const panel = panel_guard.get();
-        panel.putBackground(@ptrCast(brush)) catch |err| {
+        panel.putBackground(brush) catch |err| {
             log.warn("setControlBackground: IPanel.putBackground failed: {}", .{err});
         };
         return;
@@ -1343,10 +1353,6 @@ pub fn loadXamlResources(self: *App, xa: *com.IApplication) void {
     xaml_helpers.loadXamlResources(self, xa);
 }
 
-fn verifyTabItemHasContent(content_control: *com.IContentControl) !bool {
-    return surface_binding.verifyTabItemHasContent(content_control);
-}
-
 pub fn drainMailbox(self: *App) void {
     log.info("drainMailbox: tick...", .{});
     self.core_app.tick(self) catch |err| {
@@ -1389,7 +1395,7 @@ fn setTitle(self: *App, title: [:0]const u8) void {
             var boxed_guard = winrt.ComRef(winrt.IInspectable).init(boxed);
             defer boxed_guard.deinit();
             log.info("setTitle: putHeader...", .{});
-            tvi_guard.get().putHeader(@ptrCast(boxed_guard.get())) catch {};
+            tvi_guard.get().putHeader(boxed_guard.get()) catch {};
             log.info("setTitle: putHeader done", .{});
         }
     }
@@ -1402,8 +1408,8 @@ fn setTitle(self: *App, title: [:0]const u8) void {
 
 /// Win32 subclass procedure callback.
 /// Installed via SetWindowSubclass on the WinUI 3 window's HWND to intercept
-pub const subclassProc = @import("hacks.zig").subclassProc;
-pub const stowedExceptionHandler = @import("hacks.zig").stowedExceptionHandler;
+pub const subclassProc = @import("wndproc.zig").subclassProc;
+pub const stowedExceptionHandler = @import("wndproc.zig").stowedExceptionHandler;
 
 test "App.performAction logic" {
     const testing = std.testing;

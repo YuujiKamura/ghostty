@@ -117,6 +117,7 @@ pub const INFINITE: DWORD = 0xFFFFFFFF;
 pub const MAPVK_VK_TO_CHAR: UINT = 2;
 
 // --- SetWindowPos flags ---
+pub const SWP_NOMOVE: UINT = 0x0002;
 pub const SWP_NOZORDER: UINT = 0x0004;
 pub const SWP_NOACTIVATE: UINT = 0x0010;
 

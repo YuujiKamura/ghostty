@@ -338,13 +338,22 @@ pub const AppOuter = struct {
     }
 
     fn metadataGetXamlType(this: *anyopaque, type_name: TypeName, result: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
-        _ = this;
-        const name_ptr = if (type_name.name) |n| @intFromPtr(n) else @as(usize, 0);
-        log.info("metadataGetXamlType called (slot 6, TypeName overload) kind={} name=0x{x} -> returning null (safe path)", .{
-            @intFromEnum(type_name.kind),
-            name_ptr,
-        });
+        log.info("metadataGetXamlType called (slot 6, TypeName overload)", .{});
+        const self = fromIMetadataPtr(this);
         result.* = null;
+        if (self.provider) |provider| {
+            // TypeName is 16 bytes on x64 -> passed via hidden pointer in Windows ABI.
+            // The provider VTable expects ?*anyopaque (the hidden pointer), so pass &type_name.
+            const hr = provider.lpVtbl.GetXamlType(@ptrCast(provider), @constCast(@ptrCast(&type_name)), result);
+            const hr_u32: u32 = @bitCast(hr);
+            if (hr_u32 == @as(u32, @bitCast(winrt.E_NOINTERFACE))) {
+                log.warn("metadataGetXamlType: provider returned E_NOINTERFACE, using null-type fallback", .{});
+                result.* = null;
+                return winrt.S_OK;
+            }
+            log.info("metadataGetXamlType delegated, hr=0x{x}", .{hr_u32});
+            return hr;
+        }
         return winrt.S_OK; // return null IXamlType (type not found)
     }
 

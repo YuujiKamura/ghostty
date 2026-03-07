@@ -11,40 +11,37 @@ pub fn setTabItemContent(tvi_insp: *winrt.IInspectable, content: ?*winrt.IInspec
     defer cc_guard.deinit();
     const cc = cc_guard.get();
     if (content) |c| {
-        try cc.putContent(@ptrCast(c));
+        try cc.putContent(c);
     } else {
-        try cc.putContent(null);
+        try cc.putContent(@as(?*anyopaque, null));
     }
 }
 
+/// Swap the SwapChainPanel in tab_content_grid on tab switch.
+/// Issue #28 architecture: tab_content_grid.Children.Clear() + Append(new panel).
 pub fn attachSurfaceToTabItem(self: anytype, prev_idx_opt: ?usize, idx: usize) !void {
     if (self.tab_view == null) return;
     if (idx >= self.surfaces.items.len) return;
 
-    // Detach previous tab content back to a placeholder.
-    if (prev_idx_opt) |prev_idx| if (prev_idx < self.surfaces.items.len and prev_idx != idx) {
-        const prev_surface = self.surfaces.items[prev_idx];
-        if (prev_surface.tab_view_item_inspectable) |prev_tvi| {
-            const placeholder_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Border");
-            defer winrt.deleteHString(placeholder_class);
-            var placeholder_guard = winrt.ComRef(winrt.IInspectable).init(try winrt.activateInstance(placeholder_class));
-            defer placeholder_guard.deinit();
-            setTabItemContent(prev_tvi, placeholder_guard.get()) catch {};
-        }
-    };
+    // Same tab → nothing to do.
+    if (prev_idx_opt) |prev_idx| {
+        if (prev_idx == idx) return;
+    }
 
     const surface = self.surfaces.items[idx];
-    const tvi_insp = surface.tab_view_item_inspectable orelse return;
     const panel = surface.swap_chain_panel orelse return;
+    const tab_content = self.tab_content_grid orelse return;
 
-    // Ensure the panel fills the tab content area.
-    if (panel.queryInterface(com.IFrameworkElement)) |fe| {
-        var fe_guard = winrt.ComRef(com.IFrameworkElement).init(fe);
-        defer fe_guard.deinit();
-    } else |_| {}
+    // Clear current content from tab_content_grid and add the new panel.
+    const content_panel = try tab_content.queryInterface(com.IPanel);
+    defer content_panel.release();
+    const children_raw = try content_panel.getChildren();
+    const children: *com.IVector = @ptrCast(@alignCast(children_raw));
+    defer children.release();
+    try children.clear();
+    try children.append(@ptrCast(panel));
 
-    log.info("attachSurfaceToTabItem: idx={} panel=0x{x}", .{ idx, @intFromPtr(panel) });
-    try setTabItemContent(tvi_insp, panel);
+    log.info("attachSurfaceToTabItem: idx={} panel=0x{x} swapped into tab_content_grid", .{ idx, @intFromPtr(panel) });
 }
 
 pub fn ensureVisibleSurfaceAttached(self: anytype, surface: *Surface) void {
@@ -59,32 +56,29 @@ pub fn ensureVisibleSurfaceAttached(self: anytype, surface: *Surface) void {
     }
 }
 
-pub fn verifyTabItemHasContent(content_control: *com.IContentControl) !bool {
-    const current = try content_control.getContent();
-    if (current) |insp| {
-        var insp_guard = winrt.ComRef(winrt.IInspectable).init(insp);
-        defer insp_guard.deinit();
-        return true;
-    }
-    return false;
-}
-
 pub fn auditActiveTabBinding(self: anytype) void {
     if (self.active_surface_idx >= self.surfaces.items.len) return;
     const s = self.surfaces.items[self.active_surface_idx];
-    const tvi = s.tab_view_item_inspectable orelse return;
     const panel = s.swap_chain_panel orelse return;
-    var cc_guard = winrt.ComRef(com.IContentControl).init(tvi.queryInterface(com.IContentControl) catch return);
-    defer cc_guard.deinit();
-    const cur = cc_guard.get().getContent() catch return;
-    if (cur) |c| {
-        var c_guard = winrt.ComRef(winrt.IInspectable).init(@as(*winrt.IInspectable, @ptrCast(c)));
-        defer c_guard.deinit();
+    const tab_content = self.tab_content_grid orelse return;
+
+    const content_panel = tab_content.queryInterface(com.IPanel) catch return;
+    defer content_panel.release();
+    const children_raw2 = content_panel.getChildren() catch return;
+    const children2: *com.IVector = @ptrCast(@alignCast(children_raw2));
+    defer children2.release();
+    const size = children2.getSize() catch return;
+    if (size > 0) {
+        const first = children2.getAt(0) catch return;
+        defer {
+            const unk: *com.IUnknown = @ptrCast(@alignCast(first));
+            _ = unk.lpVtbl.Release(@ptrCast(unk));
+        }
         log.info(
-            "auditActiveTabBinding: idx={} content=0x{x} panel=0x{x} match={}",
-            .{ self.active_surface_idx, @intFromPtr(c), @intFromPtr(panel), @intFromPtr(c) == @intFromPtr(panel) },
+            "auditActiveTabBinding: idx={} tab_content_child=0x{x} panel=0x{x} match={}",
+            .{ self.active_surface_idx, @intFromPtr(first), @intFromPtr(panel), @intFromPtr(first) == @intFromPtr(panel) },
         );
     } else {
-        log.warn("auditActiveTabBinding: idx={} content=null panel=0x{x}", .{ self.active_surface_idx, @intFromPtr(panel) });
+        log.warn("auditActiveTabBinding: idx={} tab_content_grid has no children", .{self.active_surface_idx});
     }
 }

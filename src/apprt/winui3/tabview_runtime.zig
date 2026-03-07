@@ -36,7 +36,8 @@ pub fn createRoot(
     // 2. Define two rows: Row 0 = Auto (TabView), Row 1 = 1* (content).
     const igrid = try root_grid_insp.queryInterface(com.IGrid);
     defer igrid.release();
-    const row_defs = try igrid.getRowDefinitions();
+    const row_defs_raw = try igrid.getRowDefinitions();
+    const row_defs: *com.IVector = @ptrCast(@alignCast(row_defs_raw));
     defer row_defs.release();
 
     const row_def_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.RowDefinition");
@@ -96,7 +97,8 @@ pub fn createRoot(
     // Add TabView to RootGrid children and set Grid.Row = 0.
     const root_panel = try root_grid_insp.queryInterface(com.IPanel);
     defer root_panel.release();
-    const root_children = try root_panel.getChildren();
+    const root_children_raw = try root_panel.getChildren();
+    const root_children: *com.IVector = @ptrCast(@alignCast(root_children_raw));
     defer root_children.release();
     try root_children.append(@ptrCast(tv_inspectable));
     // Grid.Row defaults to 0, no SetRow needed for TabView.

@@ -23,7 +23,7 @@ pub fn onTabCloseRequested(self: anytype, _: ?*anyopaque, args_obj: ?*anyopaque)
         self.closeActiveTab();
         return;
     };
-    var tab_insp_guard = winrt.ComRef(winrt.IInspectable).init(@ptrCast(tab_insp));
+    var tab_insp_guard = winrt.ComRef(winrt.IInspectable).init(@ptrCast(@alignCast(tab_insp)));
     defer tab_insp_guard.deinit();
 
     if (self.tab_view) |tv| {

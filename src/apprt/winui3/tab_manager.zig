@@ -6,6 +6,7 @@ const winrt = @import("winrt.zig");
 const os = @import("os.zig");
 const tab_index = @import("tab_index.zig");
 const input_runtime = @import("input_runtime.zig");
+const surface_binding = @import("surface_binding.zig");
 
 const log = std.log.scoped(.winui3);
 
@@ -17,7 +18,6 @@ pub fn closeActiveTab(self: anytype) bool {
 pub fn newTab(
     self: anytype,
     comptime tabview_item_class: [:0]const u8,
-    comptime border_class_name: [:0]const u8,
     initial_tab_title: []const u8,
 ) !void {
     const alloc = self.core_app.alloc;
@@ -32,7 +32,7 @@ pub fn newTab(
     try self.surfaces.append(alloc, surface);
     errdefer _ = self.surfaces.pop();
 
-    // Sync surface size with actual HWND client area (same fix as initXaml step 8).
+    // Sync surface size with actual HWND client area.
     if (self.hwnd) |hwnd| {
         var rect: os.RECT = .{};
         _ = os.GetClientRect(hwnd, &rect);
@@ -52,20 +52,15 @@ pub fn newTab(
     defer winrt.deleteHString(initial_title);
     var boxed_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(initial_title));
     defer boxed_guard.deinit();
-    const boxed_title = boxed_guard.get();
-    try tvi.putHeader(@ptrCast(boxed_title));
+    try tvi.putHeader(boxed_guard.get());
     try tvi.putIsClosable(false);
 
-    // Set placeholder content on tab item. Active panel is attached on selection.
-    var content_control_guard = winrt.ComRef(com.IContentControl).init(try tvi_inspectable.queryInterface(com.IContentControl));
-    defer content_control_guard.deinit();
-    const content_control = content_control_guard.get();
-    const placeholder_class = try winrt.hstring(border_class_name);
-    defer winrt.deleteHString(placeholder_class);
-    var placeholder_guard = winrt.ComRef(winrt.IInspectable).init(try winrt.activateInstance(placeholder_class));
-    defer placeholder_guard.deinit();
-    const placeholder = placeholder_guard.get();
-    try content_control.putContent(@ptrCast(placeholder));
+    // Set dummy Border as TabViewItem.Content (Issue #28: not for rendering, just for drag-drop).
+    const border_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Border");
+    defer winrt.deleteHString(border_class);
+    var border_guard = winrt.ComRef(winrt.IInspectable).init(try winrt.activateInstance(border_class));
+    defer border_guard.deinit();
+    try surface_binding.setTabItemContent(tvi_inspectable, border_guard.get());
 
     // Add to TabItems collection.
     const tab_items = try tab_view.getTabItems();
@@ -74,11 +69,14 @@ pub fn newTab(
     // Store the IInspectable reference on the surface for later title updates.
     surface.tab_view_item_inspectable = tvi_inspectable;
 
-    // Select the new tab.
+    // Select the new tab (this triggers SelectionChanged which swaps panel in tab_content_grid).
     const size = try tab_items.getSize();
+    const prev_idx = self.active_surface_idx;
     try tab_view.putSelectedIndex(@intCast(size - 1));
     self.active_surface_idx = @intCast(size - 1);
-    self.attachSurfaceToTabItem(if (self.surfaces.items.len > 1) self.active_surface_idx - 1 else null, self.active_surface_idx) catch |err| {
+
+    // Swap SwapChainPanel into tab_content_grid.
+    self.attachSurfaceToTabItem(if (self.surfaces.items.len > 1) prev_idx else null, self.active_surface_idx) catch |err| {
         log.warn("newTab: attachSurfaceToTabItem({}) failed: {}", .{ self.active_surface_idx, err });
     };
 

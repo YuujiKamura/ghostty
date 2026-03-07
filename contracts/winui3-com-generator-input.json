@@ -16,6 +16,9 @@
     "ISolidColorBrush",
     "IControl",
     "IPanel",
+    "IGrid",
+    "IGridStatics",
+    "IRowDefinition",
     "IResourceDictionary"
   ],
   "optional_interfaces": [],
@@ -35,9 +38,7 @@
     "pub fn addAddTabButtonClick\\(self: \\*@This\\(\\), .*\\) !EventRegistrationToken",
     "pub fn addSelectionChanged\\(self: \\*@This\\(\\), .*\\) !EventRegistrationToken",
     "GetXmlnsDefinitions: \\*const fn \\(\\*anyopaque, \\*u32, \\*\\?\\*anyopaque\\) callconv\\(\\.winapi\\) HRESULT",
-    "pub const IVector = extern struct",
-    "pub const IPropertyValueStatics = extern struct",
-    "pub const IPropertyValue = extern struct"
+    "put_RequestedTheme: \\*const fn \\(\\*anyopaque, i32\\) callconv\\(\\.winapi\\) HRESULT"
   ],
   "forbidden_patterns": [
     "pub fn getTabItems(self: *@This()) !void { try hrCheck(self.lpVtbl.get_TabItems(self)); }",
