@@ -54,6 +54,9 @@ pub const WM_MOUSEWHEEL: UINT = 0x020A;
 pub const WM_MOUSEHWHEEL: UINT = 0x020E;
 pub const WM_ENTERSIZEMOVE: UINT = 0x0231;
 pub const WM_EXITSIZEMOVE: UINT = 0x0232;
+pub const WM_NCCALCSIZE: UINT = 0x0083;
+pub const WM_NCHITTEST: UINT = 0x0084;
+pub const WM_ACTIVATE: UINT = 0x0006;
 pub const WM_DPICHANGED: UINT = 0x02E0;
 pub const WM_USER: UINT = 0x0400;
 
@@ -247,6 +250,7 @@ pub extern "user32" fn AppendMenuW(hMenu: HMENU, uFlags: UINT, uIDNewItem: usize
 pub extern "user32" fn TrackPopupMenuEx(hmenu: HMENU, uFlags: UINT, x: c_int, y: c_int, hwnd: HWND, lptpm: ?*const anyopaque) callconv(.winapi) UINT;
 pub extern "user32" fn DestroyMenu(hMenu: HMENU) callconv(.winapi) BOOL;
 pub extern "user32" fn ScreenToClient(hWnd: HWND, lpPoint: *POINT) callconv(.winapi) BOOL;
+pub extern "user32" fn ClientToScreen(hWnd: HWND, lpPoint: *POINT) callconv(.winapi) BOOL;
 pub extern "user32" fn SetWindowTextW(hWnd: HWND, lpString: LPCWSTR) callconv(.winapi) BOOL;
 pub extern "user32" fn GetDpiForWindow(hWnd: HWND) callconv(.winapi) UINT;
 pub extern "user32" fn GetKeyState(nVirtKey: c_int) callconv(.winapi) c_short;
@@ -361,6 +365,36 @@ pub const WM_IME_NOTIFY: UINT = 0x0282;
 // --- ImmSetOpenStatus / ImmGetOpenStatus ---
 pub extern "imm32" fn ImmSetOpenStatus(hIMC: HIMC, fOpen: BOOL) callconv(.winapi) BOOL;
 pub extern "imm32" fn ImmGetOpenStatus(hIMC: HIMC) callconv(.winapi) BOOL;
+
+// --- NCCALCSIZE_PARAMS ---
+pub const NCCALCSIZE_PARAMS = extern struct {
+    rgrc: [3]RECT,
+    lppos: ?*anyopaque, // WINDOWPOS*
+};
+
+// --- WM_NCHITTEST return values ---
+pub const HTCLIENT: c_int = 1;
+pub const HTCAPTION: c_int = 2;
+pub const HTSYSMENU: c_int = 3;
+pub const HTMINBUTTON: c_int = 8;
+pub const HTMAXBUTTON: c_int = 9;
+pub const HTCLOSE: c_int = 20;
+pub const HTTOP: c_int = 12;
+pub const HTTOPLEFT: c_int = 13;
+pub const HTTOPRIGHT: c_int = 14;
+
+// --- DWM (Desktop Window Manager) ---
+pub const MARGINS = extern struct {
+    cxLeftWidth: c_int,
+    cxRightWidth: c_int,
+    cyTopHeight: c_int,
+    cyBottomHeight: c_int,
+};
+
+pub extern "dwmapi" fn DwmExtendFrameIntoClientArea(
+    hWnd: HWND,
+    pMarInset: *const MARGINS,
+) callconv(.winapi) c_long;
 
 // --- Fullscreen support ---
 pub const GWL_STYLE: c_int = -16;

@@ -28,6 +28,20 @@ pub fn subclassProc(
     const app: *App = @ptrFromInt(ref_data);
 
     switch (msg) {
+        os.WM_NCCALCSIZE => {
+            if (wparam != 0) {
+                // Windows Terminal style: let DefSubclassProc calculate the standard
+                // non-client area, then restore the original top so the client area
+                // extends into the titlebar while keeping left/right/bottom borders.
+                // This preserves DWM-drawn caption buttons (Min/Max/Close).
+                const params: *os.NCCALCSIZE_PARAMS = @ptrFromInt(@as(usize, @bitCast(lparam)));
+                const original_top = params.rgrc[0].top;
+                const ret = os.DefSubclassProc(hwnd, msg, wparam, lparam);
+                params.rgrc[0].top = original_top;
+                return ret;
+            }
+        },
+        os.WM_NCHITTEST => return titleBarHitTest(hwnd, lparam),
         os.WM_CLOSE => {
             app.requestCloseWindow();
             return 0;
@@ -358,6 +372,68 @@ fn handleBindSwapChainHandle(app: *App, wparam: os.WPARAM, lparam: os.LPARAM) os
     surface.completeBindSwapChainHandle(swap_chain_handle);
     return 0;
 }
+
+// ---------------------------------------------------------------
+// DWM title bar hit-testing (Windows Terminal style)
+// ---------------------------------------------------------------
+
+/// DWM titlebar height in pixels at 96 DPI.
+const TITLEBAR_HEIGHT_96DPI: c_int = 40;
+/// Resize border width at 96 DPI.
+const RESIZE_BORDER_96DPI: c_int = 6;
+/// Caption button width at 96 DPI (Min/Max/Close each ~46px).
+const CAPTION_BUTTON_WIDTH_96DPI: c_int = 46;
+
+fn titleBarHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
+    // Extract screen coordinates from lparam (sign-extended for multi-monitor).
+    const lp: usize = @bitCast(lparam);
+    const pt = os.POINT{
+        .x = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp))))),
+        .y = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp >> 16))))),
+    };
+
+    var rect: os.RECT = .{};
+    _ = os.GetClientRect(hwnd, &rect);
+
+    // Convert client rect to screen coords for comparison.
+    var client_top_left = os.POINT{ .x = rect.left, .y = rect.top };
+    var client_bottom_right = os.POINT{ .x = rect.right, .y = rect.bottom };
+    _ = os.ClientToScreen(hwnd, &client_top_left);
+    _ = os.ClientToScreen(hwnd, &client_bottom_right);
+
+    // DPI-scale the titlebar height and resize border.
+    const dpi = os.GetDpiForWindow(hwnd);
+    const scale: f32 = @as(f32, @floatFromInt(dpi)) / 96.0;
+    const titlebar_h: c_int = @intFromFloat(@as(f32, @floatFromInt(TITLEBAR_HEIGHT_96DPI)) * scale);
+    const resize_border: c_int = @intFromFloat(@as(f32, @floatFromInt(RESIZE_BORDER_96DPI)) * scale);
+    const button_w: c_int = @intFromFloat(@as(f32, @floatFromInt(CAPTION_BUTTON_WIDTH_96DPI)) * scale);
+
+    // Top resize border (above the titlebar content area).
+    if (pt.y >= client_top_left.y and pt.y < client_top_left.y + resize_border) {
+        if (pt.x < client_top_left.x + resize_border) return os.HTTOPLEFT;
+        if (pt.x >= client_bottom_right.x - resize_border) return os.HTTOPRIGHT;
+        return os.HTTOP;
+    }
+
+    // Titlebar region: between top resize border and titlebar bottom.
+    if (pt.y >= client_top_left.y + resize_border and pt.y < client_top_left.y + titlebar_h) {
+        // Caption buttons area (right side): Close / Maximize / Minimize.
+        // 3 buttons, each ~button_w wide, from right edge.
+        const buttons_left = client_bottom_right.x - button_w * 3;
+        if (pt.x >= buttons_left) {
+            // Determine which button: rightmost = Close, then Max, then Min.
+            if (pt.x >= client_bottom_right.x - button_w) return os.HTCLOSE;
+            if (pt.x >= client_bottom_right.x - button_w * 2) return os.HTMAXBUTTON;
+            return os.HTMINBUTTON;
+        }
+        // Everything else in the titlebar is draggable caption.
+        return os.HTCAPTION;
+    }
+
+    // Below the titlebar: normal client area.
+    return os.HTCLIENT;
+}
+
 
 // ---------------------------------------------------------------
 // Vectored Exception Handler — capture STATUS_STOWED_EXCEPTION details

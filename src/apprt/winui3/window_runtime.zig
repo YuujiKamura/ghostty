@@ -18,6 +18,22 @@ pub fn activateAndLoadResources(self: anytype, window: *com.IWindow) !void {
         _ = os.UpdateWindow(h);
         _ = os.SetForegroundWindow(h);
         log.info("initXaml: Win32 ShowWindow(MAXIMIZED) called", .{});
+
+        // DWM frame extension (Windows Terminal style — NOT ExtendsContentIntoTitleBar).
+        // Extend the DWM frame into the client area by the titlebar height so we can
+        // draw our own content (TabView) in that region while keeping the DWM shadow.
+        const margins = os.MARGINS{
+            .cxLeftWidth = 0,
+            .cxRightWidth = 0,
+            .cyTopHeight = 40, // titlebar height in px
+            .cyBottomHeight = 0,
+        };
+        const hr = os.DwmExtendFrameIntoClientArea(h, &margins);
+        if (hr >= 0) {
+            log.info("initXaml: DwmExtendFrameIntoClientArea OK (cyTopHeight=40)", .{});
+        } else {
+            log.warn("initXaml: DwmExtendFrameIntoClientArea failed: hr=0x{x}", .{@as(u32, @bitCast(hr))});
+        }
     }
 
     // Set initial size
