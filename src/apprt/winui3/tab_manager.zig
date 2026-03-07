@@ -53,7 +53,7 @@ pub fn newTab(
     var boxed_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(initial_title));
     defer boxed_guard.deinit();
     try tvi.putHeader(boxed_guard.get());
-    try tvi.putIsClosable(false);
+    try tvi.putIsClosable(true);
 
     // Set dummy Border as TabViewItem.Content (Issue #28: not for rendering, just for drag-drop).
     const border_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Border");
@@ -91,27 +91,44 @@ pub fn closeTab(self: anytype, idx: usize) bool {
 
     const surface = self.surfaces.items[idx];
 
-    // Remove from TabView.
-    if (self.tab_view) |tv| {
-        const tab_items = tv.getTabItems() catch |err| {
-            log.warn("closeTab: getTabItems failed: {}", .{err});
-            return false;
-        };
-        tab_items.removeAt(@intCast(idx)) catch |err| {
-            log.warn("closeTab: removeAt({}) failed: {}", .{ idx, err });
-        };
-    }
-
-    // Cleanup surface.
+    // 1. Cleanup surface FIRST (before removing from TabView, to avoid
+    //    onSelectionChanged referencing a stale surface array).
     surface.deinit();
     self.core_app.alloc.destroy(surface);
     _ = self.surfaces.orderedRemove(idx);
 
-    // Adjust active index and report whether this closed the final tab.
+    // 2. Adjust active index before TabView triggers SelectionChanged.
     if (self.surfaces.items.len == 0) {
+        // Remove from TabView last (triggers SelectionChanged with -1).
+        if (self.tab_view) |tv| {
+            const tab_items = tv.getTabItems() catch return true;
+            tab_items.removeAt(@intCast(idx)) catch {};
+        }
         return true;
-    } else if (tab_index.clampActiveIndex(self.active_surface_idx, self.surfaces.items.len)) |clamped| {
-        self.active_surface_idx = clamped;
     }
+
+    // Clamp active index to valid range.
+    if (self.active_surface_idx >= self.surfaces.items.len) {
+        self.active_surface_idx = self.surfaces.items.len - 1;
+    } else if (idx < self.active_surface_idx) {
+        self.active_surface_idx -= 1;
+    }
+
+    // 3. Remove from TabView (triggers onSelectionChanged).
+    if (self.tab_view) |tv| {
+        const tab_items = tv.getTabItems() catch return false;
+        tab_items.removeAt(@intCast(idx)) catch |err| {
+            log.warn("closeTab: removeAt({}) failed: {}", .{ idx, err });
+        };
+
+        // 4. Force-select the correct tab and swap SwapChainPanel.
+        tv.putSelectedIndex(@intCast(self.active_surface_idx)) catch {};
+        surface_binding.attachSurfaceToTabItem(self, null, self.active_surface_idx) catch |err| {
+            log.warn("closeTab: attachSurfaceToTabItem({}) failed: {}", .{ self.active_surface_idx, err });
+        };
+        input_runtime.focusInputOverlay(self);
+    }
+
+    log.info("closeTab: closed idx={}, active now={}, total={}", .{ idx, self.active_surface_idx, self.surfaces.items.len });
     return false;
 }

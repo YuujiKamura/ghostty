@@ -190,6 +190,21 @@ pub fn build(b: *std.Build) !void {
         // Parity check runs before compilation starts.
         exe.exe.step.dependOn(&parity_cmd.step);
 
+        // Vtable manifest verification: structural check against known-good slot ordering.
+        // Catches slot misalignment that parity check alone cannot detect.
+        const vtable_cmd = b.addSystemCommand(&.{
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            b.pathFromRoot("scripts/verify-vtable-manifest.ps1"),
+            "-ComGenPath",
+            b.pathFromRoot("src/apprt/winui3/com_generated.zig"),
+            "-ManifestPath",
+            b.pathFromRoot("contracts/vtable_manifest.json"),
+        });
+        vtable_cmd.step.dependOn(&parity_cmd.step);
+        exe.exe.step.dependOn(&vtable_cmd.step);
+
         // Legacy contract steps (kept for manual use)
         const contract_cmd = b.addSystemCommand(&.{
             "pwsh",

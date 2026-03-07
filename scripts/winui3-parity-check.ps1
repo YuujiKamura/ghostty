@@ -102,23 +102,22 @@ if (-not $buildOk) {
     exit 2
 }
 
-# Step 5: Smoke test — launch app for 3 seconds, check it doesn't crash immediately
-Write-Host "=== Smoke test: launching app for 3 seconds... ===" -ForegroundColor Yellow
-$exePath = Join-Path $RepoRoot "zig-out\bin\ghostty.exe"
-if (Test-Path $exePath) {
-    $proc = Start-Process -FilePath $exePath -PassThru -WindowStyle Hidden
-    Start-Sleep -Seconds 3
-    if ($proc.HasExited) {
-        Write-Host "=== SMOKE TEST FAILED: app crashed within 3 seconds (exit $($proc.ExitCode)). Rolling back. ===" -ForegroundColor Red
+# Step 5: Vtable manifest verification (replaces smoke test)
+Write-Host "=== Verifying vtable manifest... ===" -ForegroundColor Yellow
+$manifestPath = Join-Path $RepoRoot "contracts\vtable_manifest.json"
+if (Test-Path $manifestPath) {
+    $verifyScript = Join-Path $RepoRoot "scripts\verify-vtable-manifest.ps1"
+    pwsh -NoProfile -File $verifyScript -ComGenPath $golden -ManifestPath $manifestPath
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "=== VTABLE MANIFEST MISMATCH after autofix. Rolling back. ===" -ForegroundColor Red
         Copy-Item $backupPath $golden -Force
         if (Test-Path $emitBackup) { Copy-Item $emitBackup $emitZig -Force }
         Write-Host "Rolled back to: $backupPath"
         exit 2
     }
-    Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-    Write-Host "=== Smoke test passed (app alive after 3s) ===" -ForegroundColor Green
+    Write-Host "=== Vtable manifest verified ===" -ForegroundColor Green
 } else {
-    Write-Host "WARNING: exe not found at $exePath, skipping smoke test" -ForegroundColor Yellow
+    Write-Host "WARNING: vtable_manifest.json not found at $manifestPath, skipping structural verification" -ForegroundColor Yellow
 }
 
 # Step 6: Success

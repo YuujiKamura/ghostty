@@ -491,7 +491,7 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
         var boxed_title_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(initial_title));
         defer boxed_title_guard.deinit();
         try tvi.putHeader(boxed_title_guard.get());
-        try tvi.putIsClosable(false);
+        try tvi.putIsClosable(true);
 
         // Set dummy Border as TabViewItem.Content (required for drag-drop, not for rendering).
         if (!self.debug_cfg.tabview_item_no_content) {

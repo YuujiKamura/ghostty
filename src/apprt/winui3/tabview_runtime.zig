@@ -43,7 +43,7 @@ pub fn createRoot(
     const row_def_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.RowDefinition");
     defer winrt.deleteHString(row_def_class);
 
-    // Row 0: Fixed 40px height for TabView tab strip.
+    // Row 0: Fixed 48px height for TabView tab strip (+/x buttons need ~44px minimum).
     // NOTE: Auto (GridUnitType.Auto) collapses to 0 when the TabView control template
     // has not been fully applied (e.g. missing XamlControlsResources theme resources).
     // Using a fixed Pixel height guarantees the tab strip is always visible.
@@ -52,7 +52,7 @@ pub fn createRoot(
         defer _ = row0_insp.release(); // Collection AddRef's on append.
         const row0 = try row0_insp.queryInterface(com.IRowDefinition);
         defer row0.release();
-        try row0.putHeight(.{ .Value = 40, .GridUnitType = com.GridUnitType.Pixel });
+        try row0.putHeight(.{ .Value = 48, .GridUnitType = com.GridUnitType.Pixel });
         try row_defs.append(@ptrCast(row0_insp));
     }
 
@@ -147,6 +147,8 @@ pub fn createRoot(
 
 pub fn configureDefaults(tab_view: ?*com.ITabView) void {
     if (tab_view) |tv| {
+        tv.putIsAddTabButtonVisible(true) catch {};
+        tv.putCloseButtonOverlayMode(0) catch {}; // Always = 0, show close button always
         if (tv.queryInterface(native_interop.ITabView2)) |tv2| {
             defer tv2.release();
             tv2.putCanReorderTabs(true) catch {};
