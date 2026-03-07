@@ -175,13 +175,18 @@ pub fn build(b: *std.Build) !void {
 
     // WinUI3 COM parity check: regenerate com_generated.zig and diff against committed version.
     // Fails the build if they differ, preventing hand-edits from going undetected.
+    // With -Dcom-autofix=true, invokes AI (guardian.sh --fix) to repair the generator.
     if (config.target.result.os.tag == .windows and config.app_runtime == .winui3) {
+        const com_autofix = b.option(bool, "com-autofix", "Auto-fix generator via AI when COM parity check fails") orelse false;
         const parity_cmd = b.addSystemCommand(&.{
             "pwsh",
             "-NoProfile",
             "-File",
             b.pathFromRoot("scripts/winui3-parity-check.ps1"),
         });
+        if (com_autofix) {
+            parity_cmd.addArg("-AutoFix");
+        }
         // Parity check runs before compilation starts.
         exe.exe.step.dependOn(&parity_cmd.step);
 
