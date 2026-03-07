@@ -173,9 +173,19 @@ pub fn build(b: *std.Build) !void {
         }
     }
 
-    // WinUI3 contract validation workflow. This is intentionally a dedicated step
-    // so regular builds on other platforms/runtime modes are unaffected.
+    // WinUI3 COM parity check: regenerate com_generated.zig and diff against committed version.
+    // Fails the build if they differ, preventing hand-edits from going undetected.
     if (config.target.result.os.tag == .windows and config.app_runtime == .winui3) {
+        const parity_cmd = b.addSystemCommand(&.{
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            b.pathFromRoot("scripts/winui3-parity-check.ps1"),
+        });
+        // Parity check runs before compilation starts.
+        exe.exe.step.dependOn(&parity_cmd.step);
+
+        // Legacy contract steps (kept for manual use)
         const contract_cmd = b.addSystemCommand(&.{
             "pwsh",
             "-File",
@@ -183,8 +193,6 @@ pub fn build(b: *std.Build) !void {
             "-Fix",
         });
         winui_contract_step.dependOn(&contract_cmd.step);
-
-        // Validated install: build/install first, then run the contract workflow.
         contract_cmd.step.dependOn(b.getInstallStep());
         install_winui_validated_step.dependOn(&contract_cmd.step);
     }
