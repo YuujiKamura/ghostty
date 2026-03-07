@@ -5,10 +5,12 @@ param(
 $ErrorActionPreference = "Stop"
 
 $golden = Join-Path $RepoRoot "src\apprt\winui3\com_generated.zig"
+$backupDir = Join-Path $RepoRoot "tmp\com_backups"
 $tmpDir = Join-Path $RepoRoot "tmp"
 $tmpGen = Join-Path $tmpDir "parity_check.zig"
 
 if (-not (Test-Path $tmpDir)) { New-Item -ItemType Directory -Path $tmpDir | Out-Null }
+if (-not (Test-Path $backupDir)) { New-Item -ItemType Directory -Path $backupDir | Out-Null }
 
 # Regenerate to temp
 pwsh -NoProfile -File (Join-Path $RepoRoot "scripts\winui3-regenerate-com.ps1") -OutPath $tmpGen 2>&1 | Out-Null
@@ -43,21 +45,91 @@ if (-not $AutoFix) {
     exit 1
 }
 
-# AutoFix: invoke guardian.sh --fix
+# === AutoFix with rollback safety ===
+
+# Step 1: Backup current working golden BEFORE any modification
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$backupPath = Join-Path $backupDir "com_generated_$timestamp.zig"
+Copy-Item $golden $backupPath -Force
+Write-Host ""
+Write-Host "=== Backed up working golden to: $backupPath ===" -ForegroundColor Cyan
+
+# Also backup emit.zig
+$emitZig = Join-Path $env:USERPROFILE "win-zig-bindgen\emit.zig"
+$emitBackup = Join-Path $backupDir "emit_$timestamp.zig"
+if (Test-Path $emitZig) {
+    Copy-Item $emitZig $emitBackup -Force
+    Write-Host "=== Backed up emit.zig to: $emitBackup ===" -ForegroundColor Cyan
+}
+
+# Step 2: Run guardian.sh --fix
 Write-Host ""
 Write-Host "=== AutoFix: invoking guardian.sh --fix ===" -ForegroundColor Yellow
 $guardianScript = Join-Path $RepoRoot "scripts\guardian.sh"
 bash $guardianScript --fix
 $guardianExit = $LASTEXITCODE
 
-if ($guardianExit -eq 0) {
-    Write-Host "=== AutoFix: guardian resolved drift. Deploying fixed output. ===" -ForegroundColor Green
-    # Guardian fixed emit.zig. Regenerate one more time and deploy.
-    pwsh -NoProfile -File (Join-Path $RepoRoot "scripts\winui3-regenerate-com.ps1") -OutPath $tmpGen 2>&1 | Out-Null
-    Copy-Item $tmpGen $golden -Force
-    Write-Host "Deployed updated com_generated.zig. Commit both emit.zig and com_generated.zig."
-    exit 0
+if ($guardianExit -ne 0) {
+    Write-Host "=== AutoFix: guardian failed. Rolling back. ===" -ForegroundColor Red
+    Copy-Item $backupPath $golden -Force
+    if (Test-Path $emitBackup) { Copy-Item $emitBackup $emitZig -Force }
+    Write-Host "Rolled back to: $backupPath"
+    exit 2
 }
 
-Write-Host "=== AutoFix FAILED (guardian exit $guardianExit). Manual intervention required. ===" -ForegroundColor Red
-exit 2
+# Step 3: Guardian claims success. Regenerate and deploy.
+Write-Host "=== Guardian resolved drift. Rebuilding app to verify... ===" -ForegroundColor Yellow
+pwsh -NoProfile -File (Join-Path $RepoRoot "scripts\winui3-regenerate-com.ps1") -OutPath $tmpGen 2>&1 | Out-Null
+Copy-Item $tmpGen $golden -Force
+
+# Step 4: Build the app
+Push-Location $RepoRoot
+$buildOk = $false
+try {
+    # Build without parity check (we just deployed, it would match)
+    zig build -Dapp-runtime=winui3 2>&1 | Out-Null
+    $buildOk = ($LASTEXITCODE -eq 0)
+} catch {
+    $buildOk = $false
+}
+Pop-Location
+
+if (-not $buildOk) {
+    Write-Host "=== BUILD FAILED after autofix. Rolling back. ===" -ForegroundColor Red
+    Copy-Item $backupPath $golden -Force
+    if (Test-Path $emitBackup) { Copy-Item $emitBackup $emitZig -Force }
+    Write-Host "Rolled back to: $backupPath"
+    exit 2
+}
+
+# Step 5: Smoke test — launch app for 3 seconds, check it doesn't crash immediately
+Write-Host "=== Smoke test: launching app for 3 seconds... ===" -ForegroundColor Yellow
+$exePath = Join-Path $RepoRoot "zig-out\bin\ghostty.exe"
+if (Test-Path $exePath) {
+    $proc = Start-Process -FilePath $exePath -PassThru -WindowStyle Hidden
+    Start-Sleep -Seconds 3
+    if ($proc.HasExited) {
+        Write-Host "=== SMOKE TEST FAILED: app crashed within 3 seconds (exit $($proc.ExitCode)). Rolling back. ===" -ForegroundColor Red
+        Copy-Item $backupPath $golden -Force
+        if (Test-Path $emitBackup) { Copy-Item $emitBackup $emitZig -Force }
+        Write-Host "Rolled back to: $backupPath"
+        exit 2
+    }
+    Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+    Write-Host "=== Smoke test passed (app alive after 3s) ===" -ForegroundColor Green
+} else {
+    Write-Host "WARNING: exe not found at $exePath, skipping smoke test" -ForegroundColor Yellow
+}
+
+# Step 6: Success
+Write-Host ""
+Write-Host "=== AutoFix COMPLETE ===" -ForegroundColor Green
+Write-Host "  Backup: $backupPath"
+Write-Host "  Commit both emit.zig and com_generated.zig."
+
+# Prune old backups (keep last 5)
+$old = Get-ChildItem $backupDir -Filter "com_generated_*.zig" | Sort-Object Name -Descending | Select-Object -Skip 5
+$old += Get-ChildItem $backupDir -Filter "emit_*.zig" | Sort-Object Name -Descending | Select-Object -Skip 5
+$old | Remove-Item -Force -ErrorAction SilentlyContinue
+
+exit 0
