@@ -978,7 +978,10 @@ pub fn performAction(
         .scrollbar => {
             switch (target) {
                 .app => {},
-                .surface => |core| core.rt_surface.updateScrollbarUi(value.total, value.offset, value.len),
+                .surface => |core| {
+                    log.debug("performAction: scrollbar total={} offset={} len={}", .{ value.total, value.offset, value.len });
+                    core.rt_surface.updateScrollbarUi(value.total, value.offset, value.len);
+                },
             }
             return true;
         },
