@@ -481,7 +481,8 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
         }
     }
 
-    const panel = surface.swap_chain_panel orelse return;
+    // Prefer surface_grid (SwapChainPanel + ScrollBar layout) over bare SwapChainPanel.
+    const panel: *winrt.IInspectable = surface.surface_grid orelse surface.swap_chain_panel orelse return;
 
     if (tab_view) |tv| {
         // Issue #28 architecture: TabViewItem.Content = dummy Border,
@@ -538,7 +539,7 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
         const content_children: *com.IVector = @ptrCast(@alignCast(content_children_raw));
         defer content_children.release();
         try content_children.append(@ptrCast(panel));
-        log.info("initXaml step 8: SwapChainPanel added to tab_content_grid", .{});
+        log.info("initXaml step 8: surface panel added to tab_content_grid", .{});
 
         surface.rebindSwapChain();
         log.info("initXaml step 8 OK: full (TabViewItem+append+selectedIndex+SwapChainPanel in tab_content_grid)", .{});
@@ -971,6 +972,13 @@ pub fn performAction(
             switch (target) {
                 .app => {},
                 .surface => |core| core.rt_surface.search_overlay.hide(),
+            }
+            return true;
+        },
+        .scrollbar => {
+            switch (target) {
+                .app => {},
+                .surface => |core| core.rt_surface.updateScrollbarUi(value.total, value.offset, value.len),
             }
             return true;
         },

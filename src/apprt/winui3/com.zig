@@ -21,6 +21,7 @@ pub const IID_TypedEventHandler_WindowClosed = gen.IID_TypedEventHandler_WindowC
 pub const IID_KeyEventHandler = native.IID_KeyEventHandler;
 pub const IID_PointerEventHandler = native.IID_PointerEventHandler;
 pub const IID_CharacterReceivedHandler = native.IID_CharacterReceivedHandler;
+pub const IID_ScrollEventHandler = native.IID_ScrollEventHandler;
 
 // --- Base interfaces (from generated) ---
 pub const IUnknown = gen.IUnknown;
@@ -75,3 +76,7 @@ pub const IPropertyValue = native.IPropertyValue;
 pub const IPropertyValueStatics = native.IPropertyValueStatics;
 pub const ISwapChainPanelNative = native.ISwapChainPanelNative;
 pub const IWindowNative = native.IWindowNative;
+pub const IColumnDefinition = native.IColumnDefinition;
+pub const IRangeBase = native.IRangeBase;
+pub const IScrollBar = native.IScrollBar;
+pub const IScrollEventArgs = native.IScrollEventArgs;

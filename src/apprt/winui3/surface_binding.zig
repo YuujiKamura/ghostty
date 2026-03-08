@@ -29,7 +29,7 @@ pub fn attachSurfaceToTabItem(self: anytype, prev_idx_opt: ?usize, idx: usize) !
     }
 
     const surface = self.surfaces.items[idx];
-    const panel = surface.swap_chain_panel orelse return;
+    const panel: *winrt.IInspectable = surface.surface_grid orelse surface.swap_chain_panel orelse return;
     const tab_content = self.tab_content_grid orelse return;
 
     // Clear current content from tab_content_grid and add the new panel.
@@ -59,7 +59,7 @@ pub fn ensureVisibleSurfaceAttached(self: anytype, surface: *Surface) void {
 pub fn auditActiveTabBinding(self: anytype) void {
     if (self.active_surface_idx >= self.surfaces.items.len) return;
     const s = self.surfaces.items[self.active_surface_idx];
-    const panel = s.swap_chain_panel orelse return;
+    const panel: *winrt.IInspectable = s.surface_grid orelse s.swap_chain_panel orelse return;
     const tab_content = self.tab_content_grid orelse return;
 
     const content_panel = tab_content.queryInterface(com.IPanel) catch return;

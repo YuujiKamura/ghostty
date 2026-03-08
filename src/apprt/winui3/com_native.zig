@@ -364,3 +364,120 @@ pub const IPointerPointProperties = extern struct {
     pub fn getIsHorizontalMouseWheel(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.get_IsHorizontalMouseWheel(@ptrCast(self), &out)); return out; }
     pub fn getPointerUpdateKind(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.get_PointerUpdateKind(@ptrCast(self), &out)); return out; }
 };
+
+/// IColumnDefinition — Microsoft.UI.Xaml.Controls.IColumnDefinition
+/// Used to set column widths in Grid layouts.
+pub const IColumnDefinition = extern struct {
+    pub const IID = GUID{ .data1 = 0x454cea14, .data2 = 0x87ec, .data3 = 0x5890, .data4 = .{ 0xbb, 0x62, 0xf1, 0xd8, 0x2a, 0x94, 0x75, 0x8e } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Width: *const fn (*anyopaque, *GridLength) callconv(.winapi) HRESULT,
+        SetWidth: *const fn (*anyopaque, GridLength) callconv(.winapi) HRESULT,
+        MaxWidth: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
+        SetMaxWidth: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
+        MinWidth: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
+        SetMinWidth: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
+        ActualWidth: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+};
+
+/// IRangeBase — Microsoft.UI.Xaml.Controls.Primitives.IRangeBase
+/// Base interface for ScrollBar, Slider, ProgressBar. Provides Value/Maximum/Minimum.
+pub const IRangeBase = extern struct {
+    pub const IID = GUID{ .data1 = 0x540d6d61, .data2 = 0x8fac, .data3 = 0x5d5c, .data4 = .{ 0xb5, 0xb0, 0xe1, 0x72, 0xa7, 0xdd, 0xe1, 0x03 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_Minimum: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
+        put_Minimum: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
+        get_Maximum: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
+        put_Maximum: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
+        get_SmallChange: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
+        put_SmallChange: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
+        get_LargeChange: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
+        put_LargeChange: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
+        get_Value: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
+        put_Value: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
+        add_ValueChanged: *const fn (*anyopaque, ?*anyopaque, *i64) callconv(.winapi) HRESULT,
+        remove_ValueChanged: *const fn (*anyopaque, i64) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn setValue(self: *@This(), v: f64) !void { try hrCheck(self.lpVtbl.put_Value(@ptrCast(self), v)); }
+    pub fn setMaximum(self: *@This(), v: f64) !void { try hrCheck(self.lpVtbl.put_Maximum(@ptrCast(self), v)); }
+    pub fn setMinimum(self: *@This(), v: f64) !void { try hrCheck(self.lpVtbl.put_Minimum(@ptrCast(self), v)); }
+    pub fn setSmallChange(self: *@This(), v: f64) !void { try hrCheck(self.lpVtbl.put_SmallChange(@ptrCast(self), v)); }
+    pub fn setLargeChange(self: *@This(), v: f64) !void { try hrCheck(self.lpVtbl.put_LargeChange(@ptrCast(self), v)); }
+    pub fn getValue(self: *@This()) !f64 { var out: f64 = 0; try hrCheck(self.lpVtbl.get_Value(@ptrCast(self), &out)); return out; }
+};
+
+/// IScrollBar — Microsoft.UI.Xaml.Controls.Primitives.IScrollBar
+pub const IScrollBar = extern struct {
+    pub const IID = GUID{ .data1 = 0x568cbf41, .data2 = 0xf741, .data3 = 0x5f05, .data4 = .{ 0x8e, 0x08, 0xc0, 0xa5, 0x0a, 0xc1, 0x7c, 0x8c } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_Orientation: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        put_Orientation: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
+        get_ViewportSize: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
+        put_ViewportSize: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
+        get_IndicatorMode: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        put_IndicatorMode: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
+        add_Scroll: *const fn (*anyopaque, ?*anyopaque, *i64) callconv(.winapi) HRESULT,
+        remove_Scroll: *const fn (*anyopaque, i64) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn setOrientation(self: *@This(), v: i32) !void { try hrCheck(self.lpVtbl.put_Orientation(@ptrCast(self), v)); }
+    pub fn setViewportSize(self: *@This(), v: f64) !void { try hrCheck(self.lpVtbl.put_ViewportSize(@ptrCast(self), v)); }
+    pub fn addScroll(self: *@This(), handler: ?*anyopaque) !i64 {
+        var token: i64 = 0;
+        try hrCheck(self.lpVtbl.add_Scroll(@ptrCast(self), handler, &token));
+        return token;
+    }
+    pub fn removeScroll(self: *@This(), token: i64) !void {
+        try hrCheck(self.lpVtbl.remove_Scroll(@ptrCast(self), token));
+    }
+};
+
+/// IScrollEventArgs — Microsoft.UI.Xaml.Controls.Primitives.IScrollEventArgs
+pub const IScrollEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xdbd27f11, .data2 = 0xf937, .data3 = 0x5ad0, .data4 = .{ 0x9f, 0x75, 0xb9, 0x62, 0xc3, 0x32, 0x54, 0xcf } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_NewValue: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
+        get_ScrollEventType: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn getNewValue(self: *@This()) !f64 { var out: f64 = 0; try hrCheck(self.lpVtbl.get_NewValue(@ptrCast(self), &out)); return out; }
+    pub fn getScrollEventType(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.get_ScrollEventType(@ptrCast(self), &out)); return out; }
+};
+
+/// ScrollEventHandler delegate IID — used for IScrollBar.add_Scroll.
+/// This is a named delegate, NOT a TypedEventHandler pinterface.
+pub const IID_ScrollEventHandler = GUID{ .data1 = 0xff661ba9, .data2 = 0x8c06, .data3 = 0x5785, .data4 = .{ 0xa2, 0x3c, 0x30, 0xd6, 0xb3, 0x16, 0x31, 0xe8 } };

@@ -87,6 +87,15 @@ tab_view_item_inspectable: ?*winrt.IInspectable = null,
 /// Current title of the surface, allocated dynamically.
 title: ?[:0]u8 = null,
 
+/// Inner layout grid: col 0 = SwapChainPanel (1*), col 1 = ScrollBar (17px).
+surface_grid: ?*winrt.IInspectable = null,
+/// The vertical ScrollBar XAML control (IInspectable, QI to IScrollBar/IRangeBase).
+scroll_bar_insp: ?*winrt.IInspectable = null,
+/// Event token for ScrollBar.Scroll.
+scroll_bar_scroll_token: i64 = 0,
+/// Flag to prevent feedback loops when programmatically updating scrollbar.
+is_internal_scroll_update: bool = false,
+
 /// The search overlay UI.
 search_overlay: SearchOverlay,
 
@@ -163,6 +172,108 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
 
     // Set SwapChainPanel background to black.
     self.app.setControlBackground(panel, .{ .a = 255, .r = 0, .g = 0, .b = 0 });
+
+    // Create inner surface grid: col 0 = SwapChainPanel (Star), col 1 = ScrollBar (17px).
+    {
+        const grid_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Grid");
+        defer winrt.deleteHString(grid_class);
+        const grid_insp = try winrt.activateInstance(grid_class);
+        errdefer _ = grid_insp.release();
+
+        // Define two columns.
+        const igrid = try grid_insp.queryInterface(com.IGrid);
+        defer igrid.release();
+        const col_defs_raw = try igrid.ColumnDefinitions();
+        const col_defs: *com.IVector = @ptrCast(@alignCast(col_defs_raw));
+        defer col_defs.release();
+
+        const col_def_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.ColumnDefinition");
+        defer winrt.deleteHString(col_def_class);
+
+        // Col 0: Star (1*) for SwapChainPanel.
+        {
+            const col0_insp = try winrt.activateInstance(col_def_class);
+            defer _ = col0_insp.release();
+            const col0 = try col0_insp.queryInterface(com.IColumnDefinition);
+            defer col0.release();
+            const star_width = com.GridLength{ .Value = 1.0, .GridUnitType = com.GridUnitType.Star };
+            try com.hrCheck(col0.lpVtbl.SetWidth(@ptrCast(col0), star_width));
+            try col_defs.append(@ptrCast(col0_insp));
+        }
+
+        // Col 1: Pixel (17px) for ScrollBar.
+        {
+            const col1_insp = try winrt.activateInstance(col_def_class);
+            defer _ = col1_insp.release();
+            const col1 = try col1_insp.queryInterface(com.IColumnDefinition);
+            defer col1.release();
+            const pixel_width = com.GridLength{ .Value = 17.0, .GridUnitType = com.GridUnitType.Pixel };
+            try com.hrCheck(col1.lpVtbl.SetWidth(@ptrCast(col1), pixel_width));
+            try col_defs.append(@ptrCast(col1_insp));
+        }
+
+        // Create vertical ScrollBar.
+        const sb_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Primitives.ScrollBar");
+        defer winrt.deleteHString(sb_class);
+        const sb_insp = try winrt.activateInstance(sb_class);
+        errdefer _ = sb_insp.release();
+
+        // Set Orientation = Vertical (1).
+        const isb = try sb_insp.queryInterface(com.IScrollBar);
+        defer isb.release();
+        try isb.setOrientation(1);
+
+        // Set initial range values.
+        const irb = try sb_insp.queryInterface(com.IRangeBase);
+        defer irb.release();
+        try irb.setMinimum(0.0);
+        try irb.setMaximum(0.0);
+        try irb.setValue(0.0);
+        try irb.setSmallChange(1.0);
+        try irb.setLargeChange(10.0);
+
+        // Set VerticalAlignment = Stretch on ScrollBar.
+        const sb_fe = try sb_insp.queryInterface(com.IFrameworkElement);
+        defer sb_fe.release();
+        try sb_fe.SetVerticalAlignment(com.VerticalAlignment.Stretch);
+
+        // Add SwapChainPanel (col 0) and ScrollBar (col 1) to the grid.
+        const grid_panel = try grid_insp.queryInterface(com.IPanel);
+        defer grid_panel.release();
+        const grid_children_raw = try grid_panel.Children();
+        const grid_children: *com.IVector = @ptrCast(@alignCast(grid_children_raw));
+        defer grid_children.release();
+
+        // Append SwapChainPanel (Grid.Column defaults to 0).
+        try grid_children.append(@ptrCast(panel));
+
+        // Append ScrollBar and set Grid.Column = 1.
+        try grid_children.append(@ptrCast(sb_insp));
+
+        const grid_statics_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Grid");
+        defer winrt.deleteHString(grid_statics_class);
+        const grid_statics = try winrt.getActivationFactory(com.IGridStatics, grid_statics_class);
+        defer grid_statics.release();
+        try grid_statics.setColumn(@ptrCast(sb_fe), 1);
+
+        // Register Scroll event on ScrollBar.
+        const delegate_runtime_sb = @import("delegate_runtime.zig");
+        const ScrollDelegate = delegate_runtime_sb.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const scroll_delegate = try ScrollDelegate.createWithIid(
+            self.app.core_app.alloc,
+            self,
+            &onScrollBarScroll,
+            &com.IID_ScrollEventHandler,
+        );
+        defer scroll_delegate.release();
+        self.scroll_bar_scroll_token = try isb.addScroll(scroll_delegate.comPtr());
+
+        // Store references.
+        self.surface_grid = grid_insp;
+        self.scroll_bar_insp = sb_insp;
+
+        log.info("Surface grid created: SwapChainPanel (col 0) + ScrollBar (col 1)", .{});
+    }
 
     // Register Loaded handler to defer SetSwapChain until the panel is ready.
     const framework_element = try panel.queryInterface(com.IFrameworkElement);
@@ -314,6 +425,23 @@ pub fn deinit(self: *Surface) void {
         }
         native.release();
         self.swap_chain_panel_native = null;
+    }
+    // Release scrollbar and surface grid.
+    if (self.scroll_bar_insp) |sb| {
+        if (self.scroll_bar_scroll_token != 0) {
+            const isb = sb.queryInterface(com.IScrollBar) catch null;
+            if (isb) |s| {
+                defer s.release();
+                s.removeScroll(self.scroll_bar_scroll_token) catch {};
+            }
+            self.scroll_bar_scroll_token = 0;
+        }
+        _ = sb.release();
+        self.scroll_bar_insp = null;
+    }
+    if (self.surface_grid) |sg| {
+        _ = sg.release();
+        self.surface_grid = null;
     }
     if (self.swap_chain_panel) |panel| {
         _ = panel.release();
@@ -973,6 +1101,46 @@ fn maybeBindPendingSwapChainHandle(self: *Surface, caller: []const u8) void {
         "{s}: keeping swap chain handle deferred until panel size is >= {}x{} (current={}x{})",
         .{ caller, min_bind_dimension, min_bind_dimension, self.size.width, self.size.height },
     );
+}
+
+/// Called from App.performAction(.scrollbar) on the UI thread.
+pub fn updateScrollbarUi(self: *Surface, total: usize, offset: usize, len: usize) void {
+    const sb = self.scroll_bar_insp orelse return;
+    self.is_internal_scroll_update = true;
+    defer {
+        self.is_internal_scroll_update = false;
+    }
+
+    const range_base = sb.queryInterface(com.IRangeBase) catch return;
+    defer range_base.release();
+
+    const total_f: f64 = @floatFromInt(total);
+    const offset_f: f64 = @floatFromInt(offset);
+    const len_f: f64 = @floatFromInt(len);
+    const maximum = if (total_f > len_f) total_f - len_f else 0.0;
+
+    range_base.setMinimum(0.0) catch {};
+    range_base.setMaximum(maximum) catch {};
+    range_base.setValue(offset_f) catch {};
+    range_base.setLargeChange(len_f) catch {};
+    range_base.setSmallChange(1.0) catch {};
+
+    const isb = sb.queryInterface(com.IScrollBar) catch return;
+    defer isb.release();
+    isb.setViewportSize(len_f) catch {};
+}
+
+/// ScrollBar.Scroll event callback.
+fn onScrollBarScroll(self: *Surface, _: ?*anyopaque, args_raw: ?*anyopaque) void {
+    if (self.is_internal_scroll_update) return;
+
+    const args: *com.IScrollEventArgs = @ptrCast(@alignCast(args_raw orelse return));
+    const new_value = args.getNewValue() catch return;
+    const row: usize = @intFromFloat(@max(0.0, @round(new_value)));
+
+    _ = self.core_surface.performBindingAction(.{ .scroll_to_row = row }) catch |err| {
+        log.warn("scrollbar scroll_to_row failed: {}", .{err});
+    };
 }
 
 /// Loaded event callback. Triggered when the SwapChainPanel is added to the visual tree.
