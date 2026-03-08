@@ -16,6 +16,7 @@ const App = @import("App.zig");
 const com = @import("com.zig");
 const winrt = @import("winrt.zig");
 const native_interop = @import("native_interop.zig");
+const input_runtime = @import("input_runtime.zig");
 const key = @import("key.zig");
 const os = @import("os.zig");
 
@@ -890,11 +891,17 @@ fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
     const vk = ea.getKey() catch return;
     if (vk == 0xE5) {
         // VK_PROCESSKEY — IME is active. Switch focus to input_hwnd for IME.
-        if (self.app.input_hwnd) |h| _ = os.SetFocus(h);
+        input_runtime.focusInputOverlay(self.app);
         return; // Don't mark handled — let IME process.
     }
     self.handleKeyEvent(@intCast(@as(u32, @bitCast(vk))), true);
-    ea.putHandled(true) catch {};
+    // For text-producing keys, handleKeyEvent defers to CharacterReceived by
+    // leaving pending_keydown=.pending. Do not mark those handled here or the
+    // character event is suppressed.
+    switch (self.pending_keydown) {
+        .pending => {},
+        else => ea.putHandled(true) catch {},
+    }
 }
 
 fn onXamlPreviewKeyUp(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {

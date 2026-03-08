@@ -79,11 +79,10 @@ pub fn inputWndProc(
     if (app_ptr == 0) return os.DefWindowProcW(hwnd, msg, wparam, lparam);
     const app: *App = @ptrFromInt(app_ptr);
 
-    // input_hwnd now only handles IME messages. Keyboard, mouse, and focus
-    // events are handled via XAML events on the SwapChainPanel (Surface.zig).
+    // input_hwnd only handles IME messages. Keyboard, mouse, and focus
+    // events are handled via XAML events on the SwapChainPanel.
     switch (msg) {
         os.WM_KEYDOWN, os.WM_SYSKEYDOWN => {
-            // When focus is on input_hwnd, let the IME own navigation keys.
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
         os.WM_KEYUP, os.WM_SYSKEYUP => {
@@ -91,8 +90,8 @@ pub fn inputWndProc(
         },
         os.WM_CHAR => {
             // IME commit text arrives as WM_CHAR on input_hwnd.
+            const wp: usize = @bitCast(wparam);
             if (app.activeSurface()) |surface| {
-                const wp: usize = @bitCast(wparam);
                 surface.handleCharEvent(@truncate(wp));
             }
             return 0;

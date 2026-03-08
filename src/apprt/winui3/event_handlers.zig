@@ -78,8 +78,9 @@ pub fn onSelectionChanged(self: anytype, sender_obj: ?*anyopaque, args_obj: ?*an
             self.surfaces.items[new_idx].core_surface.focusCallback(true) catch {};
             self.surfaces.items[new_idx].rebindSwapChain();
 
-            // Redirect Win32 focus back to our input overlay.
-            input_runtime.focusInputOverlay(self);
+            // Keep normal keyboard input on the XAML surface. IME focus is
+            // redirected to input_hwnd only when composition starts.
+            input_runtime.focusKeyboardTarget(self);
         }
     }
 }

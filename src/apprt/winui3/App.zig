@@ -83,6 +83,11 @@ const ExitIntent = enum {
     close_all_windows,
 };
 
+pub const KeyboardFocusTarget = enum {
+    xaml_surface,
+    input_overlay,
+};
+
 /// The core application.
 core_app: *CoreApp,
 debug_cfg: debug_harness.RuntimeDebugConfig = .{},
@@ -108,6 +113,11 @@ child_hwnd: ?os.HWND = null,
 /// Our own input HWND — a transparent child window that receives keyboard focus
 /// and all IME messages, bypassing WinUI3's TSF layer entirely.
 input_hwnd: ?os.HWND = null,
+
+/// Desired keyboard focus owner. Normal typing stays on the XAML surface; IME
+/// composition temporarily switches to the dedicated input overlay HWND.
+keyboard_focus_target: KeyboardFocusTarget = .xaml_surface,
+ime_composing: bool = false,
 
 /// All surfaces (one per tab).
 surfaces: std.ArrayListUnmanaged(*Surface) = .{},
@@ -233,6 +243,7 @@ pub fn initXaml(self: *App) !void {
     try self.scheduleDebugActions();
     self.syncVisualDiagnostics();
     self.setupNativeInputWindows();
+    input_runtime.focusKeyboardTarget(self);
     self.startup_bootstrapped = true;
     self.setStartupStage(.content_ready);
 
@@ -1072,7 +1083,7 @@ pub fn toggleTabViewContainer(self: *App) !void {
         self.tab_view = null;
         self.active_surface_idx = 0;
         surface.rebindSwapChain();
-        if (self.input_hwnd) |h| _ = os.SetFocus(h);
+        input_runtime.focusKeyboardTarget(self);
         log.info("toggleTabViewContainer: switched to single-panel mode", .{});
         return;
     }
@@ -1140,7 +1151,7 @@ pub fn toggleTabViewContainer(self: *App) !void {
     };
 
     surface.rebindSwapChain();
-    input_runtime.focusInputOverlay(self);
+    input_runtime.focusKeyboardTarget(self);
     log.info("toggleTabViewContainer: switched to TabView mode (Issue #28 RootGrid)", .{});
     if (self.hwnd) |hwnd| {
         var rect: os.RECT = .{};

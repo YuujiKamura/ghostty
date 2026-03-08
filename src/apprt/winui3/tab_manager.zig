@@ -81,8 +81,8 @@ pub fn newTab(
         log.warn("newTab: attachSurfaceToTabItem({}) failed: {}", .{ self.active_surface_idx, err });
     };
 
-    // Ensure keyboard focus returns to our input overlay.
-    input_runtime.focusInputOverlay(self);
+    // Keep normal keyboard focus on the XAML surface after tab creation.
+    input_runtime.focusKeyboardTarget(self);
 
     log.info("newTab completed: idx={} total={}", .{ self.active_surface_idx, self.surfaces.items.len });
 }
@@ -129,7 +129,7 @@ pub fn closeTab(self: anytype, idx: usize) bool {
         surface_binding.attachSurfaceToTabItem(self, null, self.active_surface_idx) catch |err| {
             log.warn("closeTab: attachSurfaceToTabItem({}) failed: {}", .{ self.active_surface_idx, err });
         };
-        input_runtime.focusInputOverlay(self);
+        input_runtime.focusKeyboardTarget(self);
     }
 
     log.info("closeTab: closed idx={}, active now={}, total={}", .{ idx, self.active_surface_idx, self.surfaces.items.len });

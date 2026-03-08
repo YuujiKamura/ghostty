@@ -19,12 +19,26 @@ pub fn setupNativeInputWindows(self: anytype, subclass_proc: os.SUBCLASSPROC) vo
     if (self.input_hwnd) |input_hwnd| {
         // Enable IME on our input HWND.
         _ = os.ImmAssociateContextEx(input_hwnd, null, os.IACE_DEFAULT);
-        // Give it initial focus.
-        _ = os.SetFocus(input_hwnd);
+        self.keyboard_focus_target = .xaml_surface;
         log.info("initXaml step 9 OK: input HWND=0x{x} created + IME enabled", .{@intFromPtr(input_hwnd)});
     }
 }
 
 pub fn focusInputOverlay(self: anytype) void {
+    self.keyboard_focus_target = .input_overlay;
     if (self.input_hwnd) |h| _ = os.SetFocus(h);
+}
+
+pub fn focusKeyboardTarget(self: anytype) void {
+    self.keyboard_focus_target = .xaml_surface;
+    if (self.activeSurface()) |surface| {
+        surface.focusSwapChainPanel();
+    }
+}
+
+pub fn restoreDesiredKeyboardTarget(self: anytype) void {
+    switch (self.keyboard_focus_target) {
+        .xaml_surface => focusKeyboardTarget(self),
+        .input_overlay => focusInputOverlay(self),
+    }
 }

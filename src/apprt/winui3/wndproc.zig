@@ -3,6 +3,7 @@ const os = @import("os.zig");
 const App = @import("App.zig");
 const Surface = @import("Surface.zig");
 const ime = @import("ime.zig");
+const input_runtime = @import("input_runtime.zig");
 
 const log = std.log.scoped(.winui3_wndproc);
 
@@ -57,6 +58,9 @@ pub fn subclassProc(
         os.WM_EXITSIZEMOVE => return handleExitSizeMove(app, hwnd),
         os.WM_TIMER => return handleTimer(app, hwnd, msg, wparam, lparam),
         os.WM_SIZE => return handleSize(app, hwnd, msg, wparam, lparam),
+        os.WM_KEYDOWN, os.WM_SYSKEYDOWN => return handleKeyInput(app, hwnd, msg, wparam, lparam, true),
+        os.WM_KEYUP, os.WM_SYSKEYUP => return handleKeyInput(app, hwnd, msg, wparam, lparam, false),
+        os.WM_CHAR => return handleChar(app, hwnd, msg, wparam, lparam),
         os.WM_PAINT => return handlePaint(hwnd, msg, wparam, lparam),
         os.WM_ERASEBKGND => return 1,
         os.WM_DPICHANGED => return handleDpiChanged(app, hwnd, msg, wparam, lparam),
@@ -69,13 +73,13 @@ pub fn subclassProc(
         os.WM_IME_COMPOSITION => return ime.handleIMEComposition(app, hwnd, msg, wparam, lparam),
         os.WM_IME_ENDCOMPOSITION => return ime.handleIMEEndComposition(app, hwnd, msg, wparam, lparam),
         os.WM_SETFOCUS => {
-            // When the main HWND receives focus, redirect to the SwapChainPanel's
-            // XAML focus so that PreviewKeyDown/CharacterReceived events fire.
-            if (app.activeSurface()) |surface| {
-                log.info("subclassProc: WM_SETFOCUS on HWND=0x{x}, setting XAML focus on SwapChainPanel", .{@intFromPtr(hwnd)});
-                surface.focusSwapChainPanel();
-                return 0;
-            }
+            // Restore whichever keyboard target currently owns text input.
+            log.info("subclassProc: WM_SETFOCUS on HWND=0x{x}, restoring keyboard focus target={s}", .{
+                @intFromPtr(hwnd),
+                @tagName(app.keyboard_focus_target),
+            });
+            input_runtime.restoreDesiredKeyboardTarget(app);
+            return 0;
         },
         else => {},
     }
@@ -147,6 +151,28 @@ fn handlePaint(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM
     // Do NOT call BeginPaint/EndPaint here — that would validate the
     // paint region and prevent WinUI 3's own rendering from running.
     return os.DefSubclassProc(hwnd, msg, wparam, lparam);
+}
+
+fn handleKeyInput(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM, pressed: bool) os.LRESULT {
+    if (app.ime_composing) {
+        return os.DefSubclassProc(hwnd, msg, wparam, lparam);
+    }
+    if (app.activeSurface()) |surface| {
+        const wp: usize = @bitCast(wparam);
+        surface.handleKeyEvent(@truncate(wp), pressed);
+    }
+    return os.DefSubclassProc(hwnd, msg, wparam, lparam);
+}
+
+fn handleChar(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
+    if (app.activeSurface()) |surface| {
+        const wp: usize = @bitCast(wparam);
+        surface.handleCharEvent(@truncate(wp));
+    }
+    _ = hwnd;
+    _ = msg;
+    _ = lparam;
+    return 0;
 }
 
 fn showContextMenu(app: *App, hwnd: os.HWND) void {

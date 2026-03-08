@@ -6,6 +6,7 @@ const std = @import("std");
 const os = @import("os.zig");
 const App = @import("App.zig");
 const input_overlay = @import("input_overlay.zig");
+const input_runtime = @import("input_runtime.zig");
 
 const log = std.log.scoped(.winui3);
 
@@ -19,6 +20,7 @@ pub inline fn imeDefProc(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPAR
 
 pub fn handleIMEStartComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
     log.info("IME: WM_IME_STARTCOMPOSITION on HWND=0x{x}", .{@intFromPtr(hwnd)});
+    app.ime_composing = true;
     if (app.activeSurface()) |surface| {
         if (surface.core_initialized) {
             const himc = os.ImmGetContext(hwnd) orelse
@@ -111,14 +113,15 @@ pub fn handleIMEComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.W
 
 pub fn handleIMEEndComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
     log.info("IME: WM_IME_ENDCOMPOSITION on HWND=0x{x}", .{@intFromPtr(hwnd)});
+    app.ime_composing = false;
     if (app.activeSurface()) |surface| {
         if (surface.core_initialized) {
             surface.core_surface.preeditCallback(null) catch |err| {
                 log.warn("IME preedit end error: {}", .{err});
             };
-            // Restore XAML focus to SwapChainPanel now that IME composition is done.
-            // This returns keyboard events to the XAML event path (PreviewKeyDown etc.).
-            surface.focusSwapChainPanel();
+            // Restore the normal keyboard focus owner now that IME composition
+            // is done.
+            input_runtime.focusKeyboardTarget(app);
         }
     }
     return imeDefProc(app, hwnd, msg, wparam, lparam);
