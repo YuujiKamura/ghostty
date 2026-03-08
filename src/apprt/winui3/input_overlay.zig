@@ -79,116 +79,46 @@ pub fn inputWndProc(
     if (app_ptr == 0) return os.DefWindowProcW(hwnd, msg, wparam, lparam);
     const app: *App = @ptrFromInt(app_ptr);
 
+    // input_hwnd now only handles IME messages. Keyboard, mouse, and focus
+    // events are handled via XAML events on the SwapChainPanel (Surface.zig).
     switch (msg) {
         os.WM_KEYDOWN, os.WM_SYSKEYDOWN => {
-            if (app.activeSurface()) |surface| {
-                const wp: usize = @bitCast(wparam);
-                surface.handleKeyEvent(@truncate(wp), true);
-            }
+            // When focus is on input_hwnd, let the IME own navigation keys.
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
         os.WM_KEYUP, os.WM_SYSKEYUP => {
-            if (app.activeSurface()) |surface| {
-                const wp: usize = @bitCast(wparam);
-                surface.handleKeyEvent(@truncate(wp), false);
-            }
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
         os.WM_CHAR => {
+            // IME commit text arrives as WM_CHAR on input_hwnd.
             if (app.activeSurface()) |surface| {
                 const wp: usize = @bitCast(wparam);
                 surface.handleCharEvent(@truncate(wp));
             }
-            // Do NOT call DefWindowProcW for WM_CHAR — we consumed it.
             return 0;
         },
         os.WM_IME_STARTCOMPOSITION => return ime.handleIMEStartComposition(app, hwnd, msg, wparam, lparam),
         os.WM_IME_COMPOSITION => return ime.handleIMEComposition(app, hwnd, msg, wparam, lparam),
         os.WM_IME_ENDCOMPOSITION => return ime.handleIMEEndComposition(app, hwnd, msg, wparam, lparam),
         os.WM_IME_SETCONTEXT => {
-            // Let the system draw the default IME UI (candidate window etc.)
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
         os.WM_IME_NOTIFY => {
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
-        os.WM_MOUSEMOVE => {
-            if (app.activeSurface()) |surface| {
-                const lp: usize = @bitCast(lparam);
-                const x: i16 = @bitCast(@as(u16, @truncate(lp)));
-                const y: i16 = @bitCast(@as(u16, @truncate(lp >> 16)));
-                surface.handleMouseMove(@floatFromInt(x), @floatFromInt(y));
-            }
-            return 0;
-        },
-        os.WM_LBUTTONDOWN => {
-            // Ensure we keep focus when clicked.
-            _ = os.SetFocus(hwnd);
-            if (app.activeSurface()) |surface| surface.handleMouseButton(.left, .press);
-            return 0;
-        },
-        os.WM_RBUTTONDOWN => {
-            if (app.activeSurface()) |surface| surface.handleMouseButton(.right, .press);
-            return 0;
-        },
-        os.WM_MBUTTONDOWN => {
-            if (app.activeSurface()) |surface| surface.handleMouseButton(.middle, .press);
-            return 0;
-        },
-        os.WM_LBUTTONUP => {
-            if (app.activeSurface()) |surface| surface.handleMouseButton(.left, .release);
-            return 0;
-        },
-        os.WM_RBUTTONUP => {
-            if (app.activeSurface()) |surface| surface.handleMouseButton(.right, .release);
-            return 0;
-        },
-        os.WM_MBUTTONUP => {
-            if (app.activeSurface()) |surface| surface.handleMouseButton(.middle, .release);
-            return 0;
-        },
-        os.WM_MOUSEWHEEL => {
-            if (app.activeSurface()) |surface| {
-                const wp: usize = @bitCast(wparam);
-                const delta: i16 = @bitCast(@as(u16, @truncate(wp >> 16)));
-                const offset = @as(f64, @floatFromInt(delta)) / 120.0;
-                surface.handleScroll(0, offset);
-            }
-            return 0;
-        },
-        os.WM_MOUSEHWHEEL => {
-            if (app.activeSurface()) |surface| {
-                const wp: usize = @bitCast(wparam);
-                const delta: i16 = @bitCast(@as(u16, @truncate(wp >> 16)));
-                const offset = @as(f64, @floatFromInt(delta)) / 120.0;
-                surface.handleScroll(offset, 0);
-            }
-            return 0;
-        },
         os.WM_PAINT => {
-            // Validate the paint region so Windows doesn't keep sending WM_PAINT.
             var ps: os.PAINTSTRUCT = .{};
             _ = os.BeginPaint(hwnd, &ps);
             _ = os.EndPaint(hwnd, &ps);
             return 0;
         },
-        os.WM_ERASEBKGND => return 1, // Don't erase — transparent overlay.
+        os.WM_ERASEBKGND => return 1,
         os.WM_SETFOCUS => {
-            log.info("inputWndProc: WM_SETFOCUS received on input HWND=0x{x}", .{@intFromPtr(hwnd)});
-            if (app.activeSurface()) |surface| {
-                surface.core_surface.focusCallback(true) catch |err| {
-                    log.warn("focusCallback(true) error: {}", .{err});
-                };
-            }
+            log.info("inputWndProc: WM_SETFOCUS received on input HWND=0x{x} (IME mode)", .{@intFromPtr(hwnd)});
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
         os.WM_KILLFOCUS => {
-            log.info("inputWndProc: WM_KILLFOCUS on input HWND=0x{x}, new focus=0x{x}", .{ @intFromPtr(hwnd), wparam });
-            if (app.activeSurface()) |surface| {
-                surface.core_surface.focusCallback(false) catch |err| {
-                    log.warn("focusCallback(false) error: {}", .{err});
-                };
-            }
+            log.info("inputWndProc: WM_KILLFOCUS on input HWND=0x{x} (IME mode)", .{@intFromPtr(hwnd)});
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
         else => {},
@@ -247,4 +177,3 @@ test "imeUtf16ToUtf8 conversion" {
     const len3 = imeUtf16ToUtf8(&buf, &src3);
     try testing.expectEqualStrings("😀", buf[0..len3]);
 }
-

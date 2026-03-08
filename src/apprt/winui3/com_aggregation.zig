@@ -61,7 +61,7 @@ pub fn InitCallback(comptime AppType: type) type {
         }
 
         fn qiFn(this: *anyopaque, riid: *const winrt.GUID, ppv: *?*anyopaque) callconv(.winapi) winrt.HRESULT {
-            const IID_Self = winrt.GUID{ .Data1 = 0xd8eef1c9, .Data2 = 0x1234, .Data3 = 0x56f1, .Data4 = .{ 0x99, 0x63, 0x45, 0xdd, 0x9c, 0x80, 0xa6, 0x61 } };
+            const IID_Self = winrt.GUID{ .data1 = 0xd8eef1c9, .data2 = 0x1234, .data3 = 0x56f1, .data4 = .{ 0x99, 0x63, 0x45, 0xdd, 0x9c, 0x80, 0xa6, 0x61 } };
 
             if (guidEql(riid, &winrt.IID_IUnknown) or guidEql(riid, &winrt.IID_IAgileObject) or guidEql(riid, &IID_Self)) {
                 ppv.* = this;
@@ -95,8 +95,8 @@ pub fn InitCallback(comptime AppType: type) type {
 }
 
 pub fn guidEql(a: *const winrt.GUID, b: *const winrt.GUID) bool {
-    return a.Data1 == b.Data1 and a.Data2 == b.Data2 and a.Data3 == b.Data3 and
-        std.mem.eql(u8, &a.Data4, &b.Data4);
+    return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and
+        std.mem.eql(u8, &a.data4, &b.data4);
 }
 
 // ---------------------------------------------------------------
@@ -228,10 +228,10 @@ pub const AppOuter = struct {
 
         // Keep this on debug to avoid noisy startup logs in normal runs.
         log.debug("outerQI: iid={{{x:0>8}-{x:0>4}-{x:0>4}-{x:0>2}{x:0>2}-{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}}} inner={}", .{
-            riid.Data1,    riid.Data2,    riid.Data3,
-            riid.Data4[0], riid.Data4[1], riid.Data4[2],
-            riid.Data4[3], riid.Data4[4], riid.Data4[5],
-            riid.Data4[6], riid.Data4[7], @intFromPtr(self.inner),
+            riid.data1,    riid.data2,    riid.data3,
+            riid.data4[0], riid.data4[1], riid.data4[2],
+            riid.data4[3], riid.data4[4], riid.data4[5],
+            riid.data4[6], riid.data4[7], @intFromPtr(self.inner),
         });
 
         // IXamlMetadataProvider → return our metadata interface

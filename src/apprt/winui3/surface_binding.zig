@@ -11,9 +11,9 @@ pub fn setTabItemContent(tvi_insp: *winrt.IInspectable, content: ?*winrt.IInspec
     defer cc_guard.deinit();
     const cc = cc_guard.get();
     if (content) |c| {
-        try cc.putContent(c);
+        try cc.SetContent(c);
     } else {
-        try cc.putContent(@as(?*anyopaque, null));
+        try cc.SetContent(@as(?*anyopaque, null));
     }
 }
 
@@ -35,7 +35,7 @@ pub fn attachSurfaceToTabItem(self: anytype, prev_idx_opt: ?usize, idx: usize) !
     // Clear current content from tab_content_grid and add the new panel.
     const content_panel = try tab_content.queryInterface(com.IPanel);
     defer content_panel.release();
-    const children_raw = try content_panel.getChildren();
+    const children_raw = try content_panel.Children();
     const children: *com.IVector = @ptrCast(@alignCast(children_raw));
     defer children.release();
     try children.clear();
@@ -64,7 +64,7 @@ pub fn auditActiveTabBinding(self: anytype) void {
 
     const content_panel = tab_content.queryInterface(com.IPanel) catch return;
     defer content_panel.release();
-    const children_raw2 = content_panel.getChildren() catch return;
+    const children_raw2 = content_panel.Children() catch return;
     const children2: *com.IVector = @ptrCast(@alignCast(children_raw2));
     defer children2.release();
     const size = children2.getSize() catch return;

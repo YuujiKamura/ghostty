@@ -18,6 +18,9 @@ pub const IID_TypedEventHandler_TabCloseRequested = gen.IID_TypedEventHandler_Ta
 pub const IID_TypedEventHandler_AddTabButtonClick = gen.IID_TypedEventHandler_AddTabButtonClick;
 pub const IID_SelectionChangedEventHandler = gen.IID_SelectionChangedEventHandler;
 pub const IID_TypedEventHandler_WindowClosed = gen.IID_TypedEventHandler_WindowClosed;
+pub const IID_KeyEventHandler = native.IID_KeyEventHandler;
+pub const IID_PointerEventHandler = native.IID_PointerEventHandler;
+pub const IID_CharacterReceivedHandler = native.IID_CharacterReceivedHandler;
 
 // --- Base interfaces (from generated) ---
 pub const IUnknown = gen.IUnknown;
@@ -44,6 +47,20 @@ pub const IGrid = gen.IGrid;
 pub const IGridStatics = gen.IGridStatics;
 pub const IRowDefinition = gen.IRowDefinition;
 pub const IResourceDictionary = gen.IResourceDictionary;
+
+// --- XAML Input event args ---
+pub const Point = native.Point;
+pub const IKeyRoutedEventArgs = native.IKeyRoutedEventArgs;
+pub const ICharacterReceivedRoutedEventArgs = native.ICharacterReceivedRoutedEventArgs;
+pub const IPointerRoutedEventArgs = native.IPointerRoutedEventArgs;
+pub const IPointerPoint = native.IPointerPoint;
+pub const IPointerPointProperties = native.IPointerPointProperties;
+
+// --- Generated value types ---
+pub const Color = gen.Color;
+pub const Size = gen.Size;
+pub const Rect = gen.Rect;
+pub const Thickness = gen.Thickness;
 
 // --- Hand-written value types ---
 pub const GridLength = native.GridLength;

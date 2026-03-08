@@ -52,8 +52,8 @@ pub fn newTab(
     defer winrt.deleteHString(initial_title);
     var boxed_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(initial_title));
     defer boxed_guard.deinit();
-    try tvi.putHeader(boxed_guard.get());
-    try tvi.putIsClosable(true);
+    try tvi.SetHeader(boxed_guard.get());
+    try tvi.SetIsClosable(true);
 
     // Set dummy Border as TabViewItem.Content (Issue #28: not for rendering, just for drag-drop).
     const border_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Border");
@@ -63,7 +63,7 @@ pub fn newTab(
     try surface_binding.setTabItemContent(tvi_inspectable, border_guard.get());
 
     // Add to TabItems collection.
-    const tab_items = try tab_view.getTabItems();
+    const tab_items = try tab_view.TabItems();
     try tab_items.append(@ptrCast(tvi_inspectable));
 
     // Store the IInspectable reference on the surface for later title updates.
@@ -72,7 +72,7 @@ pub fn newTab(
     // Select the new tab (this triggers SelectionChanged which swaps panel in tab_content_grid).
     const size = try tab_items.getSize();
     const prev_idx = self.active_surface_idx;
-    try tab_view.putSelectedIndex(@intCast(size - 1));
+    try tab_view.SetSelectedIndex(@intCast(size - 1));
     self.active_surface_idx = @intCast(size - 1);
 
     // Swap SwapChainPanel into tab_content_grid.
@@ -101,7 +101,7 @@ pub fn closeTab(self: anytype, idx: usize) bool {
     if (self.surfaces.items.len == 0) {
         // Remove from TabView last (triggers SelectionChanged with -1).
         if (self.tab_view) |tv| {
-            const tab_items = tv.getTabItems() catch return true;
+            const tab_items = tv.TabItems() catch return true;
             tab_items.removeAt(@intCast(idx)) catch {};
         }
         return true;
@@ -116,13 +116,13 @@ pub fn closeTab(self: anytype, idx: usize) bool {
 
     // 3. Remove from TabView (triggers onSelectionChanged).
     if (self.tab_view) |tv| {
-        const tab_items = tv.getTabItems() catch return false;
+        const tab_items = tv.TabItems() catch return false;
         tab_items.removeAt(@intCast(idx)) catch |err| {
             log.warn("closeTab: removeAt({}) failed: {}", .{ idx, err });
         };
 
         // 4. Force-select the correct tab and swap SwapChainPanel.
-        tv.putSelectedIndex(@intCast(self.active_surface_idx)) catch {};
+        tv.SetSelectedIndex(@intCast(self.active_surface_idx)) catch {};
         surface_binding.attachSurfaceToTabItem(self, null, self.active_surface_idx) catch |err| {
             log.warn("closeTab: attachSurfaceToTabItem({}) failed: {}", .{ self.active_surface_idx, err });
         };

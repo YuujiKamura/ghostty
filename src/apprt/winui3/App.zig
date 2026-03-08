@@ -319,7 +319,7 @@ fn createAggregatedApplication(self: *App) !void {
     defer app_factory_guard.deinit();
     const app_factory = app_factory_guard.get();
     log.info("initXaml step 0: calling CreateInstance(outer=0x{x})...", .{@intFromPtr(self.app_outer.outerPtr())});
-    const result = try app_factory.createInstance(self.app_outer.outerPtr());
+    const result = try app_factory.CreateInstance(self.app_outer.outerPtr());
     log.info("initXaml step 0: CreateInstance returned inner=0x{x} instance=0x{x}", .{
         @intFromPtr(result.inner), @intFromPtr(result.instance),
     });
@@ -350,7 +350,7 @@ fn createWindowAndHooks(self: *App) !*com.IWindow {
     const title = try winrt.hstring("Ghostty");
     defer winrt.deleteHString(title);
     log.info("initXaml step 3: putTitle...", .{});
-    try window.putTitle(title);
+    try window.SetTitle(title);
     log.info("initXaml step 3 OK", .{});
 
     // Step 4: Get the native HWND via IWindowNative.
@@ -380,7 +380,7 @@ fn createWindowAndHooks(self: *App) !*com.IWindow {
         &onWindowClosed,
         &com.IID_TypedEventHandler_WindowClosed,
     );
-    self.closed_token = try window.addClosed(self.closed_handler.?.comPtr());
+    self.closed_token = try window.AddClosed(self.closed_handler.?.comPtr());
     log.info("initXaml step 6 OK", .{});
     return window;
 }
@@ -490,8 +490,8 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
         defer winrt.deleteHString(initial_title);
         var boxed_title_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(initial_title));
         defer boxed_title_guard.deinit();
-        try tvi.putHeader(boxed_title_guard.get());
-        try tvi.putIsClosable(true);
+        try tvi.SetHeader(boxed_title_guard.get());
+        try tvi.SetIsClosable(true);
 
         // Set dummy Border as TabViewItem.Content (required for drag-drop, not for rendering).
         if (!self.debug_cfg.tabview_item_no_content) {
@@ -501,7 +501,7 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
             defer winrt.deleteHString(border_class);
             var border_guard = winrt.ComRef(winrt.IInspectable).init(try winrt.activateInstance(border_class));
             defer border_guard.deinit();
-            try cc_guard.get().putContent(@as(?*anyopaque, @ptrCast(border_guard.get())));
+            try cc_guard.get().SetContent(@as(?*anyopaque, @ptrCast(border_guard.get())));
             log.info("initXaml step 8: TabViewItem dummy Border content set", .{});
         }
 
@@ -510,7 +510,7 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
             return;
         }
 
-        var tab_items_guard = winrt.ComRef(com.IVector).init(try tv.getTabItems());
+        var tab_items_guard = winrt.ComRef(com.IVector).init(try tv.TabItems());
         defer tab_items_guard.deinit();
         try tab_items_guard.get().append(@ptrCast(tvi_inspectable));
         surface.tab_view_item_inspectable = tvi_inspectable;
@@ -523,13 +523,13 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
             return;
         }
 
-        try tv.putSelectedIndex(0);
+        try tv.SetSelectedIndex(0);
 
         // Place SwapChainPanel into tab_content_grid (Row 1).
         const tab_content = self.tab_content_grid orelse return error.AppInitFailed;
         const content_panel = try tab_content.queryInterface(com.IPanel);
         defer content_panel.release();
-        const content_children_raw = try content_panel.getChildren();
+        const content_children_raw = try content_panel.Children();
         const content_children: *com.IVector = @ptrCast(@alignCast(content_children_raw));
         defer content_children.release();
         try content_children.append(@ptrCast(panel));
@@ -539,7 +539,7 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
         log.info("initXaml step 8 OK: full (TabViewItem+append+selectedIndex+SwapChainPanel in tab_content_grid)", .{});
     } else {
         // Single-panel mode: SwapChainPanel directly as Window.Content.
-        try window.putContent(@as(?*anyopaque, @ptrCast(panel)));
+        try window.SetContent(@as(?*anyopaque, @ptrCast(panel)));
         log.info("initXaml step 8 OK: SwapChainPanel set as Window content (single-tab)", .{});
     }
 }
@@ -549,17 +549,17 @@ fn registerTabViewHandlers(self: *App, tab_view: ?*com.ITabView) !void {
         const alloc = self.core_app.alloc;
         if (self.debug_cfg.enable_handler_close) {
             self.tab_close_handler = try event.SimpleEventHandler(App).createWithIid(alloc, self, &onTabCloseRequested, &com.IID_TypedEventHandler_TabCloseRequested);
-            self.tab_close_token = try tab_view.?.addTabCloseRequested(self.tab_close_handler.?.comPtr());
+            self.tab_close_token = try tab_view.?.AddTabCloseRequested(self.tab_close_handler.?.comPtr());
             log.info("initXaml step 7.5: TabCloseRequested handler registered", .{});
         }
         if (self.debug_cfg.enable_handler_addtab) {
             self.add_tab_handler = try event.SimpleEventHandler(App).createWithIid(alloc, self, &onAddTabButtonClick, &com.IID_TypedEventHandler_AddTabButtonClick);
-            self.add_tab_token = try tab_view.?.addAddTabButtonClick(self.add_tab_handler.?.comPtr());
+            self.add_tab_token = try tab_view.?.AddAddTabButtonClick(self.add_tab_handler.?.comPtr());
             log.info("initXaml step 7.5: AddTabButtonClick handler registered", .{});
         }
         if (self.debug_cfg.enable_handler_selection) {
             self.selection_changed_handler = try event.SimpleEventHandler(App).createWithIid(alloc, self, &onSelectionChanged, &com.IID_SelectionChangedEventHandler);
-            self.selection_changed_token = try tab_view.?.addSelectionChanged(self.selection_changed_handler.?.comPtr());
+            self.selection_changed_token = try tab_view.?.AddSelectionChanged(self.selection_changed_handler.?.comPtr());
             log.info("initXaml step 7.5: SelectionChanged handler registered", .{});
         }
         log.info("initXaml step 7.5 OK: TabView event handlers registered (close={} addtab={} selection={})", .{
@@ -573,9 +573,9 @@ fn registerTabViewHandlers(self: *App, tab_view: ?*com.ITabView) !void {
 }
 
 fn unregisterTabViewHandlers(self: *App, tab_view: *com.ITabView) void {
-    if (self.tab_close_token) |tok| tab_view.removeTabCloseRequested(tok) catch {};
-    if (self.add_tab_token) |tok| tab_view.removeAddTabButtonClick(tok) catch {};
-    if (self.selection_changed_token) |tok| tab_view.removeSelectionChanged(tok) catch {};
+    if (self.tab_close_token) |tok| tab_view.RemoveTabCloseRequested(tok) catch {};
+    if (self.add_tab_token) |tok| tab_view.RemoveAddTabButtonClick(tok) catch {};
+    if (self.selection_changed_token) |tok| tab_view.RemoveSelectionChanged(tok) catch {};
     self.tab_close_token = null;
     self.add_tab_token = null;
     self.selection_changed_token = null;
@@ -597,7 +597,7 @@ fn validateTabViewParity(self: *App) !void {
             log.err("PARITY_FAIL: step1_tab_content_grid_exists", .{});
             return error.ParityFail;
         };
-        const content = try window.getContent();
+        const content = try window.Content();
         if (content) |c| {
             var content_guard = winrt.ComRef(winrt.IInspectable).init(@as(*winrt.IInspectable, @ptrCast(c)));
             defer content_guard.deinit();
@@ -628,7 +628,7 @@ fn validateTabViewParity(self: *App) !void {
 
     // Canonical Step 3-5: first item exists, selected, and content attached.
     if (self.tab_view) |tv| {
-        var items_guard = winrt.ComRef(com.IVector).init(try tv.getTabItems());
+        var items_guard = winrt.ComRef(com.IVector).init(try tv.TabItems());
         defer items_guard.deinit();
         const size = try items_guard.get().getSize();
         if (size == 0) {
@@ -637,7 +637,7 @@ fn validateTabViewParity(self: *App) !void {
         }
         log.info("validate: [PASS] step3_first_tab_created", .{});
 
-        const selected_idx = try tv.getSelectedIndex();
+        const selected_idx = try tv.SelectedIndex();
         if (selected_idx < 0) {
             log.err("PARITY_FAIL: step5_selected_index_valid", .{});
             return error.ParityFail;
@@ -652,7 +652,7 @@ fn validateTabViewParity(self: *App) !void {
 
         var content_control_guard = winrt.ComRef(com.IContentControl).init(try first_item_guard.get().queryInterface(com.IContentControl));
         defer content_control_guard.deinit();
-        const content = try content_control_guard.get().getContent();
+        const content = try content_control_guard.get().Content();
         if (content) |c| {
             var content_guard = winrt.ComRef(winrt.IInspectable).init(@as(*winrt.IInspectable, @ptrCast(c)));
             defer content_guard.deinit();
@@ -679,7 +679,7 @@ fn validateTabViewParity(self: *App) !void {
             log.err("PARITY_FAIL: tabview_not_disabled", .{});
             return error.ParityFail;
         }
-        const content = try window.getContent();
+        const content = try window.Content();
         if (content) |c| {
             var content_guard = winrt.ComRef(winrt.IInspectable).init(@as(*winrt.IInspectable, @ptrCast(c)));
             defer content_guard.deinit();
@@ -726,7 +726,7 @@ fn onWindowClosed(self: *App, _: ?*anyopaque, _: ?*anyopaque) void {
     self.running = false;
     // Exit the XAML message loop so Application.Start() returns cleanly.
     if (self.xaml_app) |xa| {
-        xa.exit() catch {};
+        xa.Exit() catch {};
     }
 }
 
@@ -750,7 +750,7 @@ pub fn run(self: *App) !void {
     // Application.Start() calls our callback to create the Window,
     // then enters the XAML message loop. It blocks until the app exits.
     log.info("Calling Application.Start()...", .{});
-    try statics.start(callback.comPtr());
+    try statics.Start(callback.comPtr());
     log.info(
         "Application.Start() returned (startup={s} bootstrapped={} parity={} close_event={} exit_intent={s})",
         .{
@@ -772,7 +772,7 @@ pub fn terminate(self: *App) void {
     self.running = false;
     // Signal XAML to exit the message loop.
     if (self.xaml_app) |xa| {
-        xa.exit() catch {};
+        xa.Exit() catch {};
     }
 }
 
@@ -812,7 +812,7 @@ fn fullCleanup(self: *App) void {
     // 3. Unregister WinRT events.
     if (self.tab_view) |tv| self.unregisterTabViewHandlers(tv);
     if (self.window) |window| {
-        if (self.closed_token) |tok| window.removeClosed(tok) catch {};
+        if (self.closed_token) |tok| window.RemoveClosed(tok) catch {};
     }
 
     // 4. Release COM objects properly.
@@ -845,11 +845,11 @@ pub fn requestCloseWindow(self: *App) void {
     if (self.window) |window| {
         window.close() catch |err| {
             log.warn("requestCloseWindow: IWindow.Close failed: {}", .{err});
-            if (self.xaml_app) |xa| xa.exit() catch {};
+            if (self.xaml_app) |xa| xa.Exit() catch {};
         };
         return;
     }
-    if (self.xaml_app) |xa| xa.exit() catch {};
+    if (self.xaml_app) |xa| xa.Exit() catch {};
 }
 
 pub fn performAction(
@@ -863,7 +863,7 @@ pub fn performAction(
             self.setExitIntent(.quit_action);
             self.running = false;
             if (self.xaml_app) |xa| {
-                xa.exit() catch {};
+                xa.Exit() catch {};
             }
             return true;
         },
@@ -875,7 +875,7 @@ pub fn performAction(
             self.setExitIntent(.close_all_windows);
             self.running = false;
             if (self.xaml_app) |xa| {
-                xa.exit() catch {};
+                xa.Exit() catch {};
             }
             return true;
         },
@@ -914,7 +914,7 @@ pub fn performAction(
                 const tab_count = self.surfaces.items.len;
                 if (tab_count == 0) return true;
                 const new_idx = tab_index.computeGotoIndex(self.active_surface_idx, tab_count, value);
-                tv.putSelectedIndex(@intCast(new_idx)) catch {};
+                tv.SetSelectedIndex(@intCast(new_idx)) catch {};
                 self.active_surface_idx = new_idx;
             }
             return true;
@@ -991,7 +991,7 @@ pub fn closeActiveTab(self: *App) void {
     if (tab_manager.closeActiveTab(self)) {
         log.info("closeActiveTab: no tabs remain, requesting app exit", .{});
         self.running = false;
-        if (self.xaml_app) |xa| xa.exit() catch {};
+        if (self.xaml_app) |xa| xa.Exit() catch {};
     }
 }
 
@@ -1017,7 +1017,7 @@ pub fn toggleTabViewContainer(self: *App) !void {
         if (self.tab_content_grid) |tcg| {
             if (tcg.queryInterface(com.IPanel)) |p| {
                 defer p.release();
-                if (p.getChildren()) |c_raw| {
+                if (p.Children()) |c_raw| {
                     const c: *com.IVector = @ptrCast(@alignCast(c_raw));
                     defer c.release();
                     c.clear() catch {};
@@ -1027,7 +1027,7 @@ pub fn toggleTabViewContainer(self: *App) !void {
             self.tab_content_grid = null;
         }
 
-        if (tv.getTabItems()) |tab_items| {
+        if (tv.TabItems()) |tab_items| {
             var tab_items_guard = winrt.ComRef(com.IVector).init(tab_items);
             defer tab_items_guard.deinit();
             if ((tab_items_guard.get().getSize() catch 0) > 0) {
@@ -1035,9 +1035,9 @@ pub fn toggleTabViewContainer(self: *App) !void {
             }
         } else |_| {}
 
-        window.putContent(null) catch {};
-        window.putContent(@ptrCast(panel)) catch |err| {
-            log.warn("toggleTabViewContainer: window.putContent(panel) failed: {}", .{err});
+        window.SetContent(null) catch {};
+        window.SetContent(@ptrCast(panel)) catch |err| {
+            log.warn("toggleTabViewContainer: window.SetContent(panel) failed: {}", .{err});
             return err;
         };
 
@@ -1058,7 +1058,7 @@ pub fn toggleTabViewContainer(self: *App) !void {
     log.info("toggleTabViewContainer: single->tab start", .{});
 
     // Remove panel from Window.Content before re-parenting.
-    window.putContent(null) catch {};
+    window.SetContent(null) catch {};
 
     // Use tabview_runtime.createRoot to build the RootGrid.
     const tv = try self.createTabViewRoot(window) orelse return error.AppInitFailed;
@@ -1078,11 +1078,11 @@ pub fn toggleTabViewContainer(self: *App) !void {
     defer winrt.deleteHString(initial_title);
     var boxed_title_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(initial_title));
     defer boxed_title_guard.deinit();
-    tvi.putHeader(boxed_title_guard.get()) catch |err| {
+    tvi.SetHeader(boxed_title_guard.get()) catch |err| {
         log.warn("toggleTabViewContainer: tvi.putHeader failed: {}", .{err});
         return err;
     };
-    tvi.putIsClosable(false) catch |err| {
+    tvi.SetIsClosable(false) catch |err| {
         log.warn("toggleTabViewContainer: tvi.putIsClosable failed: {}", .{err});
         return err;
     };
@@ -1097,13 +1097,13 @@ pub fn toggleTabViewContainer(self: *App) !void {
         return err;
     };
 
-    var tab_items_guard = winrt.ComRef(com.IVector).init(try tv.getTabItems());
+    var tab_items_guard = winrt.ComRef(com.IVector).init(try tv.TabItems());
     defer tab_items_guard.deinit();
     tab_items_guard.get().append(@ptrCast(tvi_inspectable)) catch |err| {
         log.warn("toggleTabViewContainer: tab_items.append failed: {}", .{err});
         return err;
     };
-    tv.putSelectedIndex(0) catch |err| {
+    tv.SetSelectedIndex(0) catch |err| {
         log.warn("toggleTabViewContainer: putSelectedIndex failed: {}", .{err});
         return err;
     };
@@ -1136,7 +1136,7 @@ pub fn closeTab(self: *App, idx: usize) void {
     if (tab_manager.closeTab(self, idx)) {
         log.info("closeTab: no tabs remain, requesting app exit", .{});
         self.running = false;
-        if (self.xaml_app) |xa| xa.exit() catch {};
+        if (self.xaml_app) |xa| xa.Exit() catch {};
     }
 }
 
@@ -1215,7 +1215,7 @@ fn onSelectionChanged(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
 // ---------------------------------------------------------------
 
 /// Set the background of a Control to a solid color.
-pub fn setControlBackground(_: *App, control_insp: *winrt.IInspectable, color: com.ISolidColorBrush.Color) void {
+pub fn setControlBackground(_: *App, control_insp: *winrt.IInspectable, color: com.Color) void {
     if (std.process.getEnvVarOwned(std.heap.page_allocator, "GHOSTTY_WINUI3_DISABLE_BACKGROUNDS")) |v| {
         defer std.heap.page_allocator.free(v);
         if (std.mem.eql(u8, v, "1") or std.ascii.eqlIgnoreCase(v, "true")) {
@@ -1251,8 +1251,8 @@ pub fn setControlBackground(_: *App, control_insp: *winrt.IInspectable, color: c
     defer brush_guard.deinit();
     const brush = brush_guard.get();
 
-    brush.putColor(color) catch |err| {
-        log.warn("setControlBackground: putColor failed: {}", .{err});
+    brush.SetColor(color) catch |err| {
+        log.warn("setControlBackground: SetColor failed: {}", .{err});
         return;
     };
 
@@ -1262,7 +1262,7 @@ pub fn setControlBackground(_: *App, control_insp: *winrt.IInspectable, color: c
         var control_guard = winrt.ComRef(com.IControl).init(@ptrCast(@alignCast(control_raw.?)));
         defer control_guard.deinit();
         const control = control_guard.get();
-        control.putBackground(brush) catch |err| {
+        control.SetBackground(brush) catch |err| {
             log.warn("setControlBackground: IControl.putBackground failed: {}", .{err});
         };
         return;
@@ -1274,7 +1274,7 @@ pub fn setControlBackground(_: *App, control_insp: *winrt.IInspectable, color: c
         var panel_guard = winrt.ComRef(com.IPanel).init(@ptrCast(@alignCast(panel_raw.?)));
         defer panel_guard.deinit();
         const panel = panel_guard.get();
-        panel.putBackground(brush) catch |err| {
+        panel.SetBackground(brush) catch |err| {
             log.warn("setControlBackground: IPanel.putBackground failed: {}", .{err});
         };
         return;
@@ -1372,7 +1372,7 @@ fn setTitle(self: *App, title: [:0]const u8) void {
     // Update window title bar.
     if (self.window) |window| {
         log.info("setTitle: putTitle...", .{});
-        window.putTitle(h) catch {};
+        window.SetTitle(h) catch {};
         log.info("setTitle: putTitle done", .{});
     }
 
@@ -1395,7 +1395,7 @@ fn setTitle(self: *App, title: [:0]const u8) void {
             var boxed_guard = winrt.ComRef(winrt.IInspectable).init(boxed);
             defer boxed_guard.deinit();
             log.info("setTitle: putHeader...", .{});
-            tvi_guard.get().putHeader(boxed_guard.get()) catch {};
+            tvi_guard.get().SetHeader(boxed_guard.get()) catch {};
             log.info("setTitle: putHeader done", .{});
         }
     }
@@ -1410,6 +1410,7 @@ fn setTitle(self: *App, title: [:0]const u8) void {
 /// Installed via SetWindowSubclass on the WinUI 3 window's HWND to intercept
 pub const subclassProc = @import("wndproc.zig").subclassProc;
 pub const stowedExceptionHandler = @import("wndproc.zig").stowedExceptionHandler;
+pub const showContextMenuAtCursor = @import("wndproc.zig").showContextMenuAtCursor;
 
 test "App.performAction logic" {
     const testing = std.testing;

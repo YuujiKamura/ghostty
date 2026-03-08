@@ -22,7 +22,7 @@ fn dumpInspectableIids(ins: *winrt.IInspectable) void {
         const g = arr[i];
         log.err(
             "  iid[{d}]={x:0>8}-{x:0>4}-{x:0>4}-..",
-            .{ i, g.Data1, g.Data2, g.Data3 },
+            .{ i, g.data1, g.data2, g.data3 },
         );
     }
 }
@@ -67,9 +67,9 @@ pub fn unboxString(ins: *winrt.IInspectable) !winrt.HSTRING {
             "unboxString: QI(IPropertyValue) failed hr=0x{x:0>8} iid={x:0>8}-{x:0>4}-{x:0>4}",
             .{
                 @as(u32, @bitCast(hr)),
-                com.IPropertyValue.IID.Data1,
-                com.IPropertyValue.IID.Data2,
-                com.IPropertyValue.IID.Data3,
+                com.IPropertyValue.IID.data1,
+                com.IPropertyValue.IID.data2,
+                com.IPropertyValue.IID.data3,
             },
         );
         dumpInspectableIids(ins);

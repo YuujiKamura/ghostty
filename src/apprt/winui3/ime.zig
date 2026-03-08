@@ -116,6 +116,9 @@ pub fn handleIMEEndComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: o
             surface.core_surface.preeditCallback(null) catch |err| {
                 log.warn("IME preedit end error: {}", .{err});
             };
+            // Restore XAML focus to SwapChainPanel now that IME composition is done.
+            // This returns keyboard events to the XAML event path (PreviewKeyDown etc.).
+            surface.focusSwapChainPanel();
         }
     }
     return imeDefProc(app, hwnd, msg, wparam, lparam);

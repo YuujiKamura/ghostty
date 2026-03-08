@@ -2,8 +2,9 @@
 //! These include Windows.Foundation types (not in WinUI3 winmd),
 //! native COM interfaces, and ghostty-specific definitions.
 const std = @import("std");
-const GUID = std.os.windows.GUID;
-const HRESULT = std.os.windows.HRESULT;
+const winrt = @import("winrt.zig");
+const GUID = winrt.GUID;
+const HRESULT = winrt.HRESULT;
 const HSTRING = ?*anyopaque;
 const EventRegistrationToken = i64;
 const VtblPlaceholder = gen.VtblPlaceholder;
@@ -33,7 +34,7 @@ pub const IApplicationAbi = extern struct {
 
 pub const IVector = extern struct {
     // Windows.Foundation.Collections.IVector<IInspectable>
-    pub const IID = GUID{ .Data1 = 0xb32bdca4, .Data2 = 0x5e52, .Data3 = 0x5b27, .Data4 = .{ 0xbc, 0x5d, 0xd6, 0x6a, 0x1a, 0x26, 0x8c, 0x2a } };
+    pub const IID = GUID{ .data1 = 0xb32bdca4, .data2 = 0x5e52, .data3 = 0x5b27, .data4 = .{ 0xbc, 0x5d, 0xd6, 0x6a, 0x1a, 0x26, 0x8c, 0x2a } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -79,7 +80,7 @@ pub const IVector = extern struct {
 };
 
 pub const IPropertyValue = extern struct {
-    pub const IID = GUID{ .Data1 = 0x4bd682dd, .Data2 = 0x7554, .Data3 = 0x40e9, .Data4 = .{ 0x9a, 0x9b, 0x82, 0x65, 0x4e, 0xde, 0x7e, 0x62 } };
+    pub const IID = GUID{ .data1 = 0x4bd682dd, .data2 = 0x7554, .data3 = 0x40e9, .data4 = .{ 0x9a, 0x9b, 0x82, 0x65, 0x4e, 0xde, 0x7e, 0x62 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -109,7 +110,7 @@ pub const IPropertyValue = extern struct {
 };
 
 pub const IPropertyValueStatics = extern struct {
-    pub const IID = GUID{ .Data1 = 0x629bdbc8, .Data2 = 0xd932, .Data3 = 0x4ff4, .Data4 = .{ 0x96, 0xb9, 0x8d, 0x96, 0xc5, 0xc1, 0xe8, 0x58 } };
+    pub const IID = GUID{ .data1 = 0x629bdbc8, .data2 = 0xd932, .data3 = 0x4ff4, .data4 = .{ 0x96, 0xb9, 0x8d, 0x96, 0xc5, 0xc1, 0xe8, 0x58 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -138,7 +139,7 @@ pub const IPropertyValueStatics = extern struct {
 };
 
 pub const ISwapChainPanelNative = extern struct {
-    pub const IID = GUID{ .Data1 = 0x63aad0b8, .Data2 = 0x7c24, .Data3 = 0x40ff, .Data4 = .{ 0x85, 0xa8, 0x64, 0x0d, 0x94, 0x4c, 0xc3, 0x25 } };
+    pub const IID = GUID{ .data1 = 0x63aad0b8, .data2 = 0x7c24, .data3 = 0x40ff, .data4 = .{ 0x85, 0xa8, 0x64, 0x0d, 0x94, 0x4c, 0xc3, 0x25 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -152,7 +153,7 @@ pub const ISwapChainPanelNative = extern struct {
 };
 
 pub const IWindowNative = extern struct {
-    pub const IID = GUID{ .Data1 = 0xeecdbf0e, .Data2 = 0xbae9, .Data3 = 0x4cb6, .Data4 = .{ 0xa6, 0x8e, 0x95, 0x98, 0xe1, 0xcb, 0x57, 0xbb } };
+    pub const IID = GUID{ .data1 = 0xeecdbf0e, .data2 = 0xbae9, .data3 = 0x4cb6, .data4 = .{ 0xa6, 0x8e, 0x95, 0x98, 0xe1, 0xcb, 0x57, 0xbb } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -188,4 +189,175 @@ pub const VerticalAlignment = struct {
 pub const GridLength = extern struct {
     Value: f64,
     GridUnitType: i32,
+};
+
+// --- XAML Input event handler delegate IIDs ---
+
+pub const IID_KeyEventHandler = GUID{ .data1 = 0xDB68E7CC, .data2 = 0x9A2B, .data3 = 0x527D, .data4 = .{ 0x99, 0x89, 0x25, 0x28, 0x4D, 0xAC, 0xCC, 0x03 } };
+pub const IID_PointerEventHandler = GUID{ .data1 = 0xA48A71E1, .data2 = 0x8BB4, .data3 = 0x5597, .data4 = .{ 0x9E, 0x31, 0x90, 0x3A, 0x3F, 0x6A, 0x04, 0xFB } };
+// TypedEventHandler<UIElement, CharacterReceivedRoutedEventArgs> — computed via WinRT pinterface SHA-1
+pub const IID_CharacterReceivedHandler = GUID{ .data1 = 0x553240fb, .data2 = 0x75d9, .data3 = 0x5641, .data4 = .{ 0x9c, 0xce, 0x2d, 0x14, 0xb7, 0x43, 0xf0, 0xec } };
+
+// --- XAML Input event args interfaces ---
+
+/// Windows.Foundation.Point — value type used by IPointerPoint.get_Position.
+pub const Point = extern struct {
+    X: f32,
+    Y: f32,
+};
+
+pub const IKeyRoutedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xEE357007, .data2 = 0xA2D6, .data3 = 0x5C75, .data4 = .{ 0x94, 0x31, 0x05, 0xFD, 0x66, 0xEC, 0x79, 0x15 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_Key: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        get_KeyStatus: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
+        get_Handled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        put_Handled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        get_OriginalKey: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        get_DeviceId: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn getKey(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.get_Key(@ptrCast(self), &out)); return out; }
+    pub fn getOriginalKey(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.get_OriginalKey(@ptrCast(self), &out)); return out; }
+    pub fn getHandled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.get_Handled(@ptrCast(self), &out)); return out; }
+    pub fn putHandled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.put_Handled(@ptrCast(self), value)); }
+};
+
+pub const ICharacterReceivedRoutedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xE26CA5BB, .data2 = 0x34C3, .data3 = 0x5C1E, .data4 = .{ 0x9A, 0x16, 0x00, 0xB8, 0x0B, 0x07, 0xA8, 0x99 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_Character: *const fn (*anyopaque, *u16) callconv(.winapi) HRESULT,
+        get_KeyStatus: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
+        get_Handled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        put_Handled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn getCharacter(self: *@This()) !u16 { var out: u16 = 0; try hrCheck(self.lpVtbl.get_Character(@ptrCast(self), &out)); return out; }
+    pub fn getHandled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.get_Handled(@ptrCast(self), &out)); return out; }
+    pub fn putHandled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.put_Handled(@ptrCast(self), value)); }
+};
+
+pub const IPointerRoutedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0x66E78A9A, .data2 = 0x1BEC, .data3 = 0x5F92, .data4 = .{ 0xB1, 0xA1, 0xEA, 0x63, 0x34, 0xEE, 0x51, 0x1C } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_Pointer: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        get_KeyModifiers: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
+        get_Handled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        put_Handled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        get_IsGenerated: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        GetCurrentPoint: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetIntermediatePoints: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn getHandled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.get_Handled(@ptrCast(self), &out)); return out; }
+    pub fn putHandled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.put_Handled(@ptrCast(self), value)); }
+    pub fn getCurrentPoint(self: *@This(), relative_to: ?*anyopaque) !*IPointerPoint {
+        var out: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.GetCurrentPoint(@ptrCast(self), relative_to, &out));
+        return @ptrCast(@alignCast(out orelse return error.WinRTFailed));
+    }
+};
+
+pub const IPointerPoint = extern struct {
+    pub const IID = GUID{ .data1 = 0x0d430ee6, .data2 = 0x252c, .data3 = 0x59a4, .data4 = .{ 0xb2, 0xa2, 0xd4, 0x42, 0x64, 0xdc, 0x6a, 0x40 } };
+    lpVtbl: *const VTable,
+    // IDL order: PointerDevice, Position, RawPosition, PointerId, FrameId, Timestamp, IsInContact, Properties
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_PointerDevice: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        get_Position: *const fn (*anyopaque, *Point) callconv(.winapi) HRESULT,
+        get_RawPosition: *const fn (*anyopaque, *Point) callconv(.winapi) HRESULT,
+        get_PointerId: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
+        get_FrameId: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
+        get_Timestamp: *const fn (*anyopaque, *u64) callconv(.winapi) HRESULT,
+        get_IsInContact: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_Properties: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn getPosition(self: *@This()) !Point {
+        var out: Point = .{ .X = 0, .Y = 0 };
+        try hrCheck(self.lpVtbl.get_Position(@ptrCast(self), &out));
+        return out;
+    }
+    pub fn getProperties(self: *@This()) !*IPointerPointProperties {
+        var out: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.get_Properties(@ptrCast(self), &out));
+        return @ptrCast(@alignCast(out orelse return error.WinRTFailed));
+    }
+};
+
+pub const IPointerPointProperties = extern struct {
+    pub const IID = GUID{ .data1 = 0xd760ed77, .data2 = 0x4b10, .data3 = 0x57a5, .data4 = .{ 0xb3, 0xcc, 0xd9, 0xbf, 0x34, 0x13, 0xe9, 0x96 } };
+    lpVtbl: *const VTable,
+    // IDL order from windows.ui.input.idl (NOT alphabetical!)
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_Pressure: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        get_IsInverted: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsEraser: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_Orientation: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        get_XTilt: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        get_YTilt: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        get_Twist: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        get_ContactRect: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        get_ContactRectRaw: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        get_TouchConfidence: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsLeftButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsRightButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsMiddleButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_MouseWheelDelta: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        get_IsHorizontalMouseWheel: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsPrimary: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsInRange: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsCanceled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsBarrelButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsXButton1Pressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsXButton2Pressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_PointerUpdateKind: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        HasUsage: *const fn (*anyopaque, u32, u32, *bool) callconv(.winapi) HRESULT,
+        GetUsageValue: *const fn (*anyopaque, u32, u32, *i32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn getIsLeftButtonPressed(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.get_IsLeftButtonPressed(@ptrCast(self), &out)); return out; }
+    pub fn getIsRightButtonPressed(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.get_IsRightButtonPressed(@ptrCast(self), &out)); return out; }
+    pub fn getIsMiddleButtonPressed(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.get_IsMiddleButtonPressed(@ptrCast(self), &out)); return out; }
+    pub fn getMouseWheelDelta(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.get_MouseWheelDelta(@ptrCast(self), &out)); return out; }
+    pub fn getIsHorizontalMouseWheel(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.get_IsHorizontalMouseWheel(@ptrCast(self), &out)); return out; }
+    pub fn getPointerUpdateKind(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.get_PointerUpdateKind(@ptrCast(self), &out)); return out; }
 };

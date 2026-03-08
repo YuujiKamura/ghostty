@@ -44,7 +44,7 @@ const BasalApp = struct {
         if (self.window) |win| {
             const title = try winrt.hstring("Ghostty Basal Infrastructure Test");
             defer winrt.deleteHString(title);
-            try win.putTitle(title);
+            try win.SetTitle(title);
             try win.activate();
             std.debug.print("SUCCESS: Minimal Window Activated!\n", .{});
             

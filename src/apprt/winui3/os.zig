@@ -396,6 +396,16 @@ pub extern "dwmapi" fn DwmExtendFrameIntoClientArea(
     pMarInset: *const MARGINS,
 ) callconv(.winapi) c_long;
 
+pub extern "dwmapi" fn DwmSetWindowAttribute(
+    hWnd: HWND,
+    dwAttribute: DWORD,
+    pvAttribute: *const anyopaque,
+    cbAttribute: DWORD,
+) callconv(.winapi) c_long;
+
+pub const DWMWA_USE_IMMERSIVE_DARK_MODE: DWORD = 20;
+pub const DWMWA_CAPTION_COLOR: DWORD = 35;
+
 // --- Fullscreen support ---
 pub const GWL_STYLE: c_int = -16;
 pub const WS_CAPTION: DWORD = 0x00C00000;

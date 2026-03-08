@@ -13,10 +13,10 @@ const hrCheck = winrt.hrCheck;
 
 pub const VtblPlaceholder = ?*const anyopaque;
 
-pub const IID_SizeChangedEventHandler = GUID{ .Data1 = 0x8d7b1a58, .Data2 = 0x14c6, .Data3 = 0x51c9, .Data4 = .{ 0x89, 0x2c, 0x9f, 0xcc, 0xe3, 0x68, 0xe7, 0x7d } };
+pub const IID_SizeChangedEventHandler = GUID{ .data1 = 0x8d7b1a58, .data2 = 0x14c6, .data3 = 0x51c9, .data4 = .{ 0x89, 0x2c, 0x9f, 0xcc, 0xe3, 0x68, 0xe7, 0x7d } };
 
 pub const IWindow2 = extern struct {
-    pub const IID = GUID{ .Data1 = 0x61f0ec79, .Data2 = 0x5d52, .Data3 = 0x56b5, .Data4 = .{ 0x86, 0xfb, 0x40, 0xfa, 0x4a, 0xf2, 0x88, 0xb0 } };
+    pub const IID = GUID{ .data1 = 0x61f0ec79, .data2 = 0x5d52, .data3 = 0x56b5, .data4 = .{ 0x86, 0xfb, 0x40, 0xfa, 0x4a, 0xf2, 0x88, 0xb0 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -50,7 +50,7 @@ pub const IWindow2 = extern struct {
 pub const TabViewWidthMode = enum(i32) { equal = 0, size_to_content = 1, compact = 2 };
 
 pub const ITabView2 = extern struct {
-    pub const IID = GUID{ .Data1 = 0x07b509e1, .Data2 = 0x1d38, .Data3 = 0x551b, .Data4 = .{ 0x95, 0xf4, 0x47, 0x32, 0xb0, 0x49, 0xf6, 0xa6 } };
+    pub const IID = GUID{ .data1 = 0x07b509e1, .data2 = 0x1d38, .data3 = 0x551b, .data4 = .{ 0x95, 0xf4, 0x47, 0x32, 0xb0, 0x49, 0xf6, 0xa6 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -86,7 +86,7 @@ pub const ITabView2 = extern struct {
 };
 
 pub const IFrameworkElement2 = extern struct {
-    pub const IID = GUID{ .Data1 = 0xfe08f13d, .Data2 = 0xdc6a, .Data3 = 0x5495, .Data4 = .{ 0xad, 0x44, 0xc2, 0xd8, 0xd2, 0x18, 0x63, 0xb0 } };
+    pub const IID = GUID{ .data1 = 0xfe08f13d, .data2 = 0xdc6a, .data3 = 0x5495, .data4 = .{ 0xad, 0x44, 0xc2, 0xd8, 0xd2, 0x18, 0x63, 0xb0 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -131,7 +131,7 @@ pub const IFrameworkElement2 = extern struct {
 };
 
 pub const IPanel2 = extern struct {
-    pub const IID = GUID{ .Data1 = 0x2b02a69b, .Data2 = 0x5af7, .Data3 = 0x5ba1, .Data4 = .{ 0xb0, 0x99, 0x63, 0xaf, 0x37, 0xaf, 0x96, 0xff } };
+    pub const IID = GUID{ .data1 = 0x2b02a69b, .data2 = 0x5af7, .data3 = 0x5ba1, .data4 = .{ 0xb0, 0x99, 0x63, 0xaf, 0x37, 0xaf, 0x96, 0xff } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -150,7 +150,7 @@ pub const IPanel2 = extern struct {
 };
 
 pub const ISwapChainPanelNative2 = extern struct {
-    pub const IID = GUID{ .Data1 = 0xd5a2f60c, .Data2 = 0x37b2, .Data3 = 0x44a2, .Data4 = .{ 0x93, 0x7b, 0x8d, 0x8e, 0xb9, 0x72, 0x68, 0x21 } };
+    pub const IID = GUID{ .data1 = 0xd5a2f60c, .data2 = 0x37b2, .data3 = 0x44a2, .data4 = .{ 0x93, 0x7b, 0x8d, 0x8e, 0xb9, 0x72, 0x68, 0x21 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,

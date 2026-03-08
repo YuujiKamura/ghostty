@@ -59,8 +59,8 @@ pub fn activateAndLoadResources(self: anytype, window: *com.IWindow) !void {
     // Putting resources too early in startup can yield 0x8000ffff in unpackaged runs.
     if (self.xaml_app) |xa| {
         // ApplicationTheme: Light=0, Dark=1
-        xa.putRequestedTheme(1) catch |err| {
-            log.warn("putRequestedTheme(Dark) failed: {}", .{err});
+        xa.SetRequestedTheme(1) catch |err| {
+            log.warn("SetRequestedTheme(Dark) failed: {}", .{err});
         };
         log.info("initXaml step 7.2: loading XamlControlsResources...", .{});
         self.loadXamlResources(xa);
@@ -75,7 +75,7 @@ pub fn syncVisualDiagnostics(self: anytype) void {
 
     // Final attempt to force black background on root content.
     if (self.window) |win| {
-        if (win.getContent() catch null) |content| {
+        if (win.Content() catch null) |content| {
             var content_guard = winrt.ComRef(winrt.IInspectable).init(@as(*winrt.IInspectable, @ptrCast(content)));
             defer content_guard.deinit();
             // Set Dark theme on the content as well.
@@ -83,7 +83,7 @@ pub fn syncVisualDiagnostics(self: anytype) void {
                 var fe_guard = winrt.ComRef(com.IFrameworkElement).init(fe);
                 defer fe_guard.deinit();
                 // ElementTheme: Default=0, Light=1, Dark=2
-                fe.putRequestedTheme(2) catch {};
+                fe.SetRequestedTheme(2) catch {};
             } else |_| {}
             self.setControlBackground(@ptrCast(content), .{ .a = 255, .r = 0, .g = 0, .b = 0 });
         }

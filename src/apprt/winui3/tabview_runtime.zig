@@ -36,7 +36,7 @@ pub fn createRoot(
     // 2. Define two rows: Row 0 = Auto (TabView), Row 1 = 1* (content).
     const igrid = try root_grid_insp.queryInterface(com.IGrid);
     defer igrid.release();
-    const row_defs_raw = try igrid.getRowDefinitions();
+    const row_defs_raw = try igrid.RowDefinitions();
     const row_defs: *com.IVector = @ptrCast(@alignCast(row_defs_raw));
     defer row_defs.release();
 
@@ -52,7 +52,7 @@ pub fn createRoot(
         defer _ = row0_insp.release(); // Collection AddRef's on append.
         const row0 = try row0_insp.queryInterface(com.IRowDefinition);
         defer row0.release();
-        try row0.putHeight(.{ .Value = 40, .GridUnitType = com.GridUnitType.Pixel });
+        try row0.SetHeight(.{ .Value = 40, .GridUnitType = com.GridUnitType.Pixel });
         try row_defs.append(@ptrCast(row0_insp));
     }
 
@@ -62,7 +62,7 @@ pub fn createRoot(
         defer _ = row1_insp.release(); // Collection AddRef's on append.
         const row1 = try row1_insp.queryInterface(com.IRowDefinition);
         defer row1.release();
-        try row1.putHeight(.{ .Value = 1.0, .GridUnitType = com.GridUnitType.Star });
+        try row1.SetHeight(.{ .Value = 1.0, .GridUnitType = com.GridUnitType.Star });
         try row_defs.append(@ptrCast(row1_insp));
     }
 
@@ -90,14 +90,14 @@ pub fn createRoot(
     {
         const tv_fe = try tv_inspectable.queryInterface(com.IFrameworkElement);
         defer tv_fe.release();
-        try tv_fe.putHorizontalAlignment(com.HorizontalAlignment.Stretch);
-        try tv_fe.putVerticalAlignment(com.VerticalAlignment.Stretch);
+        try tv_fe.SetHorizontalAlignment(com.HorizontalAlignment.Stretch);
+        try tv_fe.SetVerticalAlignment(com.VerticalAlignment.Stretch);
     }
 
     // Add TabView to RootGrid children and set Grid.Row = 0.
     const root_panel = try root_grid_insp.queryInterface(com.IPanel);
     defer root_panel.release();
-    const root_children_raw = try root_panel.getChildren();
+    const root_children_raw = try root_panel.Children();
     const root_children: *com.IVector = @ptrCast(@alignCast(root_children_raw));
     defer root_children.release();
     try root_children.append(@ptrCast(tv_inspectable));
@@ -127,7 +127,7 @@ pub fn createRoot(
     log.info("initXaml step 7.5: TabContent Grid added to RootGrid Row 1", .{});
 
     // 6. Set RootGrid as Window.Content.
-    window.putContent(@ptrCast(root_grid_insp)) catch |err| {
+    window.SetContent(@ptrCast(root_grid_insp)) catch |err| {
         log.err("RootGrid putContent failed ({}), fail-fast because tabview is enabled", .{err});
         _ = tv.release();
         return err;
@@ -147,8 +147,8 @@ pub fn createRoot(
 
 pub fn configureDefaults(tab_view: ?*com.ITabView) void {
     if (tab_view) |tv| {
-        tv.putIsAddTabButtonVisible(true) catch {};
-        tv.putCloseButtonOverlayMode(0) catch {}; // Always = 0, show close button always
+        tv.SetIsAddTabButtonVisible(true) catch {};
+        tv.SetCloseButtonOverlayMode(0) catch {}; // Always = 0, show close button always
         if (tv.queryInterface(native_interop.ITabView2)) |tv2| {
             defer tv2.release();
             tv2.putCanReorderTabs(true) catch {};

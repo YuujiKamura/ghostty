@@ -55,6 +55,17 @@ loaded_token: i64 = 0,
 /// Token for the SizeChanged event registration.
 size_changed_token: i64 = 0,
 
+/// Tokens for XAML input event registrations.
+pointer_pressed_token: i64 = 0,
+pointer_moved_token: i64 = 0,
+pointer_released_token: i64 = 0,
+pointer_wheel_changed_token: i64 = 0,
+preview_key_down_token: i64 = 0,
+preview_key_up_token: i64 = 0,
+character_received_token: i64 = 0,
+got_focus_token: i64 = 0,
+lost_focus_token: i64 = 0,
+
 /// The SwapChainPanel for composition rendering.
 swap_chain_panel: ?*winrt.IInspectable = null,
 
@@ -162,7 +173,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     // Note: LoadedDelegate.createWithIid returns a ref-counted COM object.
     // We pass it to addLoaded which will AddRef it again.
     defer _ = loaded_delegate.com.lpVtbl.Release(loaded_delegate.comPtr());
-    self.loaded_token = try framework_element.addLoaded(loaded_delegate.comPtr());
+    self.loaded_token = try framework_element.AddLoaded(loaded_delegate.comPtr());
 
     const SizeChangedDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, *anyopaque, *anyopaque) void);
     const size_changed_delegate = try SizeChangedDelegate.createWithIid(
@@ -172,10 +183,66 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         &com.IID_SizeChangedEventHandler,
     );
     defer _ = size_changed_delegate.com.lpVtbl.Release(size_changed_delegate.comPtr());
-    self.size_changed_token = framework_element.addSizeChanged(size_changed_delegate.comPtr()) catch |err| blk: {
+    self.size_changed_token = framework_element.AddSizeChanged(size_changed_delegate.comPtr()) catch |err| blk: {
         log.warn("SwapChainPanel.SizeChanged handler registration failed: {}", .{err});
         break :blk 0;
     };
+
+    // Register XAML input event handlers on the SwapChainPanel.
+    // These bypass the input_overlay HWND and receive events directly from
+    // the XAML dispatcher, solving the issue where WinUI3 consumes navigation
+    // keys and mouse wheel events before they reach Win32 message queues.
+    {
+        const ui_element = try panel.queryInterface(com.IUIElement);
+        defer ui_element.release();
+
+        // Enable keyboard focus on the SwapChainPanel.
+        ui_element.SetIsTabStop(true) catch |err| {
+            log.warn("putIsTabStop failed: {}", .{err});
+        };
+
+        const XamlDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+
+        // Pointer events
+        const ptr_pressed = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerPressed, &com.IID_PointerEventHandler);
+        defer ptr_pressed.release();
+        self.pointer_pressed_token = ui_element.AddPointerPressed(ptr_pressed.comPtr()) catch 0;
+
+        const ptr_moved = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerMoved, &com.IID_PointerEventHandler);
+        defer ptr_moved.release();
+        self.pointer_moved_token = ui_element.AddPointerMoved(ptr_moved.comPtr()) catch 0;
+
+        const ptr_released = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerReleased, &com.IID_PointerEventHandler);
+        defer ptr_released.release();
+        self.pointer_released_token = ui_element.AddPointerReleased(ptr_released.comPtr()) catch 0;
+
+        const ptr_wheel = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerWheelChanged, &com.IID_PointerEventHandler);
+        defer ptr_wheel.release();
+        self.pointer_wheel_changed_token = ui_element.AddPointerWheelChanged(ptr_wheel.comPtr()) catch 0;
+
+        // Keyboard events (PreviewKeyDown catches navigation keys before XAML consumes them)
+        const key_down = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPreviewKeyDown, &com.IID_KeyEventHandler);
+        defer key_down.release();
+        self.preview_key_down_token = ui_element.AddPreviewKeyDown(key_down.comPtr()) catch 0;
+
+        const key_up = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPreviewKeyUp, &com.IID_KeyEventHandler);
+        defer key_up.release();
+        self.preview_key_up_token = ui_element.AddPreviewKeyUp(key_up.comPtr()) catch 0;
+
+        // CharacterReceived — text input
+        const char_recv = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlCharacterReceived, &com.IID_CharacterReceivedHandler);
+        defer char_recv.release();
+        self.character_received_token = ui_element.AddCharacterReceived(char_recv.comPtr()) catch 0;
+
+        // Focus events
+        const got_focus = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlGotFocus, &com.IID_RoutedEventHandler);
+        defer got_focus.release();
+        self.got_focus_token = ui_element.AddGotFocus(got_focus.comPtr()) catch 0;
+
+        const lost_focus = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlLostFocus, &com.IID_RoutedEventHandler);
+        defer lost_focus.release();
+        self.lost_focus_token = ui_element.AddLostFocus(lost_focus.comPtr()) catch 0;
+    }
 
     // NOTE: SwapChainPanel is set as TabViewItem content by App.newTab(),
     // not here. We only create the panel and query the native interface.
@@ -218,20 +285,32 @@ pub fn deinit(self: *Surface) void {
     }
     if (self.swap_chain_panel_native) |native| {
         // Unregister event handlers if we have tokens.
-        if (self.loaded_token != 0 or self.size_changed_token != 0) {
-            if (self.swap_chain_panel) |panel| {
-                if (panel.queryInterface(com.IFrameworkElement)) |fe| {
-                    defer fe.release();
-                    if (self.loaded_token != 0) {
-                        fe.removeLoaded(self.loaded_token) catch {};
-                        self.loaded_token = 0;
-                    }
-                    if (self.size_changed_token != 0) {
-                        fe.removeSizeChanged(self.size_changed_token) catch {};
-                        self.size_changed_token = 0;
-                    }
-                } else |_| {}
-            }
+        if (self.swap_chain_panel) |panel| {
+            if (panel.queryInterface(com.IFrameworkElement)) |fe| {
+                defer fe.release();
+                if (self.loaded_token != 0) {
+                    fe.RemoveLoaded(self.loaded_token) catch {};
+                    self.loaded_token = 0;
+                }
+                if (self.size_changed_token != 0) {
+                    fe.RemoveSizeChanged(self.size_changed_token) catch {};
+                    self.size_changed_token = 0;
+                }
+            } else |_| {}
+
+            // Unregister XAML input event handlers.
+            if (panel.queryInterface(com.IUIElement)) |ue| {
+                defer ue.release();
+                if (self.pointer_pressed_token != 0) { ue.RemovePointerPressed(self.pointer_pressed_token) catch {}; }
+                if (self.pointer_moved_token != 0) { ue.RemovePointerMoved(self.pointer_moved_token) catch {}; }
+                if (self.pointer_released_token != 0) { ue.RemovePointerReleased(self.pointer_released_token) catch {}; }
+                if (self.pointer_wheel_changed_token != 0) { ue.RemovePointerWheelChanged(self.pointer_wheel_changed_token) catch {}; }
+                if (self.preview_key_down_token != 0) { ue.RemovePreviewKeyDown(self.preview_key_down_token) catch {}; }
+                if (self.preview_key_up_token != 0) { ue.RemovePreviewKeyUp(self.preview_key_up_token) catch {}; }
+                if (self.character_received_token != 0) { ue.RemoveCharacterReceived(self.character_received_token) catch {}; }
+                if (self.got_focus_token != 0) { ue.RemoveGotFocus(self.got_focus_token) catch {}; }
+                if (self.lost_focus_token != 0) { ue.RemoveLostFocus(self.lost_focus_token) catch {}; }
+            } else |_| {}
         }
         native.release();
         self.swap_chain_panel_native = null;
@@ -443,7 +522,7 @@ pub fn setTabTitle(self: *Surface, title: [:0]const u8) void {
                     const util = @import("util.zig");
                     if (util.boxString(hstr)) |boxed| {
                         defer boxed.release();
-                        _ = tvi.putHeader(boxed) catch |err| {
+                        _ = tvi.SetHeader(boxed) catch |err| {
                             log.warn("setTabTitle: putHeader failed: {}", .{err});
                         };
                     } else |err| {
@@ -640,6 +719,135 @@ pub fn handleScroll(self: *Surface, xoffset: f64, yoffset: f64) void {
     self.core_surface.scrollCallback(xoffset, yoffset, .{}) catch |err| {
         log.warn("scroll callback error: {}", .{err});
     };
+}
+
+// --- XAML event callbacks ---
+
+fn onXamlPointerPressed(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
+    const point = ea.getCurrentPoint(null) catch return;
+    defer point.release();
+    const pos = point.getPosition() catch return;
+    self.handleMouseMove(@floatCast(pos.X), @floatCast(pos.Y));
+    const props = point.getProperties() catch return;
+    defer props.release();
+    const update_kind = props.getPointerUpdateKind() catch return;
+    const button: input.MouseButton = switch (update_kind) {
+        1 => .left, // LeftButtonPressed
+        3 => .right, // RightButtonPressed
+        5 => .middle, // MiddleButtonPressed
+        else => return,
+    };
+    // Request XAML focus on click so keyboard events flow here.
+    if (self.swap_chain_panel) |panel| {
+        if (panel.queryInterface(com.IUIElement)) |ue| {
+            defer ue.release();
+            _ = ue.focus(1) catch {}; // FocusState.Programmatic = 1
+        } else |_| {}
+    }
+    self.handleMouseButton(button, .press);
+    ea.putHandled(true) catch {};
+}
+
+fn onXamlPointerMoved(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
+    const point = ea.getCurrentPoint(null) catch return;
+    defer point.release();
+    const pos = point.getPosition() catch return;
+    self.handleMouseMove(@floatCast(pos.X), @floatCast(pos.Y));
+    ea.putHandled(true) catch {};
+}
+
+fn onXamlPointerReleased(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
+    const point = ea.getCurrentPoint(null) catch return;
+    defer point.release();
+    const pos = point.getPosition() catch return;
+    self.handleMouseMove(@floatCast(pos.X), @floatCast(pos.Y));
+    const props = point.getProperties() catch return;
+    defer props.release();
+    // On release, the button is no longer "pressed" so we use PointerUpdateKind.
+    const update_kind = props.getPointerUpdateKind() catch return;
+    const button: input.MouseButton = switch (update_kind) {
+        2 => .left, // LeftButtonReleased
+        4 => .right, // RightButtonReleased
+        6 => .middle, // MiddleButtonReleased
+        else => return,
+    };
+    self.handleMouseButton(button, .release);
+    if (button == .right) {
+        self.app.showContextMenuAtCursor();
+    }
+    ea.putHandled(true) catch {};
+}
+
+fn onXamlPointerWheelChanged(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
+    const point = ea.getCurrentPoint(null) catch return;
+    defer point.release();
+    const props = point.getProperties() catch return;
+    defer props.release();
+    const delta = props.getMouseWheelDelta() catch return;
+    const offset = @as(f64, @floatFromInt(delta)) / 120.0;
+    const is_horizontal = props.getIsHorizontalMouseWheel() catch false;
+    if (is_horizontal) {
+        self.handleScroll(offset, 0);
+    } else {
+        self.handleScroll(0, offset);
+    }
+    ea.putHandled(true) catch {};
+}
+
+fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
+    const vk = ea.getKey() catch return;
+    if (vk == 0xE5) {
+        // VK_PROCESSKEY — IME is active. Switch focus to input_hwnd for IME.
+        if (self.app.input_hwnd) |h| _ = os.SetFocus(h);
+        return; // Don't mark handled — let IME process.
+    }
+    self.handleKeyEvent(@intCast(@as(u32, @bitCast(vk))), true);
+    ea.putHandled(true) catch {};
+}
+
+fn onXamlPreviewKeyUp(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
+    const vk = ea.getKey() catch return;
+    self.handleKeyEvent(@intCast(@as(u32, @bitCast(vk))), false);
+    ea.putHandled(true) catch {};
+}
+
+fn onXamlCharacterReceived(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    const ea: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
+    const ch = ea.getCharacter() catch return;
+    self.handleCharEvent(ch);
+    ea.putHandled(true) catch {};
+}
+
+fn onXamlGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
+    if (!self.core_initialized) return;
+    log.info("XAML GotFocus on SwapChainPanel surface=0x{x}", .{@intFromPtr(self)});
+    self.core_surface.focusCallback(true) catch |err| {
+        log.warn("focusCallback(true) error: {}", .{err});
+    };
+}
+
+fn onXamlLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
+    if (!self.core_initialized) return;
+    log.info("XAML LostFocus on SwapChainPanel surface=0x{x}", .{@intFromPtr(self)});
+    self.core_surface.focusCallback(false) catch |err| {
+        log.warn("focusCallback(false) error: {}", .{err});
+    };
+}
+
+/// Request XAML focus on the SwapChainPanel (called from ime.zig after IME ends).
+pub fn focusSwapChainPanel(self: *Surface) void {
+    if (self.swap_chain_panel) |panel| {
+        if (panel.queryInterface(com.IUIElement)) |ue| {
+            defer ue.release();
+            _ = ue.focus(1) catch {}; // FocusState.Programmatic = 1
+        } else |_| {}
+    }
 }
 
 /// Bind a DXGI swap chain to the SwapChainPanel.

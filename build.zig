@@ -50,14 +50,6 @@ pub fn build(b: *std.Build) !void {
         "test-valgrind",
         "Run tests under valgrind",
     );
-    const winui_contract_step = b.step(
-        "winui-contract",
-        "Run WinUI3 contract fix/check workflow",
-    );
-    const install_winui_validated_step = b.step(
-        "install-winui-validated",
-        "Install artifacts, then run WinUI3 contract fix/check workflow",
-    );
     const translations_step = b.step(
         "update-translations",
         "Update translation files",
@@ -173,25 +165,8 @@ pub fn build(b: *std.Build) !void {
         }
     }
 
-    // WinUI3 COM parity check: regenerate com_generated.zig and diff against committed version.
-    // Fails the build if they differ, preventing hand-edits from going undetected.
-    // With -Dcom-autofix=true, invokes AI (guardian.sh --fix) to repair the generator.
     if (config.target.result.os.tag == .windows and config.app_runtime == .winui3) {
-        const com_autofix = b.option(bool, "com-autofix", "Auto-fix generator via AI when COM parity check fails") orelse false;
-        const parity_cmd = b.addSystemCommand(&.{
-            "pwsh",
-            "-NoProfile",
-            "-File",
-            b.pathFromRoot("scripts/winui3-parity-check.ps1"),
-        });
-        if (com_autofix) {
-            parity_cmd.addArg("-AutoFix");
-        }
-        // Parity check runs before compilation starts.
-        exe.exe.step.dependOn(&parity_cmd.step);
-
         // Vtable manifest verification: structural check against known-good slot ordering.
-        // Catches slot misalignment that parity check alone cannot detect.
         const vtable_cmd = b.addSystemCommand(&.{
             "pwsh",
             "-NoProfile",
@@ -202,19 +177,7 @@ pub fn build(b: *std.Build) !void {
             "-ManifestPath",
             b.pathFromRoot("contracts/vtable_manifest.json"),
         });
-        vtable_cmd.step.dependOn(&parity_cmd.step);
         exe.exe.step.dependOn(&vtable_cmd.step);
-
-        // Legacy contract steps (kept for manual use)
-        const contract_cmd = b.addSystemCommand(&.{
-            "pwsh",
-            "-File",
-            b.pathFromRoot("scripts/winui3-contract-run.ps1"),
-            "-Fix",
-        });
-        winui_contract_step.dependOn(&contract_cmd.step);
-        contract_cmd.step.dependOn(b.getInstallStep());
-        install_winui_validated_step.dependOn(&contract_cmd.step);
     }
 
     // macOS only artifacts. These will error if they're initialized for

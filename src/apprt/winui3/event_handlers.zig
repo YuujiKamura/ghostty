@@ -19,7 +19,7 @@ pub fn onTabCloseRequested(self: anytype, _: ?*anyopaque, args_obj: ?*anyopaque)
         return;
     }
     const args: *com.ITabViewTabCloseRequestedEventArgs = @ptrCast(@alignCast(args_raw));
-    const tab_insp = args.getTab() catch {
+    const tab_insp = args.Tab() catch {
         self.closeActiveTab();
         return;
     };
@@ -27,7 +27,7 @@ pub fn onTabCloseRequested(self: anytype, _: ?*anyopaque, args_obj: ?*anyopaque)
     defer tab_insp_guard.deinit();
 
     if (self.tab_view) |tv| {
-        var tab_items_guard = winrt.ComRef(com.IVector).init(tv.getTabItems() catch {
+        var tab_items_guard = winrt.ComRef(com.IVector).init(tv.TabItems() catch {
             self.closeActiveTab();
             return;
         });
@@ -59,7 +59,7 @@ pub fn onSelectionChanged(self: anytype, sender_obj: ?*anyopaque, args_obj: ?*an
         return;
     }
     if (self.tab_view) |tv| {
-        const idx = tv.getSelectedIndex() catch return;
+        const idx = tv.SelectedIndex() catch return;
         if (idx >= 0 and @as(usize, @intCast(idx)) < self.surfaces.items.len) {
             const new_idx: usize = @intCast(idx);
             // Notify old surface it lost focus.

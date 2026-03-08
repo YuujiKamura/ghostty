@@ -1,6 +1,5 @@
 const std = @import("std");
 const os = @import("os.zig");
-const input = @import("../../input.zig");
 const App = @import("App.zig");
 const Surface = @import("Surface.zig");
 const ime = @import("ime.zig");
@@ -60,18 +59,6 @@ pub fn subclassProc(
         os.WM_SIZE => return handleSize(app, hwnd, msg, wparam, lparam),
         os.WM_PAINT => return handlePaint(hwnd, msg, wparam, lparam),
         os.WM_ERASEBKGND => return 1,
-        os.WM_KEYDOWN, os.WM_SYSKEYDOWN => return handleKeyInput(app, hwnd, msg, wparam, lparam, true),
-        os.WM_KEYUP, os.WM_SYSKEYUP => return handleKeyInput(app, hwnd, msg, wparam, lparam, false),
-        os.WM_CHAR => return handleChar(app, hwnd, msg, wparam, lparam),
-        os.WM_MOUSEMOVE => return handleMouseMove(app, hwnd, msg, wparam, lparam),
-        os.WM_LBUTTONDOWN => return handleMouseButton(app, hwnd, msg, wparam, lparam, .left, .press),
-        os.WM_RBUTTONDOWN => return handleMouseButton(app, hwnd, msg, wparam, lparam, .right, .press),
-        os.WM_MBUTTONDOWN => return handleMouseButton(app, hwnd, msg, wparam, lparam, .middle, .press),
-        os.WM_LBUTTONUP => return handleMouseButton(app, hwnd, msg, wparam, lparam, .left, .release),
-        os.WM_RBUTTONUP => return handleMouseButton(app, hwnd, msg, wparam, lparam, .right, .release),
-        os.WM_MBUTTONUP => return handleMouseButton(app, hwnd, msg, wparam, lparam, .middle, .release),
-        os.WM_MOUSEWHEEL => return handleScroll(app, hwnd, msg, wparam, lparam, .vertical),
-        os.WM_MOUSEHWHEEL => return handleScroll(app, hwnd, msg, wparam, lparam, .horizontal),
         os.WM_DPICHANGED => return handleDpiChanged(app, hwnd, msg, wparam, lparam),
         os.WM_USER => return handleWakeup(app, hwnd, msg, wparam, lparam),
         os.WM_APP_BIND_SWAP_CHAIN => return handleBindSwapChain(app, wparam, lparam),
@@ -82,14 +69,12 @@ pub fn subclassProc(
         os.WM_IME_COMPOSITION => return ime.handleIMEComposition(app, hwnd, msg, wparam, lparam),
         os.WM_IME_ENDCOMPOSITION => return ime.handleIMEEndComposition(app, hwnd, msg, wparam, lparam),
         os.WM_SETFOCUS => {
-            // When the main or child HWND receives focus, redirect to our input HWND
-            // so that keyboard/IME messages go to inputWndProc instead of WinUI3's TSF.
-            if (app.input_hwnd) |input_hwnd| {
-                if (hwnd != input_hwnd) {
-                    log.info("subclassProc: WM_SETFOCUS on HWND=0x{x}, redirecting to input HWND=0x{x}", .{ @intFromPtr(hwnd), @intFromPtr(input_hwnd) });
-                    _ = os.SetFocus(input_hwnd);
-                    return 0;
-                }
+            // When the main HWND receives focus, redirect to the SwapChainPanel's
+            // XAML focus so that PreviewKeyDown/CharacterReceived events fire.
+            if (app.activeSurface()) |surface| {
+                log.info("subclassProc: WM_SETFOCUS on HWND=0x{x}, setting XAML focus on SwapChainPanel", .{@intFromPtr(hwnd)});
+                surface.focusSwapChainPanel();
+                return 0;
             }
         },
         else => {},
@@ -164,51 +149,6 @@ fn handlePaint(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM
     return os.DefSubclassProc(hwnd, msg, wparam, lparam);
 }
 
-fn handleKeyInput(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM, pressed: bool) os.LRESULT {
-    if (app.activeSurface()) |surface| {
-        const wp: usize = @bitCast(wparam);
-        surface.handleKeyEvent(@truncate(wp), pressed);
-    }
-    return os.DefSubclassProc(hwnd, msg, wparam, lparam);
-}
-
-fn handleChar(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
-    if (app.activeSurface()) |surface| {
-        const wp: usize = @bitCast(wparam);
-        surface.handleCharEvent(@truncate(wp));
-    }
-    return os.DefSubclassProc(hwnd, msg, wparam, lparam);
-}
-
-fn handleMouseMove(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
-    if (app.activeSurface()) |surface| {
-        const lp: usize = @bitCast(lparam);
-        const x: i16 = @bitCast(@as(u16, @truncate(lp)));
-        const y: i16 = @bitCast(@as(u16, @truncate(lp >> 16)));
-        surface.handleMouseMove(@floatFromInt(x), @floatFromInt(y));
-    }
-    return os.DefSubclassProc(hwnd, msg, wparam, lparam);
-}
-
-fn handleMouseButton(
-    app: *App,
-    hwnd: os.HWND,
-    msg: os.UINT,
-    wparam: os.WPARAM,
-    lparam: os.LPARAM,
-    button: input.MouseButton,
-    action: input.MouseButtonState,
-) os.LRESULT {
-    if (button == .right and action == .release) {
-        showContextMenu(app, hwnd);
-        return 0;
-    }
-    if (app.activeSurface()) |surface| {
-        surface.handleMouseButton(button, action);
-    }
-    return os.DefSubclassProc(hwnd, msg, wparam, lparam);
-}
-
 fn showContextMenu(app: *App, hwnd: os.HWND) void {
     const menu = os.CreatePopupMenu() orelse return;
     defer _ = os.DestroyMenu(menu);
@@ -240,6 +180,11 @@ fn showContextMenu(app: *App, hwnd: os.HWND) void {
     );
     if (cmd == 0) return;
     handleContextCommand(app, @intCast(cmd));
+}
+
+pub fn showContextMenuAtCursor(app: *App) void {
+    const hwnd = app.hwnd orelse return;
+    showContextMenu(app, hwnd);
 }
 
 fn handleCommand(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
@@ -278,28 +223,6 @@ fn handleContextCommand(app: *App, cmd_id: usize) void {
         CONTEXT_MENU_CLOSE_WINDOW => app.requestCloseWindow(),
         else => {},
     }
-}
-
-const ScrollDirection = enum { vertical, horizontal };
-
-fn handleScroll(
-    app: *App,
-    hwnd: os.HWND,
-    msg: os.UINT,
-    wparam: os.WPARAM,
-    lparam: os.LPARAM,
-    direction: ScrollDirection,
-) os.LRESULT {
-    if (app.activeSurface()) |surface| {
-        const wp: usize = @bitCast(wparam);
-        const delta: i16 = @bitCast(@as(u16, @truncate(wp >> 16)));
-        const offset = @as(f64, @floatFromInt(delta)) / 120.0;
-        switch (direction) {
-            .vertical => surface.handleScroll(0, offset),
-            .horizontal => surface.handleScroll(offset, 0),
-        }
-    }
-    return os.DefSubclassProc(hwnd, msg, wparam, lparam);
 }
 
 fn handleDpiChanged(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
