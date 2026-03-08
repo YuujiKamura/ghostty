@@ -37,11 +37,11 @@
     },
     {
       "file": "src/apprt/winui3/com.zig",
-      "pattern": "pub const IPanel = extern struct"
+      "pattern": "pub const IPanel = gen.IPanel;"
     },
     {
       "file": "src/apprt/winui3/com.zig",
-      "pattern": "pub fn createInstance(self: *@This(), outer: ?*anyopaque) WinRTError!struct { inner: ?*anyopaque, instance: *IInspectable }"
+      "pattern": "pub const IApplicationFactory = gen.IApplicationFactory;"
     },
     {
       "file": "src/apprt/winui3/com_runtime.zig",
@@ -59,7 +59,7 @@
   "line_order_checks": [
     {
       "file": "src/apprt/winui3/App.zig",
-      "first_pattern": "Step 8: Create the initial terminal content.",
+      "first_pattern": "Step 8: Create initial Surface and content.",
       "second_pattern": "try self.registerTabViewHandlers(tab_view);",
       "expectation": "first_before_second",
       "description": "Control tree creation should be completed before handler registration."

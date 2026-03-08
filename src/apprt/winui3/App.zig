@@ -398,11 +398,14 @@ fn createWindowContent(self: *App, window: *com.IWindow) !void {
 
     if (tv) |tab_view| {
         tabview_runtime.configureDefaults(tab_view);
-        try self.registerTabViewHandlers(tab_view);
     }
 
     // Step 8: Create initial Surface and content.
     try self.createInitialSurfaceContent(window, tv);
+
+    if (tv) |tab_view| {
+        try self.registerTabViewHandlers(tab_view);
+    }
 }
 
 fn scheduleDebugActions(self: *App) !void {

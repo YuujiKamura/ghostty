@@ -1,6 +1,7 @@
 param(
     [string]$RepoRoot = "",
-    [string]$WinmdPath = ""
+    [string]$WinmdPath = "",
+    [string]$ToolDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,10 +12,20 @@ if (-not $RepoRoot) {
 
 $syncScript = Join-Path $RepoRoot "scripts\winui3-sync-delegate-iids.ps1"
 if (-not (Test-Path -LiteralPath $syncScript)) {
+    $workspaceRoot = Split-Path -Parent $RepoRoot
+    if (-not $ToolDir) {
+        $ToolDir = Join-Path $workspaceRoot "win-zig-bindgen"
+    }
+    $syncScript = Join-Path $ToolDir "scripts\winui3-sync-delegate-iids.ps1"
+}
+if (-not (Test-Path -LiteralPath $syncScript)) {
     throw "Script not found: $syncScript"
 }
 
 $args = @("-RepoRoot", $RepoRoot, "-Check")
+if ($ToolDir) {
+    $args += @("-ToolDir", $ToolDir)
+}
 if ($WinmdPath) {
     $args += @("-WinmdPath", $WinmdPath)
 }
