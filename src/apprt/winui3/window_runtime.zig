@@ -14,10 +14,10 @@ pub fn activateAndLoadResources(self: anytype, window: *com.IWindow) !void {
 
     // FORCE visibility via Win32 ShowWindow
     if (self.hwnd) |h| {
-        _ = os.ShowWindow(h, os.SW_SHOWMAXIMIZED);
+        _ = os.ShowWindow(h, os.SW_SHOWNORMAL);
         _ = os.UpdateWindow(h);
         _ = os.SetForegroundWindow(h);
-        log.info("initXaml: Win32 ShowWindow(MAXIMIZED) called", .{});
+        log.info("initXaml: Win32 ShowWindow(NORMAL) called", .{});
 
         // DWM frame extension (Windows Terminal style — NOT ExtendsContentIntoTitleBar).
         // Extend the DWM frame into the client area by the titlebar height so we can
