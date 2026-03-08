@@ -55,18 +55,17 @@ See the [documentation](https://ghostty.org/docs) on the Ghostty website.
 
 For this fork's WinUI3 workflow, use this order across sibling repos:
 
-1. `win-zig-metadata`: `zig build test`
-2. `win-zig-bindgen`: `zig build test`
-3. `win-zig-bindgen`: `pwsh -File .\scripts\winui3-sync-delegate-iids.ps1 -Check`
-4. `ghostty-win`: `pwsh -File .\scripts\winui3-delegate-iid-check.ps1`
-5. `ghostty-win`: `pwsh -File .\scripts\winui3-inspect-event-params.ps1`
-6. `win-zig-core`: `pwsh -File .\scripts\winui3-contract-run.ps1 -SkipReference -SkipExtractIids`
+1. `win-zig-bindgen`: `zig build gate`
+2. `ghostty-win`: `pwsh -File .\scripts\winui3-contract-check.ps1 -Build`
+3. `win-zig-core`: `pwsh -File .\scripts\winui3-verify-all.ps1`
 
 One-command orchestration:
 
 ```powershell
 pwsh -File ..\win-zig-core\scripts\winui3-verify-all.ps1
 ```
+
+Treat `winui3-verify-all.ps1` as the cross-repo acceptance SSOT. A standalone app build is not a completion signal.
 
 ## Contributing and Developing
 
