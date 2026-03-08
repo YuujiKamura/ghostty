@@ -15,6 +15,7 @@ const comRelease = gen.comRelease;
 const comQueryInterface = gen.comQueryInterface;
 const IUnknown = gen.IUnknown;
 const IInspectable = gen.IInspectable;
+const Rect = gen.Rect;
 
 /// IApplication ABI — provides access to Application.Resources (get/put).
 /// Used by xaml_helpers.loadXamlResources to set XamlControlsResources.
@@ -285,7 +286,7 @@ pub const IPointerRoutedEventArgs = extern struct {
 pub const IPointerPoint = extern struct {
     pub const IID = GUID{ .data1 = 0x0d430ee6, .data2 = 0x252c, .data3 = 0x59a4, .data4 = .{ 0xb2, 0xa2, 0xd4, 0x42, 0x64, 0xdc, 0x6a, 0x40 } };
     lpVtbl: *const VTable,
-    // IDL order: PointerDevice, Position, RawPosition, PointerId, FrameId, Timestamp, IsInContact, Properties
+    // Microsoft.UI.Input.IPointerPoint vtable (NOT Windows.UI.Input — different slot order!)
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
@@ -293,14 +294,14 @@ pub const IPointerPoint = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        get_PointerDevice: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        get_Position: *const fn (*anyopaque, *Point) callconv(.winapi) HRESULT,
-        get_RawPosition: *const fn (*anyopaque, *Point) callconv(.winapi) HRESULT,
-        get_PointerId: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
         get_FrameId: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
-        get_Timestamp: *const fn (*anyopaque, *u64) callconv(.winapi) HRESULT,
         get_IsInContact: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_PointerDeviceType: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        get_PointerId: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
+        get_Position: *const fn (*anyopaque, *Point) callconv(.winapi) HRESULT,
         get_Properties: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        get_Timestamp: *const fn (*anyopaque, *u64) callconv(.winapi) HRESULT,
+        GetTransformedPoint: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
@@ -319,7 +320,7 @@ pub const IPointerPoint = extern struct {
 pub const IPointerPointProperties = extern struct {
     pub const IID = GUID{ .data1 = 0xd760ed77, .data2 = 0x4b10, .data3 = 0x57a5, .data4 = .{ 0xb3, 0xcc, 0xd9, 0xbf, 0x34, 0x13, 0xe9, 0x96 } };
     lpVtbl: *const VTable,
-    // IDL order from windows.ui.input.idl (NOT alphabetical!)
+    // Microsoft.UI.Input.IPointerPointProperties vtable (NOT Windows.UI.Input — different slots, fewer methods!)
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
@@ -327,30 +328,27 @@ pub const IPointerPointProperties = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        get_Pressure: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        get_IsInverted: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        get_IsEraser: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        get_Orientation: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        get_XTilt: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        get_YTilt: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        get_Twist: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        get_ContactRect: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        get_ContactRectRaw: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        get_TouchConfidence: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        get_IsLeftButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        get_IsRightButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        get_IsMiddleButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        get_MouseWheelDelta: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-        get_IsHorizontalMouseWheel: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        get_IsPrimary: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        get_IsInRange: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        get_IsCanceled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_ContactRect: *const fn (*anyopaque, *Rect) callconv(.winapi) HRESULT,
         get_IsBarrelButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsCanceled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsEraser: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsHorizontalMouseWheel: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsInRange: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsInverted: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsLeftButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsMiddleButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsPrimary: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsRightButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
         get_IsXButton1Pressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
         get_IsXButton2Pressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_MouseWheelDelta: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        get_Orientation: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
         get_PointerUpdateKind: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-        HasUsage: *const fn (*anyopaque, u32, u32, *bool) callconv(.winapi) HRESULT,
-        GetUsageValue: *const fn (*anyopaque, u32, u32, *i32) callconv(.winapi) HRESULT,
+        get_Pressure: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        get_TouchConfidence: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_Twist: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        get_XTilt: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        get_YTilt: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
