@@ -154,6 +154,9 @@ tab_close_token: ?i64 = null,
 add_tab_token: ?i64 = null,
 selection_changed_token: ?i64 = null,
 
+/// DispatcherQueueController — must be kept alive for the lifetime of the app.
+dq_controller: ?*winrt.IInspectable = null,
+
 pub fn init(
     self: *App,
     core_app: *CoreApp,
@@ -192,13 +195,12 @@ pub fn init(
         log.err("CreateDispatcherQueueController failed: {}", .{err});
         return error.AppInitFailed;
     };
-    _ = dq_controller;
-
     self.* = .{
         .core_app = core_app,
         .debug_cfg = debug_harness.RuntimeDebugConfig.load(),
         .surfaces = .{},
         .running = true,
+        .dq_controller = dq_controller,
     };
     log.info("winui3 xaml_metadata_provider={s}", .{
         if (self.debug_cfg.use_ixaml_metadata_provider) "on" else "off",
@@ -821,6 +823,7 @@ fn fullCleanup(self: *App) void {
     if (self.add_tab_handler) |h| h.release();
     if (self.selection_changed_handler) |h| h.release();
 
+    if (self.tab_content_grid) |tcg| { _ = tcg.release(); self.tab_content_grid = null; }
     if (self.tab_view) |tv| tv.release();
     if (self.window) |window| window.release();
     if (self.xaml_app) |xa| xa.release();
@@ -828,6 +831,12 @@ fn fullCleanup(self: *App) void {
     self.app_outer.deinit();
 
     if (self.input_hwnd) |h| _ = os.DestroyWindow(h);
+
+    // Release DispatcherQueueController last — it owns the message loop infrastructure.
+    if (self.dq_controller) |dqc| {
+        _ = dqc.release();
+        self.dq_controller = null;
+    }
 
     log.info("Cleanup complete.", .{});
 }

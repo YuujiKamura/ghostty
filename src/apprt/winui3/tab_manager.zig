@@ -64,6 +64,7 @@ pub fn newTab(
 
     // Add to TabItems collection.
     const tab_items = try tab_view.TabItems();
+    defer tab_items.release();
     try tab_items.append(@ptrCast(tvi_inspectable));
 
     // Store the IInspectable reference on the surface for later title updates.
@@ -102,6 +103,7 @@ pub fn closeTab(self: anytype, idx: usize) bool {
         // Remove from TabView last (triggers SelectionChanged with -1).
         if (self.tab_view) |tv| {
             const tab_items = tv.TabItems() catch return true;
+            defer tab_items.release();
             tab_items.removeAt(@intCast(idx)) catch {};
         }
         return true;
@@ -117,6 +119,7 @@ pub fn closeTab(self: anytype, idx: usize) bool {
     // 3. Remove from TabView (triggers onSelectionChanged).
     if (self.tab_view) |tv| {
         const tab_items = tv.TabItems() catch return false;
+        defer tab_items.release();
         tab_items.removeAt(@intCast(idx)) catch |err| {
             log.warn("closeTab: removeAt({}) failed: {}", .{ idx, err });
         };

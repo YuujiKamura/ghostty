@@ -71,7 +71,12 @@ pub const IVector = extern struct {
         var i: u32 = 0;
         while (i < count) : (i += 1) {
             const item = self.getAt(i) catch continue;
-            if (@intFromPtr(item) == @intFromPtr(target)) return i;
+            if (@intFromPtr(item) == @intFromPtr(target)) {
+                // Release the queried reference before returning.
+                const unk: *IUnknown = @ptrCast(@alignCast(item));
+                _ = unk.lpVtbl.Release(@ptrCast(unk));
+                return i;
+            }
             // Release the queried reference.
             const unk: *IUnknown = @ptrCast(@alignCast(item));
             _ = unk.lpVtbl.Release(@ptrCast(unk));

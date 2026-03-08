@@ -103,6 +103,7 @@ fn loadXamlResourcesMerged(xa_abi: *com.IApplicationAbi, xcr: *winrt.IInspectabl
     const rd_class = try winrt.hstring("Microsoft.UI.Xaml.ResourceDictionary");
     defer winrt.deleteHString(rd_class);
     const rd_insp = try winrt.activateInstance(rd_class);
+    defer _ = rd_insp.release();
 
     // Get IResourceDictionary interface
     const ird = try rd_insp.queryInterface(com.IResourceDictionary);
