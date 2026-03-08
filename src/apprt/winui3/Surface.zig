@@ -173,99 +173,49 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     // Set SwapChainPanel background to black.
     self.app.setControlBackground(panel, .{ .a = 255, .r = 0, .g = 0, .b = 0 });
 
-    // Create inner surface grid: col 0 = SwapChainPanel (Star), col 1 = ScrollBar (17px).
+    // Create inner surface grid via XamlReader.Load():
+    // Layout is defined in XAML, event hookup remains in Zig.
     {
-        const grid_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Grid");
-        defer winrt.deleteHString(grid_class);
-        const grid_insp = try winrt.activateInstance(grid_class);
+        const xaml_str =
+            \\<Grid xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>
+            \\  <Grid.ColumnDefinitions>
+            \\    <ColumnDefinition Width='*'/>
+            \\    <ColumnDefinition Width='17'/>
+            \\  </Grid.ColumnDefinitions>
+            \\  <ScrollBar Grid.Column='1' Orientation='Vertical'
+            \\             Width='17' MinWidth='17' MaxWidth='17'
+            \\             HorizontalAlignment='Stretch' VerticalAlignment='Stretch'
+            \\             Minimum='0' Maximum='0' Value='0'
+            \\             SmallChange='1' LargeChange='10'/>
+            \\</Grid>
+        ;
+        const xaml_hstr = try winrt.hstring(xaml_str);
+        defer winrt.deleteHString(xaml_hstr);
+
+        // Load XAML string into runtime object tree.
+        const reader_class = try winrt.hstring("Microsoft.UI.Xaml.Markup.XamlReader");
+        defer winrt.deleteHString(reader_class);
+        const reader = try winrt.getActivationFactory(com.IXamlReaderStatics, reader_class);
+        defer reader.release();
+        const grid_insp: *winrt.IInspectable = @ptrCast(@alignCast(try reader.load(xaml_hstr)));
         errdefer _ = grid_insp.release();
 
-        // Define two columns.
-        const igrid = try grid_insp.queryInterface(com.IGrid);
-        defer igrid.release();
-        const col_defs_raw = try igrid.ColumnDefinitions();
-        const col_defs: *com.IVector = @ptrCast(@alignCast(col_defs_raw));
-        defer col_defs.release();
-
-        const col_def_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.ColumnDefinition");
-        defer winrt.deleteHString(col_def_class);
-
-        // Col 0: Star (1*) for SwapChainPanel.
-        {
-            const col0_insp = try winrt.activateInstance(col_def_class);
-            defer _ = col0_insp.release();
-            const col0 = try col0_insp.queryInterface(com.IColumnDefinition);
-            defer col0.release();
-            const star_width = com.GridLength{ .Value = 1.0, .GridUnitType = com.GridUnitType.Star };
-            try com.hrCheck(col0.lpVtbl.SetWidth(@ptrCast(col0), star_width));
-            try col_defs.append(@ptrCast(col0_insp));
-        }
-
-        // Col 1: Pixel (17px) for ScrollBar.
-        {
-            const col1_insp = try winrt.activateInstance(col_def_class);
-            defer _ = col1_insp.release();
-            const col1 = try col1_insp.queryInterface(com.IColumnDefinition);
-            defer col1.release();
-            const pixel_width = com.GridLength{ .Value = 17.0, .GridUnitType = com.GridUnitType.Pixel };
-            try com.hrCheck(col1.lpVtbl.SetWidth(@ptrCast(col1), pixel_width));
-            try col_defs.append(@ptrCast(col1_insp));
-        }
-
-        // Create vertical ScrollBar.
-        const sb_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Primitives.ScrollBar");
-        defer winrt.deleteHString(sb_class);
-        const sb_insp = try winrt.activateInstance(sb_class);
-        errdefer _ = sb_insp.release();
-
-        // Set Orientation = Vertical (1).
-        const isb = try sb_insp.queryInterface(com.IScrollBar);
-        defer isb.release();
-        try isb.setOrientation(1);
-
-        // Set initial range values.
-        const irb = try sb_insp.queryInterface(com.IRangeBase);
-        defer irb.release();
-        try irb.setMinimum(0.0);
-        try irb.setMaximum(0.0);
-        try irb.setValue(0.0);
-        try irb.setSmallChange(1.0);
-        try irb.setLargeChange(10.0);
-
-        // Set VerticalAlignment = Stretch on ScrollBar.
-        const sb_fe = try sb_insp.queryInterface(com.IFrameworkElement);
-        defer sb_fe.release();
-        try sb_fe.SetWidth(17.0);
-        try sb_fe.SetMinWidth(17.0);
-        try sb_fe.SetMaxWidth(17.0);
-        try sb_fe.SetHorizontalAlignment(com.HorizontalAlignment.Stretch);
-        try sb_fe.SetVerticalAlignment(com.VerticalAlignment.Stretch);
-
-        const sb_ue = try sb_insp.queryInterface(com.IUIElement);
-        defer sb_ue.release();
-        try sb_ue.SetVisibility(0);
-        try sb_ue.SetIsHitTestVisible(true);
-
-        // Add SwapChainPanel (col 0) and ScrollBar (col 1) to the grid.
+        // Insert SwapChainPanel at position 0 in the Grid's children.
         const grid_panel = try grid_insp.queryInterface(com.IPanel);
         defer grid_panel.release();
         const grid_children_raw = try grid_panel.Children();
         const grid_children: *com.IVector = @ptrCast(@alignCast(grid_children_raw));
         defer grid_children.release();
+        try grid_children.insertAt(0, @ptrCast(panel));
 
-        // Append SwapChainPanel (Grid.Column defaults to 0).
-        try grid_children.append(@ptrCast(panel));
-
-        // Append ScrollBar and set Grid.Column = 1.
-        try grid_children.append(@ptrCast(sb_insp));
-
-        const grid_statics_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Grid");
-        defer winrt.deleteHString(grid_statics_class);
-        const grid_statics = try winrt.getActivationFactory(com.IGridStatics, grid_statics_class);
-        defer grid_statics.release();
-        try grid_statics.setColumn(@ptrCast(sb_fe), 1);
+        // Retrieve ScrollBar (now at index 1 after insert) for event hookup.
+        const sb_raw = try grid_children.getAt(1);
+        const sb_insp: *winrt.IInspectable = @ptrCast(@alignCast(sb_raw));
+        errdefer _ = sb_insp.release();
 
         // Register Scroll event on ScrollBar.
+        const isb = try sb_insp.queryInterface(com.IScrollBar);
+        defer isb.release();
         const delegate_runtime_sb = @import("delegate_runtime.zig");
         const ScrollDelegate = delegate_runtime_sb.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
         const scroll_delegate = try ScrollDelegate.createWithIid(
@@ -281,7 +231,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         self.surface_grid = grid_insp;
         self.scroll_bar_insp = sb_insp;
 
-        log.info("Surface grid created: SwapChainPanel (col 0) + ScrollBar (col 1)", .{});
+        log.info("Surface grid created via XamlReader.Load: SwapChainPanel (col 0) + ScrollBar (col 1)", .{});
     }
 
     // Register Loaded handler to defer SetSwapChain until the panel is ready.

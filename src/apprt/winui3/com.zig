@@ -80,3 +80,4 @@ pub const IColumnDefinition = native.IColumnDefinition;
 pub const IRangeBase = native.IRangeBase;
 pub const IScrollBar = native.IScrollBar;
 pub const IScrollEventArgs = native.IScrollEventArgs;
+pub const IXamlReaderStatics = native.IXamlReaderStatics;

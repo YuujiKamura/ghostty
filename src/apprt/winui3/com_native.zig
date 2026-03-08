@@ -483,3 +483,26 @@ pub const IScrollEventArgs = extern struct {
 /// ScrollEventHandler delegate IID — used for IScrollBar.add_Scroll.
 /// This is a named delegate, NOT a TypedEventHandler pinterface.
 pub const IID_ScrollEventHandler = GUID{ .data1 = 0xff661ba9, .data2 = 0x8c06, .data3 = 0x5785, .data4 = .{ 0xa2, 0x3c, 0x30, 0xd6, 0xb3, 0x16, 0x31, 0xe8 } };
+
+/// IXamlReaderStatics — Microsoft.UI.Xaml.Markup.XamlReader statics.
+/// Used to parse XAML strings into runtime object trees via XamlReader.Load().
+pub const IXamlReaderStatics = extern struct {
+    pub const IID = GUID{ .data1 = 0x82a4cd9e, .data2 = 0x435e, .data3 = 0x5aeb, .data4 = .{ 0x8c, 0x4f, 0x30, 0x0c, 0xec, 0xe4, 0x5c, 0xae } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Load: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+        LoadWithInitialTemplateValidation: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn load(self: *@This(), xaml: HSTRING) !*IInspectable {
+        var out: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.Load(@ptrCast(self), xaml, &out));
+        return @ptrCast(@alignCast(out orelse return error.WinRTFailed));
+    }
+};
