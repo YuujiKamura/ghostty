@@ -446,6 +446,8 @@ pub const IScrollBar = extern struct {
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn getOrientation(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.get_Orientation(@ptrCast(self), &out)); return out; }
+    pub fn getViewportSize(self: *@This()) !f64 { var out: f64 = 0; try hrCheck(self.lpVtbl.get_ViewportSize(@ptrCast(self), &out)); return out; }
     pub fn setOrientation(self: *@This(), v: i32) !void { try hrCheck(self.lpVtbl.put_Orientation(@ptrCast(self), v)); }
     pub fn setViewportSize(self: *@This(), v: f64) !void { try hrCheck(self.lpVtbl.put_ViewportSize(@ptrCast(self), v)); }
     pub fn addScroll(self: *@This(), handler: ?*anyopaque) !i64 {

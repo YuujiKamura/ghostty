@@ -235,7 +235,16 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         // Set VerticalAlignment = Stretch on ScrollBar.
         const sb_fe = try sb_insp.queryInterface(com.IFrameworkElement);
         defer sb_fe.release();
+        try sb_fe.SetWidth(17.0);
+        try sb_fe.SetMinWidth(17.0);
+        try sb_fe.SetMaxWidth(17.0);
+        try sb_fe.SetHorizontalAlignment(com.HorizontalAlignment.Stretch);
         try sb_fe.SetVerticalAlignment(com.VerticalAlignment.Stretch);
+
+        const sb_ue = try sb_insp.queryInterface(com.IUIElement);
+        defer sb_ue.release();
+        try sb_ue.SetVisibility(0);
+        try sb_ue.SetIsHitTestVisible(true);
 
         // Add SwapChainPanel (col 0) and ScrollBar (col 1) to the grid.
         const grid_panel = try grid_insp.queryInterface(com.IPanel);
@@ -1111,7 +1120,10 @@ pub fn updateScrollbarUi(self: *Surface, total: usize, offset: usize, len: usize
         self.is_internal_scroll_update = false;
     }
 
-    const range_base = sb.queryInterface(com.IRangeBase) catch return;
+    const range_base = sb.queryInterface(com.IRangeBase) catch |err| {
+        log.warn("scrollbar ui sync: IRangeBase QI failed: {}", .{err});
+        return;
+    };
     defer range_base.release();
 
     const total_f: f64 = @floatFromInt(total);
@@ -1125,9 +1137,33 @@ pub fn updateScrollbarUi(self: *Surface, total: usize, offset: usize, len: usize
     range_base.setLargeChange(len_f) catch {};
     range_base.setSmallChange(1.0) catch {};
 
-    const isb = sb.queryInterface(com.IScrollBar) catch return;
+    const isb = sb.queryInterface(com.IScrollBar) catch |err| {
+        log.warn("scrollbar ui sync: IScrollBar QI failed: {}", .{err});
+        return;
+    };
     defer isb.release();
     isb.setViewportSize(len_f) catch {};
+
+    const fe = sb.queryInterface(com.IFrameworkElement) catch |err| {
+        log.warn("scrollbar ui sync: IFrameworkElement QI failed: {}", .{err});
+        return;
+    };
+    defer fe.release();
+    const ue = sb.queryInterface(com.IUIElement) catch |err| {
+        log.warn("scrollbar ui sync: IUIElement QI failed: {}", .{err});
+        return;
+    };
+    defer ue.release();
+
+    const orientation = isb.getOrientation() catch -1;
+    const viewport = isb.getViewportSize() catch -1.0;
+    const width = fe.ActualWidth() catch -1.0;
+    const height = fe.ActualHeight() catch -1.0;
+    const visibility = ue.Visibility() catch -1;
+    log.debug(
+        "scrollbar ui sync: orientation={} viewport={d:.2} actual={d:.2}x{d:.2} visibility={} max={d:.2} value={d:.2} len={d:.2}",
+        .{ orientation, viewport, width, height, visibility, maximum, offset_f, len_f },
+    );
 }
 
 /// ScrollBar.Scroll event callback.
