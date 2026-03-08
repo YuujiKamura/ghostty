@@ -331,12 +331,25 @@ fn titleBarHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
     const resize_border: c_int = @intFromFloat(@as(f32, @floatFromInt(RESIZE_BORDER_96DPI)) * scale);
     const button_w: c_int = @intFromFloat(@as(f32, @floatFromInt(CAPTION_BUTTON_WIDTH_96DPI)) * scale);
 
+    // Bottom resize border.
+    if (pt.y >= client_bottom_right.y - resize_border) {
+        if (pt.x < client_top_left.x + resize_border) return os.HTBOTTOMLEFT;
+        if (pt.x >= client_bottom_right.x - resize_border) return os.HTBOTTOMRIGHT;
+        return os.HTBOTTOM;
+    }
+
     // Top resize border (above the titlebar content area).
     if (pt.y >= client_top_left.y and pt.y < client_top_left.y + resize_border) {
         if (pt.x < client_top_left.x + resize_border) return os.HTTOPLEFT;
         if (pt.x >= client_bottom_right.x - resize_border) return os.HTTOPRIGHT;
         return os.HTTOP;
     }
+
+    // Left resize border.
+    if (pt.x < client_top_left.x + resize_border) return os.HTLEFT;
+
+    // Right resize border.
+    if (pt.x >= client_bottom_right.x - resize_border) return os.HTRIGHT;
 
     // Titlebar region: between top resize border and titlebar bottom.
     if (pt.y >= client_top_left.y + resize_border and pt.y < client_top_left.y + titlebar_h) {

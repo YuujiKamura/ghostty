@@ -378,10 +378,15 @@ pub const HTCAPTION: c_int = 2;
 pub const HTSYSMENU: c_int = 3;
 pub const HTMINBUTTON: c_int = 8;
 pub const HTMAXBUTTON: c_int = 9;
-pub const HTCLOSE: c_int = 20;
+pub const HTLEFT: c_int = 10;
+pub const HTRIGHT: c_int = 11;
 pub const HTTOP: c_int = 12;
 pub const HTTOPLEFT: c_int = 13;
 pub const HTTOPRIGHT: c_int = 14;
+pub const HTBOTTOM: c_int = 15;
+pub const HTBOTTOMLEFT: c_int = 16;
+pub const HTBOTTOMRIGHT: c_int = 17;
+pub const HTCLOSE: c_int = 20;
 
 // --- DWM (Desktop Window Manager) ---
 pub const MARGINS = extern struct {
