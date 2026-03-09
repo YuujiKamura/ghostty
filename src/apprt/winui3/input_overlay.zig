@@ -118,6 +118,18 @@ pub fn inputWndProc(
         },
         os.WM_KILLFOCUS => {
             log.info("inputWndProc: WM_KILLFOCUS on input HWND=0x{x} (IME mode)", .{@intFromPtr(hwnd)});
+            // If we were composing when focus left, clean up preedit state.
+            // Windows usually sends WM_IME_ENDCOMPOSITION, but if it doesn't
+            // (e.g. user clicked TabView mid-composition), clear stale state.
+            if (app.ime_composing) {
+                log.info("inputWndProc: WM_KILLFOCUS while ime_composing — clearing preedit", .{});
+                app.ime_composing = false;
+                if (app.activeSurface()) |surface| {
+                    if (surface.core_initialized) {
+                        surface.core_surface.preeditCallback(null) catch {};
+                    }
+                }
+            }
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
         else => {},

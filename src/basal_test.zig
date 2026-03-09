@@ -15,7 +15,8 @@ pub fn main() !void {
     defer winrt.RoUninitialize();
 
     const dq_opts = winrt.DispatcherQueueOptions{};
-    _ = try winrt.createDispatcherQueueController(&dq_opts);
+    const dq_controller = try winrt.createDispatcherQueueController(&dq_opts);
+    defer _ = dq_controller.release();
 
     const app_class = try winrt.hstring("Microsoft.UI.Xaml.Application");
     defer winrt.deleteHString(app_class);

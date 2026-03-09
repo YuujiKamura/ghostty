@@ -67,6 +67,7 @@ pub fn onSelectionChanged(self: anytype, sender_obj: ?*anyopaque, args_obj: ?*an
             // Notify old surface it lost focus.
             if (new_idx != self.active_surface_idx) {
                 if (self.active_surface_idx < self.surfaces.items.len) {
+                    self.surfaces.items[self.active_surface_idx].has_focus = false;
                     self.surfaces.items[self.active_surface_idx].core_surface.focusCallback(false) catch {};
                 }
             }
@@ -77,6 +78,7 @@ pub fn onSelectionChanged(self: anytype, sender_obj: ?*anyopaque, args_obj: ?*an
             };
             surface_binding.auditActiveTabBinding(self);
             // Notify new surface it gained focus.
+            self.surfaces.items[new_idx].has_focus = true;
             self.surfaces.items[new_idx].core_surface.focusCallback(true) catch {};
             self.surfaces.items[new_idx].rebindSwapChain();
 
