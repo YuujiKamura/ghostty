@@ -65,6 +65,8 @@ pub const WM_USER: UINT = 0x0400;
 pub const WM_APP_BIND_SWAP_CHAIN: UINT = WM_USER + 1;
 /// Posted by the renderer thread to request swap chain HANDLE binding on the UI thread.
 pub const WM_APP_BIND_SWAP_CHAIN_HANDLE: UINT = WM_USER + 2;
+/// Test-only: set ime_composing = true for focus-loss cleanup testing.
+pub const WM_APP_TEST_FAKE_IME_COMPOSING: UINT = WM_USER + 3;
 
 // --- Window styles ---
 pub const WS_OVERLAPPEDWINDOW: DWORD = 0x00CF0000;

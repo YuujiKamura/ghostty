@@ -21,6 +21,7 @@ pub inline fn imeDefProc(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPAR
 pub fn handleIMEStartComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
     log.info("IME: WM_IME_STARTCOMPOSITION on HWND=0x{x}", .{@intFromPtr(hwnd)});
     app.ime_composing = true;
+    app.ime_last_had_result = false;
     if (app.activeSurface()) |surface| {
         if (surface.core_initialized) {
             const himc = os.ImmGetContext(hwnd) orelse
@@ -59,6 +60,7 @@ pub fn handleIMEComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.W
             // The default proc generates WM_CHAR for commit; if we also inject
             // key events here, committed text can be duplicated.
             if (lp_flags & os.GCS_RESULTSTR != 0) {
+                app.ime_last_had_result = true;
                 log.info("IME: GCS_RESULTSTR present — commit handled via WM_CHAR path", .{});
                 // Clear preedit when committed
                 surface.core_surface.preeditCallback(null) catch {};
@@ -112,7 +114,8 @@ pub fn handleIMEComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.W
 }
 
 pub fn handleIMEEndComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
-    log.info("IME: WM_IME_ENDCOMPOSITION on HWND=0x{x}", .{@intFromPtr(hwnd)});
+    const action: []const u8 = if (app.ime_last_had_result) "commit" else "cancel";
+    log.info("IME: WM_IME_ENDCOMPOSITION action={s} on HWND=0x{x}", .{ action, @intFromPtr(hwnd) });
     app.ime_composing = false;
     if (app.activeSurface()) |surface| {
         if (surface.core_initialized) {

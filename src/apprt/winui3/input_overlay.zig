@@ -2,6 +2,7 @@
 ///
 /// Extracted from App.zig — provides a transparent child window that receives
 /// keyboard focus and all IME messages, bypassing WinUI3's TSF layer entirely.
+const builtin = @import("builtin");
 const std = @import("std");
 const os = @import("os.zig");
 const input = @import("../../input.zig");
@@ -115,6 +116,15 @@ pub fn inputWndProc(
         os.WM_SETFOCUS => {
             log.info("inputWndProc: WM_SETFOCUS received on input HWND=0x{x} (IME mode)", .{@intFromPtr(hwnd)});
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
+        },
+        // Test hook (debug builds only): externally force ime_composing = true
+        // so that a subsequent WM_KILLFOCUS exercises the cleanup path.
+        // Stripped in ReleaseSafe/ReleaseFast/ReleaseSmall builds.
+        os.WM_APP_TEST_FAKE_IME_COMPOSING => if (comptime builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+            log.info("inputWndProc: WM_APP_TEST_FAKE_IME_COMPOSING — setting fake composing state", .{});
+            app.ime_composing = true;
+            app.ime_last_had_result = false;
+            return 0;
         },
         os.WM_KILLFOCUS => {
             log.info("inputWndProc: WM_KILLFOCUS on input HWND=0x{x} (IME mode)", .{@intFromPtr(hwnd)});

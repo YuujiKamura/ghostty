@@ -117,6 +117,7 @@ input_hwnd: ?os.HWND = null,
 /// composition temporarily switches to the dedicated input overlay HWND.
 keyboard_focus_target: KeyboardFocusTarget = .xaml_surface,
 ime_composing: bool = false,
+ime_last_had_result: bool = false,
 
 /// All surfaces (one per tab).
 surfaces: std.ArrayListUnmanaged(*Surface) = .{},

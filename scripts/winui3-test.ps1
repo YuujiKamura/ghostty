@@ -1158,6 +1158,78 @@ if ((Should-Run "TUserDxBasic") -and -not $skipRemaining) {
     }
 }
 
+# ── TImeFocusLossCleanup: IME composing cleanup on focus loss ─
+# Uses a test-only WM_APP message (WM_USER+3 = 0x0403) to fake
+# ime_composing=true on input_hwnd, then steals focus to trigger
+# WM_KILLFOCUS cleanup. Verifies via stderr log pattern.
+if ((Should-Run "TImeFocusLossCleanup") -and -not $skipRemaining) {
+    $check = Test-ProcessAlive
+    if (-not $check.Alive) {
+        Out-Line "  [SKIP] TImeFocusLossCleanup: process already exited" "Yellow"
+        Dump-CrashOnce; $skipped += "TImeFocusLossCleanup"
+    } else {
+        $pass = $false
+        $detail = ""
+        try {
+            if ($cachedHwnd -eq [IntPtr]::Zero) {
+                $cachedHwnd = Find-GhosttyWindowAny -TimeoutMs $Timeout
+            }
+            Ensure-Focus
+
+            # Find input_hwnd from stderr log.
+            $inputHwnd = [IntPtr]::Zero
+            try {
+                $inputLine = Wait-LogLine -Path $session.StderrPath -Pattern "input HWND=0x[0-9a-fA-F]+ created" -TimeoutMs 5000
+                if ($inputLine -match "input HWND=0x([0-9a-fA-F]+)") {
+                    $inputHwnd = [IntPtr][System.Convert]::ToInt64($Matches[1], 16)
+                }
+            } catch { }
+
+            if ($inputHwnd -eq [IntPtr]::Zero) {
+                $detail = "skipped: input_hwnd not found in log"
+                Out-Line "  [SKIP] TImeFocusLossCleanup: input_hwnd not found in log" "Yellow"
+                $skipped += "TImeFocusLossCleanup"
+            } else {
+                # Send WM_APP_TEST_FAKE_IME_COMPOSING (WM_USER+3 = 0x0403) to input_hwnd.
+                $WM_FAKE_IME = 0x0403
+                [Win32]::PostMessageW($inputHwnd, $WM_FAKE_IME, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+                Start-Sleep -Milliseconds 200
+
+                # Steal focus to trigger WM_KILLFOCUS on input_hwnd.
+                $taskbarHwnd = [Win32]::FindWindowW("Shell_TrayWnd", $null)
+                if ($taskbarHwnd -ne [IntPtr]::Zero) {
+                    [Win32]::SetForegroundWindow($taskbarHwnd) | Out-Null
+                }
+                Start-Sleep -Milliseconds 500
+
+                # Check for cleanup log pattern.
+                $focusLine = $null
+                try {
+                    $focusLine = Wait-LogLine -Path $session.StderrPath -Pattern "WM_KILLFOCUS while ime_composing" -TimeoutMs 5000
+                } catch { }
+
+                # Restore focus for subsequent tests.
+                [Win32]::ForceForegroundWindow($cachedHwnd) | Out-Null
+                Start-Sleep -Milliseconds 300
+
+                $alive = -not $session.Process.HasExited
+                $pass = $alive -and ($null -ne $focusLine)
+                $detail = "alive=$alive focus_cleanup_logged=$($null -ne $focusLine)"
+
+                Write-TestResult -Id "TImeFocusLossCleanup" -Name "IME focus-loss cleanup" -Passed $pass -Detail $detail
+                $results += @{ Id = "TImeFocusLossCleanup"; Passed = $pass }
+                if (-not $pass) { $failed += "TImeFocusLossCleanup"; Dump-CrashOnce }
+            }
+        } catch {
+            $detail = "error: $($_.Exception.Message)"
+            $pass = $false
+            Write-TestResult -Id "TImeFocusLossCleanup" -Name "IME focus-loss cleanup" -Passed $pass -Detail $detail
+            $results += @{ Id = "TImeFocusLossCleanup"; Passed = $pass }
+            if (-not $pass) { $failed += "TImeFocusLossCleanup"; Dump-CrashOnce }
+        }
+    }
+}
+
 # ── T9: Clean exit ────────────────────────────────────────────
 if (Should-Run "T9") {
     if ($session.Process.HasExited) {
