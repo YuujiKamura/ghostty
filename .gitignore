@@ -27,3 +27,4 @@ glad.zip
 vgcore.*
 
 tmp/procdumps/*.dmp
+tmp/bin/
