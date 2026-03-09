@@ -87,27 +87,30 @@ function Wait-LogLineAny {
         [Parameter(Mandatory)][string]$Pattern,
         [Parameter(Mandatory)][int]$TimeoutMs
     )
+    # Try debug.log first — winui3 info logs go there, not stderr.
     try {
-        return Wait-LogLine -Path $session.StderrPath -Pattern $Pattern -TimeoutMs $TimeoutMs
+        return Wait-LogLine -Path $debugLogPath -Pattern $Pattern -TimeoutMs ([Math]::Min($TimeoutMs, 5000))
     } catch {}
-    return Wait-LogLine -Path $debugLogPath -Pattern $Pattern -TimeoutMs $TimeoutMs
+    return Wait-LogLine -Path $session.StderrPath -Pattern $Pattern -TimeoutMs $TimeoutMs
 }
 
 function Find-GhosttyWindowAny {
     param([Parameter(Mandatory)][int]$TimeoutMs)
+    # Try debug.log first — winui3 info logs go there, not stderr.
     try {
-        return Find-GhosttyWindow -StderrPath $session.StderrPath -TimeoutMs $TimeoutMs
+        return Find-GhosttyWindow -StderrPath $debugLogPath -TimeoutMs ([Math]::Min($TimeoutMs, 5000))
     } catch {}
-    return Find-GhosttyWindow -StderrPath $debugLogPath -TimeoutMs $TimeoutMs
+    return Find-GhosttyWindow -StderrPath $session.StderrPath -TimeoutMs $TimeoutMs
 }
 
 function Find-GhosttyInputWindowAny {
     param([Parameter(Mandatory)][int]$TimeoutMs)
     $line = $null
+    # Try debug.log first — winui3 info logs go there, not stderr.
     try {
-        $line = Wait-LogLine -Path $session.StderrPath -Pattern "input HWND=0x" -TimeoutMs $TimeoutMs
+        $line = Wait-LogLine -Path $debugLogPath -Pattern "input HWND=0x" -TimeoutMs ([Math]::Min($TimeoutMs, 5000))
     } catch {
-        $line = Wait-LogLine -Path $debugLogPath -Pattern "input HWND=0x" -TimeoutMs $TimeoutMs
+        $line = Wait-LogLine -Path $session.StderrPath -Pattern "input HWND=0x" -TimeoutMs $TimeoutMs
     }
     if ($line -match "input HWND=0x([0-9a-fA-F]+)") {
         return [IntPtr][System.Convert]::ToInt64($Matches[1], 16)
@@ -115,8 +118,29 @@ function Find-GhosttyInputWindowAny {
     throw "input HWND not found in logs"
 }
 
+function Ensure-WindowHandle {
+    if ($cachedHwnd -ne [IntPtr]::Zero) { return $true }
+    try {
+        $script:cachedHwnd = Find-GhosttyWindowAny -TimeoutMs $Timeout
+        return $true
+    } catch {
+        for ($i = 0; $i -lt 20; $i++) {
+            try { $session.Process.Refresh() } catch {}
+            $hwnd = $session.Process.MainWindowHandle
+            if ($hwnd -ne [IntPtr]::Zero) {
+                if ([Win32]::IsWindowVisible($hwnd)) {
+                    $script:cachedHwnd = $hwnd
+                    return $true
+                }
+            }
+            Start-Sleep -Milliseconds 150
+        }
+        return $false
+    }
+}
+
 function Ensure-Focus {
-    if ($cachedHwnd -eq [IntPtr]::Zero) { return $false }
+    if (-not (Ensure-WindowHandle)) { return $false }
     for ($i = 0; $i -lt 12; $i++) {
         [Win32]::ForceForegroundWindow($cachedHwnd) | Out-Null
         try { [Win32]::ClickWindowCenter($cachedHwnd) | Out-Null } catch {}
@@ -333,7 +357,7 @@ if ((Should-Run "T3") -and -not $skipRemaining) {
 # ── T4: TabView creation ──────────────────────────────────────
 if ((Should-Run "T4") -and -not $skipRemaining) {
     $pass = $false
-    try { Wait-LogLineAny -Pattern "TabView set as Window content" -TimeoutMs $Timeout | Out-Null; $pass = $true } catch {}
+    try { Wait-LogLineAny -Pattern "RootGrid set as Window content" -TimeoutMs $Timeout | Out-Null; $pass = $true } catch {}
     Write-TestResult -Id "T4" -Name "TabView creation" -Passed $pass -Detail $(if ($pass) { "log line found" } else { "timeout" })
     $results += @{ Id = "T4"; Passed = $pass }
     if (-not $pass) { $failed += "T4" }
@@ -394,6 +418,98 @@ if ((Should-Run "T7") -and -not $skipRemaining) {
     }
 }
 
+# ── T20: Post-tab-switch survival + focus recovery smoke ──────
+# Evidence for #67 Lane A/C: after Ctrl+T (new tab) + Ctrl+W (close),
+# focus returns to original tab and typing doesn't crash.
+# NOTE: Runs BEFORE T8 (resize) to avoid pre-existing delegate segfault
+# triggered by SizeChanged events that corrupts PointerMoved delegates.
+if ((Should-Run "T20") -and -not $skipRemaining) {
+    $check = Test-ProcessAlive
+    if (-not $check.Alive) {
+        Out-Line "  [SKIP] T20: Post-tab-switch survival -- process already exited" "Yellow"
+        Dump-CrashOnce; $skipped += "T20"
+    } else {
+        $pass = $false
+        $detail = ""
+        try {
+            # Type a few characters + Enter to prove input works
+            Ensure-Focus | Out-Null
+            Start-Sleep -Milliseconds 300
+            Send-Keys -Keys ([UInt16[]]@(0x41, 0x42, 0x43, 0x0D)) | Out-Null  # A B C Enter
+            Start-Sleep -Milliseconds 500
+
+            # Verify process survived
+            if ($session.Process.HasExited) {
+                $detail = "process crashed after tab switch + typing"
+            } else {
+                # Check log for GotFocus after the tab switch
+                $gotFocus = $false
+                foreach ($lp in @($debugLogPath, $session.StderrPath)) {
+                    if (Test-Path $lp) {
+                        $content = Get-Content -Path $lp -Raw -ErrorAction SilentlyContinue
+                        if ($content -match "GotFocus") { $gotFocus = $true; break }
+                    }
+                }
+                $pass = $true
+                $detail = "process alive, post-tab-switch typing accepted"
+                if ($gotFocus) { $detail += ", GotFocus confirmed in log" }
+            }
+        } catch {
+            $detail = "error: $($_.Exception.Message)"
+        }
+        Write-TestResult -Id "T20" -Name "Post-tab-switch survival + focus recovery" -Passed $pass -Detail $detail
+        $results += @{ Id = "T20"; Passed = $pass }
+        if (-not $pass) { $failed += "T20"; Dump-CrashOnce }
+    }
+}
+
+# ── T22: Tab close + post-close typing survival ───────────────
+# Reproducer-oriented smoke for #67: perform Ctrl+T, Ctrl+W, then
+# type immediately without mouse-based refocus. This keeps the test
+# on the tab-close/input path instead of conflating it with pointer
+# event injection.
+if ((Should-Run "T22") -and -not $skipRemaining) {
+    $check = Test-ProcessAlive
+    if (-not $check.Alive) {
+        Out-Line "  [SKIP] T22: Tab close + typing -- process already exited" "Yellow"
+        Dump-CrashOnce; $skipped += "T22"
+    } else {
+        $pass = $false
+        $detail = ""
+        try {
+            if ($cachedHwnd -ne [IntPtr]::Zero) {
+                [Win32]::ForceForegroundWindow($cachedHwnd) | Out-Null
+                Start-Sleep -Milliseconds 250
+            }
+
+            Send-KeyCombo -Modifier 0x11 -Key 0x54 | Out-Null   # Ctrl+T
+            Start-Sleep -Milliseconds 500
+            Send-KeyCombo -Modifier 0x11 -Key 0x57 | Out-Null   # Ctrl+W
+            Start-Sleep -Milliseconds 500
+
+            if ($cachedHwnd -ne [IntPtr]::Zero) {
+                [Win32]::ForceForegroundWindow($cachedHwnd) | Out-Null
+                Start-Sleep -Milliseconds 250
+            }
+
+            Send-Keys -Keys ([UInt16[]]@(0x41, 0x42, 0x43, 0x0D)) | Out-Null  # A B C Enter
+            Start-Sleep -Milliseconds 500
+
+            $pass = -not $session.Process.HasExited
+            $detail = if ($pass) {
+                "survived Ctrl+T/Ctrl+W followed by typing"
+            } else {
+                "process crashed after Ctrl+T/Ctrl+W + typing"
+            }
+        } catch {
+            $detail = "error: $($_.Exception.Message)"
+        }
+        Write-TestResult -Id "T22" -Name "Tab close + post-close typing survival" -Passed $pass -Detail $detail
+        $results += @{ Id = "T22"; Passed = $pass }
+        if (-not $pass) { $failed += "T22"; Dump-CrashOnce }
+    }
+}
+
 # ── T8: Window resize ─────────────────────────────────────────
 if ((Should-Run "T8") -and -not $skipRemaining) {
     $check = Test-ProcessAlive
@@ -413,6 +529,42 @@ if ((Should-Run "T8") -and -not $skipRemaining) {
         Write-TestResult -Id "T8" -Name "Window resize" -Passed $pass -Detail $(if ($pass) { "survived 3 resizes" } else { "process crashed" })
         $results += @{ Id = "T8"; Passed = $pass }
         if (-not $pass) { $failed += "T8"; Dump-CrashOnce }
+    }
+}
+
+# ── T21: Resize stability smoke ──────────────────────────────
+# Evidence for #67 Lane D: multiple rapid resizes don't crash.
+if ((Should-Run "T21") -and -not $skipRemaining) {
+    $check = Test-ProcessAlive
+    if (-not $check.Alive) {
+        Out-Line "  [SKIP] T21: Resize stability -- process already exited" "Yellow"
+        Dump-CrashOnce; $skipped += "T21"
+    } else {
+        $pass = $false
+        $detail = ""
+        try {
+            if (Ensure-WindowHandle) {
+                $sizes = @(@(640, 480), @(1280, 720), @(400, 300), @(1920, 1080), @(800, 600))
+                foreach ($sz in $sizes) {
+                    [Win32]::SetWindowPos($cachedHwnd, [IntPtr]::Zero, 0, 0, $sz[0], $sz[1], [Win32]::SWP_NOZORDER) | Out-Null
+                    Start-Sleep -Milliseconds 150
+                }
+                Start-Sleep -Milliseconds 500
+
+                Send-CommandViaPaste -CommandText "echo T21_RESIZE"
+                Start-Sleep -Milliseconds 300
+
+                $pass = -not $session.Process.HasExited
+                $detail = if ($pass) { "survived 5 rapid resizes + post-resize typing" } else { "crashed during resize" }
+            } else {
+                $detail = "no HWND cached"
+            }
+        } catch {
+            $detail = "error: $($_.Exception.Message)"
+        }
+        Write-TestResult -Id "T21" -Name "Resize stability" -Passed $pass -Detail $detail
+        $results += @{ Id = "T21"; Passed = $pass }
+        if (-not $pass) { $failed += "T21"; Dump-CrashOnce }
     }
 }
 

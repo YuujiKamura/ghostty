@@ -39,6 +39,9 @@ content_scale: apprt.ContentScale = .{ .x = 1.0, .y = 1.0 },
 /// Whether the core surface has been initialized.
 core_initialized: bool = false,
 
+/// Tracks XAML focus state to deduplicate focusCallback calls.
+has_focus: bool = false,
+
 /// Whether the SwapChainPanel has fired its Loaded event.
 loaded: bool = false,
 
@@ -693,16 +696,33 @@ pub fn handleKeyEvent(self: *Surface, vk: u16, pressed: bool) void {
         .unshifted_codepoint = unshifted,
     };
 
+    // keyCallback may trigger close_tab, which destroys this Surface.
+    // Save app pointer before the call so we can check liveness after.
+    const app_ref = self.app;
     _ = self.core_surface.keyCallback(event) catch |err| {
         log.warn("key callback error vk=0x{X:0>2}: {}", .{ vk, err });
         return;
     };
+
+    // If keyCallback destroyed this surface (e.g. close_tab binding),
+    // self is freed memory — do not access it.
+    if (!isSurfaceAlive(app_ref, self)) return;
 
     // Suppress any subsequent WM_CHAR for consumed press events.
     // (Releases don't produce WM_CHAR.)
     if (pressed) {
         self.pending_keydown = .consumed;
     }
+}
+
+/// Check if a Surface pointer is still in the app's surface list.
+/// Used to detect use-after-free when a keybinding destroys the surface
+/// during keyCallback (e.g. close_tab).
+fn isSurfaceAlive(app: *App, surface: *const Surface) bool {
+    for (app.surfaces.items) |s| {
+        if (s == surface) return true;
+    }
+    return false;
 }
 
 pub fn handleCharEvent(self: *Surface, char_code: u16) void {
@@ -812,6 +832,7 @@ pub fn handleScroll(self: *Surface, xoffset: f64, yoffset: f64) void {
 // --- XAML event callbacks ---
 
 fn onXamlPointerPressed(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    if (!self.core_initialized) return;
     const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const point = ea.getCurrentPoint(null) catch return;
     defer point.release();
@@ -838,6 +859,7 @@ fn onXamlPointerPressed(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
 }
 
 fn onXamlPointerMoved(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    if (!self.core_initialized) return;
     const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const point = ea.getCurrentPoint(null) catch return;
     defer point.release();
@@ -847,6 +869,7 @@ fn onXamlPointerMoved(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
 }
 
 fn onXamlPointerReleased(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    if (!self.core_initialized) return;
     const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const point = ea.getCurrentPoint(null) catch return;
     defer point.release();
@@ -870,6 +893,7 @@ fn onXamlPointerReleased(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void
 }
 
 fn onXamlPointerWheelChanged(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    if (!self.core_initialized) return;
     const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const point = ea.getCurrentPoint(null) catch return;
     defer point.release();
@@ -887,6 +911,7 @@ fn onXamlPointerWheelChanged(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) 
 }
 
 fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    if (!self.core_initialized) return;
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const vk = ea.Key() catch return;
     if (vk == 0xE5) {
@@ -894,7 +919,12 @@ fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
         input_runtime.focusInputOverlay(self.app);
         return; // Don't mark handled — let IME process.
     }
+    // Save app pointer before handleKeyEvent — a keybinding (e.g. close_tab)
+    // may destroy this Surface, freeing self.
+    const app_ref = self.app;
     self.handleKeyEvent(@intCast(@as(u32, @bitCast(vk))), true);
+    // If the surface was destroyed during handleKeyEvent, self is freed.
+    if (!isSurfaceAlive(app_ref, self)) return;
     // For text-producing keys, handleKeyEvent defers to CharacterReceived by
     // leaving pending_keydown=.pending. Do not mark those handled here or the
     // character event is suppressed.
@@ -905,21 +935,29 @@ fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
 }
 
 fn onXamlPreviewKeyUp(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    if (!self.core_initialized) return;
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const vk = ea.Key() catch return;
+    const app_ref = self.app;
     self.handleKeyEvent(@intCast(@as(u32, @bitCast(vk))), false);
+    if (!isSurfaceAlive(app_ref, self)) return;
     ea.SetHandled(true) catch {};
 }
 
 fn onXamlCharacterReceived(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    if (!self.core_initialized) return;
     const ea: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const ch = ea.Character() catch return;
+    const app_ref = self.app;
     self.handleCharEvent(ch);
+    if (!isSurfaceAlive(app_ref, self)) return;
     ea.SetHandled(true) catch {};
 }
 
 fn onXamlGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
+    if (self.has_focus) return; // deduplicate
+    self.has_focus = true;
     log.info("XAML GotFocus on SwapChainPanel surface=0x{x}", .{@intFromPtr(self)});
     self.core_surface.focusCallback(true) catch |err| {
         log.warn("focusCallback(true) error: {}", .{err});
@@ -928,6 +966,8 @@ fn onXamlGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
 
 fn onXamlLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
+    if (!self.has_focus) return; // deduplicate
+    self.has_focus = false;
     log.info("XAML LostFocus on SwapChainPanel surface=0x{x}", .{@intFromPtr(self)});
     self.core_surface.focusCallback(false) catch |err| {
         log.warn("focusCallback(false) error: {}", .{err});

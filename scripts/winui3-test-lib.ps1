@@ -362,7 +362,7 @@ function Find-GhosttyWindow {
         [int]$TimeoutMs = 10000
     )
 
-    $line = Wait-LogLine -Path $StderrPath -Pattern "step 4 OK: HWND=0x" -TimeoutMs $TimeoutMs
+    $line = Wait-LogLine -Path $StderrPath -Pattern "HWND=0x[0-9a-fA-F]" -TimeoutMs $TimeoutMs
     if ($line -match "HWND=0x([0-9a-fA-F]+)") {
         $hwnd = [IntPtr][System.Convert]::ToInt64($Matches[1], 16)
         if ([Win32]::IsWindowVisible($hwnd)) {
@@ -673,7 +673,8 @@ function Build-AndStageGhosttyExe {
         $bootstrapName = "Microsoft.WindowsAppRuntime.Bootstrap.dll"
         $bootstrapCandidates = @(
             (Join-Path $RepoRoot $bootstrapName),
-            (Join-Path $RepoRoot "scripts\$bootstrapName")
+            (Join-Path $RepoRoot "scripts\$bootstrapName"),
+            (Join-Path $env:USERPROFILE ".nuget\packages\microsoft.windowsappsdk\1.6.250108002\runtimes\win-x64\native\$bootstrapName")
         )
 
         $bootstrapSource = $null

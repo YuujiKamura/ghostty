@@ -93,21 +93,28 @@ pub fn closeTab(self: anytype, idx: usize) bool {
 
     const surface = self.surfaces.items[idx];
 
-    // 1. Cleanup surface FIRST (before removing from TabView, to avoid
-    //    onSelectionChanged referencing a stale surface array).
+    // 1. Deinit the surface (stops threads, unregisters XAML event handlers,
+    //    sets core_initialized=false). Do NOT free memory yet — XAML may still
+    //    dispatch pending events to our delegates during the TabView operations
+    //    below. The core_initialized=false guard in each callback will cause
+    //    them to no-op safely.
     surface.deinit();
-    self.core_app.alloc.destroy(surface);
     _ = self.surfaces.orderedRemove(idx);
 
     // 2. Adjust active index before TabView triggers SelectionChanged.
     if (self.surfaces.items.len == 0) {
         // Remove from TabView last (triggers SelectionChanged with -1).
         if (self.tab_view) |tv| {
-            const tab_items_raw = tv.TabItems() catch return true;
+            const tab_items_raw = tv.TabItems() catch {
+                self.core_app.alloc.destroy(surface);
+                return true;
+            };
             const tab_items: *com.IVector = @ptrCast(@alignCast(tab_items_raw));
             defer tab_items.release();
             tab_items.removeAt(@intCast(idx)) catch {};
         }
+        // Now safe to free — XAML operations complete.
+        self.core_app.alloc.destroy(surface);
         return true;
     }
 
@@ -120,7 +127,10 @@ pub fn closeTab(self: anytype, idx: usize) bool {
 
     // 3. Remove from TabView (triggers onSelectionChanged).
     if (self.tab_view) |tv| {
-        const tab_items_raw2 = tv.TabItems() catch return false;
+        const tab_items_raw2 = tv.TabItems() catch {
+            self.core_app.alloc.destroy(surface);
+            return false;
+        };
         const tab_items: *com.IVector = @ptrCast(@alignCast(tab_items_raw2));
         defer tab_items.release();
         tab_items.removeAt(@intCast(idx)) catch |err| {
@@ -134,6 +144,11 @@ pub fn closeTab(self: anytype, idx: usize) bool {
         };
         input_runtime.focusKeyboardTarget(self);
     }
+
+    // 5. Free surface memory AFTER all XAML operations. Any pending delegate
+    //    callbacks that fired during steps 2-4 saw core_initialized=false
+    //    and returned immediately without accessing freed memory.
+    self.core_app.alloc.destroy(surface);
 
     log.info("closeTab: closed idx={}, active now={}, total={}", .{ idx, self.active_surface_idx, self.surfaces.items.len });
     return false;
