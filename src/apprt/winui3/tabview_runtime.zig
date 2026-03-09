@@ -1,7 +1,6 @@
 const std = @import("std");
 const com = @import("com.zig");
 const winrt = @import("winrt.zig");
-const native_interop = @import("native_interop.zig");
 
 const log = std.log.scoped(.winui3);
 
@@ -31,7 +30,7 @@ pub fn createRoot(
     defer _ = root_grid_insp.release(); // putContent AddRef's; release our local ref.
 
     // Set black background on the RootGrid.
-    self.setControlBackground(root_grid_insp, .{ .a = 255, .r = 0, .g = 0, .b = 0 });
+    self.setControlBackground(root_grid_insp, .{ .A = 255, .R = 0, .G = 0, .B = 0 });
 
     // 2. Define two rows: Row 0 = Auto (TabView), Row 1 = 1* (content).
     const igrid = try root_grid_insp.queryInterface(com.IGrid);
@@ -84,7 +83,7 @@ pub fn createRoot(
         return err;
     };
 
-    self.setControlBackground(@ptrCast(tv_inspectable), .{ .a = 255, .r = 0, .g = 0, .b = 0 });
+    self.setControlBackground(@ptrCast(tv_inspectable), .{ .A = 255, .R = 0, .G = 0, .B = 0 });
 
     // Ensure TabView stretches to fill its grid cell.
     {
@@ -110,7 +109,7 @@ pub fn createRoot(
     defer winrt.deleteHString(tab_content_class);
     const tab_content_insp = try winrt.activateInstance(tab_content_class);
 
-    self.setControlBackground(tab_content_insp, .{ .a = 255, .r = 0, .g = 0, .b = 0 });
+    self.setControlBackground(tab_content_insp, .{ .A = 255, .R = 0, .G = 0, .B = 0 });
 
     try root_children.append(@ptrCast(tab_content_insp));
 
@@ -149,11 +148,8 @@ pub fn configureDefaults(tab_view: ?*com.ITabView) void {
     if (tab_view) |tv| {
         tv.SetIsAddTabButtonVisible(true) catch {};
         tv.SetCloseButtonOverlayMode(0) catch {}; // Always = 0, show close button always
-        if (tv.queryInterface(native_interop.ITabView2)) |tv2| {
-            defer tv2.release();
-            tv2.putCanReorderTabs(true) catch {};
-            tv2.putCanDragTabs(true) catch {};
-            tv2.putTabWidthMode(.equal) catch {};
-        } else |_| {}
+        tv.SetCanReorderTabs(true) catch {};
+        tv.SetCanDragTabs(true) catch {};
+        tv.SetTabWidthMode(0) catch {}; // TabViewWidthMode.Equal = 0
     }
 }

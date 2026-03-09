@@ -19,7 +19,6 @@ const key = @import("key.zig");
 const winrt = @import("winrt.zig");
 const bootstrap = @import("bootstrap.zig");
 const com = @import("com.zig");
-const native_interop = @import("native_interop.zig");
 const event = @import("event.zig");
 const os = @import("os.zig");
 const com_aggregation = @import("com_aggregation.zig");
@@ -527,7 +526,8 @@ fn createInitialSurfaceContent(self: *App, window: *com.IWindow, tab_view: ?*com
             return;
         }
 
-        var tab_items_guard = winrt.ComRef(com.IVector).init(try tv.TabItems());
+        const tab_items_ptr: *com.IVector = @ptrCast(@alignCast(try tv.TabItems()));
+        var tab_items_guard = winrt.ComRef(com.IVector).init(tab_items_ptr);
         defer tab_items_guard.deinit();
         try tab_items_guard.get().append(@ptrCast(tvi_inspectable));
         surface.tab_view_item_inspectable = tvi_inspectable;
@@ -645,7 +645,8 @@ fn validateTabViewParity(self: *App) !void {
 
     // Canonical Step 3-5: first item exists, selected, and content attached.
     if (self.tab_view) |tv| {
-        var items_guard = winrt.ComRef(com.IVector).init(try tv.TabItems());
+        const items_vec: *com.IVector = @ptrCast(@alignCast(try tv.TabItems()));
+        var items_guard = winrt.ComRef(com.IVector).init(items_vec);
         defer items_guard.deinit();
         const size = try items_guard.get().getSize();
         if (size == 0) {
@@ -1062,7 +1063,8 @@ pub fn toggleTabViewContainer(self: *App) !void {
         }
 
         if (tv.TabItems()) |tab_items| {
-            var tab_items_guard = winrt.ComRef(com.IVector).init(tab_items);
+            const tab_items_vec: *com.IVector = @ptrCast(@alignCast(tab_items));
+            var tab_items_guard = winrt.ComRef(com.IVector).init(tab_items_vec);
             defer tab_items_guard.deinit();
             if ((tab_items_guard.get().getSize() catch 0) > 0) {
                 tab_items_guard.get().removeAt(0) catch {};
@@ -1131,7 +1133,8 @@ pub fn toggleTabViewContainer(self: *App) !void {
         return err;
     };
 
-    var tab_items_guard = winrt.ComRef(com.IVector).init(try tv.TabItems());
+    const tab_items_ptr2: *com.IVector = @ptrCast(@alignCast(try tv.TabItems()));
+    var tab_items_guard = winrt.ComRef(com.IVector).init(tab_items_ptr2);
     defer tab_items_guard.deinit();
     tab_items_guard.get().append(@ptrCast(tvi_inspectable)) catch |err| {
         log.warn("toggleTabViewContainer: tab_items.append failed: {}", .{err});

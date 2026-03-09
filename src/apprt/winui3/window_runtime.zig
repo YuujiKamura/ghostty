@@ -1,6 +1,5 @@
 const std = @import("std");
 const com = @import("com.zig");
-const native_interop = @import("native_interop.zig");
 const os = @import("os.zig");
 const winrt = @import("winrt.zig");
 
@@ -85,7 +84,7 @@ pub fn syncVisualDiagnostics(self: anytype) void {
                 // ElementTheme: Default=0, Light=1, Dark=2
                 fe.SetRequestedTheme(2) catch {};
             } else |_| {}
-            self.setControlBackground(@ptrCast(content), .{ .a = 255, .r = 0, .g = 0, .b = 0 });
+            self.setControlBackground(@ptrCast(content), .{ .A = 255, .R = 0, .G = 0, .B = 0 });
         }
     }
 }

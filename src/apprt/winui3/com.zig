@@ -11,17 +11,17 @@ pub const comQueryInterface = gen.comQueryInterface;
 pub const hrCheck = gen.hrCheck;
 pub const isValidComPtr = gen.isValidComPtr;
 
-// --- IID constants (from generated) ---
+// --- IID constants ---
 pub const IID_RoutedEventHandler = gen.IID_RoutedEventHandler;
 pub const IID_SizeChangedEventHandler = gen.IID_SizeChangedEventHandler;
 pub const IID_TypedEventHandler_TabCloseRequested = gen.IID_TypedEventHandler_TabCloseRequested;
 pub const IID_TypedEventHandler_AddTabButtonClick = gen.IID_TypedEventHandler_AddTabButtonClick;
 pub const IID_SelectionChangedEventHandler = gen.IID_SelectionChangedEventHandler;
 pub const IID_TypedEventHandler_WindowClosed = gen.IID_TypedEventHandler_WindowClosed;
-pub const IID_KeyEventHandler = native.IID_KeyEventHandler;
-pub const IID_PointerEventHandler = native.IID_PointerEventHandler;
+pub const IID_KeyEventHandler = gen.KeyEventHandler.IID;
+pub const IID_PointerEventHandler = gen.PointerEventHandler.IID;
 pub const IID_CharacterReceivedHandler = native.IID_CharacterReceivedHandler;
-pub const IID_ScrollEventHandler = native.IID_ScrollEventHandler;
+pub const IID_ScrollEventHandler = gen.ScrollEventHandler.IID;
 
 // --- Base interfaces (from generated) ---
 pub const IUnknown = gen.IUnknown;
@@ -48,36 +48,34 @@ pub const IGrid = gen.IGrid;
 pub const IGridStatics = gen.IGridStatics;
 pub const IRowDefinition = gen.IRowDefinition;
 pub const IResourceDictionary = gen.IResourceDictionary;
+pub const IColumnDefinition = gen.IColumnDefinition;
+pub const IRangeBase = gen.IRangeBase;
+pub const IScrollBar = gen.IScrollBar;
+pub const IScrollEventArgs = gen.IScrollEventArgs;
+pub const IXamlReaderStatics = gen.IXamlReaderStatics;
 
-// --- XAML Input event args ---
-pub const Point = native.Point;
-pub const IKeyRoutedEventArgs = native.IKeyRoutedEventArgs;
-pub const ICharacterReceivedRoutedEventArgs = native.ICharacterReceivedRoutedEventArgs;
-pub const IPointerRoutedEventArgs = native.IPointerRoutedEventArgs;
-pub const IPointerPoint = native.IPointerPoint;
-pub const IPointerPointProperties = native.IPointerPointProperties;
+// --- XAML Input event args (from generated) ---
+pub const Point = gen.Point;
+pub const IKeyRoutedEventArgs = gen.IKeyRoutedEventArgs;
+pub const ICharacterReceivedRoutedEventArgs = gen.ICharacterReceivedRoutedEventArgs;
+pub const IPointerRoutedEventArgs = gen.IPointerRoutedEventArgs;
+pub const IPointerPoint = gen.IPointerPoint;
+pub const IPointerPointProperties = gen.IPointerPointProperties;
 
 // --- Generated value types ---
 pub const Color = gen.Color;
 pub const Size = gen.Size;
 pub const Rect = gen.Rect;
 pub const Thickness = gen.Thickness;
+pub const GridLength = gen.GridLength;
+pub const GridUnitType = gen.GridUnitType;
+pub const HorizontalAlignment = gen.HorizontalAlignment;
+pub const VerticalAlignment = gen.VerticalAlignment;
 
-// --- Hand-written value types ---
-pub const GridLength = native.GridLength;
-pub const GridUnitType = native.GridUnitType;
-pub const HorizontalAlignment = native.HorizontalAlignment;
-pub const VerticalAlignment = native.VerticalAlignment;
-
-// --- Hand-written native interfaces ---
+// --- Hand-written native interfaces (cannot be auto-generated from WinMD) ---
 pub const IApplicationAbi = native.IApplicationAbi;
 pub const IVector = native.IVector;
 pub const IPropertyValue = native.IPropertyValue;
 pub const IPropertyValueStatics = native.IPropertyValueStatics;
 pub const ISwapChainPanelNative = native.ISwapChainPanelNative;
 pub const IWindowNative = native.IWindowNative;
-pub const IColumnDefinition = native.IColumnDefinition;
-pub const IRangeBase = native.IRangeBase;
-pub const IScrollBar = native.IScrollBar;
-pub const IScrollEventArgs = native.IScrollEventArgs;
-pub const IXamlReaderStatics = native.IXamlReaderStatics;

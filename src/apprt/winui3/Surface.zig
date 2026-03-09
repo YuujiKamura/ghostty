@@ -172,7 +172,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     }
 
     // Set SwapChainPanel background to black.
-    self.app.setControlBackground(panel, .{ .a = 255, .r = 0, .g = 0, .b = 0 });
+    self.app.setControlBackground(panel, .{ .A = 255, .R = 0, .G = 0, .B = 0 });
 
     // Create inner surface grid via XamlReader.Load():
     // Layout is defined in XAML, event hookup remains in Zig.
@@ -226,7 +226,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
             &com.IID_ScrollEventHandler,
         );
         defer scroll_delegate.release();
-        self.scroll_bar_scroll_token = try isb.addScroll(scroll_delegate.comPtr());
+        self.scroll_bar_scroll_token = try isb.AddScroll(scroll_delegate.comPtr());
 
         // Store references.
         self.surface_grid = grid_insp;
@@ -392,7 +392,7 @@ pub fn deinit(self: *Surface) void {
             const isb = sb.queryInterface(com.IScrollBar) catch null;
             if (isb) |s| {
                 defer s.release();
-                s.removeScroll(self.scroll_bar_scroll_token) catch {};
+                s.RemoveScroll(self.scroll_bar_scroll_token) catch {};
             }
             self.scroll_bar_scroll_token = 0;
         }
@@ -815,11 +815,11 @@ fn onXamlPointerPressed(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
     const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const point = ea.getCurrentPoint(null) catch return;
     defer point.release();
-    const pos = point.getPosition() catch return;
+    const pos = point.Position() catch return;
     self.handleMouseMove(@floatCast(pos.X), @floatCast(pos.Y));
-    const props = point.getProperties() catch return;
+    const props = point.Properties() catch return;
     defer props.release();
-    const update_kind = props.getPointerUpdateKind() catch return;
+    const update_kind = props.PointerUpdateKind() catch return;
     const button: input.MouseButton = switch (update_kind) {
         1 => .left, // LeftButtonPressed
         3 => .right, // RightButtonPressed
@@ -834,28 +834,28 @@ fn onXamlPointerPressed(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
         } else |_| {}
     }
     self.handleMouseButton(button, .press);
-    ea.putHandled(true) catch {};
+    ea.SetHandled(true) catch {};
 }
 
 fn onXamlPointerMoved(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
     const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const point = ea.getCurrentPoint(null) catch return;
     defer point.release();
-    const pos = point.getPosition() catch return;
+    const pos = point.Position() catch return;
     self.handleMouseMove(@floatCast(pos.X), @floatCast(pos.Y));
-    ea.putHandled(true) catch {};
+    ea.SetHandled(true) catch {};
 }
 
 fn onXamlPointerReleased(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
     const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const point = ea.getCurrentPoint(null) catch return;
     defer point.release();
-    const pos = point.getPosition() catch return;
+    const pos = point.Position() catch return;
     self.handleMouseMove(@floatCast(pos.X), @floatCast(pos.Y));
-    const props = point.getProperties() catch return;
+    const props = point.Properties() catch return;
     defer props.release();
     // On release, the button is no longer "pressed" so we use PointerUpdateKind.
-    const update_kind = props.getPointerUpdateKind() catch return;
+    const update_kind = props.PointerUpdateKind() catch return;
     const button: input.MouseButton = switch (update_kind) {
         2 => .left, // LeftButtonReleased
         4 => .right, // RightButtonReleased
@@ -866,29 +866,29 @@ fn onXamlPointerReleased(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void
     if (button == .right) {
         self.app.showContextMenuAtCursor();
     }
-    ea.putHandled(true) catch {};
+    ea.SetHandled(true) catch {};
 }
 
 fn onXamlPointerWheelChanged(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
     const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const point = ea.getCurrentPoint(null) catch return;
     defer point.release();
-    const props = point.getProperties() catch return;
+    const props = point.Properties() catch return;
     defer props.release();
-    const delta = props.getMouseWheelDelta() catch return;
+    const delta = props.MouseWheelDelta() catch return;
     const offset = @as(f64, @floatFromInt(delta)) / 120.0;
-    const is_horizontal = props.getIsHorizontalMouseWheel() catch false;
+    const is_horizontal = props.IsHorizontalMouseWheel() catch false;
     if (is_horizontal) {
         self.handleScroll(offset, 0);
     } else {
         self.handleScroll(0, offset);
     }
-    ea.putHandled(true) catch {};
+    ea.SetHandled(true) catch {};
 }
 
 fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
-    const vk = ea.getKey() catch return;
+    const vk = ea.Key() catch return;
     if (vk == 0xE5) {
         // VK_PROCESSKEY — IME is active. Switch focus to input_hwnd for IME.
         input_runtime.focusInputOverlay(self.app);
@@ -900,22 +900,22 @@ fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
     // character event is suppressed.
     switch (self.pending_keydown) {
         .pending => {},
-        else => ea.putHandled(true) catch {},
+        else => ea.SetHandled(true) catch {},
     }
 }
 
 fn onXamlPreviewKeyUp(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
-    const vk = ea.getKey() catch return;
+    const vk = ea.Key() catch return;
     self.handleKeyEvent(@intCast(@as(u32, @bitCast(vk))), false);
-    ea.putHandled(true) catch {};
+    ea.SetHandled(true) catch {};
 }
 
 fn onXamlCharacterReceived(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
     const ea: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
-    const ch = ea.getCharacter() catch return;
+    const ch = ea.Character() catch return;
     self.handleCharEvent(ch);
-    ea.putHandled(true) catch {};
+    ea.SetHandled(true) catch {};
 }
 
 fn onXamlGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
@@ -1088,18 +1088,18 @@ pub fn updateScrollbarUi(self: *Surface, total: usize, offset: usize, len: usize
     const len_f: f64 = @floatFromInt(len);
     const maximum = if (total_f > len_f) total_f - len_f else 0.0;
 
-    range_base.setMinimum(0.0) catch {};
-    range_base.setMaximum(maximum) catch {};
-    range_base.setValue(offset_f) catch {};
-    range_base.setLargeChange(len_f) catch {};
-    range_base.setSmallChange(1.0) catch {};
+    range_base.SetMinimum(0.0) catch {};
+    range_base.SetMaximum(maximum) catch {};
+    range_base.SetValue(offset_f) catch {};
+    range_base.SetLargeChange(len_f) catch {};
+    range_base.SetSmallChange(1.0) catch {};
 
     const isb = sb.queryInterface(com.IScrollBar) catch |err| {
         log.warn("scrollbar ui sync: IScrollBar QI failed: {}", .{err});
         return;
     };
     defer isb.release();
-    isb.setViewportSize(len_f) catch {};
+    isb.SetViewportSize(len_f) catch {};
 
     const fe = sb.queryInterface(com.IFrameworkElement) catch |err| {
         log.warn("scrollbar ui sync: IFrameworkElement QI failed: {}", .{err});
@@ -1112,8 +1112,8 @@ pub fn updateScrollbarUi(self: *Surface, total: usize, offset: usize, len: usize
     };
     defer ue.release();
 
-    const orientation = isb.getOrientation() catch -1;
-    const viewport = isb.getViewportSize() catch -1.0;
+    const orientation = isb.Orientation() catch -1;
+    const viewport = isb.ViewportSize() catch -1.0;
     const width = fe.ActualWidth() catch -1.0;
     const height = fe.ActualHeight() catch -1.0;
     const visibility = ue.Visibility() catch -1;
@@ -1128,7 +1128,7 @@ fn onScrollBarScroll(self: *Surface, _: ?*anyopaque, args_raw: ?*anyopaque) void
     if (self.is_internal_scroll_update) return;
 
     const args: *com.IScrollEventArgs = @ptrCast(@alignCast(args_raw orelse return));
-    const new_value = args.getNewValue() catch return;
+    const new_value = args.NewValue() catch return;
     const row: usize = @intFromFloat(@max(0.0, @round(new_value)));
 
     _ = self.core_surface.performBindingAction(.{ .scroll_to_row = row }) catch |err| {

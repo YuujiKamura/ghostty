@@ -110,7 +110,8 @@ fn loadXamlResourcesMerged(xa_abi: *com.IApplicationAbi, xcr: *winrt.IInspectabl
     defer ird.release();
 
     // Get MergedDictionaries collection and add XamlControlsResources
-    const merged = try ird.MergedDictionaries();
+    const merged_raw = try ird.MergedDictionaries();
+    const merged: *com.IVector = @ptrCast(@alignCast(merged_raw));
     defer merged.release();
     try merged.append(@ptrCast(xcr));
 

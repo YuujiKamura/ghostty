@@ -27,10 +27,12 @@ pub fn onTabCloseRequested(self: anytype, _: ?*anyopaque, args_obj: ?*anyopaque)
     defer tab_insp_guard.deinit();
 
     if (self.tab_view) |tv| {
-        var tab_items_guard = winrt.ComRef(com.IVector).init(tv.TabItems() catch {
+        const tab_items_raw = tv.TabItems() catch {
             self.closeActiveTab();
             return;
-        });
+        };
+        const tab_items_vec: *com.IVector = @ptrCast(@alignCast(tab_items_raw));
+        var tab_items_guard = winrt.ComRef(com.IVector).init(tab_items_vec);
         defer tab_items_guard.deinit();
 
         if (tab_items_guard.get().indexOf(@ptrCast(tab_insp_guard.get())) catch null) |idx| {

@@ -63,7 +63,8 @@ pub fn newTab(
     try surface_binding.setTabItemContent(tvi_inspectable, border_guard.get());
 
     // Add to TabItems collection.
-    const tab_items = try tab_view.TabItems();
+    const tab_items_raw = try tab_view.TabItems();
+    const tab_items: *com.IVector = @ptrCast(@alignCast(tab_items_raw));
     defer tab_items.release();
     try tab_items.append(@ptrCast(tvi_inspectable));
 
@@ -102,7 +103,8 @@ pub fn closeTab(self: anytype, idx: usize) bool {
     if (self.surfaces.items.len == 0) {
         // Remove from TabView last (triggers SelectionChanged with -1).
         if (self.tab_view) |tv| {
-            const tab_items = tv.TabItems() catch return true;
+            const tab_items_raw = tv.TabItems() catch return true;
+            const tab_items: *com.IVector = @ptrCast(@alignCast(tab_items_raw));
             defer tab_items.release();
             tab_items.removeAt(@intCast(idx)) catch {};
         }
@@ -118,7 +120,8 @@ pub fn closeTab(self: anytype, idx: usize) bool {
 
     // 3. Remove from TabView (triggers onSelectionChanged).
     if (self.tab_view) |tv| {
-        const tab_items = tv.TabItems() catch return false;
+        const tab_items_raw2 = tv.TabItems() catch return false;
+        const tab_items: *com.IVector = @ptrCast(@alignCast(tab_items_raw2));
         defer tab_items.release();
         tab_items.removeAt(@intCast(idx)) catch |err| {
             log.warn("closeTab: removeAt({}) failed: {}", .{ idx, err });
