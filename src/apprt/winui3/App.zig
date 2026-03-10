@@ -32,6 +32,7 @@ const window_runtime = @import("window_runtime.zig");
 const xaml_helpers = @import("xaml_helpers.zig");
 const surface_binding = @import("surface_binding.zig");
 const event_handlers = @import("event_handlers.zig");
+const ControlPlane = @import("control_plane.zig").ControlPlane;
 
 const log = std.log.scoped(.winui3);
 
@@ -185,6 +186,9 @@ tab_close_token: ?i64 = null,
 add_tab_token: ?i64 = null,
 selection_changed_token: ?i64 = null,
 
+/// Optional side-channel control plane for session-aware automation.
+control_plane: ?*ControlPlane = null,
+
 /// DispatcherQueueController — must be kept alive for the lifetime of the app.
 dq_controller: ?*winrt.IInspectable = null,
 
@@ -283,6 +287,22 @@ pub fn initXaml(self: *App) !void {
     self.startup_bootstrapped = true;
     self.setStartupStage(.content_ready);
     fileLog("initXaml: content_ready, entering message loop", .{});
+
+    // --- Control Plane (optional, env-gated) ---
+    if (ControlPlane.isEnabled(self.core_app.alloc)) {
+        if (self.hwnd) |hwnd| {
+            self.control_plane = ControlPlane.create(
+                self.core_app.alloc,
+                hwnd,
+                @ptrCast(self),
+                controlPlaneCaptureState,
+                controlPlaneCaptureTail,
+            ) catch |err| blk: {
+                log.warn("failed to start control plane: {}", .{err});
+                break :blk null;
+            };
+        }
+    }
 
     // --- TabView Parity Validation (Tier 2 Verification) ---
     self.validateTabViewParity() catch |err| {
@@ -828,6 +848,10 @@ pub fn run(self: *App) !void {
 
 pub fn terminate(self: *App) void {
     log.info("Termination requested", .{});
+    if (self.control_plane) |cp| {
+        cp.destroy();
+        self.control_plane = null;
+    }
     self.setExitIntent(.terminate);
     self.running = false;
     // Signal XAML to exit the message loop.
@@ -848,6 +872,12 @@ fn fullCleanup(self: *App) void {
         },
     );
     const alloc = self.core_app.alloc;
+
+    // 0. Stop control plane before surfaces are destroyed.
+    if (self.control_plane) |cp| {
+        cp.destroy();
+        self.control_plane = null;
+    }
 
     // 1. Remove subclasses first.
     if (self.child_hwnd) |child_hwnd| {
@@ -1243,6 +1273,37 @@ pub fn activeSurface(self: *App) ?*Surface {
     if (self.surfaces.items.len == 0) return null;
     if (!tab_index.isValid(self.active_surface_idx, self.surfaces.items.len)) return null;
     return self.surfaces.items[self.active_surface_idx];
+}
+
+// ---------------------------------------------------------------
+// Control plane capture callbacks
+// ---------------------------------------------------------------
+
+fn controlPlaneCaptureState(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) !?ControlPlane.StateSnapshot {
+    const self: *App = @ptrCast(@alignCast(ctx));
+    const surface = if (tab_idx) |idx|
+        (if (idx < self.surfaces.items.len) self.surfaces.items[idx] else null)
+    else
+        self.activeSurface();
+    const s = surface orelse return null;
+    return .{
+        .pwd = try s.pwd(allocator),
+        .has_selection = s.hasSelection(),
+        .at_prompt = s.cursorIsAtPrompt(),
+        .tab_count = self.surfaces.items.len,
+        .active_tab = self.active_surface_idx,
+    };
+}
+
+fn controlPlaneCaptureTail(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) !?[]u8 {
+    const self: *App = @ptrCast(@alignCast(ctx));
+    const surface = if (tab_idx) |idx|
+        (if (idx < self.surfaces.items.len) self.surfaces.items[idx] else null)
+    else
+        self.activeSurface();
+    const s = surface orelse return null;
+    const viewport = try s.viewportString(allocator);
+    return try allocator.dupe(u8, viewport);
 }
 
 // ---------------------------------------------------------------

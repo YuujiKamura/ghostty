@@ -446,6 +446,26 @@ pub fn getSize(self: *const Surface) !apprt.SurfaceSize {
     return self.size;
 }
 
+pub fn pwd(self: *Surface, alloc: std.mem.Allocator) !?[]const u8 {
+    if (!self.core_initialized) return null;
+    return try self.core_surface.pwd(alloc);
+}
+
+pub fn hasSelection(self: *const Surface) bool {
+    if (!self.core_initialized) return false;
+    return self.core_surface.hasSelection();
+}
+
+pub fn cursorIsAtPrompt(self: *Surface) bool {
+    if (!self.core_initialized) return false;
+    return self.core_surface.cursorIsAtPrompt();
+}
+
+pub fn viewportString(self: *Surface, alloc: std.mem.Allocator) ![]const u8 {
+    if (!self.core_initialized) return alloc.dupe(u8, "");
+    return try self.core_surface.viewportString(alloc);
+}
+
 pub fn getCursorPos(self: *const Surface) !apprt.CursorPos {
     return self.cursor_pos;
 }

@@ -68,6 +68,7 @@ pub fn subclassProc(
         os.WM_USER => return handleWakeup(app, hwnd, msg, wparam, lparam),
         os.WM_APP_BIND_SWAP_CHAIN => return handleBindSwapChain(app, wparam, lparam),
         os.WM_APP_BIND_SWAP_CHAIN_HANDLE => return handleBindSwapChainHandle(app, wparam, lparam),
+        os.WM_APP_CONTROL_INPUT => return handleControlInput(app),
         // IME messages only handled in subclass as fallback (when input_hwnd failed).
         // When input_hwnd is active, IME messages go directly to inputWndProc.
         os.WM_IME_STARTCOMPOSITION => return ime.handleIMEStartComposition(app, hwnd, msg, wparam, lparam),
@@ -320,6 +321,16 @@ fn handleBindSwapChainHandle(app: *App, wparam: os.WPARAM, lparam: os.LPARAM) os
     }
 
     surface.completeBindSwapChainHandle(swap_chain_handle);
+    return 0;
+}
+
+/// Handle WM_APP_CONTROL_INPUT: drain pending inputs from the control plane.
+fn handleControlInput(app: *App) os.LRESULT {
+    if (app.control_plane) |cp| {
+        if (app.activeSurface()) |surface| {
+            cp.drainPendingInputs(&surface.core_surface);
+        }
+    }
     return 0;
 }
 

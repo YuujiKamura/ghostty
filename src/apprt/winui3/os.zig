@@ -67,6 +67,8 @@ pub const WM_APP_BIND_SWAP_CHAIN: UINT = WM_USER + 1;
 pub const WM_APP_BIND_SWAP_CHAIN_HANDLE: UINT = WM_USER + 2;
 /// Test-only: set ime_composing = true for focus-loss cleanup testing.
 pub const WM_APP_TEST_FAKE_IME_COMPOSING: UINT = WM_USER + 3;
+/// Control plane: dequeue pending inputs on the UI thread.
+pub const WM_APP_CONTROL_INPUT: UINT = WM_USER + 4;
 
 // --- Window styles ---
 pub const WS_OVERLAPPEDWINDOW: DWORD = 0x00CF0000;
@@ -254,6 +256,8 @@ pub extern "user32" fn DestroyMenu(hMenu: HMENU) callconv(.winapi) BOOL;
 pub extern "user32" fn ScreenToClient(hWnd: HWND, lpPoint: *POINT) callconv(.winapi) BOOL;
 pub extern "user32" fn ClientToScreen(hWnd: HWND, lpPoint: *POINT) callconv(.winapi) BOOL;
 pub extern "user32" fn SetWindowTextW(hWnd: HWND, lpString: LPCWSTR) callconv(.winapi) BOOL;
+pub extern "user32" fn GetWindowTextW(hWnd: HWND, lpString: [*]u16, nMaxCount: c_int) callconv(.winapi) c_int;
+pub extern "user32" fn GetWindowTextLengthW(hWnd: HWND) callconv(.winapi) c_int;
 pub extern "user32" fn GetDpiForWindow(hWnd: HWND) callconv(.winapi) UINT;
 pub extern "user32" fn GetKeyState(nVirtKey: c_int) callconv(.winapi) c_short;
 pub extern "user32" fn OpenClipboard(hWndNewOwner: ?HWND) callconv(.winapi) BOOL;
