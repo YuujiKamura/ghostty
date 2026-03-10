@@ -80,6 +80,46 @@ UI スレッド → activeSurface().core_surface.textCallback()
 
 ログファイルに記録されるだけ。ターミナルには表示されない。
 
+### LIST_TABS (WinUI3のみ)
+```
+→ LIST_TABS
+← LIST_TABS|{tab_count}|{active_tab}
+← TAB|0|{title}|pwd={path}|prompt={0|1}|selection={0|1}
+← TAB|1|{title}|pwd={path}|prompt={0|1}|selection={0|1}
+...
+```
+
+全タブの状態を一括取得。
+
+### NEW_TAB (WinUI3のみ)
+```
+→ NEW_TAB
+← ACK|{session}|NEW_TAB
+```
+
+新しいタブを作成。UI スレッドで非同期実行される。
+
+### CLOSE_TAB (WinUI3のみ)
+```
+→ CLOSE_TAB        # タブ0を閉じる
+→ CLOSE_TAB|2      # タブ2を閉じる
+← ACK|{session}|CLOSE_TAB|{n}
+```
+
+### SWITCH_TAB (WinUI3のみ)
+```
+→ SWITCH_TAB|1     # タブ1に切り替え
+← ACK|{session}|SWITCH_TAB|{n}
+```
+
+### FOCUS (WinUI3のみ)
+```
+→ FOCUS
+← ACK|{session}|FOCUS
+```
+
+ウィンドウをフォアグラウンドに持ってくる。
+
 ## PowerShell スクリプト
 
 ### セッション一覧
@@ -110,6 +150,21 @@ winui3-123 12345 0x001A0B20 1      0         C:\Users\me  3        0         Gho
 
 # ビューポート取得
 .\scripts\winui3-control-send.ps1 -SessionName winui3-123 -Type TAIL -Lines 50
+
+# 全タブの状態一覧
+.\scripts\winui3-control-send.ps1 -SessionName winui3-123 -Type LIST_TABS
+
+# 新タブ作成
+.\scripts\winui3-control-send.ps1 -SessionName winui3-123 -Type NEW_TAB
+
+# タブ切り替え
+.\scripts\winui3-control-send.ps1 -SessionName winui3-123 -Type SWITCH_TAB -TabIndex 1
+
+# タブを閉じる
+.\scripts\winui3-control-send.ps1 -SessionName winui3-123 -Type CLOSE_TAB -TabIndex 2
+
+# ウィンドウをフォアグラウンドに
+.\scripts\winui3-control-send.ps1 -SessionName winui3-123 -Type FOCUS
 ```
 
 ## WinUI3 vs Win32 の違い
@@ -119,7 +174,7 @@ winui3-123 12345 0x001A0B20 1      0         C:\Users\me  3        0         Gho
 | パイプ名 | `ghostty-win32-*` | `ghostty-winui3-*` |
 | セッションDir | `control-plane\win32\` | `control-plane\winui3\` |
 | PostMessage | `WM_GHOSTTY_CONTROL_INPUT` (WM_USER+1) | `WM_APP_CONTROL_INPUT` (WM_USER+4) |
-| タブ対応 | なし (単一Surface) | あり (`STATE|N`, `tab_count`, `active_tab`) |
+| タブ対応 | なし (単一Surface) | あり (`STATE|N`, `LIST_TABS`, `NEW_TAB`, `CLOSE_TAB`, `SWITCH_TAB`, `FOCUS`) |
 | デフォルト名 | `win32-{pid}` | `winui3-{pid}` |
 
 ## ソースファイル

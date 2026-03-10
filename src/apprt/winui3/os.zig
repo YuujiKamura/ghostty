@@ -69,6 +69,9 @@ pub const WM_APP_BIND_SWAP_CHAIN_HANDLE: UINT = WM_USER + 2;
 pub const WM_APP_TEST_FAKE_IME_COMPOSING: UINT = WM_USER + 3;
 /// Control plane: dequeue pending inputs on the UI thread.
 pub const WM_APP_CONTROL_INPUT: UINT = WM_USER + 4;
+/// Control plane: execute a tab/window action on the UI thread.
+/// wparam encodes the action type, lparam encodes a parameter (e.g. tab index).
+pub const WM_APP_CONTROL_ACTION: UINT = WM_USER + 5;
 
 // --- Window styles ---
 pub const WS_OVERLAPPEDWINDOW: DWORD = 0x00CF0000;

@@ -32,6 +32,15 @@ pub const ControlPlane = struct {
 
     pub const CaptureStateFn = *const fn (ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) anyerror!?StateSnapshot;
     pub const CaptureTailFn = *const fn (ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) anyerror!?[]u8;
+    pub const CaptureTabListFn = *const fn (ctx: *anyopaque, allocator: Allocator) anyerror!?[]u8;
+
+    /// Action codes posted via WM_APP_CONTROL_ACTION (wparam).
+    pub const Action = enum(usize) {
+        new_tab = 1,
+        close_tab = 2,
+        switch_tab = 3,
+        focus_window = 4,
+    };
 
     const PendingInput = struct {
         from: []u8,
@@ -57,6 +66,7 @@ pub const ControlPlane = struct {
     callback_ctx: ?*anyopaque = null,
     capture_state_fn: ?CaptureStateFn = null,
     capture_tail_fn: ?CaptureTailFn = null,
+    capture_tab_list_fn: ?CaptureTabListFn = null,
 
     pub fn isEnabled(allocator: Allocator) bool {
         return checkEnvFlag(allocator, "GHOSTTY_CONTROL_PLANE") or
@@ -77,6 +87,7 @@ pub const ControlPlane = struct {
         callback_ctx: ?*anyopaque,
         capture_state_fn: ?CaptureStateFn,
         capture_tail_fn: ?CaptureTailFn,
+        capture_tab_list_fn: ?CaptureTabListFn,
     ) !*ControlPlane {
         const self = try allocator.create(ControlPlane);
         errdefer allocator.destroy(self);
@@ -129,6 +140,7 @@ pub const ControlPlane = struct {
             .callback_ctx = callback_ctx,
             .capture_state_fn = capture_state_fn,
             .capture_tail_fn = capture_tail_fn,
+            .capture_tab_list_fn = capture_tab_list_fn,
         };
         errdefer self.freeOwned();
 
@@ -392,6 +404,48 @@ pub const ControlPlane = struct {
             self.appendLog(line);
             _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0);
             return std.fmt.allocPrint(self.allocator, "ACK|{s}|{d}\n", .{ self.session_name, self.pid });
+        }
+
+        if (std.mem.eql(u8, request, "LIST_TABS")) {
+            if (self.capture_tab_list_fn) |capture| {
+                if (self.callback_ctx) |ctx| {
+                    const list = capture(ctx, self.allocator) catch |err| blk: {
+                        log.warn("failed to capture tab list: {}", .{err});
+                        break :blk null;
+                    };
+                    if (list) |text| {
+                        return text; // caller frees
+                    }
+                }
+            }
+            return std.fmt.allocPrint(self.allocator, "LIST_TABS|{s}|0\n", .{self.session_name});
+        }
+
+        if (std.mem.eql(u8, request, "NEW_TAB")) {
+            _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(Action.new_tab), 0);
+            return std.fmt.allocPrint(self.allocator, "ACK|{s}|NEW_TAB\n", .{self.session_name});
+        }
+
+        if (std.mem.startsWith(u8, request, "CLOSE_TAB")) {
+            const idx: usize = if (std.mem.startsWith(u8, request, "CLOSE_TAB|"))
+                std.fmt.parseUnsigned(usize, request[10..], 10) catch 0
+            else
+                0;
+            _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(Action.close_tab), @bitCast(idx));
+            return std.fmt.allocPrint(self.allocator, "ACK|{s}|CLOSE_TAB|{d}\n", .{ self.session_name, idx });
+        }
+
+        if (std.mem.startsWith(u8, request, "SWITCH_TAB|")) {
+            const idx = std.fmt.parseUnsigned(usize, request[11..], 10) catch {
+                return std.fmt.allocPrint(self.allocator, "ERR|{s}|invalid-tab-index\n", .{self.session_name});
+            };
+            _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(Action.switch_tab), @bitCast(idx));
+            return std.fmt.allocPrint(self.allocator, "ACK|{s}|SWITCH_TAB|{d}\n", .{ self.session_name, idx });
+        }
+
+        if (std.mem.eql(u8, request, "FOCUS")) {
+            _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(Action.focus_window), 0);
+            return std.fmt.allocPrint(self.allocator, "ACK|{s}|FOCUS\n", .{self.session_name});
         }
 
         return std.fmt.allocPrint(self.allocator, "ERR|{s}|unknown-request\n", .{self.session_name});

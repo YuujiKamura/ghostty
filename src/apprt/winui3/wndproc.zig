@@ -69,6 +69,7 @@ pub fn subclassProc(
         os.WM_APP_BIND_SWAP_CHAIN => return handleBindSwapChain(app, wparam, lparam),
         os.WM_APP_BIND_SWAP_CHAIN_HANDLE => return handleBindSwapChainHandle(app, wparam, lparam),
         os.WM_APP_CONTROL_INPUT => return handleControlInput(app),
+        os.WM_APP_CONTROL_ACTION => return handleControlAction(app, wparam, lparam),
         // IME messages only handled in subclass as fallback (when input_hwnd failed).
         // When input_hwnd is active, IME messages go directly to inputWndProc.
         os.WM_IME_STARTCOMPOSITION => return ime.handleIMEStartComposition(app, hwnd, msg, wparam, lparam),
@@ -330,6 +331,35 @@ fn handleControlInput(app: *App) os.LRESULT {
         if (app.activeSurface()) |surface| {
             cp.drainPendingInputs(&surface.core_surface);
         }
+    }
+    return 0;
+}
+
+/// Handle WM_APP_CONTROL_ACTION: execute a tab/window action from the control plane.
+fn handleControlAction(app: *App, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
+    const ControlPlane = @import("control_plane.zig").ControlPlane;
+    const action: ControlPlane.Action = @enumFromInt(@as(usize, @bitCast(wparam)));
+    const param: usize = @bitCast(lparam);
+
+    switch (action) {
+        .new_tab => {
+            app.newTab() catch |err| log.warn("control plane NEW_TAB failed: {}", .{err});
+        },
+        .close_tab => {
+            if (param < app.surfaces.items.len) {
+                app.closeTab(param);
+            }
+        },
+        .switch_tab => {
+            if (param < app.surfaces.items.len) {
+                app.switchToTab(param);
+            }
+        },
+        .focus_window => {
+            if (app.hwnd) |hwnd| {
+                _ = os.SetForegroundWindow(hwnd);
+            }
+        },
     }
     return 0;
 }

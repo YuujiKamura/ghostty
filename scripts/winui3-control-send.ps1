@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$SessionName,
 
-    [ValidateSet('PING', 'MSG', 'STATE', 'TAIL', 'INPUT')]
+    [ValidateSet('PING', 'MSG', 'STATE', 'TAIL', 'INPUT', 'LIST_TABS', 'NEW_TAB', 'CLOSE_TAB', 'SWITCH_TAB', 'FOCUS')]
     [string]$Type = 'PING',
 
     [string]$From = 'owner',
@@ -53,6 +53,16 @@ $message = if ($Type -eq 'PING') {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
     $encoded = [Convert]::ToBase64String($bytes)
     "INPUT|$From|$encoded"
+} elseif ($Type -eq 'LIST_TABS') {
+    'LIST_TABS'
+} elseif ($Type -eq 'NEW_TAB') {
+    'NEW_TAB'
+} elseif ($Type -eq 'CLOSE_TAB') {
+    if ($TabIndex -ge 0) { "CLOSE_TAB|$TabIndex" } else { 'CLOSE_TAB' }
+} elseif ($Type -eq 'SWITCH_TAB') {
+    if ($TabIndex -ge 0) { "SWITCH_TAB|$TabIndex" } else { throw '-TabIndex is required for SWITCH_TAB' }
+} elseif ($Type -eq 'FOCUS') {
+    'FOCUS'
 } else {
     "MSG|$From|$Text"
 }

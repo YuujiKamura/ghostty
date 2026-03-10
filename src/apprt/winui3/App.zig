@@ -297,6 +297,7 @@ pub fn initXaml(self: *App) !void {
                 @ptrCast(self),
                 controlPlaneCaptureState,
                 controlPlaneCaptureTail,
+                controlPlaneCaptureTabList,
             ) catch |err| blk: {
                 log.warn("failed to start control plane: {}", .{err});
                 break :blk null;
@@ -1268,6 +1269,20 @@ pub fn closeSurface(self: *App, surface: *Surface) void {
     }
 }
 
+/// Switch to a specific tab by index.
+pub fn switchToTab(self: *App, idx: usize) void {
+    if (idx >= self.surfaces.items.len) return;
+    if (self.tab_view) |tv| {
+        tv.SetSelectedIndex(@intCast(idx)) catch {};
+        const prev_idx = self.active_surface_idx;
+        self.active_surface_idx = idx;
+        surface_binding.attachSurfaceToTabItem(self, prev_idx, idx) catch |err| {
+            log.warn("switchToTab: attachSurfaceToTabItem({}) failed: {}", .{ idx, err });
+        };
+        input_runtime.focusKeyboardTarget(self);
+    }
+}
+
 /// Get the currently active Surface, or null if none.
 pub fn activeSurface(self: *App) ?*Surface {
     if (self.surfaces.items.len == 0) return null;
@@ -1304,6 +1319,29 @@ fn controlPlaneCaptureTail(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usiz
     const s = surface orelse return null;
     const viewport = try s.viewportString(allocator);
     return try allocator.dupe(u8, viewport);
+}
+
+fn controlPlaneCaptureTabList(ctx: *anyopaque, allocator: Allocator) !?[]u8 {
+    const self: *App = @ptrCast(@alignCast(ctx));
+    if (self.surfaces.items.len == 0) return null;
+
+    var buf: std.ArrayListUnmanaged(u8) = .{};
+    errdefer buf.deinit(allocator);
+    const writer = buf.writer(allocator);
+    try writer.print("LIST_TABS|{d}|{d}\n", .{ self.surfaces.items.len, self.active_surface_idx });
+    for (self.surfaces.items, 0..) |surface, i| {
+        const pwd_val = surface.pwd(allocator) catch null;
+        defer if (pwd_val) |p| allocator.free(p);
+        const title = surface.getTitle() orelse "";
+        try writer.print("TAB|{d}|{s}|pwd={s}|prompt={d}|selection={d}\n", .{
+            i,
+            title,
+            pwd_val orelse "",
+            @as(u8, if (surface.cursorIsAtPrompt()) 1 else 0),
+            @as(u8, if (surface.hasSelection()) 1 else 0),
+        });
+    }
+    return try buf.toOwnedSlice(allocator);
 }
 
 // ---------------------------------------------------------------
