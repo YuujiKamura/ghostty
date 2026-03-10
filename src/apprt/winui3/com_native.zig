@@ -15,6 +15,8 @@ const comRelease = gen.comRelease;
 const comQueryInterface = gen.comQueryInterface;
 const IUnknown = gen.IUnknown;
 const IInspectable = gen.IInspectable;
+const Point = gen.Point;
+const Rect = gen.Rect;
 
 /// IApplication ABI — provides access to Application.Resources (get/put).
 /// Used by xaml_helpers.loadXamlResources to set XamlControlsResources.
@@ -141,6 +143,120 @@ pub const IPropertyValueStatics = extern struct {
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn createString(self: *@This(), s: HSTRING) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateString(self, s, &out)); return @ptrCast(@alignCast(out.?)); }
+};
+
+/// Microsoft.UI.Xaml.Input.IPointerRoutedEventArgs — WinUI3 version.
+/// DIFFERENT IID and vtable layout from Windows.UI.Xaml.Input (UWP).
+pub const IPointerRoutedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0x66E78A9A, .data2 = 0x1BEC, .data3 = 0x5F92, .data4 = .{ 0xB1, 0xA1, 0xEA, 0x63, 0x34, 0xEE, 0x51, 0x1C } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_Pointer: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        get_KeyModifiers: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
+        get_Handled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        put_Handled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        get_IsGenerated: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        GetCurrentPoint: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetIntermediatePoints: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn getCurrentPoint(self: *@This(), relative_to: ?*anyopaque) !*IPointerPoint {
+        var out: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.GetCurrentPoint(@ptrCast(self), relative_to, &out));
+        return @ptrCast(@alignCast(out orelse return error.WinRTFailed));
+    }
+    pub fn SetHandled(self: *@This(), value: bool) !void {
+        try hrCheck(self.lpVtbl.put_Handled(@ptrCast(self), value));
+    }
+};
+
+/// Microsoft.UI.Input.IPointerPoint — WinUI3 version.
+/// DIFFERENT IID and vtable layout from Windows.UI.Input.IPointerPoint (UWP).
+/// UWP has: PointerDevice, Position, RawPosition, PointerId, FrameId, Timestamp, IsInContact, Properties
+/// WinUI3 has: FrameId, IsInContact, PointerDeviceType, PointerId, Position, Properties, Timestamp, GetTransformedPoint
+pub const IPointerPoint = extern struct {
+    pub const IID = GUID{ .data1 = 0x0d430ee6, .data2 = 0x252c, .data3 = 0x59a4, .data4 = .{ 0xb2, 0xa2, 0xd4, 0x42, 0x64, 0xdc, 0x6a, 0x40 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_FrameId: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
+        get_IsInContact: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_PointerDeviceType: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        get_PointerId: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
+        get_Position: *const fn (*anyopaque, *Point) callconv(.winapi) HRESULT,
+        get_Properties: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        get_Timestamp: *const fn (*anyopaque, *u64) callconv(.winapi) HRESULT,
+        GetTransformedPoint: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Position(self: *@This()) !Point {
+        var out: Point = .{ .X = 0, .Y = 0 };
+        try hrCheck(self.lpVtbl.get_Position(@ptrCast(self), &out));
+        return out;
+    }
+    pub fn Properties(self: *@This()) !*IPointerPointProperties {
+        var out: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.get_Properties(@ptrCast(self), &out));
+        return @ptrCast(@alignCast(out orelse return error.WinRTFailed));
+    }
+};
+
+/// Microsoft.UI.Input.IPointerPointProperties — WinUI3 version.
+/// DIFFERENT IID and vtable layout from Windows.UI.Input (UWP).
+/// WinUI3 uses alphabetical property ordering and has fewer methods (no HasUsage/GetUsageValue).
+pub const IPointerPointProperties = extern struct {
+    pub const IID = GUID{ .data1 = 0xd760ed77, .data2 = 0x4b10, .data3 = 0x57a5, .data4 = .{ 0xb3, 0xcc, 0xd9, 0xbf, 0x34, 0x13, 0xe9, 0x96 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        get_ContactRect: *const fn (*anyopaque, *Rect) callconv(.winapi) HRESULT,
+        get_IsBarrelButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsCanceled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsEraser: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsHorizontalMouseWheel: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsInRange: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsInverted: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsLeftButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsMiddleButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsPrimary: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsRightButtonPressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsXButton1Pressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_IsXButton2Pressed: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_MouseWheelDelta: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        get_Orientation: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        get_PointerUpdateKind: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        get_Pressure: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        get_TouchConfidence: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        get_Twist: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        get_XTilt: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        get_YTilt: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn IsLeftButtonPressed(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.get_IsLeftButtonPressed(@ptrCast(self), &out)); return out; }
+    pub fn IsRightButtonPressed(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.get_IsRightButtonPressed(@ptrCast(self), &out)); return out; }
+    pub fn IsMiddleButtonPressed(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.get_IsMiddleButtonPressed(@ptrCast(self), &out)); return out; }
+    pub fn MouseWheelDelta(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.get_MouseWheelDelta(@ptrCast(self), &out)); return out; }
+    pub fn IsHorizontalMouseWheel(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.get_IsHorizontalMouseWheel(@ptrCast(self), &out)); return out; }
+    pub fn PointerUpdateKind(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.get_PointerUpdateKind(@ptrCast(self), &out)); return out; }
 };
 
 pub const ISwapChainPanelNative = extern struct {

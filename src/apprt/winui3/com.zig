@@ -58,9 +58,12 @@ pub const IXamlReaderStatics = gen.IXamlReaderStatics;
 pub const Point = gen.Point;
 pub const IKeyRoutedEventArgs = gen.IKeyRoutedEventArgs;
 pub const ICharacterReceivedRoutedEventArgs = gen.ICharacterReceivedRoutedEventArgs;
-pub const IPointerRoutedEventArgs = gen.IPointerRoutedEventArgs;
-pub const IPointerPoint = gen.IPointerPoint;
-pub const IPointerPointProperties = gen.IPointerPointProperties;
+// WinUI3 pointer interfaces use DIFFERENT IIDs and vtable layouts from UWP.
+// The generated versions are from Windows.UI.Input (UWP); the hand-written
+// native versions are from Microsoft.UI.Input (WinUI3) with correct slot order.
+pub const IPointerRoutedEventArgs = native.IPointerRoutedEventArgs;
+pub const IPointerPoint = native.IPointerPoint;
+pub const IPointerPointProperties = native.IPointerPointProperties;
 
 // --- Generated value types ---
 pub const Color = gen.Color;

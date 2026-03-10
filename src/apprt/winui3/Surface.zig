@@ -877,7 +877,6 @@ fn onXamlPointerReleased(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void
     self.handleMouseMove(@floatCast(pos.X), @floatCast(pos.Y));
     const props = point.Properties() catch return;
     defer props.release();
-    // On release, the button is no longer "pressed" so we use PointerUpdateKind.
     const update_kind = props.PointerUpdateKind() catch return;
     const button: input.MouseButton = switch (update_kind) {
         2 => .left, // LeftButtonReleased

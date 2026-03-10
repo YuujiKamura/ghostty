@@ -43,6 +43,7 @@ pub fn subclassProc(
         },
         os.WM_NCHITTEST => return titleBarHitTest(hwnd, lparam),
         os.WM_CLOSE => {
+            App.fileLog("WM_CLOSE received on HWND=0x{x}", .{@intFromPtr(hwnd)});
             app.requestCloseWindow();
             return 0;
         },
@@ -411,63 +412,130 @@ fn writeRaw(msg: []const u8) void {
 
 pub fn stowedExceptionHandler(info: *os.EXCEPTION_POINTERS) callconv(.winapi) c_long {
     const record = info.ExceptionRecord orelse return os.EXCEPTION_CONTINUE_SEARCH;
+    const code = record.ExceptionCode;
 
-    // Only intercept STATUS_STOWED_EXCEPTION (0xC000027B).
-    if (record.ExceptionCode != os.STATUS_STOWED_EXCEPTION) return os.EXCEPTION_CONTINUE_SEARCH;
+    App.fileLog("VEH-filter-v2-active", .{});
 
-    // Use direct WriteFile to bypass Zig's log locking (may be held when crash occurs).
-    writeRaw("=== STATUS_STOWED_EXCEPTION caught ===\n");
+    // Skip noisy, harmless exceptions to keep log readable.
+    // 0xe06d7363 = C++ exception (normal WinRT), 0x406d1388 = thread naming, 0x40010006 = debug print
+    if (code == 0xe06d7363 or code == 0x406d1388 or code == 0x40010006) return os.EXCEPTION_CONTINUE_SEARCH;
 
-    log.err("=== STATUS_STOWED_EXCEPTION caught ===", .{});
-    log.err("  ExceptionAddress: 0x{x}", .{@intFromPtr(record.ExceptionAddress)});
-    log.err("  NumberParameters: {}", .{record.NumberParameters});
+    const first_chance: bool = (record.ExceptionFlags & 1) == 0; // bit 0 = EXCEPTION_NONCONTINUABLE
+    const thread_id = os.GetCurrentThreadId();
+    const addr = @intFromPtr(record.ExceptionAddress);
 
-    // Dump raw exception parameters.
-    const n = @min(record.NumberParameters, 15);
-    for (0..n) |i| {
-        log.err("  ExceptionInformation[{}]: 0x{x}", .{ i, record.ExceptionInformation[i] });
+    App.fileLog("=== VEH Exception ===", .{});
+    App.fileLog("  Code=0x{x:0>8} Addr=0x{x} Thread={} Chance={s}", .{
+        code, addr, thread_id, if (first_chance) "first" else "second/noncontinuable",
+    });
+
+    // For ACCESS_VIOLATION (0xc0000005): param[0]=read(0)/write(1)/DEP(8), param[1]=target address
+    if (code == 0xc0000005 and record.NumberParameters >= 2) {
+        const rw = record.ExceptionInformation[0];
+        const target = record.ExceptionInformation[1];
+        const rw_str = switch (rw) {
+            0 => "READ",
+            1 => "WRITE",
+            8 => "DEP",
+            else => "UNKNOWN",
+        };
+        App.fileLog("  ACCESS_VIOLATION: {s} at 0x{x}", .{ rw_str, target });
     }
 
-    // Try to parse stowed exception entries.
-    // Common layout: ExceptionInformation[0] = count, ExceptionInformation[1] = pointer to array of pointers.
-    if (record.NumberParameters >= 2) {
-        const count = record.ExceptionInformation[0];
-        const array_ptr = record.ExceptionInformation[1];
+    // Dump raw parameters for other exceptions
+    if (code != 0xc0000005) {
+        const n = @min(record.NumberParameters, 15);
+        for (0..n) |i| {
+            App.fileLog("  Param[{}]=0x{x}", .{ i, record.ExceptionInformation[i] });
+        }
+    }
 
-        if (count > 0 and count < 100 and array_ptr != 0) {
-            log.err("  Attempting to read {} stowed exception(s) from 0x{x}...", .{ count, array_ptr });
-            const entries: [*]const usize = @ptrFromInt(array_ptr);
-            for (0..count) |i| {
-                const entry_ptr = entries[i];
-                if (entry_ptr == 0) {
-                    log.err("  [{}] null entry", .{i});
-                    continue;
+    // Identify faulting module by enumerating loaded modules
+    identifyFaultingModule(addr);
+
+    // Capture stack back trace (top 16 frames)
+    captureStackTrace();
+
+    // STATUS_STOWED_EXCEPTION (0xC000027B) — parse stowed entries
+    if (code == os.STATUS_STOWED_EXCEPTION) {
+        App.fileLog("  === Stowed Exception Details ===", .{});
+        if (record.NumberParameters >= 2) {
+            const count = record.ExceptionInformation[0];
+            const array_ptr = record.ExceptionInformation[1];
+            if (count > 0 and count < 100 and array_ptr != 0) {
+                const entries: [*]const usize = @ptrFromInt(array_ptr);
+                for (0..count) |i| {
+                    const entry_ptr = entries[i];
+                    if (entry_ptr == 0) continue;
+                    const entry: *const os.STOWED_EXCEPTION_INFORMATION_V2 = @ptrFromInt(entry_ptr);
+                    App.fileLog("  Stowed[{}] HRESULT=0x{x} sig=0x{x} form={}", .{
+                        i, @as(u32, @bitCast(entry.result_code)), entry.signature, entry.exception_form,
+                    });
                 }
-                const entry: *const os.STOWED_EXCEPTION_INFORMATION_V2 = @ptrFromInt(entry_ptr);
-                log.err("  [{}] size={} sig=0x{x} HRESULT=0x{x} form={}", .{
-                    i,
-                    entry.size,
-                    entry.signature,
-                    @as(u32, @bitCast(entry.result_code)),
-                    entry.exception_form,
-                });
             }
         }
     }
 
-    // Also try: ExceptionInformation[0] = pointer to single STOWED_EXCEPTION_INFORMATION_V2.
-    if (record.NumberParameters >= 1 and record.ExceptionInformation[0] != 0) {
-        const maybe_entry: *const os.STOWED_EXCEPTION_INFORMATION_V2 = @ptrFromInt(record.ExceptionInformation[0]);
-        // Check for "SE02" (0x32304553) or "SE01" (0x31304553) signature.
-        if (maybe_entry.signature == 0x32304553 or maybe_entry.signature == 0x31304553) {
-            log.err("  Direct stowed entry: HRESULT=0x{x} (sig=0x{x})", .{
-                @as(u32, @bitCast(maybe_entry.result_code)),
-                maybe_entry.signature,
-            });
+    App.fileLog("=== End VEH ===", .{});
+    return os.EXCEPTION_CONTINUE_SEARCH;
+}
+
+/// Enumerate loaded modules to find which DLL contains the faulting address.
+fn identifyFaultingModule(addr: usize) void {
+    const K32 = std.os.windows.kernel32;
+    const snap = os.CreateToolhelp32Snapshot(os.TH32CS_SNAPMODULE | os.TH32CS_SNAPMODULE32, 0);
+    if (snap == std.os.windows.INVALID_HANDLE_VALUE) {
+        App.fileLog("  Module: CreateToolhelp32Snapshot failed err={}", .{K32.GetLastError()});
+        return;
+    }
+    defer _ = std.os.windows.ntdll.NtClose(snap);
+
+    var me: os.MODULEENTRY32W = undefined;
+    me.dwSize = @sizeOf(os.MODULEENTRY32W);
+
+    if (os.Module32FirstW(snap, &me) == 0) return;
+
+    while (true) {
+        const base = @intFromPtr(me.modBaseAddr);
+        const end = base + me.modBaseSize;
+        if (addr >= base and addr < end) {
+            // Found it — convert module name from UTF-16 to UTF-8
+            var name_buf: [512]u8 = undefined;
+            const name_len = std.unicode.utf16LeToUtf8(&name_buf, wideCStr(&me.szModule)) catch 0;
+            const offset = addr - base;
+            App.fileLog("  Module: {s} Base=0x{x} Offset=0x{x}", .{ name_buf[0..name_len], base, offset });
+            return;
         }
+        if (os.Module32NextW(snap, &me) == 0) break;
     }
 
-    log.err("=== End stowed exception dump ===", .{});
+    App.fileLog("  Module: UNKNOWN (addr 0x{x} not in any loaded module)", .{addr});
+}
 
-    return os.EXCEPTION_CONTINUE_SEARCH;
+/// Get null-terminated length from a wide C string buffer.
+fn wideCStr(buf: []const u16) []const u16 {
+    for (buf, 0..) |c, i| {
+        if (c == 0) return buf[0..i];
+    }
+    return buf;
+}
+
+/// Capture stack back trace and log frame addresses + module info.
+fn captureStackTrace() void {
+    var frames: [16]?*anyopaque = undefined;
+    const count = os.RtlCaptureStackBackTrace(0, 16, &frames, null);
+    if (count == 0) return;
+
+    App.fileLog("  Stack ({} frames):", .{count});
+    for (0..count) |i| {
+        const frame_addr = @intFromPtr(frames[i]);
+        App.fileLog("    [{:>2}] 0x{x}", .{ i, frame_addr });
+    }
+}
+
+/// Unhandled exception filter — last resort before process termination.
+pub fn unhandledExceptionFilter(info: *os.EXCEPTION_POINTERS) callconv(.winapi) c_long {
+    App.fileLog("=== UNHANDLED EXCEPTION (last chance) ===", .{});
+    _ = stowedExceptionHandler(info);
+    return 0; // EXCEPTION_EXECUTE_HANDLER — let the process terminate
 }

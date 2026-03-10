@@ -35,6 +35,27 @@ const event_handlers = @import("event_handlers.zig");
 
 const log = std.log.scoped(.winui3);
 
+/// Temporary file logger for debugging GUI app (no stderr visible).
+pub fn fileLog(comptime fmt: []const u8, args: anytype) void {
+    var buf: [1024]u8 = undefined;
+    const msg = std.fmt.bufPrint(&buf, fmt ++ "\n", args) catch return;
+    const K32 = std.os.windows.kernel32;
+    const path_w = std.unicode.utf8ToUtf16LeStringLiteral("C:\\Users\\yuuji\\ghostty_debug.log");
+    const h = K32.CreateFileW(
+        path_w,
+        0x40000000, // GENERIC_WRITE
+        1, // FILE_SHARE_READ
+        null,
+        4, // OPEN_ALWAYS
+        0x80, // FILE_ATTRIBUTE_NORMAL
+        null,
+    );
+    if (h == std.os.windows.INVALID_HANDLE_VALUE) return;
+    defer _ = windows.ntdll.NtClose(h);
+    _ = K32.SetFilePointerEx(h, @bitCast(@as(i64, 0)), null, 2); // FILE_END
+    _ = K32.WriteFile(h, msg.ptr, @intCast(msg.len), null, null);
+}
+
 /// Timer ID for live resize preview.
 const RESIZE_TIMER_ID: usize = 1;
 const CONTEXT_MENU_NEW_TAB: usize = 1001;
@@ -174,37 +195,50 @@ pub fn init(
 ) !void {
     _ = opts;
 
+    os.OutputDebugStringA("MARKER-APP-INIT-ENTRY\n");
+    fileLog("App.init: ENTRY", .{});
+
     // Allocate a debug console so log output is visible for GUI apps.
     os.attachDebugConsole();
+    fileLog("App.init: after attachDebugConsole", .{});
 
     // Install a Vectored Exception Handler to capture details of
     // STATUS_STOWED_EXCEPTION before the process terminates.
     _ = os.AddVectoredExceptionHandler(1, &stowedExceptionHandler);
+    _ = os.SetUnhandledExceptionFilter(&@import("wndproc.zig").unhandledExceptionFilter);
+    fileLog("App.init: after VEH install", .{});
 
     // Request 1ms timer resolution for smooth animation timing.
     _ = os.timeBeginPeriod(1);
 
     logPackageIdentity();
+    fileLog("App.init: after logPackageIdentity", .{});
 
     // Step 1: Bootstrap the Windows App SDK runtime.
     bootstrap.init() catch |err| {
+        fileLog("App.init: bootstrap FAILED err={}", .{err});
         log.err("Windows App SDK bootstrap failed: {}", .{err});
         return error.AppInitFailed;
     };
+    fileLog("App.init: after bootstrap.init", .{});
 
     // Step 2: Initialize WinRT.
     winrt.hrCheck(winrt.RoInitialize(winrt.RO_INIT_SINGLETHREADED)) catch |err| {
+        fileLog("App.init: RoInitialize FAILED err={}", .{err});
         log.err("RoInitialize failed: {}", .{err});
         return error.AppInitFailed;
     };
+    fileLog("App.init: after RoInitialize", .{});
 
     // Step 3: Create a DispatcherQueue for the current thread.
     // This is required before creating any XAML objects.
     const dq_opts = winrt.DispatcherQueueOptions{};
     const dq_controller = winrt.createDispatcherQueueController(&dq_opts) catch |err| {
+        fileLog("App.init: DispatcherQueue FAILED err={}", .{err});
         log.err("CreateDispatcherQueueController failed: {}", .{err});
         return error.AppInitFailed;
     };
+    fileLog("App.init: after DispatcherQueue", .{});
     self.* = .{
         .core_app = core_app,
         .debug_cfg = debug_harness.RuntimeDebugConfig.load(),
@@ -220,10 +254,12 @@ pub fn init(
     // Window/UI creation happens inside run() via Application.Start(callback).
     // WinUI 3 requires Window creation on the XAML thread which is set up by Start().
     log.info("WinUI 3 runtime initialized (window creation deferred to run)", .{});
+    fileLog("App.init: EXIT OK", .{});
 }
 
 /// Called from inside Application.Start() callback — XAML thread is active here.
 pub fn initXaml(self: *App) !void {
+    fileLog("initXaml: START", .{});
     log.info("initXaml: creating Window inside XAML thread", .{});
     self.startup_bootstrapped = false;
     self.parity_verified = false;
@@ -246,6 +282,7 @@ pub fn initXaml(self: *App) !void {
     input_runtime.focusKeyboardTarget(self);
     self.startup_bootstrapped = true;
     self.setStartupStage(.content_ready);
+    fileLog("initXaml: content_ready, entering message loop", .{});
 
     // --- TabView Parity Validation (Tier 2 Verification) ---
     self.validateTabViewParity() catch |err| {
@@ -721,6 +758,10 @@ fn validateTabViewParity(self: *App) !void {
 
 /// Closed event callback — triggered when the user closes the window.
 fn onWindowClosed(self: *App, _: ?*anyopaque, _: ?*anyopaque) void {
+    fileLog("onWindowClosed called! stage={s} exit_intent={s}", .{
+        startupStageLabel(self.startup_stage),
+        exitIntentLabel(self.exit_intent),
+    });
     self.close_event_seen = true;
     self.setExitIntent(.window_closed);
 
@@ -866,7 +907,10 @@ pub fn wakeup(self: *App) void {
 }
 
 pub fn requestCloseWindow(self: *App) void {
-    self.setExitIntent(.request_close_window);
+    fileLog("requestCloseWindow called! stage={s} exit_intent={s}", .{
+        startupStageLabel(self.startup_stage),
+        exitIntentLabel(self.exit_intent),
+    });
     self.running = false;
     if (self.window) |window| {
         window.close() catch |err| {
@@ -886,6 +930,7 @@ pub fn performAction(
 ) !bool {
     switch (action) {
         .quit => {
+            fileLog("performAction: .quit", .{});
             self.setExitIntent(.quit_action);
             self.running = false;
             if (self.xaml_app) |xa| {
@@ -898,6 +943,7 @@ pub fn performAction(
             return false;
         },
         .close_all_windows => {
+            fileLog("performAction: .close_all_windows", .{});
             self.setExitIntent(.close_all_windows);
             self.running = false;
             if (self.xaml_app) |xa| {

@@ -98,6 +98,7 @@ pub fn main() !MainReturn {
     defer app.destroy();
 
     // Create our runtime app
+    std.log.info("MARKER-BEFORE-RUNTIME-INIT", .{});
     var app_runtime: apprt.App = undefined;
     app_runtime.init(app, .{}) catch |err| {
         std.log.err("runtime init failed error={}", .{err});
@@ -111,6 +112,7 @@ pub fn main() !MainReturn {
     if (@hasDecl(apprt.App, "startQuitTimer")) app_runtime.startQuitTimer();
 
     // Run the GUI event loop
+    std.log.info("MARKER-BEFORE-RUNTIME-RUN", .{});
     app_runtime.run() catch |err| {
         std.log.err("runtime run failed error={}", .{err});
         posix.exit(1);

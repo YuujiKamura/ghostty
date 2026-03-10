@@ -296,6 +296,30 @@ pub extern "user32" fn GetKeyboardLayout(idThread: DWORD) callconv(.winapi) usiz
 pub extern "kernel32" fn GetLastError() callconv(.winapi) DWORD;
 pub extern "kernel32" fn ExitProcess(uExitCode: UINT) callconv(.winapi) noreturn;
 pub extern "kernel32" fn GetModuleHandleW(lpModuleName: ?LPCWSTR) callconv(.winapi) ?HINSTANCE;
+pub extern "kernel32" fn GetCurrentThreadId() callconv(.winapi) DWORD;
+pub extern "kernel32" fn GetModuleFileNameW(hModule: ?HINSTANCE, lpFilename: [*]u16, nSize: DWORD) callconv(.winapi) DWORD;
+pub extern "kernel32" fn RtlCaptureStackBackTrace(FramesToSkip: DWORD, FramesToCapture: DWORD, BackTrace: [*]?*anyopaque, BackTraceHash: ?*DWORD) callconv(.winapi) u16;
+pub extern "kernel32" fn SetUnhandledExceptionFilter(lpTopLevelExceptionFilter: ?VectoredExceptionHandler) callconv(.winapi) ?VectoredExceptionHandler;
+
+pub const MODULEENTRY32W = extern struct {
+    dwSize: DWORD,
+    th32ModuleID: DWORD,
+    th32ProcessID: DWORD,
+    GlblcntUsage: DWORD,
+    ProccntUsage: DWORD,
+    modBaseAddr: ?[*]u8,
+    modBaseSize: DWORD,
+    hModule: ?HINSTANCE,
+    szModule: [256]u16,
+    szExePath: [260]u16,
+};
+
+pub extern "kernel32" fn CreateToolhelp32Snapshot(dwFlags: DWORD, th32ProcessID: DWORD) callconv(.winapi) HANDLE;
+pub extern "kernel32" fn Module32FirstW(hSnapshot: HANDLE, lpme: *MODULEENTRY32W) callconv(.winapi) BOOL;
+pub extern "kernel32" fn Module32NextW(hSnapshot: HANDLE, lpme: *MODULEENTRY32W) callconv(.winapi) BOOL;
+pub const TH32CS_SNAPMODULE: DWORD = 0x00000008;
+pub const TH32CS_SNAPMODULE32: DWORD = 0x00000010;
+
 pub extern "kernel32" fn GlobalAlloc(uFlags: UINT, dwBytes: usize) callconv(.winapi) LPVOID;
 pub extern "kernel32" fn GlobalLock(hMem: LPVOID) callconv(.winapi) LPVOID;
 pub extern "kernel32" fn GlobalUnlock(hMem: LPVOID) callconv(.winapi) BOOL;
@@ -483,6 +507,7 @@ pub extern "kernel32" fn SetStdHandle(nStdHandle: DWORD, hHandle: HANDLE) callco
 pub const STD_ERROR_HANDLE: DWORD = @as(DWORD, @bitCast(@as(i32, -12)));
 
 pub extern "user32" fn MessageBeep(uType: UINT) callconv(.winapi) BOOL;
+pub extern "kernel32" fn OutputDebugStringA(lpOutputString: [*:0]const u8) callconv(.winapi) void;
 pub const MB_OK: UINT = 0x00000000;
 
 const CreateFileW = win32.kernel32.CreateFileW;

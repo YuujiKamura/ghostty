@@ -139,6 +139,21 @@ pub fn build(b: *std.Build) !void {
         const basal_test_install = b.addInstallArtifact(basal_test_exe, .{});
         const basal_test_step = b.step("basal-test", "Build WinUI 3 basal infrastructure test");
         basal_test_step.dependOn(&basal_test_install.step);
+
+        const win32_replacement_exe = b.addExecutable(.{
+            .name = "ghostty-win32-replacement",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/apprt/win32_replacement/main.zig"),
+                .target = config.target,
+                .optimize = config.optimize,
+            }),
+        });
+        const win32_replacement_install = b.addInstallArtifact(win32_replacement_exe, .{});
+        const win32_replacement_step = b.step(
+            "win32-replacement-bootstrap",
+            "Build replacement Win32 app-layer bootstrap",
+        );
+        win32_replacement_step.dependOn(&win32_replacement_install.step);
     }
 
     // Runtime "none" is libghostty, anything else is an executable.
@@ -166,6 +181,15 @@ pub fn build(b: *std.Build) !void {
     }
 
     if (config.target.result.os.tag == .windows and config.app_runtime == .winui3) {
+        // Stage the Windows App SDK bootstrap DLL next to the exe so LoadLibraryW finds it.
+        {
+            const src: std.Build.LazyPath = .{ .cwd_relative = b.pathFromRoot(
+                "../.nuget/packages/microsoft.windowsappsdk/1.4.230822000/runtimes/win10-x64/native/Microsoft.WindowsAppRuntime.Bootstrap.dll",
+            ) };
+            const cp = b.addInstallBinFile(src, "Microsoft.WindowsAppRuntime.Bootstrap.dll");
+            b.getInstallStep().dependOn(&cp.step);
+        }
+
         // Vtable manifest verification: structural check against known-good slot ordering.
         const vtable_cmd = b.addSystemCommand(&.{
             "pwsh",
