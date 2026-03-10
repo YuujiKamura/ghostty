@@ -114,6 +114,11 @@ pub fn close(self: *Surface, process_active: bool) void {
     }
 }
 
+pub fn textCallback(self: *Surface, text: []const u8) !void {
+    if (!self.core_initialized) return error.CoreNotInitialized;
+    try self.core_surface.textCallback(text);
+}
+
 pub fn getTitle(_: *Surface) ?[:0]const u8 {
     return null;
 }
@@ -128,6 +133,31 @@ pub fn getSize(self: *const Surface) !apprt.SurfaceSize {
 
 pub fn getCursorPos(self: *const Surface) !apprt.CursorPos {
     return self.cursor_pos;
+}
+
+pub fn hasSelection(self: *const Surface) bool {
+    if (!self.core_initialized) return false;
+    return self.core_surface.hasSelection();
+}
+
+pub fn selectionString(self: *Surface, alloc: Allocator) !?[:0]const u8 {
+    if (!self.core_initialized) return null;
+    return try self.core_surface.selectionString(alloc);
+}
+
+pub fn pwd(self: *const Surface, alloc: Allocator) !?[]const u8 {
+    if (!self.core_initialized) return null;
+    return try self.core_surface.pwd(alloc);
+}
+
+pub fn cursorIsAtPrompt(self: *Surface) bool {
+    if (!self.core_initialized) return false;
+    return self.core_surface.cursorIsAtPrompt();
+}
+
+pub fn viewportString(self: *Surface, alloc: Allocator) ![]const u8 {
+    if (!self.core_initialized) return alloc.dupe(u8, "");
+    return try self.core_surface.viewportString(alloc);
 }
 
 pub fn supportsClipboard(

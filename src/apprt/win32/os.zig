@@ -53,6 +53,7 @@ pub const WM_ENTERSIZEMOVE: UINT = 0x0231;
 pub const WM_EXITSIZEMOVE: UINT = 0x0232;
 pub const WM_DPICHANGED: UINT = 0x02E0;
 pub const WM_USER: UINT = 0x0400;
+pub const WM_GHOSTTY_CONTROL_INPUT: UINT = WM_USER + 1;
 
 // --- Window styles ---
 pub const WS_OVERLAPPEDWINDOW: DWORD = 0x00CF0000;
@@ -198,6 +199,8 @@ pub extern "user32" fn InvalidateRect(hWnd: HWND, lpRect: ?*const RECT, bErase: 
 pub extern "user32" fn GetCursorPos(lpPoint: *POINT) callconv(.winapi) BOOL;
 pub extern "user32" fn ScreenToClient(hWnd: HWND, lpPoint: *POINT) callconv(.winapi) BOOL;
 pub extern "user32" fn SetWindowTextW(hWnd: HWND, lpString: LPCWSTR) callconv(.winapi) BOOL;
+pub extern "user32" fn GetWindowTextW(hWnd: HWND, lpString: [*]u16, nMaxCount: c_int) callconv(.winapi) c_int;
+pub extern "user32" fn GetWindowTextLengthW(hWnd: HWND) callconv(.winapi) c_int;
 pub extern "user32" fn GetDpiForWindow(hWnd: HWND) callconv(.winapi) UINT;
 pub extern "user32" fn GetKeyState(nVirtKey: c_int) callconv(.winapi) c_short;
 pub extern "user32" fn OpenClipboard(hWndNewOwner: ?HWND) callconv(.winapi) BOOL;

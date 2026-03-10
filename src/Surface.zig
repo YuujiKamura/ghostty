@@ -2036,6 +2036,20 @@ pub fn pwd(
     return try alloc.dupe(u8, terminal_pwd);
 }
 
+/// Returns true when the terminal cursor is currently at a shell prompt.
+pub fn cursorIsAtPrompt(self: *Surface) bool {
+    self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+    return self.io.terminal.cursorIsAtPrompt();
+}
+
+/// Returns the current viewport contents as plain text.
+pub fn viewportString(self: *Surface, alloc: Allocator) ![]const u8 {
+    self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+    return try self.io.terminal.plainString(alloc);
+}
+
 /// Resolves a relative file path to an absolute path using the terminal's pwd.
 fn resolvePathForOpening(
     self: *Surface,

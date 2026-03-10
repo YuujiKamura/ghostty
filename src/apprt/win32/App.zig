@@ -10,6 +10,7 @@ const CoreSurface = @import("../../Surface.zig");
 const configpkg = @import("../../config.zig");
 const input = @import("../../input.zig");
 const Surface = @import("Surface.zig");
+const ControlPlane = @import("control_plane.zig").ControlPlane;
 const key = @import("key.zig");
 const os = @import("os.zig");
 
@@ -34,6 +35,9 @@ hglrc: ?os.HGLRC = null,
 
 /// The single surface (MVP: one window = one surface).
 surface: ?*Surface = null,
+
+/// Optional side-channel control plane for session-aware automation.
+control_plane: ?*ControlPlane = null,
 
 /// Whether the app is running.
 running: bool = false,
@@ -147,6 +151,16 @@ pub fn init(
     _ = os.ShowWindow(hwnd, os.SW_SHOW);
     _ = os.UpdateWindow(hwnd);
 
+    if (ControlPlane.isEnabled(core_app.alloc)) {
+        self.control_plane = try ControlPlane.create(
+            core_app.alloc,
+            hwnd,
+            @ptrCast(self),
+            controlPlaneCaptureState,
+            controlPlaneCaptureTail,
+        );
+    }
+
     log.info("Win32 application initialized", .{});
 }
 
@@ -193,6 +207,11 @@ pub fn run(self: *App) !void {
 }
 
 pub fn terminate(self: *App) void {
+    if (self.control_plane) |control_plane| {
+        control_plane.destroy();
+        self.control_plane = null;
+    }
+
     if (self.surface) |surface| {
         surface.deinit();
         self.core_app.alloc.destroy(surface);
@@ -235,6 +254,23 @@ pub fn wakeup(self: *App) void {
     if (self.hwnd) |hwnd| {
         _ = os.PostMessageW(hwnd, os.WM_USER, 0, 0);
     }
+}
+
+fn controlPlaneCaptureState(ctx: *anyopaque, allocator: Allocator) !?ControlPlane.StateSnapshot {
+    const self: *App = @ptrCast(@alignCast(ctx));
+    const surface = self.surface orelse return null;
+    return .{
+        .pwd = try surface.pwd(allocator),
+        .has_selection = surface.hasSelection(),
+        .at_prompt = surface.cursorIsAtPrompt(),
+    };
+}
+
+fn controlPlaneCaptureTail(ctx: *anyopaque, allocator: Allocator) !?[]u8 {
+    const self: *App = @ptrCast(@alignCast(ctx));
+    const surface = self.surface orelse return null;
+    const viewport = try surface.viewportString(allocator);
+    return try allocator.dupe(u8, viewport);
 }
 
 pub fn performAction(
@@ -357,6 +393,7 @@ fn wndProc(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) ca
         os.WM_MOUSEHWHEEL => return handleScroll(app, wparam, .horizontal),
         os.WM_DPICHANGED => return handleDpiChanged(app, hwnd, lparam),
         os.WM_USER => return handleWakeup(app),
+        os.WM_GHOSTTY_CONTROL_INPUT => return handleControlInput(app),
         os.WM_IME_STARTCOMPOSITION => return handleIMEStartComposition(app, hwnd),
         os.WM_IME_COMPOSITION => return handleIMEComposition(app, hwnd, lparam),
         os.WM_IME_ENDCOMPOSITION => return handleIMEEndComposition(app, hwnd),
@@ -512,6 +549,17 @@ fn handleDpiChanged(app: ?*App, hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
 
 fn handleWakeup(app: ?*App) os.LRESULT {
     if (app) |a| a.drainMailbox();
+    return 0;
+}
+
+fn handleControlInput(app: ?*App) os.LRESULT {
+    if (app) |a| {
+        if (a.control_plane) |control_plane| {
+            if (a.surface) |surface| {
+                control_plane.drainPendingInputs(surface);
+            }
+        }
+    }
     return 0;
 }
 
