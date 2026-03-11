@@ -189,8 +189,10 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
             \\  <ScrollBar Grid.Column='1' Orientation='Vertical'
             \\             Width='17' MinWidth='17' MaxWidth='17'
             \\             HorizontalAlignment='Stretch' VerticalAlignment='Stretch'
+            \\             IndicatorMode='MouseIndicator' IsTabStop='False'
             \\             Minimum='0' Maximum='0' Value='0'
-            \\             SmallChange='1' LargeChange='10'/>
+            \\             SmallChange='1' LargeChange='10'
+            \\             ViewportSize='10'/>
             \\</Grid>
         ;
         const xaml_hstr = try winrt.hstring(xaml_str);
