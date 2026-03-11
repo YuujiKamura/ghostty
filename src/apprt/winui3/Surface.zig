@@ -95,8 +95,8 @@ title: ?[:0]u8 = null,
 surface_grid: ?*winrt.IInspectable = null,
 /// The vertical ScrollBar XAML control (IInspectable, QI to IScrollBar/IRangeBase).
 scroll_bar_insp: ?*winrt.IInspectable = null,
-/// Event token for ScrollBar.Scroll.
-scroll_bar_scroll_token: i64 = 0,
+/// Event token for RangeBase.ValueChanged.
+scroll_bar_value_changed_token: i64 = 0,
 /// Flag to prevent feedback loops when programmatically updating scrollbar.
 is_internal_scroll_update: bool = false,
 
@@ -219,19 +219,20 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         const sb_insp: *winrt.IInspectable = @ptrCast(@alignCast(sb_raw));
         errdefer _ = sb_insp.release();
 
-        // Register Scroll event on ScrollBar.
-        const isb = try sb_insp.queryInterface(com.IScrollBar);
-        defer isb.release();
+        // Register ValueChanged event on RangeBase (more reliable than Scroll event).
+        // Windows Terminal also uses ValueChanged for scrollbar interaction.
+        const range_base = try sb_insp.queryInterface(com.IRangeBase);
+        defer range_base.release();
         const delegate_runtime_sb = @import("delegate_runtime.zig");
-        const ScrollDelegate = delegate_runtime_sb.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
-        const scroll_delegate = try ScrollDelegate.createWithIid(
+        const ValueChangedDelegate = delegate_runtime_sb.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const vc_delegate = try ValueChangedDelegate.createWithIid(
             self.app.core_app.alloc,
             self,
-            &onScrollBarScroll,
-            &com.IID_ScrollEventHandler,
+            &onScrollBarValueChanged,
+            &com.IID_RangeBaseValueChangedEventHandler,
         );
-        defer scroll_delegate.release();
-        self.scroll_bar_scroll_token = try isb.AddScroll(scroll_delegate.comPtr());
+        defer vc_delegate.release();
+        self.scroll_bar_value_changed_token = try range_base.AddValueChanged(vc_delegate.comPtr());
 
         // Store references.
         self.surface_grid = grid_insp;
@@ -393,13 +394,13 @@ pub fn deinit(self: *Surface) void {
     }
     // Release scrollbar and surface grid.
     if (self.scroll_bar_insp) |sb| {
-        if (self.scroll_bar_scroll_token != 0) {
-            const isb = sb.queryInterface(com.IScrollBar) catch null;
-            if (isb) |s| {
-                defer s.release();
-                s.RemoveScroll(self.scroll_bar_scroll_token) catch {};
+        if (self.scroll_bar_value_changed_token != 0) {
+            const rb = sb.queryInterface(com.IRangeBase) catch null;
+            if (rb) |r| {
+                defer r.release();
+                r.RemoveValueChanged(self.scroll_bar_value_changed_token) catch {};
             }
-            self.scroll_bar_scroll_token = 0;
+            self.scroll_bar_value_changed_token = 0;
         }
         _ = sb.release();
         self.scroll_bar_insp = null;
@@ -1155,6 +1156,7 @@ pub fn updateScrollbarUi(self: *Surface, total: usize, offset: usize, len: usize
     range_base.SetLargeChange(len_f) catch {};
     range_base.SetSmallChange(1.0) catch {};
 
+
     const isb = sb.queryInterface(com.IScrollBar) catch |err| {
         log.warn("scrollbar ui sync: IScrollBar QI failed: {}", .{err});
         return;
@@ -1184,13 +1186,15 @@ pub fn updateScrollbarUi(self: *Surface, total: usize, offset: usize, len: usize
     );
 }
 
-/// ScrollBar.Scroll event callback.
-fn onScrollBarScroll(self: *Surface, _: ?*anyopaque, args_raw: ?*anyopaque) void {
+/// RangeBase.ValueChanged event callback (fires on user drag and programmatic changes).
+fn onScrollBarValueChanged(self: *Surface, _: ?*anyopaque, args_raw: ?*anyopaque) void {
     if (self.is_internal_scroll_update) return;
 
-    const args: *com.IScrollEventArgs = @ptrCast(@alignCast(args_raw orelse return));
+    const args: *com.IRangeBaseValueChangedEventArgs = @ptrCast(@alignCast(args_raw orelse return));
     const new_value = args.NewValue() catch return;
     const row: usize = @intFromFloat(@max(0.0, @round(new_value)));
+
+    log.debug("onScrollBarValueChanged: new_value={d:.2} row={}", .{ new_value, row });
 
     _ = self.core_surface.performBindingAction(.{ .scroll_to_row = row }) catch |err| {
         log.warn("scrollbar scroll_to_row failed: {}", .{err});

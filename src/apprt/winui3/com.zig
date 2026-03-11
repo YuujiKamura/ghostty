@@ -22,6 +22,8 @@ pub const IID_KeyEventHandler = gen.KeyEventHandler.IID;
 pub const IID_PointerEventHandler = gen.PointerEventHandler.IID;
 pub const IID_CharacterReceivedHandler = native.IID_CharacterReceivedHandler;
 pub const IID_ScrollEventHandler = gen.ScrollEventHandler.IID;
+pub const IID_RangeBaseValueChangedEventHandler = gen.RangeBaseValueChangedEventHandler.IID;
+pub const IRangeBaseValueChangedEventArgs = gen.IRangeBaseValueChangedEventArgs;
 
 // --- Base interfaces (from generated) ---
 pub const IUnknown = gen.IUnknown;
