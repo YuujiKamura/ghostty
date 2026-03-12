@@ -241,8 +241,8 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         // Windows Terminal also uses ValueChanged for scrollbar interaction.
         const range_base = try sb_insp.queryInterface(com.IRangeBase);
         defer range_base.release();
-        const delegate_runtime_sb = @import("delegate_runtime.zig");
-        const ValueChangedDelegate = delegate_runtime_sb.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const gen = @import("com_generated.zig");
+        const ValueChangedDelegate = gen.RangeBaseValueChangedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
         const vc_delegate = try ValueChangedDelegate.createWithIid(
             self.app.core_app.alloc,
             self,
@@ -296,15 +296,15 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     // Register Loaded handler to defer SetSwapChain until the panel is ready.
     const framework_element = try panel.queryInterface(com.IFrameworkElement);
     defer framework_element.release();
-    const delegate_runtime = @import("delegate_runtime.zig");
-    const LoadedDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, *anyopaque, *anyopaque) void);
+    const gen = @import("com_generated.zig");
+    const LoadedDelegate = gen.RoutedEventHandlerImpl(Surface, *const fn (*Surface, *anyopaque, *anyopaque) void);
     const loaded_delegate = try LoadedDelegate.createWithIid(self.app.core_app.alloc, self, &onLoaded, &com.IID_RoutedEventHandler);
     // Note: LoadedDelegate.createWithIid returns a ref-counted COM object.
     // We pass it to addLoaded which will AddRef it again.
     defer _ = loaded_delegate.com.lpVtbl.Release(loaded_delegate.comPtr());
     self.loaded_token = try framework_element.AddLoaded(loaded_delegate.comPtr());
 
-    const SizeChangedDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, *anyopaque, *anyopaque) void);
+    const SizeChangedDelegate = gen.SizeChangedEventHandlerImpl(Surface, *const fn (*Surface, *anyopaque, *anyopaque) void);
     const size_changed_delegate = try SizeChangedDelegate.createWithIid(
         self.app.core_app.alloc,
         self,
@@ -330,45 +330,49 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
             log.warn("putIsTabStop failed: {}", .{err});
         };
 
-        const XamlDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const PointerDelegate = gen.PointerEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const KeyDelegate = gen.KeyEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const RoutedDelegate = gen.RoutedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const delegate_runtime = @import("delegate_runtime.zig");
+        const CharRecvDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
 
         // Pointer events
-        const ptr_pressed = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerPressed, &com.IID_PointerEventHandler);
+        const ptr_pressed = try PointerDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerPressed, &com.IID_PointerEventHandler);
         defer ptr_pressed.release();
         self.pointer_pressed_token = ui_element.AddPointerPressed(ptr_pressed.comPtr()) catch 0;
 
-        const ptr_moved = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerMoved, &com.IID_PointerEventHandler);
+        const ptr_moved = try PointerDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerMoved, &com.IID_PointerEventHandler);
         defer ptr_moved.release();
         self.pointer_moved_token = ui_element.AddPointerMoved(ptr_moved.comPtr()) catch 0;
 
-        const ptr_released = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerReleased, &com.IID_PointerEventHandler);
+        const ptr_released = try PointerDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerReleased, &com.IID_PointerEventHandler);
         defer ptr_released.release();
         self.pointer_released_token = ui_element.AddPointerReleased(ptr_released.comPtr()) catch 0;
 
-        const ptr_wheel = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerWheelChanged, &com.IID_PointerEventHandler);
+        const ptr_wheel = try PointerDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerWheelChanged, &com.IID_PointerEventHandler);
         defer ptr_wheel.release();
         self.pointer_wheel_changed_token = ui_element.AddPointerWheelChanged(ptr_wheel.comPtr()) catch 0;
 
         // Keyboard events (PreviewKeyDown catches navigation keys before XAML consumes them)
-        const key_down = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPreviewKeyDown, &com.IID_KeyEventHandler);
+        const key_down = try KeyDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPreviewKeyDown, &com.IID_KeyEventHandler);
         defer key_down.release();
         self.preview_key_down_token = ui_element.AddPreviewKeyDown(key_down.comPtr()) catch 0;
 
-        const key_up = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPreviewKeyUp, &com.IID_KeyEventHandler);
+        const key_up = try KeyDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPreviewKeyUp, &com.IID_KeyEventHandler);
         defer key_up.release();
         self.preview_key_up_token = ui_element.AddPreviewKeyUp(key_up.comPtr()) catch 0;
 
-        // CharacterReceived — text input
-        const char_recv = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlCharacterReceived, &com.IID_CharacterReceivedHandler);
+        // CharacterReceived — text input (not in WinMD, uses hand-written delegate)
+        const char_recv = try CharRecvDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlCharacterReceived, &com.IID_CharacterReceivedHandler);
         defer char_recv.release();
         self.character_received_token = ui_element.AddCharacterReceived(char_recv.comPtr()) catch 0;
 
         // Focus events
-        const got_focus = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlGotFocus, &com.IID_RoutedEventHandler);
+        const got_focus = try RoutedDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlGotFocus, &com.IID_RoutedEventHandler);
         defer got_focus.release();
         self.got_focus_token = ui_element.AddGotFocus(got_focus.comPtr()) catch 0;
 
-        const lost_focus = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlLostFocus, &com.IID_RoutedEventHandler);
+        const lost_focus = try RoutedDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlLostFocus, &com.IID_RoutedEventHandler);
         defer lost_focus.release();
         self.lost_focus_token = ui_element.AddLostFocus(lost_focus.comPtr()) catch 0;
     }
@@ -376,31 +380,35 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     if (self.ime_text_box) |ime_tb| {
         if (ime_tb.queryInterface(com.IUIElement)) |ime_ue| {
             defer ime_ue.release();
-            const XamlDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+            const ImeKeyDelegate = gen.KeyEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+            const ImeRoutedDelegate = gen.RoutedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+            const ime_delegate_runtime = @import("delegate_runtime.zig");
+            const ImeCharRecvDelegate = ime_delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
 
-            const ime_key_down = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxPreviewKeyDown, &com.IID_KeyEventHandler);
+            const ime_key_down = try ImeKeyDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxPreviewKeyDown, &com.IID_KeyEventHandler);
             defer ime_key_down.release();
             self.ime_preview_key_down_token = ime_ue.AddPreviewKeyDown(ime_key_down.comPtr()) catch 0;
 
-            const ime_char_recv = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxCharacterReceived, &com.IID_CharacterReceivedHandler);
+            const ime_char_recv = try ImeCharRecvDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxCharacterReceived, &com.IID_CharacterReceivedHandler);
             defer ime_char_recv.release();
             self.ime_character_received_token = ime_ue.AddCharacterReceived(ime_char_recv.comPtr()) catch 0;
 
-            const ime_got_focus = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxGotFocus, &com.IID_RoutedEventHandler);
+            const ime_got_focus = try ImeRoutedDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxGotFocus, &com.IID_RoutedEventHandler);
             defer ime_got_focus.release();
             self.ime_got_focus_token = ime_ue.AddGotFocus(ime_got_focus.comPtr()) catch 0;
 
-            const ime_lost_focus = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxLostFocus, &com.IID_RoutedEventHandler);
+            const ime_lost_focus = try ImeRoutedDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxLostFocus, &com.IID_RoutedEventHandler);
             defer ime_lost_focus.release();
             self.ime_lost_focus_token = ime_ue.AddLostFocus(ime_lost_focus.comPtr()) catch 0;
         } else |_| {}
 
-        const TextChangedDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const TextChangedDelegate = gen.TextChangedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
         const ime_text_changed = try TextChangedDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxTextChanged, &com.IID_TextChangedEventHandler);
         defer ime_text_changed.release();
         self.ime_text_changed_token = ime_tb.AddTextChanged(ime_text_changed.comPtr()) catch 0;
 
-        const CompositionDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const comp_delegate_runtime = @import("delegate_runtime.zig");
+        const CompositionDelegate = comp_delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
         const comp_start = try CompositionDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxCompositionStarted, &com.IID_TextCompositionStartedHandler);
         defer comp_start.release();
         self.ime_text_comp_start_token = ime_tb.AddTextCompositionStarted(comp_start.comPtr()) catch |err| blk: {

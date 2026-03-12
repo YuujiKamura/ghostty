@@ -10,7 +10,7 @@ const std = @import("std");
 const com = @import("com.zig");
 const os = @import("os.zig");
 const winrt = @import("winrt.zig");
-const delegate_runtime = @import("delegate_runtime.zig");
+const gen = @import("com_generated.zig");
 
 const log = std.log.scoped(.winui3_caption);
 
@@ -69,7 +69,7 @@ var ctx_minimize = CaptionContext{ .action = .minimize };
 var ctx_maximize = CaptionContext{ .action = .maximize };
 var ctx_close = CaptionContext{ .action = .close };
 
-const XamlDelegate = delegate_runtime.TypedDelegate(CaptionContext, *const fn (*CaptionContext, ?*anyopaque, ?*anyopaque) void);
+const XamlDelegate = gen.TappedEventHandlerImpl(CaptionContext, *const fn (*CaptionContext, ?*anyopaque, ?*anyopaque) void);
 
 fn onCaptionTapped(ctx: *CaptionContext, _: ?*anyopaque, _: ?*anyopaque) void {
     const App = @import("App.zig");

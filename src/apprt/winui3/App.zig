@@ -19,7 +19,7 @@ const key = @import("key.zig");
 const winrt = @import("winrt.zig");
 const bootstrap = @import("bootstrap.zig");
 const com = @import("com.zig");
-const event = @import("event.zig");
+const gen = @import("com_generated.zig");
 const os = @import("os.zig");
 const com_aggregation = @import("com_aggregation.zig");
 const ime = @import("ime.zig");
@@ -111,6 +111,9 @@ pub const KeyboardFocusTarget = enum {
     input_overlay,
 };
 
+const TypedHandler = gen.TypedEventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void);
+const SelectionHandler = gen.SelectionChangedEventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void);
+
 /// The core application.
 core_app: *CoreApp,
 debug_cfg: debug_harness.RuntimeDebugConfig = .{},
@@ -183,13 +186,13 @@ saved_style: usize = 0,
 saved_placement: os.WINDOWPLACEMENT = .{},
 
 /// Closed event handler (prevent dangling reference).
-closed_handler: ?*event.SimpleEventHandler(App) = null,
+closed_handler: ?*TypedHandler = null,
 closed_token: ?i64 = null,
 
 /// TabView event handlers.
-tab_close_handler: ?*event.SimpleEventHandler(App) = null,
-add_tab_handler: ?*event.SimpleEventHandler(App) = null,
-selection_changed_handler: ?*event.SimpleEventHandler(App) = null,
+tab_close_handler: ?*TypedHandler = null,
+add_tab_handler: ?*TypedHandler = null,
+selection_changed_handler: ?*SelectionHandler = null,
 tab_close_token: ?i64 = null,
 add_tab_token: ?i64 = null,
 selection_changed_token: ?i64 = null,
@@ -459,7 +462,7 @@ fn createWindowAndHooks(self: *App) !*com.IWindow {
     // Step 6: Register Closed event handler.
     log.info("initXaml step 6: addClosed handler...", .{});
     const alloc = self.core_app.alloc;
-    self.closed_handler = try event.SimpleEventHandler(App).createWithIid(
+    self.closed_handler = try TypedHandler.createWithIid(
         alloc,
         self,
         &onWindowClosed,
@@ -638,17 +641,17 @@ fn registerTabViewHandlers(self: *App, tab_view: ?*com.ITabView) !void {
     if (tab_view != null and self.debug_cfg.enable_tabview_handlers) {
         const alloc = self.core_app.alloc;
         if (self.debug_cfg.enable_handler_close) {
-            self.tab_close_handler = try event.SimpleEventHandler(App).createWithIid(alloc, self, &onTabCloseRequested, &com.IID_TypedEventHandler_TabCloseRequested);
+            self.tab_close_handler = try TypedHandler.createWithIid(alloc, self, &onTabCloseRequested, &com.IID_TypedEventHandler_TabCloseRequested);
             self.tab_close_token = try tab_view.?.AddTabCloseRequested(self.tab_close_handler.?.comPtr());
             log.info("initXaml step 7.5: TabCloseRequested handler registered", .{});
         }
         if (self.debug_cfg.enable_handler_addtab) {
-            self.add_tab_handler = try event.SimpleEventHandler(App).createWithIid(alloc, self, &onAddTabButtonClick, &com.IID_TypedEventHandler_AddTabButtonClick);
+            self.add_tab_handler = try TypedHandler.createWithIid(alloc, self, &onAddTabButtonClick, &com.IID_TypedEventHandler_AddTabButtonClick);
             self.add_tab_token = try tab_view.?.AddAddTabButtonClick(self.add_tab_handler.?.comPtr());
             log.info("initXaml step 7.5: AddTabButtonClick handler registered", .{});
         }
         if (self.debug_cfg.enable_handler_selection) {
-            self.selection_changed_handler = try event.SimpleEventHandler(App).createWithIid(alloc, self, &onSelectionChanged, &com.IID_SelectionChangedEventHandler);
+            self.selection_changed_handler = try SelectionHandler.createWithIid(alloc, self, &onSelectionChanged, &com.IID_SelectionChangedEventHandler);
             self.selection_changed_token = try tab_view.?.AddSelectionChanged(self.selection_changed_handler.?.comPtr());
             log.info("initXaml step 7.5: SelectionChanged handler registered", .{});
         }
