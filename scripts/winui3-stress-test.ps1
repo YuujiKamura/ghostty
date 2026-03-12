@@ -52,6 +52,46 @@ public class Win32Stress {
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left, Top, Right, Bottom; }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct INPUT {
+        public uint type;
+        public MOUSEINPUT mi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MOUSEINPUT {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [DllImport("user32.dll")] public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+
+    public const uint INPUT_MOUSE = 0;
+    public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+    public const uint MOUSEEVENTF_LEFTUP = 0x0004;
+    public const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
+    public const uint MOUSEEVENTF_MOVE = 0x0001;
+
+    public static void RealClick(IntPtr hwnd, int clientX, int clientY) {
+        RECT r;
+        GetWindowRect(hwnd, out r);
+        int screenX = r.Left + clientX;
+        int screenY = r.Top + clientY;
+        SetCursorPos(screenX, screenY);
+        INPUT[] inputs = new INPUT[2];
+        inputs[0].type = INPUT_MOUSE;
+        inputs[0].mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+        inputs[1].type = INPUT_MOUSE;
+        inputs[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
+        SendInput(2, inputs, Marshal.SizeOf(typeof(INPUT)));
+    }
+
     public static IntPtr MakeLParam(int lo, int hi) {
         return (IntPtr)((hi << 16) | (lo & 0xFFFF));
     }
@@ -84,33 +124,52 @@ Write-Host "[stress] Launching ghostty + steady_load.py ($Duration sec)..." -For
 $env:GHOSTTY_WINUI3_ENABLE_TABVIEW = "1"
 $env:GHOSTTY_WINUI3_ENABLE_TABVIEW_HANDLERS = "1"
 
-# Start ghostty; it runs steady_load.py as the shell command
-$proc = Start-Process -FilePath $exe -ArgumentList @(
-    "-e", "python", "$repoRoot\scripts\steady_load.py", "$Duration"
-) -PassThru
+# Start ghostty (plain launch — no -e flag, WinUI3 doesn't support it).
+# Output load will be injected via a separate process writing to a pipe,
+# or we rely on the terminal's own shell activity as the load source.
+$proc = Start-Process -FilePath $exe -PassThru
 
 # Wait for window to appear
 $hwnd = [IntPtr]::Zero
-$maxWait = 15
+$maxWait = 20
 for ($i = 0; $i -lt $maxWait; $i++) {
     Start-Sleep -Seconds 1
     if ($proc.HasExited) {
         Write-Error "[stress] ghostty exited before window appeared (exit=$($proc.ExitCode))"
         return
     }
-    # Find window by process
-    $hwnd = $proc.MainWindowHandle
-    if ($hwnd -ne [IntPtr]::Zero) { break }
+    # Refresh process info to get MainWindowHandle
+    $proc = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
+    if ($proc -and $proc.MainWindowHandle -ne [IntPtr]::Zero) {
+        $hwnd = $proc.MainWindowHandle
+        break
+    }
 }
 if ($hwnd -eq [IntPtr]::Zero) {
-    Write-Warning "[stress] Could not find ghostty window handle, trying FindWindow..."
-    $hwnd = [Win32Stress]::FindWindow($null, "ghostty")
+    Write-Warning "[stress] MainWindowHandle not found, trying FindWindow..."
+    # Try common WinUI3 window class names
+    foreach ($title in @("ghostty", "Ghostty", "")) {
+        $hwnd = [Win32Stress]::FindWindow($null, $title)
+        if ($hwnd -ne [IntPtr]::Zero) { break }
+    }
 }
 if ($hwnd -eq [IntPtr]::Zero) {
     Write-Error "[stress] No window found after ${maxWait}s"
     return
 }
 Write-Host "[stress] Window found: 0x$($hwnd.ToString('X'))" -ForegroundColor Green
+
+# Inject output load: type a command into the terminal via keystroke injection
+Start-Sleep -Seconds 2
+$loadCmd = "python $($repoRoot -replace '\\','/')/scripts/steady_load.py $Duration"
+foreach ($ch in $loadCmd.ToCharArray()) {
+    # WM_CHAR to send each character
+    [Win32Stress]::PostMessage($hwnd, 0x0102, [IntPtr]::new([int]$ch), [IntPtr]::Zero) | Out-Null
+}
+# Send Enter (VK_RETURN = 0x0D)
+[Win32Stress]::PostMessage($hwnd, 0x0102, [IntPtr]::new(0x0D), [IntPtr]::Zero) | Out-Null
+Write-Host "[stress] Injected output load command" -ForegroundColor Green
+Start-Sleep -Seconds 2
 
 # --- Stress loop ---
 $rng = [System.Random]::new()
@@ -144,22 +203,20 @@ while (([DateTime]::UtcNow - $startTime).TotalSeconds -lt $Duration) {
             $h = [Math]::Max(300, [Math]::Min(1200, $h))
             [Win32Stress]::MoveWindow($hwnd, $rect.Left, $rect.Top, $w, $h, $true) | Out-Null
         }
-        3 { # Inject mouse click at random position in client area
-            $x = $rng.Next(10, 800)
-            $y = $rng.Next(10, 600)
-            $lp = [Win32Stress]::MakeLParam($x, $y)
-            [Win32Stress]::PostMessage($hwnd, [Win32Stress]::WM_LBUTTONDOWN, [IntPtr]::new(1), $lp) | Out-Null
-            Start-Sleep -Milliseconds 10
-            [Win32Stress]::PostMessage($hwnd, [Win32Stress]::WM_LBUTTONUP, [IntPtr]::Zero, $lp) | Out-Null
+        3 { # Real mouse click via SendInput (reaches XAML pointer layer)
+            [Win32Stress]::SetForegroundWindow($hwnd) | Out-Null
+            $x = $rng.Next(50, 600)
+            $y = $rng.Next(50, 400)
+            [Win32Stress]::RealClick($hwnd, $x, $y)
         }
-        4 { # Rapid maximize-restore (the exact crash trigger)
+        4 { # Rapid maximize-restore + real click (exact crash trigger)
             [Win32Stress]::ShowWindow($hwnd, [Win32Stress]::SW_MAXIMIZE) | Out-Null
             Start-Sleep -Milliseconds 50
             [Win32Stress]::ShowWindow($hwnd, [Win32Stress]::SW_RESTORE) | Out-Null
             Start-Sleep -Milliseconds 50
-            # Click immediately after restore
-            $lp = [Win32Stress]::MakeLParam(400, 300)
-            [Win32Stress]::PostMessage($hwnd, [Win32Stress]::WM_LBUTTONDOWN, [IntPtr]::new(1), $lp) | Out-Null
+            # Real click immediately after restore
+            [Win32Stress]::SetForegroundWindow($hwnd) | Out-Null
+            [Win32Stress]::RealClick($hwnd, 400, 300)
         }
         5 { # Mouse move sweep
             for ($m = 0; $m -lt 10; $m++) {
