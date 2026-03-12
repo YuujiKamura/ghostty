@@ -67,18 +67,8 @@ pub const i18n: bool = options.i18n;
 /// avoid it in Zig coe as much as possible.
 pub const bundle_id = "com.mitchellh.ghostty";
 
-/// True if we should have "slow" runtime safety checks. The initial motivation
-/// for this was terminal page/pagelist integrity checks. These were VERY
-/// slow but very thorough. But they made it so slow that the terminal couldn't
-/// be used for real work. We'd love to have an option to run a build with
-/// safety checks that could be used for real work. This lets us do that.
-pub const slow_runtime_safety = std.debug.runtime_safety and switch (builtin.mode) {
-    .Debug => true,
-    .ReleaseSafe,
-    .ReleaseSmall,
-    .ReleaseFast,
-    => false,
-};
+/// slow_runtime_safety is now controlled via -Dslow-safety build option.
+/// See src/terminal/build_options.zig (terminal_options.slow_runtime_safety).
 
 pub const Artifact = enum {
     /// Standalone executable
