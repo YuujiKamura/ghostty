@@ -17,18 +17,18 @@ pub const IID_SizeChangedEventHandler = gen.IID_SizeChangedEventHandler;
 pub const IID_TypedEventHandler_TabCloseRequested = gen.IID_TypedEventHandler_TabCloseRequested;
 pub const IID_TypedEventHandler_AddTabButtonClick = gen.IID_TypedEventHandler_AddTabButtonClick;
 pub const IID_SelectionChangedEventHandler = gen.IID_SelectionChangedEventHandler;
-pub const IID_TypedEventHandler_WindowClosed = gen.IID_TypedEventHandler_WindowClosed;
+pub const IID_TypedEventHandler_WindowClosed = gen.IID_TypedEventHandler_Closed;
 pub const IID_KeyEventHandler = gen.KeyEventHandler.IID;
 pub const IID_PointerEventHandler = gen.PointerEventHandler.IID;
-pub const IID_CharacterReceivedHandler = native.IID_CharacterReceivedHandler;
+pub const IID_CharacterReceivedHandler = gen.IID_TypedEventHandler_CharacterReceived;
 pub const IID_ScrollEventHandler = gen.ScrollEventHandler.IID;
 pub const IID_RangeBaseValueChangedEventHandler = gen.RangeBaseValueChangedEventHandler.IID;
 pub const IRangeBaseValueChangedEventArgs = gen.IRangeBaseValueChangedEventArgs;
 pub const IID_TappedEventHandler = gen.TappedEventHandler.IID;
 pub const IID_TextChangedEventHandler = gen.TextChangedEventHandler.IID;
-pub const IID_TextCompositionStartedHandler = native.IID_TextCompositionStartedHandler;
-pub const IID_TextCompositionChangedHandler = native.IID_TextCompositionChangedHandler;
-pub const IID_TextCompositionEndedHandler = native.IID_TextCompositionEndedHandler;
+pub const IID_TextCompositionStartedHandler = gen.IID_TypedEventHandler_TextCompositionStarted;
+pub const IID_TextCompositionChangedHandler = gen.IID_TypedEventHandler_TextCompositionChanged;
+pub const IID_TextCompositionEndedHandler = gen.IID_TypedEventHandler_TextCompositionEnded;
 
 // --- Base interfaces (from generated) ---
 pub const IUnknown = gen.IUnknown;

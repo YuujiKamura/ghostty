@@ -287,12 +287,5 @@ pub const IWindowNative = extern struct {
     pub fn getWindowHandle(self: *@This()) !*anyopaque { var h: ?*anyopaque = null; try hrCheck(self.lpVtbl.getWindowHandle(self, &h)); return h orelse error.WinRTFailed; }
 };
 
-// TypedEventHandler<UIElement, CharacterReceivedRoutedEventArgs> — computed via WinRT pinterface SHA-1.
-// Cannot be auto-generated because the generator doesn't support generic pinterface IID computation.
-pub const IID_CharacterReceivedHandler = GUID{ .data1 = 0x553240fb, .data2 = 0x75d9, .data3 = 0x5641, .data4 = .{ 0x9c, 0xce, 0x2d, 0x14, 0xb7, 0x43, 0xf0, 0xec } };
-
-// TypedEventHandler<TextBox, TextComposition*EventArgs> — computed locally via
-// WinRT.GuidGenerator.GetIID(closed_generic_type) from Microsoft.Windows.SDK.NET.
-pub const IID_TextCompositionStartedHandler = GUID{ .data1 = 0xbcc3cc9b, .data2 = 0x1608, .data3 = 0x5871, .data4 = .{ 0xb5, 0x82, 0xe5, 0xc2, 0x24, 0x7b, 0xa1, 0x42 } };
-pub const IID_TextCompositionChangedHandler = GUID{ .data1 = 0x34c56877, .data2 = 0x38e3, .data3 = 0x55d6, .data4 = .{ 0xa2, 0x50, 0x53, 0xce, 0x9e, 0x49, 0x0d, 0xfc } };
-pub const IID_TextCompositionEndedHandler = GUID{ .data1 = 0xbcc52f19, .data2 = 0x43de, .data3 = 0x5469, .data4 = .{ 0x8a, 0x77, 0xa2, 0x74, 0xdd, 0x3a, 0xe1, 0x4e } };
+// CharacterReceived and TextComposition delegate IIDs are now auto-generated
+// in com_generated.zig via TypedEventHandler pinterface IID computation.
