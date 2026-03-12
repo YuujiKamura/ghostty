@@ -34,6 +34,7 @@ sentry: bool = true,
 simd: bool = true,
 i18n: bool = true,
 wasm_shared: bool = true,
+slow_safety: bool = true,
 
 /// Ghostty exe properties
 exe_entrypoint: ExeEntrypoint = .ghostty,
@@ -67,6 +68,10 @@ pub fn init(b: *std.Build, appVersion: []const u8) !Config {
     // Setup our standard Zig target and optimize options, i.e.
     // `-Doptimize` and `-Dtarget`.
     const optimize = b.standardOptimizeOption(.{});
+    const slow_safety = b.option(bool, "slow-safety", "Enable slow runtime safety checks (default: true for Debug)") orelse switch (optimize) {
+        .Debug => true,
+        .ReleaseSafe, .ReleaseSmall, .ReleaseFast => false,
+    };
     const target = target: {
         var result = b.standardTargetOptions(.{});
 
@@ -110,6 +115,7 @@ pub fn init(b: *std.Build, appVersion: []const u8) !Config {
         .target = target,
         .wasm_target = wasm_target,
         .env = env,
+        .slow_safety = slow_safety,
     };
 
     //---------------------------------------------------------------
@@ -516,13 +522,7 @@ pub fn terminalOptions(self: *const Config) TerminalBuildOptions {
         .simd = self.simd,
         .oniguruma = true,
         .c_abi = false,
-        .slow_runtime_safety = switch (self.optimize) {
-            .Debug => true,
-            .ReleaseSafe,
-            .ReleaseSmall,
-            .ReleaseFast,
-            => false,
-        },
+        .slow_runtime_safety = self.slow_safety,
     };
 }
 
