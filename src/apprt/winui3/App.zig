@@ -1551,12 +1551,52 @@ pub fn loadXamlResources(self: *App, xa: *com.IApplication) void {
     xaml_helpers.loadXamlResources(self, xa);
 }
 
+/// Counter for periodic diagnostic snapshots (every N ticks).
+var diagnostic_tick_count: u32 = 0;
+const diagnostic_interval: u32 = 500; // ~every 500 ticks
+
 pub fn drainMailbox(self: *App) void {
     log.info("drainMailbox: tick...", .{});
     self.core_app.tick(self) catch |err| {
         log.warn("tick error: {}", .{err});
     };
     log.info("drainMailbox: tick done", .{});
+
+    // Periodic internal state snapshot
+    diagnostic_tick_count += 1;
+    if (diagnostic_tick_count % diagnostic_interval == 0) {
+        self.logDiagnosticSnapshot();
+    }
+}
+
+fn logDiagnosticSnapshot(self: *App) void {
+    fileLog("=== DIAGNOSTIC tick={} ===", .{diagnostic_tick_count});
+    fileLog("  surfaces={} active_idx={}", .{ self.surfaces.items.len, self.active_surface_idx });
+    fileLog("  resizing={} pending_size={}", .{
+        @intFromBool(self.resizing),
+        @intFromBool(self.pending_size != null),
+    });
+
+    // Per-surface terminal stats
+    for (self.surfaces.items, 0..) |surface, i| {
+        if (surface.core_initialized) {
+            const t = surface.core_surface.renderer_state.terminal;
+            const screen = t.screens.active;
+            // Count pages in the linked list
+            var page_count: usize = 0;
+            var it = screen.pages.pages.first;
+            while (it) |node| : (it = node.next) {
+                page_count += 1;
+            }
+            fileLog("  surface[{}] pages={} rows={} cols={}", .{
+                i,
+                page_count,
+                screen.pages.rows,
+                screen.pages.cols,
+            });
+        }
+    }
+    fileLog("=== END DIAGNOSTIC ===", .{});
 }
 
 fn setTitle(self: *App, title: [:0]const u8) void {
