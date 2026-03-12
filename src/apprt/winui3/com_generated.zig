@@ -181,6 +181,44 @@ pub const IApplication = extern struct {
     pub fn Exit(self: *@This()) !void { try self.exit(); }
 };
 
+pub const IApplication2 = extern struct {
+    pub const IID = GUID{ .data1 = 0x469e6d36, .data2 = 0x2e11, .data3 = 0x5b06, .data4 = .{ 0x9e, 0x0a, 0xc5, 0xee, 0xf0, 0xcf, 0x8f, 0x12 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        ResourceManagerRequested: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveResourceManagerRequested: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn AddResourceManagerRequested(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.ResourceManagerRequested(self, p0, &out0)); return out0; }
+    pub fn ResourceManagerRequested(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddResourceManagerRequested(p0); }
+    pub fn RemoveResourceManagerRequested(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveResourceManagerRequested(self, token)); }
+};
+
+pub const IApplicationOverrides = extern struct {
+    pub const IID = GUID{ .data1 = 0xa33e81ef, .data2 = 0xc665, .data3 = 0x503b, .data4 = .{ 0x88, 0x27, 0xd2, 0x7e, 0xf1, 0x72, 0x0a, 0x06 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        OnLaunched: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn onLaunched(self: *@This(), args: ?*anyopaque) !void { try hrCheck(self.lpVtbl.OnLaunched(self, args)); }
+    pub fn OnLaunched(self: *@This(), args: ?*anyopaque) !void { try self.onLaunched(args); }
+};
+
 pub const IWindow = extern struct {
     pub const IID = GUID{ .data1 = 0x61f0ec79, .data2 = 0x5d52, .data3 = 0x56b5, .data4 = .{ 0x86, 0xfb, 0x40, 0xfa, 0x4a, 0xf2, 0x88, 0xb0 } };
     lpVtbl: *const VTable,
@@ -1276,6 +1314,35 @@ pub const IRowDefinition = extern struct {
     pub fn ActualHeight(self: *@This()) !f64 { var out: f64 = 0; try hrCheck(self.lpVtbl.ActualHeight(self, &out)); return out; }
 };
 
+pub const IColumnDefinition = extern struct {
+    pub const IID = GUID{ .data1 = 0x454cea14, .data2 = 0x87ec, .data3 = 0x5890, .data4 = .{ 0xbb, 0x62, 0xf1, 0xd8, 0x2a, 0x94, 0x75, 0x8e } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Width: *const fn (*anyopaque, *GridLength) callconv(.winapi) HRESULT,
+        SetWidth: *const fn (*anyopaque, GridLength) callconv(.winapi) HRESULT,
+        MaxWidth: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
+        SetMaxWidth: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
+        MinWidth: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
+        SetMinWidth: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
+        ActualWidth: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Width(self: *@This()) !GridLength { var out: GridLength = .{ .Value = 0, .GridUnitType = 0 }; try hrCheck(self.lpVtbl.Width(self, &out)); return out; }
+    pub fn SetWidth(self: *@This(), value: GridLength) !void { try hrCheck(self.lpVtbl.SetWidth(self, value)); }
+    pub fn MaxWidth(self: *@This()) !f64 { var out: f64 = 0; try hrCheck(self.lpVtbl.MaxWidth(self, &out)); return out; }
+    pub fn SetMaxWidth(self: *@This(), value: f64) !void { try hrCheck(self.lpVtbl.SetMaxWidth(self, value)); }
+    pub fn MinWidth(self: *@This()) !f64 { var out: f64 = 0; try hrCheck(self.lpVtbl.MinWidth(self, &out)); return out; }
+    pub fn SetMinWidth(self: *@This(), value: f64) !void { try hrCheck(self.lpVtbl.SetMinWidth(self, value)); }
+    pub fn ActualWidth(self: *@This()) !f64 { var out: f64 = 0; try hrCheck(self.lpVtbl.ActualWidth(self, &out)); return out; }
+};
+
 pub const ITextBox = extern struct {
     pub const IID = GUID{ .data1 = 0x873af7c2, .data2 = 0xab89, .data3 = 0x5d76, .data4 = .{ 0x8d, 0xbe, 0x3d, 0x63, 0x25, 0x66, 0x9d, 0xf5 } };
     lpVtbl: *const VTable,
@@ -1782,35 +1849,6 @@ pub const IScrollEventArgs = extern struct {
     pub fn ScrollEventType(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.ScrollEventType(self, &out)); return out; }
 };
 
-pub const IColumnDefinition = extern struct {
-    pub const IID = GUID{ .data1 = 0x454cea14, .data2 = 0x87ec, .data3 = 0x5890, .data4 = .{ 0xbb, 0x62, 0xf1, 0xd8, 0x2a, 0x94, 0x75, 0x8e } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Width: *const fn (*anyopaque, *GridLength) callconv(.winapi) HRESULT,
-        SetWidth: *const fn (*anyopaque, GridLength) callconv(.winapi) HRESULT,
-        MaxWidth: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
-        SetMaxWidth: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
-        MinWidth: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
-        SetMinWidth: *const fn (*anyopaque, f64) callconv(.winapi) HRESULT,
-        ActualWidth: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Width(self: *@This()) !GridLength { var out: GridLength = .{ .Value = 0, .GridUnitType = 0 }; try hrCheck(self.lpVtbl.Width(self, &out)); return out; }
-    pub fn SetWidth(self: *@This(), value: GridLength) !void { try hrCheck(self.lpVtbl.SetWidth(self, value)); }
-    pub fn MaxWidth(self: *@This()) !f64 { var out: f64 = 0; try hrCheck(self.lpVtbl.MaxWidth(self, &out)); return out; }
-    pub fn SetMaxWidth(self: *@This(), value: f64) !void { try hrCheck(self.lpVtbl.SetMaxWidth(self, value)); }
-    pub fn MinWidth(self: *@This()) !f64 { var out: f64 = 0; try hrCheck(self.lpVtbl.MinWidth(self, &out)); return out; }
-    pub fn SetMinWidth(self: *@This(), value: f64) !void { try hrCheck(self.lpVtbl.SetMinWidth(self, value)); }
-    pub fn ActualWidth(self: *@This()) !f64 { var out: f64 = 0; try hrCheck(self.lpVtbl.ActualWidth(self, &out)); return out; }
-};
-
 pub const ISolidColorBrush = extern struct {
     pub const IID = GUID{ .data1 = 0xb3865c31, .data2 = 0x37c8, .data3 = 0x55c1, .data4 = .{ 0x8a, 0x72, 0xd4, 0x1c, 0x67, 0x64, 0x2e, 0x2a } };
     lpVtbl: *const VTable,
@@ -2134,11 +2172,311 @@ pub const IPointerPointProperties = extern struct {
     pub fn GetUsageValue(self: *@This(), p0: u32, p1: u32) !i32 { return self.getUsageValue(p0, p1); }
 };
 
+pub const IDispatcherQueue = extern struct {
+    pub const IID = GUID{ .data1 = 0x603e88e4, .data2 = 0xa338, .data3 = 0x4ffe, .data4 = .{ 0xa4, 0x57, 0xa5, 0xcf, 0xb9, 0xce, 0xb8, 0x99 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CreateTimer: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        TryEnqueue: *const fn (*anyopaque, ?*anyopaque, *bool) callconv(.winapi) HRESULT,
+        TryEnqueue_1: *const fn (*anyopaque, i32, ?*anyopaque, *bool) callconv(.winapi) HRESULT,
+        ShutdownStarting: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveShutdownStarting: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        ShutdownCompleted: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveShutdownCompleted: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn createTimer(self: *@This()) !*IDispatcherQueueTimer { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateTimer(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateTimer(self: *@This()) !*IDispatcherQueueTimer { return self.createTimer(); }
+    pub fn tryEnqueue(self: *@This(), p0: ?*anyopaque) !bool { var out0: bool = false; try hrCheck(self.lpVtbl.TryEnqueue(self, p0, &out0)); return out0; }
+    pub fn TryEnqueue(self: *@This(), p0: ?*anyopaque) !bool { return self.tryEnqueue(p0); }
+    pub fn tryEnqueue_1(self: *@This(), p0: i32, p1: ?*anyopaque) !bool { var out0: bool = false; try hrCheck(self.lpVtbl.TryEnqueue_1(self, p0, p1, &out0)); return out0; }
+    pub fn TryEnqueue_1(self: *@This(), p0: i32, p1: ?*anyopaque) !bool { return self.tryEnqueue_1(p0, p1); }
+    pub fn AddShutdownStarting(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.ShutdownStarting(self, p0, &out0)); return out0; }
+    pub fn ShutdownStarting(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddShutdownStarting(p0); }
+    pub fn RemoveShutdownStarting(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveShutdownStarting(self, token)); }
+    pub fn AddShutdownCompleted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.ShutdownCompleted(self, p0, &out0)); return out0; }
+    pub fn ShutdownCompleted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddShutdownCompleted(p0); }
+    pub fn RemoveShutdownCompleted(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveShutdownCompleted(self, token)); }
+};
+
+pub const ICompositor = extern struct {
+    pub const IID = GUID{ .data1 = 0xb403ca50, .data2 = 0x7f8c, .data3 = 0x4e83, .data4 = .{ 0x98, 0x5f, 0xcc, 0x45, 0x06, 0x00, 0x36, 0xd8 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CreateColorKeyFrameAnimation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateColorBrush: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateColorBrush_1: *const fn (*anyopaque, Color, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateContainerVisual: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateCubicBezierEasingFunction: *const fn (*anyopaque, Vector2, Vector2, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateEffectFactory: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateEffectFactory_1: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateExpressionAnimation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateExpressionAnimation_1: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateInsetClip: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateInsetClip_1: *const fn (*anyopaque, f32, f32, f32, f32, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateLinearEasingFunction: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreatePropertySet: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateQuaternionKeyFrameAnimation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateScalarKeyFrameAnimation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateScopedBatch: *const fn (*anyopaque, i32, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateSpriteVisual: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateSurfaceBrush: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateSurfaceBrush_1: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateTargetForCurrentView: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateVector2KeyFrameAnimation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateVector3KeyFrameAnimation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateVector4KeyFrameAnimation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetCommitBatch: *const fn (*anyopaque, i32, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn createColorKeyFrameAnimation(self: *@This()) !*IColorKeyFrameAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateColorKeyFrameAnimation(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateColorKeyFrameAnimation(self: *@This()) !*IColorKeyFrameAnimation { return self.createColorKeyFrameAnimation(); }
+    pub fn createColorBrush(self: *@This()) !*ICompositionColorBrush { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateColorBrush(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateColorBrush(self: *@This()) !*ICompositionColorBrush { return self.createColorBrush(); }
+    pub fn createColorBrush_1(self: *@This(), p0: Color) !*ICompositionColorBrush { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateColorBrush_1(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateColorBrush_1(self: *@This(), p0: Color) !*ICompositionColorBrush { return self.createColorBrush_1(p0); }
+    pub fn createContainerVisual(self: *@This()) !*IContainerVisual { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateContainerVisual(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateContainerVisual(self: *@This()) !*IContainerVisual { return self.createContainerVisual(); }
+    pub fn createCubicBezierEasingFunction(self: *@This(), p0: Vector2, p1: Vector2) !*ICubicBezierEasingFunction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateCubicBezierEasingFunction(self, p0, p1, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateCubicBezierEasingFunction(self: *@This(), p0: Vector2, p1: Vector2) !*ICubicBezierEasingFunction { return self.createCubicBezierEasingFunction(p0, p1); }
+    pub fn createEffectFactory(self: *@This(), p0: ?*anyopaque) !*ICompositionEffectFactory { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateEffectFactory(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateEffectFactory(self: *@This(), p0: ?*anyopaque) !*ICompositionEffectFactory { return self.createEffectFactory(p0); }
+    pub fn createEffectFactory_1(self: *@This(), p0: ?*anyopaque, p1: ?*anyopaque) !*ICompositionEffectFactory { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateEffectFactory_1(self, p0, p1, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateEffectFactory_1(self: *@This(), p0: ?*anyopaque, p1: ?*anyopaque) !*ICompositionEffectFactory { return self.createEffectFactory_1(p0, p1); }
+    pub fn createExpressionAnimation(self: *@This()) !*IExpressionAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateExpressionAnimation(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateExpressionAnimation(self: *@This()) !*IExpressionAnimation { return self.createExpressionAnimation(); }
+    pub fn createExpressionAnimation_1(self: *@This(), p0: anytype) !*IExpressionAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateExpressionAnimation_1(self, @ptrCast(p0), &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateExpressionAnimation_1(self: *@This(), p0: anytype) !*IExpressionAnimation { return self.createExpressionAnimation_1(p0); }
+    pub fn createInsetClip(self: *@This()) !*IInsetClip { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateInsetClip(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateInsetClip(self: *@This()) !*IInsetClip { return self.createInsetClip(); }
+    pub fn createInsetClip_1(self: *@This(), p0: f32, p1: f32, p2: f32, p3: f32) !*IInsetClip { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateInsetClip_1(self, p0, p1, p2, p3, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateInsetClip_1(self: *@This(), p0: f32, p1: f32, p2: f32, p3: f32) !*IInsetClip { return self.createInsetClip_1(p0, p1, p2, p3); }
+    pub fn createLinearEasingFunction(self: *@This()) !*ILinearEasingFunction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateLinearEasingFunction(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateLinearEasingFunction(self: *@This()) !*ILinearEasingFunction { return self.createLinearEasingFunction(); }
+    pub fn createPropertySet(self: *@This()) !*ICompositionPropertySet { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreatePropertySet(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreatePropertySet(self: *@This()) !*ICompositionPropertySet { return self.createPropertySet(); }
+    pub fn createQuaternionKeyFrameAnimation(self: *@This()) !*IQuaternionKeyFrameAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateQuaternionKeyFrameAnimation(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateQuaternionKeyFrameAnimation(self: *@This()) !*IQuaternionKeyFrameAnimation { return self.createQuaternionKeyFrameAnimation(); }
+    pub fn createScalarKeyFrameAnimation(self: *@This()) !*IScalarKeyFrameAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateScalarKeyFrameAnimation(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateScalarKeyFrameAnimation(self: *@This()) !*IScalarKeyFrameAnimation { return self.createScalarKeyFrameAnimation(); }
+    pub fn createScopedBatch(self: *@This(), p0: i32) !*ICompositionScopedBatch { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateScopedBatch(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateScopedBatch(self: *@This(), p0: i32) !*ICompositionScopedBatch { return self.createScopedBatch(p0); }
+    pub fn createSpriteVisual(self: *@This()) !*ISpriteVisual { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateSpriteVisual(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateSpriteVisual(self: *@This()) !*ISpriteVisual { return self.createSpriteVisual(); }
+    pub fn createSurfaceBrush(self: *@This()) !*ICompositionSurfaceBrush { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateSurfaceBrush(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateSurfaceBrush(self: *@This()) !*ICompositionSurfaceBrush { return self.createSurfaceBrush(); }
+    pub fn createSurfaceBrush_1(self: *@This(), p0: ?*anyopaque) !*ICompositionSurfaceBrush { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateSurfaceBrush_1(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateSurfaceBrush_1(self: *@This(), p0: ?*anyopaque) !*ICompositionSurfaceBrush { return self.createSurfaceBrush_1(p0); }
+    pub fn createTargetForCurrentView(self: *@This()) !*ICompositionTarget { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateTargetForCurrentView(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateTargetForCurrentView(self: *@This()) !*ICompositionTarget { return self.createTargetForCurrentView(); }
+    pub fn createVector2KeyFrameAnimation(self: *@This()) !*IVector2KeyFrameAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateVector2KeyFrameAnimation(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateVector2KeyFrameAnimation(self: *@This()) !*IVector2KeyFrameAnimation { return self.createVector2KeyFrameAnimation(); }
+    pub fn createVector3KeyFrameAnimation(self: *@This()) !*IVector3KeyFrameAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateVector3KeyFrameAnimation(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateVector3KeyFrameAnimation(self: *@This()) !*IVector3KeyFrameAnimation { return self.createVector3KeyFrameAnimation(); }
+    pub fn createVector4KeyFrameAnimation(self: *@This()) !*IVector4KeyFrameAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateVector4KeyFrameAnimation(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateVector4KeyFrameAnimation(self: *@This()) !*IVector4KeyFrameAnimation { return self.createVector4KeyFrameAnimation(); }
+    pub fn getCommitBatch(self: *@This(), p0: i32) !*ICompositionCommitBatch { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetCommitBatch(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn GetCommitBatch(self: *@This(), p0: i32) !*ICompositionCommitBatch { return self.getCommitBatch(p0); }
+};
+
+pub const IDebugSettings = extern struct {
+    pub const IID = GUID{ .data1 = 0x4004943b, .data2 = 0x2509, .data3 = 0x5476, .data4 = .{ 0xbb, 0xa2, 0x3f, 0xe0, 0x5e, 0xcf, 0x61, 0x5d } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        EnableFrameRateCounter: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetEnableFrameRateCounter: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        IsBindingTracingEnabled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetIsBindingTracingEnabled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        IsTextPerformanceVisualizationEnabled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetIsTextPerformanceVisualizationEnabled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        FailFastOnErrors: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetFailFastOnErrors: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        BindingFailed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveBindingFailed: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn EnableFrameRateCounter(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.EnableFrameRateCounter(self, &out)); return out; }
+    pub fn SetEnableFrameRateCounter(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetEnableFrameRateCounter(self, value)); }
+    pub fn IsBindingTracingEnabled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsBindingTracingEnabled(self, &out)); return out; }
+    pub fn SetIsBindingTracingEnabled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsBindingTracingEnabled(self, value)); }
+    pub fn IsTextPerformanceVisualizationEnabled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsTextPerformanceVisualizationEnabled(self, &out)); return out; }
+    pub fn SetIsTextPerformanceVisualizationEnabled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsTextPerformanceVisualizationEnabled(self, value)); }
+    pub fn FailFastOnErrors(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.FailFastOnErrors(self, &out)); return out; }
+    pub fn SetFailFastOnErrors(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetFailFastOnErrors(self, value)); }
+    pub fn AddBindingFailed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.BindingFailed(self, p0, &out0)); return out0; }
+    pub fn BindingFailed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddBindingFailed(p0); }
+    pub fn RemoveBindingFailed(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveBindingFailed(self, token)); }
+};
+
+pub const ICoreWindow = extern struct {
+    pub const IID = GUID{ .data1 = 0x79b9d5f2, .data2 = 0x879e, .data3 = 0x4b89, .data4 = .{ 0xb7, 0x98, 0x79, 0xe4, 0x75, 0x98, 0x03, 0x0c } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        AutomationHostProvider: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        Bounds: *const fn (*anyopaque, *Rect) callconv(.winapi) HRESULT,
+        CustomProperties: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        Dispatcher: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        FlowDirection: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        SetFlowDirection: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
+        IsInputEnabled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetIsInputEnabled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        PointerCursor: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetPointerCursor: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        PointerPosition: *const fn (*anyopaque, *Point) callconv(.winapi) HRESULT,
+        Visible: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        Activate: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        Close: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        GetAsyncKeyState: *const fn (*anyopaque, i32, *i32) callconv(.winapi) HRESULT,
+        GetKeyState: *const fn (*anyopaque, i32, *i32) callconv(.winapi) HRESULT,
+        ReleasePointerCapture: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        SetPointerCapture: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        Activated: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveActivated: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        AutomationProviderRequested: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveAutomationProviderRequested: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        CharacterReceived: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveCharacterReceived: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        Closed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveClosed: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        InputEnabled: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveInputEnabled: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        KeyDown: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveKeyDown: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        KeyUp: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveKeyUp: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        PointerCaptureLost: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemovePointerCaptureLost: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        PointerEntered: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemovePointerEntered: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        PointerExited: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemovePointerExited: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        PointerMoved: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemovePointerMoved: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        PointerPressed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemovePointerPressed: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        PointerReleased: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemovePointerReleased: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        TouchHitTesting: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveTouchHitTesting: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        PointerWheelChanged: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemovePointerWheelChanged: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        SizeChanged: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveSizeChanged: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        VisibilityChanged: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveVisibilityChanged: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn AutomationHostProvider(self: *@This()) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.AutomationHostProvider(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn Bounds(self: *@This()) !Rect { var out: Rect = undefined; try hrCheck(self.lpVtbl.Bounds(self, &out)); return out; }
+    pub fn CustomProperties(self: *@This()) !*IPropertySet { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CustomProperties(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn Dispatcher(self: *@This()) !*ICoreDispatcher { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Dispatcher(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn FlowDirection(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.FlowDirection(self, &out)); return out; }
+    pub fn SetFlowDirection(self: *@This(), value: i32) !void { try hrCheck(self.lpVtbl.SetFlowDirection(self, value)); }
+    pub fn IsInputEnabled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsInputEnabled(self, &out)); return out; }
+    pub fn SetIsInputEnabled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsInputEnabled(self, value)); }
+    pub fn PointerCursor(self: *@This()) !*ICoreCursor { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.PointerCursor(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetPointerCursor(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetPointerCursor(self, value)); }
+    pub fn PointerPosition(self: *@This()) !Point { var out: Point = undefined; try hrCheck(self.lpVtbl.PointerPosition(self, &out)); return out; }
+    pub fn Visible(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.Visible(self, &out)); return out; }
+    pub fn activate(self: *@This()) !void { try hrCheck(self.lpVtbl.Activate(self)); }
+    pub fn Activate(self: *@This()) !void { try self.activate(); }
+    pub fn close(self: *@This()) !void { try hrCheck(self.lpVtbl.Close(self)); }
+    pub fn Close(self: *@This()) !void { try self.close(); }
+    pub fn getAsyncKeyState(self: *@This(), p0: i32) !i32 { var out0: i32 = 0; try hrCheck(self.lpVtbl.GetAsyncKeyState(self, p0, &out0)); return out0; }
+    pub fn GetAsyncKeyState(self: *@This(), p0: i32) !i32 { return self.getAsyncKeyState(p0); }
+    pub fn getKeyState(self: *@This(), p0: i32) !i32 { var out0: i32 = 0; try hrCheck(self.lpVtbl.GetKeyState(self, p0, &out0)); return out0; }
+    pub fn GetKeyState(self: *@This(), p0: i32) !i32 { return self.getKeyState(p0); }
+    pub fn releasePointerCapture(self: *@This()) !void { try hrCheck(self.lpVtbl.ReleasePointerCapture(self)); }
+    pub fn ReleasePointerCapture(self: *@This()) !void { try self.releasePointerCapture(); }
+    pub fn setPointerCapture(self: *@This()) !void { try hrCheck(self.lpVtbl.SetPointerCapture(self)); }
+    pub fn SetPointerCapture(self: *@This()) !void { try self.setPointerCapture(); }
+    pub fn AddActivated(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.Activated(self, p0, &out0)); return out0; }
+    pub fn Activated(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddActivated(p0); }
+    pub fn RemoveActivated(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveActivated(self, cookie)); }
+    pub fn AddAutomationProviderRequested(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.AutomationProviderRequested(self, p0, &out0)); return out0; }
+    pub fn AutomationProviderRequested(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddAutomationProviderRequested(p0); }
+    pub fn RemoveAutomationProviderRequested(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveAutomationProviderRequested(self, cookie)); }
+    pub fn AddCharacterReceived(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.CharacterReceived(self, p0, &out0)); return out0; }
+    pub fn CharacterReceived(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddCharacterReceived(p0); }
+    pub fn RemoveCharacterReceived(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveCharacterReceived(self, cookie)); }
+    pub fn AddClosed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.Closed(self, p0, &out0)); return out0; }
+    pub fn Closed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddClosed(p0); }
+    pub fn RemoveClosed(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveClosed(self, cookie)); }
+    pub fn AddInputEnabled(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.InputEnabled(self, p0, &out0)); return out0; }
+    pub fn InputEnabled(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddInputEnabled(p0); }
+    pub fn RemoveInputEnabled(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveInputEnabled(self, cookie)); }
+    pub fn AddKeyDown(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.KeyDown(self, p0, &out0)); return out0; }
+    pub fn KeyDown(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddKeyDown(p0); }
+    pub fn RemoveKeyDown(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveKeyDown(self, cookie)); }
+    pub fn AddKeyUp(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.KeyUp(self, p0, &out0)); return out0; }
+    pub fn KeyUp(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddKeyUp(p0); }
+    pub fn RemoveKeyUp(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveKeyUp(self, cookie)); }
+    pub fn AddPointerCaptureLost(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.PointerCaptureLost(self, p0, &out0)); return out0; }
+    pub fn PointerCaptureLost(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddPointerCaptureLost(p0); }
+    pub fn RemovePointerCaptureLost(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemovePointerCaptureLost(self, cookie)); }
+    pub fn AddPointerEntered(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.PointerEntered(self, p0, &out0)); return out0; }
+    pub fn PointerEntered(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddPointerEntered(p0); }
+    pub fn RemovePointerEntered(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemovePointerEntered(self, cookie)); }
+    pub fn AddPointerExited(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.PointerExited(self, p0, &out0)); return out0; }
+    pub fn PointerExited(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddPointerExited(p0); }
+    pub fn RemovePointerExited(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemovePointerExited(self, cookie)); }
+    pub fn AddPointerMoved(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.PointerMoved(self, p0, &out0)); return out0; }
+    pub fn PointerMoved(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddPointerMoved(p0); }
+    pub fn RemovePointerMoved(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemovePointerMoved(self, cookie)); }
+    pub fn AddPointerPressed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.PointerPressed(self, p0, &out0)); return out0; }
+    pub fn PointerPressed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddPointerPressed(p0); }
+    pub fn RemovePointerPressed(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemovePointerPressed(self, cookie)); }
+    pub fn AddPointerReleased(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.PointerReleased(self, p0, &out0)); return out0; }
+    pub fn PointerReleased(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddPointerReleased(p0); }
+    pub fn RemovePointerReleased(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemovePointerReleased(self, cookie)); }
+    pub fn AddTouchHitTesting(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.TouchHitTesting(self, p0, &out0)); return out0; }
+    pub fn TouchHitTesting(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddTouchHitTesting(p0); }
+    pub fn RemoveTouchHitTesting(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveTouchHitTesting(self, cookie)); }
+    pub fn AddPointerWheelChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.PointerWheelChanged(self, p0, &out0)); return out0; }
+    pub fn PointerWheelChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddPointerWheelChanged(p0); }
+    pub fn RemovePointerWheelChanged(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemovePointerWheelChanged(self, cookie)); }
+    pub fn AddSizeChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.SizeChanged(self, p0, &out0)); return out0; }
+    pub fn SizeChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddSizeChanged(p0); }
+    pub fn RemoveSizeChanged(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveSizeChanged(self, cookie)); }
+    pub fn AddVisibilityChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.VisibilityChanged(self, p0, &out0)); return out0; }
+    pub fn VisibilityChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddVisibilityChanged(p0); }
+    pub fn RemoveVisibilityChanged(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveVisibilityChanged(self, cookie)); }
+};
+
 pub const Application = extern struct {
     pub const IID = IApplication.IID;
     lpVtbl: *const VTable,
     pub const VTable = IApplication.VTable;
     pub const Requires_IApplication2 = true; // requires IApplication2
+    pub const Requires_IApplication3 = true; // requires IApplication3
     pub const Requires_IApplicationOverrides = true; // requires IApplicationOverrides
     pub const Requires_IApplicationStatics = true; // requires IApplicationStatics
     pub fn Resources() void {}
@@ -2168,6 +2506,10 @@ pub const Application = extern struct {
     pub fn add_ResourceManagerRequested() void {}
     pub fn RemoveResourceManagerRequested() void {}
     pub fn remove_ResourceManagerRequested() void {}
+    pub fn DispatcherShutdownMode() void {}
+    pub fn get_DispatcherShutdownMode() void {}
+    pub fn SetDispatcherShutdownMode() void {}
+    pub fn put_DispatcherShutdownMode() void {}
     pub fn OnLaunched() void {}
     pub fn Current() void {}
     pub fn get_Current() void {}
@@ -2191,9 +2533,136 @@ pub const ApplicationInitializationCallback = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), p: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, p)); }
     pub fn Invoke(self: *@This(), p: ?*anyopaque) !void { try self.invoke(p); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use ApplicationInitializationCallbackImpl instead"); }
 };
 
+pub fn ApplicationInitializationCallbackImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = ApplicationInitializationCallback;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const Uri = extern struct {
     pub const IID = IUriRuntimeClass.IID;
     lpVtbl: *const VTable,
@@ -2331,6 +2800,7 @@ pub const DebugSettings = extern struct {
     lpVtbl: *const VTable,
     pub const VTable = IDebugSettings.VTable;
     pub const Requires_IDebugSettings2 = true; // requires IDebugSettings2
+    pub const Requires_IDebugSettings3 = true; // requires IDebugSettings3
     pub fn EnableFrameRateCounter() void {}
     pub fn get_EnableFrameRateCounter() void {}
     pub fn SetEnableFrameRateCounter() void {}
@@ -2359,42 +2829,14 @@ pub const DebugSettings = extern struct {
     pub fn add_XamlResourceReferenceFailed() void {}
     pub fn RemoveXamlResourceReferenceFailed() void {}
     pub fn remove_XamlResourceReferenceFailed() void {}
-};
-
-pub const IDebugSettings = extern struct {
-    pub const IID = GUID{ .data1 = 0x4004943b, .data2 = 0x2509, .data3 = 0x5476, .data4 = .{ 0xbb, 0xa2, 0x3f, 0xe0, 0x5e, 0xcf, 0x61, 0x5d } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        EnableFrameRateCounter: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetEnableFrameRateCounter: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-        IsBindingTracingEnabled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetIsBindingTracingEnabled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-        IsTextPerformanceVisualizationEnabled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetIsTextPerformanceVisualizationEnabled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-        FailFastOnErrors: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetFailFastOnErrors: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-        BindingFailed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveBindingFailed: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn EnableFrameRateCounter(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.EnableFrameRateCounter(self, &out)); return out; }
-    pub fn SetEnableFrameRateCounter(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetEnableFrameRateCounter(self, value)); }
-    pub fn IsBindingTracingEnabled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsBindingTracingEnabled(self, &out)); return out; }
-    pub fn SetIsBindingTracingEnabled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsBindingTracingEnabled(self, value)); }
-    pub fn IsTextPerformanceVisualizationEnabled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsTextPerformanceVisualizationEnabled(self, &out)); return out; }
-    pub fn SetIsTextPerformanceVisualizationEnabled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsTextPerformanceVisualizationEnabled(self, value)); }
-    pub fn FailFastOnErrors(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.FailFastOnErrors(self, &out)); return out; }
-    pub fn SetFailFastOnErrors(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetFailFastOnErrors(self, value)); }
-    pub fn AddBindingFailed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.BindingFailed(self, p0, &out0)); return out0; }
-    pub fn BindingFailed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddBindingFailed(p0); }
-    pub fn RemoveBindingFailed(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveBindingFailed(self, token)); }
+    pub fn LayoutCycleTracingLevel() void {}
+    pub fn get_LayoutCycleTracingLevel() void {}
+    pub fn SetLayoutCycleTracingLevel() void {}
+    pub fn put_LayoutCycleTracingLevel() void {}
+    pub fn LayoutCycleDebugBreakLevel() void {}
+    pub fn get_LayoutCycleDebugBreakLevel() void {}
+    pub fn SetLayoutCycleDebugBreakLevel() void {}
+    pub fn put_LayoutCycleDebugBreakLevel() void {}
 };
 
 pub const ApplicationTheme = struct {
@@ -2429,7 +2871,338 @@ pub const UnhandledExceptionEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use UnhandledExceptionEventHandlerImpl instead"); }
+};
+
+pub fn UnhandledExceptionEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = UnhandledExceptionEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
+pub const ResourceManagerRequestedEventArgs = extern struct {
+    pub const IID = IResourceManagerRequestedEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IResourceManagerRequestedEventArgs.VTable;
+    pub fn CustomResourceManager() void {}
+    pub fn get_CustomResourceManager() void {}
+    pub fn SetCustomResourceManager() void {}
+    pub fn put_CustomResourceManager() void {}
+};
+
+pub const IResourceManagerRequestedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xc35f4cf1, .data2 = 0xfcd6, .data3 = 0x5c6b, .data4 = .{ 0x9b, 0xe2, 0x4c, 0xfa, 0xef, 0xb6, 0x8b, 0x2a } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CustomResourceManager: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetCustomResourceManager: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn CustomResourceManager(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CustomResourceManager(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn SetCustomResourceManager(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetCustomResourceManager(self, value)); }
+};
+
+pub const TypedEventHandler = extern struct {
+    pub const IID = GUID{ .data1 = 0x9de1c534, .data2 = 0x6ae1, .data3 = 0x11e0, .data4 = .{ 0x84, 0xe1, 0x18, 0xa9, 0x05, 0xbc, 0xc5, 0x3f } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn invoke(self: *@This(), sender: ?*anyopaque, args: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, args)); }
+    pub fn Invoke(self: *@This(), sender: ?*anyopaque, args: ?*anyopaque) !void { try self.invoke(sender, args); }
+    pub fn new() !*@This() { @compileError("use TypedEventHandlerImpl instead"); }
+};
+
+pub fn TypedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = TypedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
+pub const LaunchActivatedEventArgs = extern struct {
+    pub const IID = ILaunchActivatedEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ILaunchActivatedEventArgs.VTable;
+    pub fn Arguments() void {}
+    pub fn get_Arguments() void {}
+    pub fn UWPLaunchActivatedEventArgs() void {}
+    pub fn get_UWPLaunchActivatedEventArgs() void {}
+};
+
+pub const ILaunchActivatedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xd505cea9, .data2 = 0x1bcb, .data3 = 0x5b29, .data4 = .{ 0xa8, 0xbe, 0x94, 0x4e, 0x00, 0xf0, 0x6f, 0x78 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Arguments: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+        UWPLaunchActivatedEventArgs: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Arguments(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.Arguments(self, &out)); return out; }
+    pub fn UWPLaunchActivatedEventArgs(self: *@This()) !*LaunchActivatedEventArgs { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.UWPLaunchActivatedEventArgs(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
 };
 
 pub const Rect = extern struct {
@@ -3198,148 +3971,6 @@ pub const CoreWindow = extern struct {
     pub fn GetForCurrentThread() void {}
 };
 
-pub const ICoreWindow = extern struct {
-    pub const IID = GUID{ .data1 = 0x79b9d5f2, .data2 = 0x879e, .data3 = 0x4b89, .data4 = .{ 0xb7, 0x98, 0x79, 0xe4, 0x75, 0x98, 0x03, 0x0c } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        AutomationHostProvider: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        Bounds: *const fn (*anyopaque, *Rect) callconv(.winapi) HRESULT,
-        CustomProperties: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        Dispatcher: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        FlowDirection: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-        SetFlowDirection: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
-        IsInputEnabled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetIsInputEnabled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-        PointerCursor: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetPointerCursor: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        PointerPosition: *const fn (*anyopaque, *Point) callconv(.winapi) HRESULT,
-        Visible: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        Activate: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        Close: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        GetAsyncKeyState: *const fn (*anyopaque, i32, *i32) callconv(.winapi) HRESULT,
-        GetKeyState: *const fn (*anyopaque, i32, *i32) callconv(.winapi) HRESULT,
-        ReleasePointerCapture: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        SetPointerCapture: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        Activated: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveActivated: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        AutomationProviderRequested: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveAutomationProviderRequested: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        CharacterReceived: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveCharacterReceived: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        Closed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveClosed: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        InputEnabled: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveInputEnabled: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        KeyDown: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveKeyDown: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        KeyUp: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveKeyUp: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        PointerCaptureLost: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemovePointerCaptureLost: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        PointerEntered: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemovePointerEntered: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        PointerExited: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemovePointerExited: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        PointerMoved: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemovePointerMoved: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        PointerPressed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemovePointerPressed: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        PointerReleased: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemovePointerReleased: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        TouchHitTesting: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveTouchHitTesting: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        PointerWheelChanged: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemovePointerWheelChanged: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        SizeChanged: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveSizeChanged: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        VisibilityChanged: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveVisibilityChanged: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AutomationHostProvider(self: *@This()) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.AutomationHostProvider(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn Bounds(self: *@This()) !Rect { var out: Rect = undefined; try hrCheck(self.lpVtbl.Bounds(self, &out)); return out; }
-    pub fn CustomProperties(self: *@This()) !*IPropertySet { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CustomProperties(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn Dispatcher(self: *@This()) !*ICoreDispatcher { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Dispatcher(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn FlowDirection(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.FlowDirection(self, &out)); return out; }
-    pub fn SetFlowDirection(self: *@This(), value: i32) !void { try hrCheck(self.lpVtbl.SetFlowDirection(self, value)); }
-    pub fn IsInputEnabled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsInputEnabled(self, &out)); return out; }
-    pub fn SetIsInputEnabled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsInputEnabled(self, value)); }
-    pub fn PointerCursor(self: *@This()) !*ICoreCursor { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.PointerCursor(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetPointerCursor(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetPointerCursor(self, value)); }
-    pub fn PointerPosition(self: *@This()) !Point { var out: Point = undefined; try hrCheck(self.lpVtbl.PointerPosition(self, &out)); return out; }
-    pub fn Visible(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.Visible(self, &out)); return out; }
-    pub fn activate(self: *@This()) !void { try hrCheck(self.lpVtbl.Activate(self)); }
-    pub fn Activate(self: *@This()) !void { try self.activate(); }
-    pub fn close(self: *@This()) !void { try hrCheck(self.lpVtbl.Close(self)); }
-    pub fn Close(self: *@This()) !void { try self.close(); }
-    pub fn getAsyncKeyState(self: *@This(), p0: i32) !i32 { var out0: i32 = 0; try hrCheck(self.lpVtbl.GetAsyncKeyState(self, p0, &out0)); return out0; }
-    pub fn GetAsyncKeyState(self: *@This(), p0: i32) !i32 { return self.getAsyncKeyState(p0); }
-    pub fn getKeyState(self: *@This(), p0: i32) !i32 { var out0: i32 = 0; try hrCheck(self.lpVtbl.GetKeyState(self, p0, &out0)); return out0; }
-    pub fn GetKeyState(self: *@This(), p0: i32) !i32 { return self.getKeyState(p0); }
-    pub fn releasePointerCapture(self: *@This()) !void { try hrCheck(self.lpVtbl.ReleasePointerCapture(self)); }
-    pub fn ReleasePointerCapture(self: *@This()) !void { try self.releasePointerCapture(); }
-    pub fn setPointerCapture(self: *@This()) !void { try hrCheck(self.lpVtbl.SetPointerCapture(self)); }
-    pub fn SetPointerCapture(self: *@This()) !void { try self.setPointerCapture(); }
-    pub fn AddActivated(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.Activated(self, p0, &out0)); return out0; }
-    pub fn Activated(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddActivated(p0); }
-    pub fn RemoveActivated(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveActivated(self, cookie)); }
-    pub fn AddAutomationProviderRequested(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.AutomationProviderRequested(self, p0, &out0)); return out0; }
-    pub fn AutomationProviderRequested(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddAutomationProviderRequested(p0); }
-    pub fn RemoveAutomationProviderRequested(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveAutomationProviderRequested(self, cookie)); }
-    pub fn AddCharacterReceived(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.CharacterReceived(self, p0, &out0)); return out0; }
-    pub fn CharacterReceived(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddCharacterReceived(p0); }
-    pub fn RemoveCharacterReceived(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveCharacterReceived(self, cookie)); }
-    pub fn AddClosed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.Closed(self, p0, &out0)); return out0; }
-    pub fn Closed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddClosed(p0); }
-    pub fn RemoveClosed(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveClosed(self, cookie)); }
-    pub fn AddInputEnabled(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.InputEnabled(self, p0, &out0)); return out0; }
-    pub fn InputEnabled(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddInputEnabled(p0); }
-    pub fn RemoveInputEnabled(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveInputEnabled(self, cookie)); }
-    pub fn AddKeyDown(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.KeyDown(self, p0, &out0)); return out0; }
-    pub fn KeyDown(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddKeyDown(p0); }
-    pub fn RemoveKeyDown(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveKeyDown(self, cookie)); }
-    pub fn AddKeyUp(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.KeyUp(self, p0, &out0)); return out0; }
-    pub fn KeyUp(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddKeyUp(p0); }
-    pub fn RemoveKeyUp(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveKeyUp(self, cookie)); }
-    pub fn AddPointerCaptureLost(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.PointerCaptureLost(self, p0, &out0)); return out0; }
-    pub fn PointerCaptureLost(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddPointerCaptureLost(p0); }
-    pub fn RemovePointerCaptureLost(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemovePointerCaptureLost(self, cookie)); }
-    pub fn AddPointerEntered(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.PointerEntered(self, p0, &out0)); return out0; }
-    pub fn PointerEntered(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddPointerEntered(p0); }
-    pub fn RemovePointerEntered(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemovePointerEntered(self, cookie)); }
-    pub fn AddPointerExited(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.PointerExited(self, p0, &out0)); return out0; }
-    pub fn PointerExited(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddPointerExited(p0); }
-    pub fn RemovePointerExited(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemovePointerExited(self, cookie)); }
-    pub fn AddPointerMoved(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.PointerMoved(self, p0, &out0)); return out0; }
-    pub fn PointerMoved(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddPointerMoved(p0); }
-    pub fn RemovePointerMoved(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemovePointerMoved(self, cookie)); }
-    pub fn AddPointerPressed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.PointerPressed(self, p0, &out0)); return out0; }
-    pub fn PointerPressed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddPointerPressed(p0); }
-    pub fn RemovePointerPressed(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemovePointerPressed(self, cookie)); }
-    pub fn AddPointerReleased(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.PointerReleased(self, p0, &out0)); return out0; }
-    pub fn PointerReleased(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddPointerReleased(p0); }
-    pub fn RemovePointerReleased(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemovePointerReleased(self, cookie)); }
-    pub fn AddTouchHitTesting(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.TouchHitTesting(self, p0, &out0)); return out0; }
-    pub fn TouchHitTesting(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddTouchHitTesting(p0); }
-    pub fn RemoveTouchHitTesting(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveTouchHitTesting(self, cookie)); }
-    pub fn AddPointerWheelChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.PointerWheelChanged(self, p0, &out0)); return out0; }
-    pub fn PointerWheelChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddPointerWheelChanged(p0); }
-    pub fn RemovePointerWheelChanged(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemovePointerWheelChanged(self, cookie)); }
-    pub fn AddSizeChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.SizeChanged(self, p0, &out0)); return out0; }
-    pub fn SizeChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddSizeChanged(p0); }
-    pub fn RemoveSizeChanged(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveSizeChanged(self, cookie)); }
-    pub fn AddVisibilityChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.VisibilityChanged(self, p0, &out0)); return out0; }
-    pub fn VisibilityChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddVisibilityChanged(p0); }
-    pub fn RemoveVisibilityChanged(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveVisibilityChanged(self, cookie)); }
-};
-
 pub const Compositor = extern struct {
     pub const IID = ICompositor.IID;
     lpVtbl: *const VTable,
@@ -3433,90 +4064,6 @@ pub const Compositor = extern struct {
     pub fn get_MinGlobalPlaybackRate() void {}
 };
 
-pub const ICompositor = extern struct {
-    pub const IID = GUID{ .data1 = 0x95213c13, .data2 = 0xc4cb, .data3 = 0x57de, .data4 = .{ 0xb2, 0x67, 0xd2, 0x1a, 0xb9, 0x01, 0xae, 0x38 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        CreateColorKeyFrameAnimation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateColorBrush: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateColorBrush_1: *const fn (*anyopaque, Color, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateContainerVisual: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateCubicBezierEasingFunction: *const fn (*anyopaque, Vector2, Vector2, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateEffectFactory: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateEffectFactory_1: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateExpressionAnimation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateExpressionAnimation_1: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateInsetClip: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateInsetClip_1: *const fn (*anyopaque, f32, f32, f32, f32, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateLinearEasingFunction: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreatePropertySet: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateQuaternionKeyFrameAnimation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateScalarKeyFrameAnimation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateScopedBatch: *const fn (*anyopaque, i32, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateSpriteVisual: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateSurfaceBrush: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateSurfaceBrush_1: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateVector2KeyFrameAnimation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateVector3KeyFrameAnimation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateVector4KeyFrameAnimation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        GetCommitBatch: *const fn (*anyopaque, i32, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn createColorKeyFrameAnimation(self: *@This()) !*IColorKeyFrameAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateColorKeyFrameAnimation(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateColorKeyFrameAnimation(self: *@This()) !*IColorKeyFrameAnimation { return self.createColorKeyFrameAnimation(); }
-    pub fn createColorBrush(self: *@This()) !*ICompositionColorBrush { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateColorBrush(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateColorBrush(self: *@This()) !*ICompositionColorBrush { return self.createColorBrush(); }
-    pub fn createColorBrush_1(self: *@This(), p0: Color) !*ICompositionColorBrush { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateColorBrush_1(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateColorBrush_1(self: *@This(), p0: Color) !*ICompositionColorBrush { return self.createColorBrush_1(p0); }
-    pub fn createContainerVisual(self: *@This()) !*IContainerVisual { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateContainerVisual(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateContainerVisual(self: *@This()) !*IContainerVisual { return self.createContainerVisual(); }
-    pub fn createCubicBezierEasingFunction(self: *@This(), p0: Vector2, p1: Vector2) !*ICubicBezierEasingFunction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateCubicBezierEasingFunction(self, p0, p1, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateCubicBezierEasingFunction(self: *@This(), p0: Vector2, p1: Vector2) !*ICubicBezierEasingFunction { return self.createCubicBezierEasingFunction(p0, p1); }
-    pub fn createEffectFactory(self: *@This(), p0: ?*anyopaque) !*ICompositionEffectFactory { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateEffectFactory(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateEffectFactory(self: *@This(), p0: ?*anyopaque) !*ICompositionEffectFactory { return self.createEffectFactory(p0); }
-    pub fn createEffectFactory_1(self: *@This(), p0: ?*anyopaque, p1: ?*anyopaque) !*ICompositionEffectFactory { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateEffectFactory_1(self, p0, p1, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateEffectFactory_1(self: *@This(), p0: ?*anyopaque, p1: ?*anyopaque) !*ICompositionEffectFactory { return self.createEffectFactory_1(p0, p1); }
-    pub fn createExpressionAnimation(self: *@This()) !*IExpressionAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateExpressionAnimation(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateExpressionAnimation(self: *@This()) !*IExpressionAnimation { return self.createExpressionAnimation(); }
-    pub fn createExpressionAnimation_1(self: *@This(), p0: anytype) !*IExpressionAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateExpressionAnimation_1(self, @ptrCast(p0), &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateExpressionAnimation_1(self: *@This(), p0: anytype) !*IExpressionAnimation { return self.createExpressionAnimation_1(p0); }
-    pub fn createInsetClip(self: *@This()) !*IInsetClip { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateInsetClip(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateInsetClip(self: *@This()) !*IInsetClip { return self.createInsetClip(); }
-    pub fn createInsetClip_1(self: *@This(), p0: f32, p1: f32, p2: f32, p3: f32) !*IInsetClip { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateInsetClip_1(self, p0, p1, p2, p3, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateInsetClip_1(self: *@This(), p0: f32, p1: f32, p2: f32, p3: f32) !*IInsetClip { return self.createInsetClip_1(p0, p1, p2, p3); }
-    pub fn createLinearEasingFunction(self: *@This()) !*ILinearEasingFunction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateLinearEasingFunction(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateLinearEasingFunction(self: *@This()) !*ILinearEasingFunction { return self.createLinearEasingFunction(); }
-    pub fn createPropertySet(self: *@This()) !*ICompositionPropertySet { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreatePropertySet(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreatePropertySet(self: *@This()) !*ICompositionPropertySet { return self.createPropertySet(); }
-    pub fn createQuaternionKeyFrameAnimation(self: *@This()) !*IQuaternionKeyFrameAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateQuaternionKeyFrameAnimation(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateQuaternionKeyFrameAnimation(self: *@This()) !*IQuaternionKeyFrameAnimation { return self.createQuaternionKeyFrameAnimation(); }
-    pub fn createScalarKeyFrameAnimation(self: *@This()) !*IScalarKeyFrameAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateScalarKeyFrameAnimation(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateScalarKeyFrameAnimation(self: *@This()) !*IScalarKeyFrameAnimation { return self.createScalarKeyFrameAnimation(); }
-    pub fn createScopedBatch(self: *@This(), p0: i32) !*ICompositionScopedBatch { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateScopedBatch(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateScopedBatch(self: *@This(), p0: i32) !*ICompositionScopedBatch { return self.createScopedBatch(p0); }
-    pub fn createSpriteVisual(self: *@This()) !*ISpriteVisual { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateSpriteVisual(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateSpriteVisual(self: *@This()) !*ISpriteVisual { return self.createSpriteVisual(); }
-    pub fn createSurfaceBrush(self: *@This()) !*ICompositionSurfaceBrush { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateSurfaceBrush(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateSurfaceBrush(self: *@This()) !*ICompositionSurfaceBrush { return self.createSurfaceBrush(); }
-    pub fn createSurfaceBrush_1(self: *@This(), p0: ?*anyopaque) !*ICompositionSurfaceBrush { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateSurfaceBrush_1(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateSurfaceBrush_1(self: *@This(), p0: ?*anyopaque) !*ICompositionSurfaceBrush { return self.createSurfaceBrush_1(p0); }
-    pub fn createVector2KeyFrameAnimation(self: *@This()) !*IVector2KeyFrameAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateVector2KeyFrameAnimation(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateVector2KeyFrameAnimation(self: *@This()) !*IVector2KeyFrameAnimation { return self.createVector2KeyFrameAnimation(); }
-    pub fn createVector3KeyFrameAnimation(self: *@This()) !*IVector3KeyFrameAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateVector3KeyFrameAnimation(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateVector3KeyFrameAnimation(self: *@This()) !*IVector3KeyFrameAnimation { return self.createVector3KeyFrameAnimation(); }
-    pub fn createVector4KeyFrameAnimation(self: *@This()) !*IVector4KeyFrameAnimation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateVector4KeyFrameAnimation(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateVector4KeyFrameAnimation(self: *@This()) !*IVector4KeyFrameAnimation { return self.createVector4KeyFrameAnimation(); }
-    pub fn getCommitBatch(self: *@This(), p0: i32) !*ICompositionCommitBatch { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetCommitBatch(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn GetCommitBatch(self: *@This(), p0: i32) !*ICompositionCommitBatch { return self.getCommitBatch(p0); }
-};
-
 pub const CoreDispatcher = extern struct {
     pub const IID = ICoreDispatcher.IID;
     lpVtbl: *const VTable,
@@ -3603,40 +4150,6 @@ pub const DispatcherQueue = extern struct {
     pub fn GetForCurrentThread() void {}
 };
 
-pub const IDispatcherQueue = extern struct {
-    pub const IID = GUID{ .data1 = 0xf6ebf8fa, .data2 = 0xbe1c, .data3 = 0x5bf6, .data4 = .{ 0xa4, 0x67, 0x73, 0xda, 0x28, 0x73, 0x8a, 0xe8 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        CreateTimer: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        TryEnqueue: *const fn (*anyopaque, ?*anyopaque, *bool) callconv(.winapi) HRESULT,
-        TryEnqueue_1: *const fn (*anyopaque, i32, ?*anyopaque, *bool) callconv(.winapi) HRESULT,
-        ShutdownStarting: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveShutdownStarting: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        ShutdownCompleted: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveShutdownCompleted: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn createTimer(self: *@This()) !*IDispatcherQueueTimer { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateTimer(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateTimer(self: *@This()) !*IDispatcherQueueTimer { return self.createTimer(); }
-    pub fn tryEnqueue(self: *@This(), p0: ?*anyopaque) !bool { var out0: bool = false; try hrCheck(self.lpVtbl.TryEnqueue(self, p0, &out0)); return out0; }
-    pub fn TryEnqueue(self: *@This(), p0: ?*anyopaque) !bool { return self.tryEnqueue(p0); }
-    pub fn tryEnqueue_1(self: *@This(), p0: i32, p1: ?*anyopaque) !bool { var out0: bool = false; try hrCheck(self.lpVtbl.TryEnqueue_1(self, p0, p1, &out0)); return out0; }
-    pub fn TryEnqueue_1(self: *@This(), p0: i32, p1: ?*anyopaque) !bool { return self.tryEnqueue_1(p0, p1); }
-    pub fn AddShutdownStarting(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.ShutdownStarting(self, p0, &out0)); return out0; }
-    pub fn ShutdownStarting(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddShutdownStarting(p0); }
-    pub fn RemoveShutdownStarting(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveShutdownStarting(self, token)); }
-    pub fn AddShutdownCompleted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.ShutdownCompleted(self, p0, &out0)); return out0; }
-    pub fn ShutdownCompleted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddShutdownCompleted(p0); }
-    pub fn RemoveShutdownCompleted(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveShutdownCompleted(self, token)); }
-};
-
 pub const WindowActivatedEventArgs = extern struct {
     pub const IID = IWindowActivatedEventArgs.IID;
     lpVtbl: *const VTable,
@@ -3668,25 +4181,6 @@ pub const IWindowActivatedEventArgs = extern struct {
     pub fn Handled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.Handled(self, &out)); return out; }
     pub fn SetHandled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetHandled(self, value)); }
     pub fn WindowActivationState(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.WindowActivationState(self, &out)); return out; }
-};
-
-pub const TypedEventHandler = extern struct {
-    pub const IID = GUID{ .data1 = 0x9de1c534, .data2 = 0x6ae1, .data3 = 0x11e0, .data4 = .{ 0x84, 0xe1, 0x18, 0xa9, 0x05, 0xbc, 0xc5, 0x3f } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn invoke(self: *@This(), sender: ?*anyopaque, args: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, args)); }
-    pub fn Invoke(self: *@This(), sender: ?*anyopaque, args: ?*anyopaque) !void { try self.invoke(sender, args); }
-    pub fn new() !*@This() { return error.NotImplemented; }
 };
 
 pub const WindowEventArgs = extern struct {
@@ -4581,6 +5075,7 @@ pub const XamlRoot = extern struct {
     lpVtbl: *const VTable,
     pub const VTable = IXamlRoot.VTable;
     pub const Requires_IXamlRoot2 = true; // requires IXamlRoot2
+    pub const Requires_IXamlRoot3 = true; // requires IXamlRoot3
     pub fn Content() void {}
     pub fn get_Content() void {}
     pub fn Size() void {}
@@ -4595,6 +5090,8 @@ pub const XamlRoot = extern struct {
     pub fn remove_Changed() void {}
     pub fn ContentIslandEnvironment() void {}
     pub fn get_ContentIslandEnvironment() void {}
+    pub fn CoordinateConverter() void {}
+    pub fn get_CoordinateConverter() void {}
 };
 
 pub const IXamlRoot = extern struct {
@@ -4669,9 +5166,136 @@ pub const KeyEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use KeyEventHandlerImpl instead"); }
 };
 
+pub fn KeyEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = KeyEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const RoutedEventHandler = extern struct {
     pub const IID = GUID{ .data1 = 0xdae23d85, .data2 = 0x69ca, .data3 = 0x5bdf, .data4 = .{ 0x80, 0x5b, 0x61, 0x61, 0xa3, 0xa2, 0x15, 0xcc } };
     lpVtbl: *const VTable,
@@ -4688,9 +5312,136 @@ pub const RoutedEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use RoutedEventHandlerImpl instead"); }
 };
 
+pub fn RoutedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = RoutedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const DragStartingEventArgs = extern struct {
     pub const IID = IDragStartingEventArgs.IID;
     lpVtbl: *const VTable,
@@ -4799,9 +5550,136 @@ pub const DragEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use DragEventHandlerImpl instead"); }
 };
 
+pub fn DragEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = DragEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const PointerEventHandler = extern struct {
     pub const IID = GUID{ .data1 = 0xa48a71e1, .data2 = 0x8bb4, .data3 = 0x5597, .data4 = .{ 0x9e, 0x31, 0x90, 0x3a, 0x3f, 0x6a, 0x04, 0xfb } };
     lpVtbl: *const VTable,
@@ -4818,9 +5696,136 @@ pub const PointerEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use PointerEventHandlerImpl instead"); }
 };
 
+pub fn PointerEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = PointerEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const TappedEventHandler = extern struct {
     pub const IID = GUID{ .data1 = 0xb60074f3, .data2 = 0x125b, .data3 = 0x534e, .data4 = .{ 0x8f, 0x9c, 0x97, 0x69, 0xbd, 0x3f, 0x0f, 0x64 } };
     lpVtbl: *const VTable,
@@ -4837,9 +5842,136 @@ pub const TappedEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use TappedEventHandlerImpl instead"); }
 };
 
+pub fn TappedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = TappedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const DoubleTappedEventHandler = extern struct {
     pub const IID = GUID{ .data1 = 0xf7a501b9, .data2 = 0xe277, .data3 = 0x5611, .data4 = .{ 0x87, 0xb0, 0x0e, 0x06, 0x07, 0x62, 0x21, 0x83 } };
     lpVtbl: *const VTable,
@@ -4856,9 +5988,136 @@ pub const DoubleTappedEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use DoubleTappedEventHandlerImpl instead"); }
 };
 
+pub fn DoubleTappedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = DoubleTappedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const HoldingEventHandler = extern struct {
     pub const IID = GUID{ .data1 = 0xfe23c5bd, .data2 = 0x4984, .data3 = 0x56b6, .data4 = .{ 0xb9, 0x2b, 0xfc, 0x9d, 0x12, 0x16, 0xb2, 0x4e } };
     lpVtbl: *const VTable,
@@ -4875,9 +6134,136 @@ pub const HoldingEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use HoldingEventHandlerImpl instead"); }
 };
 
+pub fn HoldingEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = HoldingEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const ContextRequestedEventArgs = extern struct {
     pub const IID = IContextRequestedEventArgs.IID;
     lpVtbl: *const VTable,
@@ -4952,9 +6338,136 @@ pub const RightTappedEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use RightTappedEventHandlerImpl instead"); }
 };
 
+pub fn RightTappedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = RightTappedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const ManipulationStartingEventHandler = extern struct {
     pub const IID = GUID{ .data1 = 0x44f528f1, .data2 = 0xf0e4, .data3 = 0x505c, .data4 = .{ 0xa0, 0xbb, 0x0c, 0x48, 0x39, 0xb2, 0x9d, 0xf5 } };
     lpVtbl: *const VTable,
@@ -4971,9 +6484,136 @@ pub const ManipulationStartingEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use ManipulationStartingEventHandlerImpl instead"); }
 };
 
+pub fn ManipulationStartingEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = ManipulationStartingEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const ManipulationInertiaStartingEventHandler = extern struct {
     pub const IID = GUID{ .data1 = 0x5de296bd, .data2 = 0x6f1c, .data3 = 0x5f60, .data4 = .{ 0x91, 0x80, 0x10, 0x70, 0x52, 0x82, 0x57, 0x6c } };
     lpVtbl: *const VTable,
@@ -4990,9 +6630,136 @@ pub const ManipulationInertiaStartingEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use ManipulationInertiaStartingEventHandlerImpl instead"); }
 };
 
+pub fn ManipulationInertiaStartingEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = ManipulationInertiaStartingEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const ManipulationStartedEventHandler = extern struct {
     pub const IID = GUID{ .data1 = 0x41060669, .data2 = 0x304c, .data3 = 0x53ac, .data4 = .{ 0x9d, 0x43, 0xbc, 0x31, 0x12, 0x35, 0xaa, 0xe4 } };
     lpVtbl: *const VTable,
@@ -5009,9 +6776,136 @@ pub const ManipulationStartedEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use ManipulationStartedEventHandlerImpl instead"); }
 };
 
+pub fn ManipulationStartedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = ManipulationStartedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const ManipulationDeltaEventHandler = extern struct {
     pub const IID = GUID{ .data1 = 0x83f2d4ce, .data2 = 0x105f, .data3 = 0x5392, .data4 = .{ 0xa3, 0x8a, 0xb7, 0x46, 0x7b, 0x7c, 0x2e, 0xa5 } };
     lpVtbl: *const VTable,
@@ -5028,9 +6922,136 @@ pub const ManipulationDeltaEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use ManipulationDeltaEventHandlerImpl instead"); }
 };
 
+pub fn ManipulationDeltaEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = ManipulationDeltaEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const ManipulationCompletedEventHandler = extern struct {
     pub const IID = GUID{ .data1 = 0xd51df8db, .data2 = 0x71cd, .data3 = 0x5bfd, .data4 = .{ 0x84, 0x26, 0x76, 0x72, 0x18, 0xee, 0x55, 0xec } };
     lpVtbl: *const VTable,
@@ -5047,9 +7068,136 @@ pub const ManipulationCompletedEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use ManipulationCompletedEventHandlerImpl instead"); }
 };
 
+pub fn ManipulationCompletedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = ManipulationCompletedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const AccessKeyDisplayRequestedEventArgs = extern struct {
     pub const IID = IAccessKeyDisplayRequestedEventArgs.IID;
     lpVtbl: *const VTable,
@@ -6045,9 +8193,136 @@ pub const SizeChangedEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use SizeChangedEventHandlerImpl instead"); }
 };
 
+pub fn SizeChangedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = SizeChangedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const EventHandler = extern struct {
     pub const IID = GUID{ .data1 = 0x9de1c535, .data2 = 0x6ae1, .data3 = 0x11e0, .data4 = .{ 0x84, 0xe1, 0x18, 0xa9, 0x05, 0xbc, 0xc5, 0x3f } };
     lpVtbl: *const VTable,
@@ -6064,9 +8339,136 @@ pub const EventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, args: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, args)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, args: ?*anyopaque) !void { try self.invoke(sender, args); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use EventHandlerImpl instead"); }
 };
 
+pub fn EventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = EventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const EffectiveViewportChangedEventArgs = extern struct {
     pub const IID = IEffectiveViewportChangedEventArgs.IID;
     lpVtbl: *const VTable,
@@ -6634,9 +9036,136 @@ pub const DependencyPropertyChangedEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use DependencyPropertyChangedEventHandlerImpl instead"); }
 };
 
+pub fn DependencyPropertyChangedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = DependencyPropertyChangedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const UIElementCollection = extern struct {
     pub const Requires_IUIElementCollection = true; // requires IUIElementCollection
     pub const Requires_IVector = true; // requires IVector
@@ -6775,15 +9304,15 @@ pub const SolidColorBrush = extern struct {
     pub const IID = ISolidColorBrush.IID;
     lpVtbl: *const VTable,
     pub const VTable = ISolidColorBrush.VTable;
-    pub const Requires_ISolidColorBrushStatics = true; // requires ISolidColorBrushStatics
     pub const Requires_ISolidColorBrushFactory = true; // requires ISolidColorBrushFactory
+    pub const Requires_ISolidColorBrushStatics = true; // requires ISolidColorBrushStatics
     pub fn Color() void {}
     pub fn get_Color() void {}
     pub fn SetColor() void {}
     pub fn put_Color() void {}
+    pub fn CreateInstanceWithColor() void {}
     pub fn ColorProperty() void {}
     pub fn get_ColorProperty() void {}
-    pub fn CreateInstanceWithColor() void {}
 };
 
 pub const CharacterCasing = struct {
@@ -6808,9 +9337,136 @@ pub const TextChangedEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use TextChangedEventHandlerImpl instead"); }
 };
 
+pub fn TextChangedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = TextChangedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const ContextMenuOpeningEventHandler = extern struct {
     pub const IID = GUID{ .data1 = 0xd010ff61, .data2 = 0x4067, .data3 = 0x526a, .data4 = .{ 0x95, 0xa3, 0x51, 0x75, 0x77, 0xbc, 0x52, 0x73 } };
     lpVtbl: *const VTable,
@@ -6827,9 +9483,136 @@ pub const ContextMenuOpeningEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use ContextMenuOpeningEventHandlerImpl instead"); }
 };
 
+pub fn ContextMenuOpeningEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = ContextMenuOpeningEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const TextControlPasteEventHandler = extern struct {
     pub const IID = GUID{ .data1 = 0xddf3a6c0, .data2 = 0x5ab1, .data3 = 0x5d74, .data4 = .{ 0x82, 0x89, 0x89, 0x2c, 0x06, 0x14, 0x65, 0x8f } };
     lpVtbl: *const VTable,
@@ -6846,9 +9629,136 @@ pub const TextControlPasteEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use TextControlPasteEventHandlerImpl instead"); }
 };
 
+pub fn TextControlPasteEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = TextControlPasteEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const TextBox = extern struct {
     pub const IID = ITextBox.IID;
     lpVtbl: *const VTable,
@@ -7402,6 +10312,8 @@ pub const TabView = extern struct {
     pub const IID = ITabView.IID;
     lpVtbl: *const VTable,
     pub const VTable = ITabView.VTable;
+    pub const Requires_ITabView2 = true; // requires ITabView2
+    pub const Requires_ITabViewStatics2 = true; // requires ITabViewStatics2
     pub const Requires_ITabViewStatics = true; // requires ITabViewStatics
     pub fn TabWidthMode() void {}
     pub fn get_TabWidthMode() void {}
@@ -7511,6 +10423,28 @@ pub const TabView = extern struct {
     pub fn add_TabStripDrop() void {}
     pub fn RemoveTabStripDrop() void {}
     pub fn remove_TabStripDrop() void {}
+    pub fn CanTearOutTabs() void {}
+    pub fn get_CanTearOutTabs() void {}
+    pub fn SetCanTearOutTabs() void {}
+    pub fn put_CanTearOutTabs() void {}
+    pub fn AddTabTearOutWindowRequested() void {}
+    pub fn add_TabTearOutWindowRequested() void {}
+    pub fn RemoveTabTearOutWindowRequested() void {}
+    pub fn remove_TabTearOutWindowRequested() void {}
+    pub fn AddTabTearOutRequested() void {}
+    pub fn add_TabTearOutRequested() void {}
+    pub fn RemoveTabTearOutRequested() void {}
+    pub fn remove_TabTearOutRequested() void {}
+    pub fn AddExternalTornOutTabsDropping() void {}
+    pub fn add_ExternalTornOutTabsDropping() void {}
+    pub fn RemoveExternalTornOutTabsDropping() void {}
+    pub fn remove_ExternalTornOutTabsDropping() void {}
+    pub fn AddExternalTornOutTabsDropped() void {}
+    pub fn add_ExternalTornOutTabsDropped() void {}
+    pub fn RemoveExternalTornOutTabsDropped() void {}
+    pub fn remove_ExternalTornOutTabsDropped() void {}
+    pub fn CanTearOutTabsProperty() void {}
+    pub fn get_CanTearOutTabsProperty() void {}
     pub fn TabWidthModeProperty() void {}
     pub fn get_TabWidthModeProperty() void {}
     pub fn TabStripHeaderProperty() void {}
@@ -7623,9 +10557,136 @@ pub const SelectionChangedEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use SelectionChangedEventHandlerImpl instead"); }
 };
 
+pub fn SelectionChangedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = SelectionChangedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const TabViewTabDragStartingEventArgs = extern struct {
     pub const IID = ITabViewTabDragStartingEventArgs.IID;
     lpVtbl: *const VTable,
@@ -7744,8 +10805,8 @@ pub const TabViewItemTemplateSettings = extern struct {
     lpVtbl: *const VTable,
     pub const VTable = ITabViewItemTemplateSettings.VTable;
     pub const Requires_ITabViewItemTemplateSettings2 = true; // requires ITabViewItemTemplateSettings2
-    pub const Requires_ITabViewItemTemplateSettingsStatics2 = true; // requires ITabViewItemTemplateSettingsStatics2
     pub const Requires_ITabViewItemTemplateSettingsStatics = true; // requires ITabViewItemTemplateSettingsStatics
+    pub const Requires_ITabViewItemTemplateSettingsStatics2 = true; // requires ITabViewItemTemplateSettingsStatics2
     pub fn IconElement() void {}
     pub fn get_IconElement() void {}
     pub fn SetIconElement() void {}
@@ -7754,10 +10815,10 @@ pub const TabViewItemTemplateSettings = extern struct {
     pub fn get_TabGeometry() void {}
     pub fn SetTabGeometry() void {}
     pub fn put_TabGeometry() void {}
-    pub fn TabGeometryProperty() void {}
-    pub fn get_TabGeometryProperty() void {}
     pub fn IconElementProperty() void {}
     pub fn get_IconElementProperty() void {}
+    pub fn TabGeometryProperty() void {}
+    pub fn get_TabGeometryProperty() void {}
 };
 
 pub const ITabViewItemTemplateSettings = extern struct {
@@ -7834,9 +10895,136 @@ pub const RangeBaseValueChangedEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use RangeBaseValueChangedEventHandlerImpl instead"); }
 };
 
+pub fn RangeBaseValueChangedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = RangeBaseValueChangedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const Orientation = struct {
     pub const Vertical: i32 = 0;
     pub const Horizontal: i32 = 1;
@@ -7864,9 +11052,136 @@ pub const ScrollEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use ScrollEventHandlerImpl instead"); }
 };
 
+pub fn ScrollEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = ScrollEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const ScrollEventType = struct {
     pub const SmallDecrement: i32 = 0;
     pub const SmallIncrement: i32 = 1;
@@ -8276,8 +11591,30 @@ pub const PointerUpdateKind = struct {
     pub const XButton2Released: i32 = 10;
 };
 
-pub const IApplication2 = extern struct {
-    pub const IID = GUID{ .data1 = 0x469e6d36, .data2 = 0x2e11, .data3 = 0x5b06, .data4 = .{ 0x9e, 0x0a, 0xc5, 0xee, 0xf0, 0xcf, 0x8f, 0x12 } };
+pub const DispatcherQueueTimer = extern struct {
+    pub const IID = IDispatcherQueueTimer.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IDispatcherQueueTimer.VTable;
+    pub fn Interval() void {}
+    pub fn get_Interval() void {}
+    pub fn SetInterval() void {}
+    pub fn put_Interval() void {}
+    pub fn IsRunning() void {}
+    pub fn get_IsRunning() void {}
+    pub fn IsRepeating() void {}
+    pub fn get_IsRepeating() void {}
+    pub fn SetIsRepeating() void {}
+    pub fn put_IsRepeating() void {}
+    pub fn Start() void {}
+    pub fn Stop() void {}
+    pub fn AddTick() void {}
+    pub fn add_Tick() void {}
+    pub fn RemoveTick() void {}
+    pub fn remove_Tick() void {}
+};
+
+pub const IDispatcherQueueTimer = extern struct {
+    pub const IID = GUID{ .data1 = 0x5feabb1d, .data2 = 0xa31c, .data3 = 0x4727, .data4 = .{ 0xb1, 0xac, 0x37, 0x45, 0x46, 0x49, 0xd5, 0x6a } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -8286,18 +11623,34 @@ pub const IApplication2 = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        ResourceManagerRequested: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveResourceManagerRequested: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        Interval: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetInterval: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        IsRunning: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        IsRepeating: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetIsRepeating: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        Start: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        Stop: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        Tick: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveTick: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddResourceManagerRequested(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.ResourceManagerRequested(self, p0, &out0)); return out0; }
-    pub fn ResourceManagerRequested(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddResourceManagerRequested(p0); }
-    pub fn RemoveResourceManagerRequested(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveResourceManagerRequested(self, token)); }
+    pub fn Interval(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Interval(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn SetInterval(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetInterval(self, value)); }
+    pub fn IsRunning(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsRunning(self, &out)); return out; }
+    pub fn IsRepeating(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsRepeating(self, &out)); return out; }
+    pub fn SetIsRepeating(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsRepeating(self, value)); }
+    pub fn start(self: *@This()) !void { try hrCheck(self.lpVtbl.Start(self)); }
+    pub fn Start(self: *@This()) !void { try self.start(); }
+    pub fn stop(self: *@This()) !void { try hrCheck(self.lpVtbl.Stop(self)); }
+    pub fn Stop(self: *@This()) !void { try self.stop(); }
+    pub fn AddTick(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.Tick(self, p0, &out0)); return out0; }
+    pub fn Tick(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddTick(p0); }
+    pub fn RemoveTick(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveTick(self, token)); }
 };
 
-pub const IApplicationOverrides = extern struct {
-    pub const IID = GUID{ .data1 = 0xa33e81ef, .data2 = 0xc665, .data3 = 0x503b, .data4 = .{ 0x88, 0x27, 0xd2, 0x7e, 0xf1, 0x72, 0x0a, 0x06 } };
+pub const DispatcherQueueHandler = extern struct {
+    pub const IID = GUID{ .data1 = 0xdfa2dc9c, .data2 = 0x1a2d, .data3 = 0x4917, .data4 = .{ 0x98, 0xf2, 0x93, 0x9a, 0xf1, 0xd6, 0xe0, 0xc8 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -8306,26 +11659,157 @@ pub const IApplicationOverrides = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        OnLaunched: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        Invoke: *const fn (*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn onLaunched(self: *@This(), args: ?*anyopaque) !void { try hrCheck(self.lpVtbl.OnLaunched(self, args)); }
-    pub fn OnLaunched(self: *@This(), args: ?*anyopaque) !void { try self.onLaunched(args); }
+    pub fn invoke(self: *@This()) !void { try hrCheck(self.lpVtbl.Invoke(self)); }
+    pub fn Invoke(self: *@This()) !void { try self.invoke(); }
+    pub fn new() !*@This() { @compileError("use DispatcherQueueHandlerImpl instead"); }
 };
 
-pub const ResourceManagerRequestedEventArgs = extern struct {
-    pub const IID = IResourceManagerRequestedEventArgs.IID;
+pub fn DispatcherQueueHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = DispatcherQueueHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
+pub const DispatcherQueuePriority = struct {
+    pub const Low: i32 = -10;
+    pub const Normal: i32 = 0;
+    pub const High: i32 = 10;
+};
+
+pub const DispatcherQueueShutdownStartingEventArgs = extern struct {
+    pub const IID = IDispatcherQueueShutdownStartingEventArgs.IID;
     lpVtbl: *const VTable,
-    pub const VTable = IResourceManagerRequestedEventArgs.VTable;
-    pub fn CustomResourceManager() void {}
-    pub fn get_CustomResourceManager() void {}
-    pub fn SetCustomResourceManager() void {}
-    pub fn put_CustomResourceManager() void {}
+    pub const VTable = IDispatcherQueueShutdownStartingEventArgs.VTable;
+    pub fn GetDeferral() void {}
 };
 
-pub const IResourceManagerRequestedEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0xc35f4cf1, .data2 = 0xfcd6, .data3 = 0x5c6b, .data4 = .{ 0x9b, 0xe2, 0x4c, 0xfa, 0xef, 0xb6, 0x8b, 0x2a } };
+pub const IDispatcherQueueShutdownStartingEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xc4724c4c, .data2 = 0xff97, .data3 = 0x40c0, .data4 = .{ 0xa2, 0x26, 0xcc, 0x0a, 0xaa, 0x54, 0x5e, 0x89 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -8334,27 +11818,27 @@ pub const IResourceManagerRequestedEventArgs = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        CustomResourceManager: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetCustomResourceManager: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        GetDeferral: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn CustomResourceManager(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CustomResourceManager(self, &out)); return out orelse error.WinRTFailed; }
-    pub fn SetCustomResourceManager(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetCustomResourceManager(self, value)); }
+    pub fn getDeferral(self: *@This()) !*IDeferral { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetDeferral(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn GetDeferral(self: *@This()) !*IDeferral { return self.getDeferral(); }
 };
 
-pub const LaunchActivatedEventArgs = extern struct {
-    pub const IID = ILaunchActivatedEventArgs.IID;
+pub const ColorKeyFrameAnimation = extern struct {
+    pub const IID = IColorKeyFrameAnimation.IID;
     lpVtbl: *const VTable,
-    pub const VTable = ILaunchActivatedEventArgs.VTable;
-    pub fn Arguments() void {}
-    pub fn get_Arguments() void {}
-    pub fn UWPLaunchActivatedEventArgs() void {}
-    pub fn get_UWPLaunchActivatedEventArgs() void {}
+    pub const VTable = IColorKeyFrameAnimation.VTable;
+    pub fn InterpolationColorSpace() void {}
+    pub fn get_InterpolationColorSpace() void {}
+    pub fn SetInterpolationColorSpace() void {}
+    pub fn put_InterpolationColorSpace() void {}
+    pub fn InsertKeyFrame() void {}
 };
 
-pub const ILaunchActivatedEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0xd505cea9, .data2 = 0x1bcb, .data3 = 0x5b29, .data4 = .{ 0xa8, 0xbe, 0x94, 0x4e, 0x00, 0xf0, 0x6f, 0x78 } };
+pub const IColorKeyFrameAnimation = extern struct {
+    pub const IID = GUID{ .data1 = 0x93adb5e9, .data2 = 0x8e05, .data3 = 0x4593, .data4 = .{ 0x84, 0xa3, 0xdc, 0xa1, 0x52, 0x78, 0x1e, 0x56 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -8363,13 +11847,1291 @@ pub const ILaunchActivatedEventArgs = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        Arguments: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-        UWPLaunchActivatedEventArgs: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        InterpolationColorSpace: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        SetInterpolationColorSpace: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
+        InsertKeyFrame: *const fn (*anyopaque, f32, Color) callconv(.winapi) HRESULT,
+        InsertKeyFrame_1: *const fn (*anyopaque, f32, Color, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Arguments(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.Arguments(self, &out)); return out; }
-    pub fn UWPLaunchActivatedEventArgs(self: *@This()) !*LaunchActivatedEventArgs { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.UWPLaunchActivatedEventArgs(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn InterpolationColorSpace(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.InterpolationColorSpace(self, &out)); return out; }
+    pub fn SetInterpolationColorSpace(self: *@This(), value: i32) !void { try hrCheck(self.lpVtbl.SetInterpolationColorSpace(self, value)); }
+    pub fn insertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Color) !void { try hrCheck(self.lpVtbl.InsertKeyFrame(self, normalizedProgressKey, value)); }
+    pub fn InsertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Color) !void { try self.insertKeyFrame(normalizedProgressKey, value); }
+    pub fn insertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Color, easingFunction: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertKeyFrame_1(self, normalizedProgressKey, value, easingFunction)); }
+    pub fn InsertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Color, easingFunction: ?*anyopaque) !void { try self.insertKeyFrame_1(normalizedProgressKey, value, easingFunction); }
+};
+
+pub const CompositionColorBrush = extern struct {
+    pub const IID = ICompositionColorBrush.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICompositionColorBrush.VTable;
+    pub fn Color() void {}
+    pub fn get_Color() void {}
+    pub fn SetColor() void {}
+    pub fn put_Color() void {}
+};
+
+pub const ICompositionColorBrush = extern struct {
+    pub const IID = GUID{ .data1 = 0x2b264c5e, .data2 = 0xbf35, .data3 = 0x4831, .data4 = .{ 0x86, 0x42, 0xcf, 0x70, 0xc2, 0x0f, 0xff, 0x2f } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Color: *const fn (*anyopaque, *Color) callconv(.winapi) HRESULT,
+        SetColor: *const fn (*anyopaque, Color) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn GetColor(self: *@This()) !Color { var out: Color = .{ .A = 0, .R = 0, .G = 0, .B = 0 }; try hrCheck(self.lpVtbl.Color(self, &out)); return out; }
+    pub fn SetColor(self: *@This(), value: Color) !void { try hrCheck(self.lpVtbl.SetColor(self, value)); }
+};
+
+pub const ContainerVisual = extern struct {
+    pub const IID = IContainerVisual.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IContainerVisual.VTable;
+    pub fn Children() void {}
+    pub fn get_Children() void {}
+};
+
+pub const IContainerVisual = extern struct {
+    pub const IID = GUID{ .data1 = 0x02f6bc74, .data2 = 0xed20, .data3 = 0x4773, .data4 = .{ 0xaf, 0xe6, 0xd4, 0x9b, 0x4a, 0x93, 0xdb, 0x32 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Children: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Children(self: *@This()) !*IVisualCollection { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Children(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+};
+
+pub const CubicBezierEasingFunction = extern struct {
+    pub const IID = ICubicBezierEasingFunction.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICubicBezierEasingFunction.VTable;
+    pub fn ControlPoint1() void {}
+    pub fn get_ControlPoint1() void {}
+    pub fn ControlPoint2() void {}
+    pub fn get_ControlPoint2() void {}
+};
+
+pub const ICubicBezierEasingFunction = extern struct {
+    pub const IID = GUID{ .data1 = 0x32350666, .data2 = 0xc1e8, .data3 = 0x44f9, .data4 = .{ 0x96, 0xb8, 0xc9, 0x8a, 0xcf, 0x0a, 0xe6, 0x98 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        ControlPoint1: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
+        ControlPoint2: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn ControlPoint1(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.ControlPoint1(self, &out)); return out; }
+    pub fn ControlPoint2(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.ControlPoint2(self, &out)); return out; }
+};
+
+pub const CompositionEffectFactory = extern struct {
+    pub const IID = ICompositionEffectFactory.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICompositionEffectFactory.VTable;
+    pub fn CreateBrush() void {}
+    pub fn ExtendedError() void {}
+    pub fn get_ExtendedError() void {}
+    pub fn LoadStatus() void {}
+    pub fn get_LoadStatus() void {}
+};
+
+pub const ICompositionEffectFactory = extern struct {
+    pub const IID = GUID{ .data1 = 0xbe5624af, .data2 = 0xba7e, .data3 = 0x4510, .data4 = .{ 0x98, 0x50, 0x41, 0xc0, 0xb4, 0xff, 0x74, 0xdf } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CreateBrush: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        ExtendedError: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        LoadStatus: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn createBrush(self: *@This()) !*ICompositionEffectBrush { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateBrush(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateBrush(self: *@This()) !*ICompositionEffectBrush { return self.createBrush(); }
+    pub fn ExtendedError(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ExtendedError(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn LoadStatus(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.LoadStatus(self, &out)); return out; }
+};
+
+pub const IGraphicsEffect = extern struct {
+    pub const IID = GUID{ .data1 = 0xcb51c0ce, .data2 = 0x8fe6, .data3 = 0x4636, .data4 = .{ 0xb2, 0x02, 0x86, 0x1f, 0xaa, 0x07, 0xd8, 0xf3 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Name: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+        SetName: *const fn (*anyopaque, HSTRING) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_IGraphicsEffectSource = true; // requires IGraphicsEffectSource
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Name(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.Name(self, &out)); return out; }
+    pub fn SetName(self: *@This(), name: anytype) !void { try hrCheck(self.lpVtbl.SetName(self, @ptrCast(name))); }
+};
+
+pub const IIterable = extern struct {
+    pub const IID = GUID{ .data1 = 0xfaa585ea, .data2 = 0x6214, .data3 = 0x4217, .data4 = .{ 0xaf, 0xda, 0x7f, 0x46, 0xde, 0x58, 0x69, 0xb3 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        First: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn first(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.First(self, &out0)); return out0; }
+    pub fn First(self: *@This()) !?*anyopaque { return self.first(); }
+};
+
+pub const ExpressionAnimation = extern struct {
+    pub const IID = IExpressionAnimation.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IExpressionAnimation.VTable;
+    pub fn Expression() void {}
+    pub fn get_Expression() void {}
+    pub fn SetExpression() void {}
+    pub fn put_Expression() void {}
+};
+
+pub const IExpressionAnimation = extern struct {
+    pub const IID = GUID{ .data1 = 0x6acc5431, .data2 = 0x7d3d, .data3 = 0x4bf3, .data4 = .{ 0xab, 0xb6, 0xf4, 0x4b, 0xdc, 0x48, 0x88, 0xc1 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Expression: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+        SetExpression: *const fn (*anyopaque, HSTRING) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Expression(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.Expression(self, &out)); return out; }
+    pub fn SetExpression(self: *@This(), value: anytype) !void { try hrCheck(self.lpVtbl.SetExpression(self, @ptrCast(value))); }
+};
+
+pub const InsetClip = extern struct {
+    pub const IID = IInsetClip.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IInsetClip.VTable;
+    pub fn BottomInset() void {}
+    pub fn get_BottomInset() void {}
+    pub fn SetBottomInset() void {}
+    pub fn put_BottomInset() void {}
+    pub fn LeftInset() void {}
+    pub fn get_LeftInset() void {}
+    pub fn SetLeftInset() void {}
+    pub fn put_LeftInset() void {}
+    pub fn RightInset() void {}
+    pub fn get_RightInset() void {}
+    pub fn SetRightInset() void {}
+    pub fn put_RightInset() void {}
+    pub fn TopInset() void {}
+    pub fn get_TopInset() void {}
+    pub fn SetTopInset() void {}
+    pub fn put_TopInset() void {}
+};
+
+pub const IInsetClip = extern struct {
+    pub const IID = GUID{ .data1 = 0x1e73e647, .data2 = 0x84c7, .data3 = 0x477a, .data4 = .{ 0xb4, 0x74, 0x58, 0x80, 0xe0, 0x44, 0x2e, 0x15 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        BottomInset: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        SetBottomInset: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
+        LeftInset: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        SetLeftInset: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
+        RightInset: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        SetRightInset: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
+        TopInset: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        SetTopInset: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn BottomInset(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.BottomInset(self, &out)); return out; }
+    pub fn SetBottomInset(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetBottomInset(self, value)); }
+    pub fn LeftInset(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.LeftInset(self, &out)); return out; }
+    pub fn SetLeftInset(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetLeftInset(self, value)); }
+    pub fn RightInset(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.RightInset(self, &out)); return out; }
+    pub fn SetRightInset(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetRightInset(self, value)); }
+    pub fn TopInset(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.TopInset(self, &out)); return out; }
+    pub fn SetTopInset(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetTopInset(self, value)); }
+};
+
+pub const LinearEasingFunction = extern struct {
+    pub const IID = ILinearEasingFunction.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ILinearEasingFunction.VTable;
+};
+
+pub const ILinearEasingFunction = extern struct {
+    pub const IID = GUID{ .data1 = 0x9400975a, .data2 = 0xc7a6, .data3 = 0x46b3, .data4 = .{ 0xac, 0xf7, 0x1a, 0x26, 0x8a, 0x0a, 0x11, 0x7d } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+};
+
+pub const CompositionPropertySet = extern struct {
+    pub const IID = ICompositionPropertySet.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICompositionPropertySet.VTable;
+    pub const Requires_ICompositionPropertySet2 = true; // requires ICompositionPropertySet2
+    pub fn InsertColor() void {}
+    pub fn InsertMatrix3x2() void {}
+    pub fn InsertMatrix4x4() void {}
+    pub fn InsertQuaternion() void {}
+    pub fn InsertScalar() void {}
+    pub fn InsertVector2() void {}
+    pub fn InsertVector3() void {}
+    pub fn InsertVector4() void {}
+    pub fn TryGetColor() void {}
+    pub fn TryGetMatrix3x2() void {}
+    pub fn TryGetMatrix4x4() void {}
+    pub fn TryGetQuaternion() void {}
+    pub fn TryGetScalar() void {}
+    pub fn TryGetVector2() void {}
+    pub fn TryGetVector3() void {}
+    pub fn TryGetVector4() void {}
+    pub fn InsertBoolean() void {}
+    pub fn TryGetBoolean() void {}
+};
+
+pub const ICompositionPropertySet = extern struct {
+    pub const IID = GUID{ .data1 = 0xc9d6d202, .data2 = 0x5f67, .data3 = 0x4453, .data4 = .{ 0x91, 0x17, 0x9e, 0xad, 0xd4, 0x30, 0xd3, 0xc2 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        InsertColor: *const fn (*anyopaque, HSTRING, Color) callconv(.winapi) HRESULT,
+        InsertMatrix3x2: *const fn (*anyopaque, HSTRING, Matrix3x2) callconv(.winapi) HRESULT,
+        InsertMatrix4x4: *const fn (*anyopaque, HSTRING, Matrix4x4) callconv(.winapi) HRESULT,
+        InsertQuaternion: *const fn (*anyopaque, HSTRING, Quaternion) callconv(.winapi) HRESULT,
+        InsertScalar: *const fn (*anyopaque, HSTRING, f32) callconv(.winapi) HRESULT,
+        InsertVector2: *const fn (*anyopaque, HSTRING, Vector2) callconv(.winapi) HRESULT,
+        InsertVector3: *const fn (*anyopaque, HSTRING, Vector3) callconv(.winapi) HRESULT,
+        InsertVector4: *const fn (*anyopaque, HSTRING, ?*anyopaque) callconv(.winapi) HRESULT,
+        TryGetColor: *const fn (*anyopaque, HSTRING, *Color, *i32) callconv(.winapi) HRESULT,
+        TryGetMatrix3x2: *const fn (*anyopaque, HSTRING, *Matrix3x2, *i32) callconv(.winapi) HRESULT,
+        TryGetMatrix4x4: *const fn (*anyopaque, HSTRING, *Matrix4x4, *i32) callconv(.winapi) HRESULT,
+        TryGetQuaternion: *const fn (*anyopaque, HSTRING, *Quaternion, *i32) callconv(.winapi) HRESULT,
+        TryGetScalar: *const fn (*anyopaque, HSTRING, *f32, *i32) callconv(.winapi) HRESULT,
+        TryGetVector2: *const fn (*anyopaque, HSTRING, *Vector2, *i32) callconv(.winapi) HRESULT,
+        TryGetVector3: *const fn (*anyopaque, HSTRING, *Vector3, *i32) callconv(.winapi) HRESULT,
+        TryGetVector4: *const fn (*anyopaque, HSTRING, *?*anyopaque, *i32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn insertColor(self: *@This(), propertyName: anytype, value: Color) !void { try hrCheck(self.lpVtbl.InsertColor(self, @ptrCast(propertyName), value)); }
+    pub fn InsertColor(self: *@This(), propertyName: anytype, value: Color) !void { try self.insertColor(propertyName, value); }
+    pub fn insertMatrix3x2(self: *@This(), propertyName: anytype, value: Matrix3x2) !void { try hrCheck(self.lpVtbl.InsertMatrix3x2(self, @ptrCast(propertyName), value)); }
+    pub fn InsertMatrix3x2(self: *@This(), propertyName: anytype, value: Matrix3x2) !void { try self.insertMatrix3x2(propertyName, value); }
+    pub fn insertMatrix4x4(self: *@This(), propertyName: anytype, value: Matrix4x4) !void { try hrCheck(self.lpVtbl.InsertMatrix4x4(self, @ptrCast(propertyName), value)); }
+    pub fn InsertMatrix4x4(self: *@This(), propertyName: anytype, value: Matrix4x4) !void { try self.insertMatrix4x4(propertyName, value); }
+    pub fn insertQuaternion(self: *@This(), propertyName: anytype, value: Quaternion) !void { try hrCheck(self.lpVtbl.InsertQuaternion(self, @ptrCast(propertyName), value)); }
+    pub fn InsertQuaternion(self: *@This(), propertyName: anytype, value: Quaternion) !void { try self.insertQuaternion(propertyName, value); }
+    pub fn insertScalar(self: *@This(), propertyName: anytype, value: f32) !void { try hrCheck(self.lpVtbl.InsertScalar(self, @ptrCast(propertyName), value)); }
+    pub fn InsertScalar(self: *@This(), propertyName: anytype, value: f32) !void { try self.insertScalar(propertyName, value); }
+    pub fn insertVector2(self: *@This(), propertyName: anytype, value: Vector2) !void { try hrCheck(self.lpVtbl.InsertVector2(self, @ptrCast(propertyName), value)); }
+    pub fn InsertVector2(self: *@This(), propertyName: anytype, value: Vector2) !void { try self.insertVector2(propertyName, value); }
+    pub fn insertVector3(self: *@This(), propertyName: anytype, value: Vector3) !void { try hrCheck(self.lpVtbl.InsertVector3(self, @ptrCast(propertyName), value)); }
+    pub fn InsertVector3(self: *@This(), propertyName: anytype, value: Vector3) !void { try self.insertVector3(propertyName, value); }
+    pub fn insertVector4(self: *@This(), propertyName: anytype, value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertVector4(self, @ptrCast(propertyName), value)); }
+    pub fn InsertVector4(self: *@This(), propertyName: anytype, value: ?*anyopaque) !void { try self.insertVector4(propertyName, value); }
+    pub fn tryGetColor(self: *@This(), p0: anytype) !struct { value: Color, value_1: i32 } { var out0: Color = undefined; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetColor(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
+    pub fn TryGetColor(self: *@This(), p0: anytype) !struct { value: Color, value_1: i32 } { return self.tryGetColor(p0); }
+    pub fn tryGetMatrix3x2(self: *@This(), p0: anytype) !struct { value: Matrix3x2, value_1: i32 } { var out0: Matrix3x2 = undefined; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetMatrix3x2(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
+    pub fn TryGetMatrix3x2(self: *@This(), p0: anytype) !struct { value: Matrix3x2, value_1: i32 } { return self.tryGetMatrix3x2(p0); }
+    pub fn tryGetMatrix4x4(self: *@This(), p0: anytype) !struct { value: Matrix4x4, value_1: i32 } { var out0: Matrix4x4 = undefined; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetMatrix4x4(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
+    pub fn TryGetMatrix4x4(self: *@This(), p0: anytype) !struct { value: Matrix4x4, value_1: i32 } { return self.tryGetMatrix4x4(p0); }
+    pub fn tryGetQuaternion(self: *@This(), p0: anytype) !struct { value: Quaternion, value_1: i32 } { var out0: Quaternion = undefined; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetQuaternion(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
+    pub fn TryGetQuaternion(self: *@This(), p0: anytype) !struct { value: Quaternion, value_1: i32 } { return self.tryGetQuaternion(p0); }
+    pub fn tryGetScalar(self: *@This(), p0: anytype) !struct { value: f32, value_1: i32 } { var out0: f32 = 0; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetScalar(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
+    pub fn TryGetScalar(self: *@This(), p0: anytype) !struct { value: f32, value_1: i32 } { return self.tryGetScalar(p0); }
+    pub fn tryGetVector2(self: *@This(), p0: anytype) !struct { value: Vector2, value_1: i32 } { var out0: Vector2 = undefined; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetVector2(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
+    pub fn TryGetVector2(self: *@This(), p0: anytype) !struct { value: Vector2, value_1: i32 } { return self.tryGetVector2(p0); }
+    pub fn tryGetVector3(self: *@This(), p0: anytype) !struct { value: Vector3, value_1: i32 } { var out0: Vector3 = undefined; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetVector3(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
+    pub fn TryGetVector3(self: *@This(), p0: anytype) !struct { value: Vector3, value_1: i32 } { return self.tryGetVector3(p0); }
+    pub fn tryGetVector4(self: *@This(), p0: anytype) !struct { value: ?*anyopaque, value_1: i32 } { var out0: ?*anyopaque = null; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetVector4(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
+    pub fn TryGetVector4(self: *@This(), p0: anytype) !struct { value: ?*anyopaque, value_1: i32 } { return self.tryGetVector4(p0); }
+};
+
+pub const QuaternionKeyFrameAnimation = extern struct {
+    pub const IID = IQuaternionKeyFrameAnimation.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IQuaternionKeyFrameAnimation.VTable;
+    pub fn InsertKeyFrame() void {}
+};
+
+pub const IQuaternionKeyFrameAnimation = extern struct {
+    pub const IID = GUID{ .data1 = 0x404e5835, .data2 = 0xecf6, .data3 = 0x4240, .data4 = .{ 0x85, 0x20, 0x67, 0x12, 0x79, 0xcf, 0x36, 0xbc } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        InsertKeyFrame: *const fn (*anyopaque, f32, Quaternion) callconv(.winapi) HRESULT,
+        InsertKeyFrame_1: *const fn (*anyopaque, f32, Quaternion, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn insertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Quaternion) !void { try hrCheck(self.lpVtbl.InsertKeyFrame(self, normalizedProgressKey, value)); }
+    pub fn InsertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Quaternion) !void { try self.insertKeyFrame(normalizedProgressKey, value); }
+    pub fn insertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Quaternion, easingFunction: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertKeyFrame_1(self, normalizedProgressKey, value, easingFunction)); }
+    pub fn InsertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Quaternion, easingFunction: ?*anyopaque) !void { try self.insertKeyFrame_1(normalizedProgressKey, value, easingFunction); }
+};
+
+pub const ScalarKeyFrameAnimation = extern struct {
+    pub const IID = IScalarKeyFrameAnimation.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IScalarKeyFrameAnimation.VTable;
+    pub fn InsertKeyFrame() void {}
+};
+
+pub const IScalarKeyFrameAnimation = extern struct {
+    pub const IID = GUID{ .data1 = 0xae288fa9, .data2 = 0x252c, .data3 = 0x4b95, .data4 = .{ 0xa7, 0x25, 0xbf, 0x85, 0xe3, 0x80, 0x00, 0xa1 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        InsertKeyFrame: *const fn (*anyopaque, f32, f32) callconv(.winapi) HRESULT,
+        InsertKeyFrame_1: *const fn (*anyopaque, f32, f32, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn insertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: f32) !void { try hrCheck(self.lpVtbl.InsertKeyFrame(self, normalizedProgressKey, value)); }
+    pub fn InsertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: f32) !void { try self.insertKeyFrame(normalizedProgressKey, value); }
+    pub fn insertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: f32, easingFunction: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertKeyFrame_1(self, normalizedProgressKey, value, easingFunction)); }
+    pub fn InsertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: f32, easingFunction: ?*anyopaque) !void { try self.insertKeyFrame_1(normalizedProgressKey, value, easingFunction); }
+};
+
+pub const CompositionScopedBatch = extern struct {
+    pub const IID = ICompositionScopedBatch.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICompositionScopedBatch.VTable;
+    pub fn IsActive() void {}
+    pub fn get_IsActive() void {}
+    pub fn IsEnded() void {}
+    pub fn get_IsEnded() void {}
+    pub fn End() void {}
+    pub fn Resume() void {}
+    pub fn Suspend() void {}
+    pub fn AddCompleted() void {}
+    pub fn add_Completed() void {}
+    pub fn RemoveCompleted() void {}
+    pub fn remove_Completed() void {}
+};
+
+pub const ICompositionScopedBatch = extern struct {
+    pub const IID = GUID{ .data1 = 0x0d00dad0, .data2 = 0xfb07, .data3 = 0x46fd, .data4 = .{ 0x8c, 0x72, 0x62, 0x80, 0xd1, 0xa3, 0xd1, 0xdd } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        IsActive: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        IsEnded: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        End: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        Resume: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        Suspend: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        Completed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveCompleted: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn IsActive(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsActive(self, &out)); return out; }
+    pub fn IsEnded(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsEnded(self, &out)); return out; }
+    pub fn end(self: *@This()) !void { try hrCheck(self.lpVtbl.End(self)); }
+    pub fn End(self: *@This()) !void { try self.end(); }
+    pub fn @"resume"(self: *@This()) !void { try hrCheck(self.lpVtbl.Resume(self)); }
+    pub fn Resume(self: *@This()) !void { try self.@"resume"(); }
+    pub fn @"suspend"(self: *@This()) !void { try hrCheck(self.lpVtbl.Suspend(self)); }
+    pub fn Suspend(self: *@This()) !void { try self.@"suspend"(); }
+    pub fn AddCompleted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.Completed(self, p0, &out0)); return out0; }
+    pub fn Completed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddCompleted(p0); }
+    pub fn RemoveCompleted(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveCompleted(self, token)); }
+};
+
+pub const CompositionBatchTypes = struct {
+    pub const None: i32 = 0;
+    pub const Animation: i32 = 1;
+    pub const Effect: i32 = 2;
+    pub const InfiniteAnimation: i32 = 4;
+    pub const AllAnimations: i32 = 5;
+};
+
+pub const SpriteVisual = extern struct {
+    pub const IID = ISpriteVisual.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ISpriteVisual.VTable;
+    pub const Requires_ISpriteVisual2 = true; // requires ISpriteVisual2
+    pub fn Brush() void {}
+    pub fn get_Brush() void {}
+    pub fn SetBrush() void {}
+    pub fn put_Brush() void {}
+    pub fn Shadow() void {}
+    pub fn get_Shadow() void {}
+    pub fn SetShadow() void {}
+    pub fn put_Shadow() void {}
+};
+
+pub const ISpriteVisual = extern struct {
+    pub const IID = GUID{ .data1 = 0x08e05581, .data2 = 0x1ad1, .data3 = 0x4f97, .data4 = .{ 0x97, 0x57, 0x40, 0x2d, 0x76, 0xe4, 0x23, 0x3b } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Brush: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetBrush: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Brush(self: *@This()) !*ICompositionBrush { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Brush(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetBrush(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetBrush(self, value)); }
+};
+
+pub const CompositionSurfaceBrush = extern struct {
+    pub const IID = ICompositionSurfaceBrush.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICompositionSurfaceBrush.VTable;
+    pub const Requires_ICompositionSurfaceBrush2 = true; // requires ICompositionSurfaceBrush2
+    pub const Requires_ICompositionSurfaceBrush3 = true; // requires ICompositionSurfaceBrush3
+    pub fn BitmapInterpolationMode() void {}
+    pub fn get_BitmapInterpolationMode() void {}
+    pub fn SetBitmapInterpolationMode() void {}
+    pub fn put_BitmapInterpolationMode() void {}
+    pub fn HorizontalAlignmentRatio() void {}
+    pub fn get_HorizontalAlignmentRatio() void {}
+    pub fn SetHorizontalAlignmentRatio() void {}
+    pub fn put_HorizontalAlignmentRatio() void {}
+    pub fn Stretch() void {}
+    pub fn get_Stretch() void {}
+    pub fn SetStretch() void {}
+    pub fn put_Stretch() void {}
+    pub fn Surface() void {}
+    pub fn get_Surface() void {}
+    pub fn SetSurface() void {}
+    pub fn put_Surface() void {}
+    pub fn VerticalAlignmentRatio() void {}
+    pub fn get_VerticalAlignmentRatio() void {}
+    pub fn SetVerticalAlignmentRatio() void {}
+    pub fn put_VerticalAlignmentRatio() void {}
+    pub fn AnchorPoint() void {}
+    pub fn get_AnchorPoint() void {}
+    pub fn SetAnchorPoint() void {}
+    pub fn put_AnchorPoint() void {}
+    pub fn CenterPoint() void {}
+    pub fn get_CenterPoint() void {}
+    pub fn SetCenterPoint() void {}
+    pub fn put_CenterPoint() void {}
+    pub fn Offset() void {}
+    pub fn get_Offset() void {}
+    pub fn SetOffset() void {}
+    pub fn put_Offset() void {}
+    pub fn RotationAngle() void {}
+    pub fn get_RotationAngle() void {}
+    pub fn SetRotationAngle() void {}
+    pub fn put_RotationAngle() void {}
+    pub fn RotationAngleInDegrees() void {}
+    pub fn get_RotationAngleInDegrees() void {}
+    pub fn SetRotationAngleInDegrees() void {}
+    pub fn put_RotationAngleInDegrees() void {}
+    pub fn Scale() void {}
+    pub fn get_Scale() void {}
+    pub fn SetScale() void {}
+    pub fn put_Scale() void {}
+    pub fn TransformMatrix() void {}
+    pub fn get_TransformMatrix() void {}
+    pub fn SetTransformMatrix() void {}
+    pub fn put_TransformMatrix() void {}
+    pub fn SnapToPixels() void {}
+    pub fn get_SnapToPixels() void {}
+    pub fn SetSnapToPixels() void {}
+    pub fn put_SnapToPixels() void {}
+};
+
+pub const ICompositionSurfaceBrush = extern struct {
+    pub const IID = GUID{ .data1 = 0xad016d79, .data2 = 0x1e4c, .data3 = 0x4c0d, .data4 = .{ 0x9c, 0x29, 0x83, 0x33, 0x8c, 0x87, 0xc1, 0x62 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        BitmapInterpolationMode: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        SetBitmapInterpolationMode: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
+        HorizontalAlignmentRatio: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        SetHorizontalAlignmentRatio: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
+        Stretch: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        SetStretch: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
+        Surface: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetSurface: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        VerticalAlignmentRatio: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        SetVerticalAlignmentRatio: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn BitmapInterpolationMode(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.BitmapInterpolationMode(self, &out)); return out; }
+    pub fn SetBitmapInterpolationMode(self: *@This(), value: i32) !void { try hrCheck(self.lpVtbl.SetBitmapInterpolationMode(self, value)); }
+    pub fn HorizontalAlignmentRatio(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.HorizontalAlignmentRatio(self, &out)); return out; }
+    pub fn SetHorizontalAlignmentRatio(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetHorizontalAlignmentRatio(self, value)); }
+    pub fn Stretch(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.Stretch(self, &out)); return out; }
+    pub fn SetStretch(self: *@This(), value: i32) !void { try hrCheck(self.lpVtbl.SetStretch(self, value)); }
+    pub fn Surface(self: *@This()) !*ICompositionSurface { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Surface(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetSurface(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetSurface(self, value)); }
+    pub fn VerticalAlignmentRatio(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.VerticalAlignmentRatio(self, &out)); return out; }
+    pub fn SetVerticalAlignmentRatio(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetVerticalAlignmentRatio(self, value)); }
+};
+
+pub const ICompositionSurface = extern struct {
+    pub const IID = GUID{ .data1 = 0x1527540d, .data2 = 0x42c7, .data3 = 0x47a6, .data4 = .{ 0xa4, 0x08, 0x66, 0x8f, 0x79, 0xa9, 0x0d, 0xfb } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+};
+
+pub const CompositionTarget = extern struct {
+    pub const IID = ICompositionTarget.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICompositionTarget.VTable;
+};
+
+pub const ICompositionTarget = extern struct {
+    pub const IID = GUID{ .data1 = 0xa1bea8ba, .data2 = 0xd726, .data3 = 0x4663, .data4 = .{ 0x81, 0x29, 0x6b, 0x5e, 0x79, 0x27, 0xff, 0xa6 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Root: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetRoot: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Root(self: *@This()) !*IVisual { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Root(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetRoot(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetRoot(self, value)); }
+};
+
+pub const Vector2KeyFrameAnimation = extern struct {
+    pub const IID = IVector2KeyFrameAnimation.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IVector2KeyFrameAnimation.VTable;
+    pub fn InsertKeyFrame() void {}
+};
+
+pub const IVector2KeyFrameAnimation = extern struct {
+    pub const IID = GUID{ .data1 = 0xdf414515, .data2 = 0x4e29, .data3 = 0x4f11, .data4 = .{ 0xb5, 0x5e, 0xbf, 0x2a, 0x6e, 0xb3, 0x62, 0x94 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        InsertKeyFrame: *const fn (*anyopaque, f32, Vector2) callconv(.winapi) HRESULT,
+        InsertKeyFrame_1: *const fn (*anyopaque, f32, Vector2, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn insertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Vector2) !void { try hrCheck(self.lpVtbl.InsertKeyFrame(self, normalizedProgressKey, value)); }
+    pub fn InsertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Vector2) !void { try self.insertKeyFrame(normalizedProgressKey, value); }
+    pub fn insertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Vector2, easingFunction: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertKeyFrame_1(self, normalizedProgressKey, value, easingFunction)); }
+    pub fn InsertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Vector2, easingFunction: ?*anyopaque) !void { try self.insertKeyFrame_1(normalizedProgressKey, value, easingFunction); }
+};
+
+pub const Vector3KeyFrameAnimation = extern struct {
+    pub const IID = IVector3KeyFrameAnimation.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IVector3KeyFrameAnimation.VTable;
+    pub fn InsertKeyFrame() void {}
+};
+
+pub const IVector3KeyFrameAnimation = extern struct {
+    pub const IID = GUID{ .data1 = 0xc8039daa, .data2 = 0xa281, .data3 = 0x43c2, .data4 = .{ 0xa7, 0x3d, 0xb6, 0x8e, 0x3c, 0x53, 0x3c, 0x40 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        InsertKeyFrame: *const fn (*anyopaque, f32, Vector3) callconv(.winapi) HRESULT,
+        InsertKeyFrame_1: *const fn (*anyopaque, f32, Vector3, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn insertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Vector3) !void { try hrCheck(self.lpVtbl.InsertKeyFrame(self, normalizedProgressKey, value)); }
+    pub fn InsertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Vector3) !void { try self.insertKeyFrame(normalizedProgressKey, value); }
+    pub fn insertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Vector3, easingFunction: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertKeyFrame_1(self, normalizedProgressKey, value, easingFunction)); }
+    pub fn InsertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Vector3, easingFunction: ?*anyopaque) !void { try self.insertKeyFrame_1(normalizedProgressKey, value, easingFunction); }
+};
+
+pub const Vector4KeyFrameAnimation = extern struct {
+    pub const IID = IVector4KeyFrameAnimation.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IVector4KeyFrameAnimation.VTable;
+    pub fn InsertKeyFrame() void {}
+};
+
+pub const IVector4KeyFrameAnimation = extern struct {
+    pub const IID = GUID{ .data1 = 0x2457945b, .data2 = 0xaddd, .data3 = 0x4385, .data4 = .{ 0x96, 0x06, 0xb6, 0xa3, 0xd5, 0xe4, 0xe1, 0xb9 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        InsertKeyFrame: *const fn (*anyopaque, f32, ?*anyopaque) callconv(.winapi) HRESULT,
+        InsertKeyFrame_1: *const fn (*anyopaque, f32, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn insertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertKeyFrame(self, normalizedProgressKey, value)); }
+    pub fn InsertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: ?*anyopaque) !void { try self.insertKeyFrame(normalizedProgressKey, value); }
+    pub fn insertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: ?*anyopaque, easingFunction: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertKeyFrame_1(self, normalizedProgressKey, value, easingFunction)); }
+    pub fn InsertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: ?*anyopaque, easingFunction: ?*anyopaque) !void { try self.insertKeyFrame_1(normalizedProgressKey, value, easingFunction); }
+};
+
+pub const CompositionCommitBatch = extern struct {
+    pub const IID = ICompositionCommitBatch.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICompositionCommitBatch.VTable;
+    pub fn IsActive() void {}
+    pub fn get_IsActive() void {}
+    pub fn IsEnded() void {}
+    pub fn get_IsEnded() void {}
+    pub fn AddCompleted() void {}
+    pub fn add_Completed() void {}
+    pub fn RemoveCompleted() void {}
+    pub fn remove_Completed() void {}
+};
+
+pub const ICompositionCommitBatch = extern struct {
+    pub const IID = GUID{ .data1 = 0x0d00dad0, .data2 = 0xca07, .data3 = 0x4400, .data4 = .{ 0x8c, 0x8e, 0xcb, 0x5d, 0xb0, 0x85, 0x59, 0xcc } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        IsActive: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        IsEnded: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        Completed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveCompleted: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn IsActive(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsActive(self, &out)); return out; }
+    pub fn IsEnded(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsEnded(self, &out)); return out; }
+    pub fn AddCompleted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.Completed(self, p0, &out0)); return out0; }
+    pub fn Completed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddCompleted(p0); }
+    pub fn RemoveCompleted(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveCompleted(self, token)); }
+};
+
+pub const BindingFailedEventHandler = extern struct {
+    pub const IID = GUID{ .data1 = 0xa3160ab0, .data2 = 0xa8a9, .data3 = 0x5f38, .data4 = .{ 0xaf, 0x17, 0x5c, 0xd9, 0x1a, 0x2b, 0x33, 0xf5 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
+    pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
+    pub fn new() !*@This() { @compileError("use BindingFailedEventHandlerImpl instead"); }
+};
+
+pub fn BindingFailedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = BindingFailedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
+pub const IPropertySet = extern struct {
+    pub const IID = GUID{ .data1 = 0x8a43ed9f, .data2 = 0xf4e6, .data3 = 0x4421, .data4 = .{ 0xac, 0xf9, 0x1d, 0xab, 0x29, 0x86, 0x82, 0x0c } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+};
+
+pub const CoreWindowFlowDirection = struct {
+    pub const LeftToRight: i32 = 0;
+    pub const RightToLeft: i32 = 1;
+};
+
+pub const CoreCursor = extern struct {
+    pub const IID = ICoreCursor.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICoreCursor.VTable;
+    pub const Requires_ICoreCursorFactory = true; // requires ICoreCursorFactory
+    pub fn Id() void {}
+    pub fn get_Id() void {}
+    pub fn Type() void {}
+    pub fn get_Type() void {}
+    pub fn CreateCursor() void {}
+};
+
+pub const ICoreCursor = extern struct {
+    pub const IID = GUID{ .data1 = 0x96893acf, .data2 = 0x111d, .data3 = 0x442c, .data4 = .{ 0x8a, 0x77, 0xb8, 0x79, 0x92, 0xf8, 0xe2, 0xd6 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Id: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
+        Type: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Id(self: *@This()) !u32 { var out: u32 = 0; try hrCheck(self.lpVtbl.Id(self, &out)); return out; }
+    pub fn Type(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.Type(self, &out)); return out; }
+};
+
+pub const CoreVirtualKeyStates = struct {
+    pub const None: i32 = 0;
+    pub const Down: i32 = 1;
+    pub const Locked: i32 = 2;
+};
+
+pub const AutomationProviderRequestedEventArgs = extern struct {
+    pub const IID = IAutomationProviderRequestedEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IAutomationProviderRequestedEventArgs.VTable;
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub fn AutomationProvider() void {}
+    pub fn get_AutomationProvider() void {}
+    pub fn SetAutomationProvider() void {}
+    pub fn put_AutomationProvider() void {}
+    pub fn Handled() void {}
+    pub fn get_Handled() void {}
+    pub fn SetHandled() void {}
+    pub fn put_Handled() void {}
+};
+
+pub const IAutomationProviderRequestedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0x961ff258, .data2 = 0x21bf, .data3 = 0x4b42, .data4 = .{ 0xa2, 0x98, 0xfa, 0x47, 0x9d, 0x4c, 0x52, 0xe2 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        AutomationProvider: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetAutomationProvider: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
+    pub fn AutomationProvider(self: *@This()) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.AutomationProvider(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetAutomationProvider(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetAutomationProvider(self, value)); }
+};
+
+pub const CharacterReceivedEventArgs = extern struct {
+    pub const IID = ICharacterReceivedEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICharacterReceivedEventArgs.VTable;
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub fn KeyCode() void {}
+    pub fn get_KeyCode() void {}
+    pub fn KeyStatus() void {}
+    pub fn get_KeyStatus() void {}
+    pub fn Handled() void {}
+    pub fn get_Handled() void {}
+    pub fn SetHandled() void {}
+    pub fn put_Handled() void {}
+};
+
+pub const ICharacterReceivedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xc584659f, .data2 = 0x99b2, .data3 = 0x4bcc, .data4 = .{ 0xbd, 0x33, 0x04, 0xe6, 0x3f, 0x42, 0x90, 0x2e } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        KeyCode: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
+        KeyStatus: *const fn (*anyopaque, *CorePhysicalKeyStatus) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
+    pub fn KeyCode(self: *@This()) !u32 { var out: u32 = 0; try hrCheck(self.lpVtbl.KeyCode(self, &out)); return out; }
+    pub fn KeyStatus(self: *@This()) !CorePhysicalKeyStatus { var out: CorePhysicalKeyStatus = undefined; try hrCheck(self.lpVtbl.KeyStatus(self, &out)); return out; }
+};
+
+pub const CoreWindowEventArgs = extern struct {
+    pub const IID = ICoreWindowEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICoreWindowEventArgs.VTable;
+    pub fn Handled() void {}
+    pub fn get_Handled() void {}
+    pub fn SetHandled() void {}
+    pub fn put_Handled() void {}
+};
+
+pub const ICoreWindowEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0x272b1ef3, .data2 = 0xc633, .data3 = 0x4da5, .data4 = .{ 0xa2, 0x6c, 0xc6, 0xd0, 0xf5, 0x6b, 0x29, 0xda } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Handled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetHandled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Handled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.Handled(self, &out)); return out; }
+    pub fn SetHandled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetHandled(self, value)); }
+};
+
+pub const InputEnabledEventArgs = extern struct {
+    pub const IID = IInputEnabledEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IInputEnabledEventArgs.VTable;
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub fn InputEnabled() void {}
+    pub fn get_InputEnabled() void {}
+    pub fn Handled() void {}
+    pub fn get_Handled() void {}
+    pub fn SetHandled() void {}
+    pub fn put_Handled() void {}
+};
+
+pub const IInputEnabledEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0x80371d4f, .data2 = 0x2fd8, .data3 = 0x4c24, .data4 = .{ 0xaa, 0x86, 0x31, 0x63, 0xa8, 0x7b, 0x4e, 0x5a } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        InputEnabled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
+    pub fn InputEnabled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.InputEnabled(self, &out)); return out; }
+};
+
+pub const KeyEventArgs = extern struct {
+    pub const IID = IKeyEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IKeyEventArgs.VTable;
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub const Requires_IKeyEventArgs2 = true; // requires IKeyEventArgs2
+    pub fn VirtualKey() void {}
+    pub fn get_VirtualKey() void {}
+    pub fn KeyStatus() void {}
+    pub fn get_KeyStatus() void {}
+    pub fn Handled() void {}
+    pub fn get_Handled() void {}
+    pub fn SetHandled() void {}
+    pub fn put_Handled() void {}
+    pub fn DeviceId() void {}
+    pub fn get_DeviceId() void {}
+};
+
+pub const IKeyEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0x5ff5e930, .data2 = 0x2544, .data3 = 0x4a17, .data4 = .{ 0xbd, 0x78, 0x1f, 0x2f, 0xde, 0xbb, 0x10, 0x6b } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        VirtualKey: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        KeyStatus: *const fn (*anyopaque, *CorePhysicalKeyStatus) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
+    pub fn VirtualKey(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.VirtualKey(self, &out)); return out; }
+    pub fn KeyStatus(self: *@This()) !CorePhysicalKeyStatus { var out: CorePhysicalKeyStatus = undefined; try hrCheck(self.lpVtbl.KeyStatus(self, &out)); return out; }
+};
+
+pub const PointerEventArgs = extern struct {
+    pub const IID = IPointerEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IPointerEventArgs.VTable;
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub fn CurrentPoint() void {}
+    pub fn get_CurrentPoint() void {}
+    pub fn KeyModifiers() void {}
+    pub fn get_KeyModifiers() void {}
+    pub fn GetIntermediatePoints() void {}
+    pub fn Handled() void {}
+    pub fn get_Handled() void {}
+    pub fn SetHandled() void {}
+    pub fn put_Handled() void {}
+};
+
+pub const IPointerEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0x920d9cb1, .data2 = 0xa5fc, .data3 = 0x4a21, .data4 = .{ 0x8c, 0x09, 0x49, 0xdf, 0xe6, 0xff, 0xe2, 0x5f } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CurrentPoint: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        KeyModifiers: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        GetIntermediatePoints: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
+    pub fn CurrentPoint(self: *@This()) !*IPointerPoint { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CurrentPoint(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn KeyModifiers(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.KeyModifiers(self, &out)); return out; }
+    pub fn getIntermediatePoints(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetIntermediatePoints(self, &out0)); return out0; }
+    pub fn GetIntermediatePoints(self: *@This()) !?*anyopaque { return self.getIntermediatePoints(); }
+};
+
+pub const TouchHitTestingEventArgs = extern struct {
+    pub const IID = ITouchHitTestingEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ITouchHitTestingEventArgs.VTable;
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub fn ProximityEvaluation() void {}
+    pub fn get_ProximityEvaluation() void {}
+    pub fn SetProximityEvaluation() void {}
+    pub fn put_ProximityEvaluation() void {}
+    pub fn Point() void {}
+    pub fn get_Point() void {}
+    pub fn BoundingBox() void {}
+    pub fn get_BoundingBox() void {}
+    pub fn EvaluateProximity() void {}
+    pub fn Handled() void {}
+    pub fn get_Handled() void {}
+    pub fn SetHandled() void {}
+    pub fn put_Handled() void {}
+};
+
+pub const ITouchHitTestingEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0x22f3b823, .data2 = 0x0b7c, .data3 = 0x424e, .data4 = .{ 0x9d, 0xf7, 0x33, 0xd4, 0xf9, 0x62, 0x93, 0x1b } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        ProximityEvaluation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetProximityEvaluation: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        Point: *const fn (*anyopaque, *Point) callconv(.winapi) HRESULT,
+        BoundingBox: *const fn (*anyopaque, *Rect) callconv(.winapi) HRESULT,
+        EvaluateProximity: *const fn (*anyopaque, Rect, *?*anyopaque) callconv(.winapi) HRESULT,
+        EvaluateProximity_1: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
+    pub fn ProximityEvaluation(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ProximityEvaluation(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn SetProximityEvaluation(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetProximityEvaluation(self, value)); }
+    pub fn GetPoint(self: *@This()) !Point { var out: Point = undefined; try hrCheck(self.lpVtbl.Point(self, &out)); return out; }
+    pub fn BoundingBox(self: *@This()) !Rect { var out: Rect = undefined; try hrCheck(self.lpVtbl.BoundingBox(self, &out)); return out; }
+    pub fn evaluateProximity(self: *@This(), p0: Rect) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.EvaluateProximity(self, p0, &out0)); return out0; }
+    pub fn EvaluateProximity(self: *@This(), p0: Rect) !?*anyopaque { return self.evaluateProximity(p0); }
+    pub fn evaluateProximity_1(self: *@This(), p0: ?*anyopaque) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.EvaluateProximity_1(self, p0, &out0)); return out0; }
+    pub fn EvaluateProximity_1(self: *@This(), p0: ?*anyopaque) !?*anyopaque { return self.evaluateProximity_1(p0); }
+};
+
+pub const VisibilityChangedEventArgs = extern struct {
+    pub const IID = IVisibilityChangedEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IVisibilityChangedEventArgs.VTable;
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub fn Visible() void {}
+    pub fn get_Visible() void {}
+    pub fn Handled() void {}
+    pub fn get_Handled() void {}
+    pub fn SetHandled() void {}
+    pub fn put_Handled() void {}
+};
+
+pub const IVisibilityChangedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xbf9918ea, .data2 = 0xd801, .data3 = 0x4564, .data4 = .{ 0xa4, 0x95, 0xb1, 0xe8, 0x4f, 0x8a, 0xd0, 0x85 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Visible: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
+    pub fn Visible(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.Visible(self, &out)); return out; }
+};
+
+pub const IApplication3 = extern struct {
+    pub const IID = GUID{ .data1 = 0xbe941595, .data2 = 0x61fe, .data3 = 0x5b36, .data4 = .{ 0xa3, 0xd3, 0x96, 0x2a, 0x64, 0x7d, 0x7c, 0x6f } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        DispatcherShutdownMode: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        SetDispatcherShutdownMode: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn DispatcherShutdownMode(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.DispatcherShutdownMode(self, &out)); return out; }
+    pub fn SetDispatcherShutdownMode(self: *@This(), value: i32) !void { try hrCheck(self.lpVtbl.SetDispatcherShutdownMode(self, value)); }
+};
+
+pub const DispatcherShutdownMode = struct {
+    pub const OnLastWindowClose: i32 = 0;
+    pub const OnExplicitShutdown: i32 = 1;
 };
 
 pub const ApplicationInitializationCallbackParams = extern struct {
@@ -8526,24 +13288,6 @@ pub const IKeyValuePair = extern struct {
     pub fn Value(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Value(self, &out)); return out orelse error.WinRTFailed; }
 };
 
-pub const IIterable = extern struct {
-    pub const IID = GUID{ .data1 = 0xfaa585ea, .data2 = 0x6214, .data3 = 0x4217, .data4 = .{ 0xaf, 0xda, 0x7f, 0x46, 0xde, 0x58, 0x69, 0xb3 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        First: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn first(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.First(self, &out0)); return out0; }
-    pub fn First(self: *@This()) !?*anyopaque { return self.first(); }
-};
-
 pub const IMapView = extern struct {
     pub const IID = GUID{ .data1 = 0xe480ce40, .data2 = 0xa338, .data3 = 0x4ada, .data4 = .{ 0xad, 0xcf, 0x27, 0x22, 0x72, 0xe4, 0x8c, 0xb9 } };
     lpVtbl: *const VTable,
@@ -8619,8 +13363,8 @@ pub const IDebugSettings2 = extern struct {
     pub fn RemoveXamlResourceReferenceFailed(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveXamlResourceReferenceFailed(self, token)); }
 };
 
-pub const BindingFailedEventHandler = extern struct {
-    pub const IID = GUID{ .data1 = 0xa3160ab0, .data2 = 0xa8a9, .data3 = 0x5f38, .data4 = .{ 0xaf, 0x17, 0x5c, 0xd9, 0x1a, 0x2b, 0x33, 0xf5 } };
+pub const IDebugSettings3 = extern struct {
+    pub const IID = GUID{ .data1 = 0x36135bd5, .data2 = 0x3917, .data3 = 0x5c8d, .data4 = .{ 0xa3, 0xc6, 0x2f, 0xc8, 0x9a, 0x50, 0x3f, 0x26 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -8629,13 +13373,17 @@ pub const BindingFailedEventHandler = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        LayoutCycleTracingLevel: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        SetLayoutCycleTracingLevel: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
+        LayoutCycleDebugBreakLevel: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        SetLayoutCycleDebugBreakLevel: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
-    pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn LayoutCycleTracingLevel(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.LayoutCycleTracingLevel(self, &out)); return out; }
+    pub fn SetLayoutCycleTracingLevel(self: *@This(), value: i32) !void { try hrCheck(self.lpVtbl.SetLayoutCycleTracingLevel(self, value)); }
+    pub fn LayoutCycleDebugBreakLevel(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.LayoutCycleDebugBreakLevel(self, &out)); return out; }
+    pub fn SetLayoutCycleDebugBreakLevel(self: *@This(), value: i32) !void { try hrCheck(self.lpVtbl.SetLayoutCycleDebugBreakLevel(self, value)); }
 };
 
 pub const XamlResourceReferenceFailedEventArgs = extern struct {
@@ -8661,6 +13409,18 @@ pub const IXamlResourceReferenceFailedEventArgs = extern struct {
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn Message(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.Message(self, &out)); return out; }
+};
+
+pub const LayoutCycleTracingLevel = struct {
+    pub const None: i32 = 0;
+    pub const Low: i32 = 1;
+    pub const High: i32 = 2;
+};
+
+pub const LayoutCycleDebugBreakLevel = struct {
+    pub const None: i32 = 0;
+    pub const Low: i32 = 1;
+    pub const High: i32 = 2;
 };
 
 pub const UnhandledExceptionEventArgs = extern struct {
@@ -8698,6 +13458,33 @@ pub const IUnhandledExceptionEventArgs = extern struct {
     pub fn Message(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.Message(self, &out)); return out; }
     pub fn Handled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.Handled(self, &out)); return out; }
     pub fn SetHandled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetHandled(self, value)); }
+};
+
+pub const IResourceManager = extern struct {
+    pub const IID = GUID{ .data1 = 0xf744d97b, .data2 = 0x9988, .data3 = 0x44fb, .data4 = .{ 0xab, 0xd6, 0x53, 0x78, 0x84, 0x4c, 0xfa, 0x8b } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        MainResourceMap: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        AllResourceMaps: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        DefaultContext: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        LoadPriFiles: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        UnloadPriFiles: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn MainResourceMap(self: *@This()) !*IResourceMap { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.MainResourceMap(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn AllResourceMaps(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.AllResourceMaps(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn DefaultContext(self: *@This()) !*IResourceContext { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.DefaultContext(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn loadPriFiles(self: *@This(), files: ?*anyopaque) !void { try hrCheck(self.lpVtbl.LoadPriFiles(self, files)); }
+    pub fn LoadPriFiles(self: *@This(), files: ?*anyopaque) !void { try self.loadPriFiles(files); }
+    pub fn unloadPriFiles(self: *@This(), files: ?*anyopaque) !void { try hrCheck(self.lpVtbl.UnloadPriFiles(self, files)); }
+    pub fn UnloadPriFiles(self: *@This(), files: ?*anyopaque) !void { try self.unloadPriFiles(files); }
 };
 
 pub const IUIElementProtected = extern struct {
@@ -9700,358 +14487,6 @@ pub const ICoreWindowStatic = extern struct {
     pub fn GetForCurrentThread(self: *@This()) !*ICoreWindow { return self.getForCurrentThread(); }
 };
 
-pub const IPropertySet = extern struct {
-    pub const IID = GUID{ .data1 = 0x8a43ed9f, .data2 = 0xf4e6, .data3 = 0x4421, .data4 = .{ 0xac, 0xf9, 0x1d, 0xab, 0x29, 0x86, 0x82, 0x0c } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-};
-
-pub const CoreWindowFlowDirection = struct {
-    pub const LeftToRight: i32 = 0;
-    pub const RightToLeft: i32 = 1;
-};
-
-pub const CoreCursor = extern struct {
-    pub const IID = ICoreCursor.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICoreCursor.VTable;
-    pub const Requires_ICoreCursorFactory = true; // requires ICoreCursorFactory
-    pub fn Id() void {}
-    pub fn get_Id() void {}
-    pub fn Type() void {}
-    pub fn get_Type() void {}
-    pub fn CreateCursor() void {}
-};
-
-pub const ICoreCursor = extern struct {
-    pub const IID = GUID{ .data1 = 0x96893acf, .data2 = 0x111d, .data3 = 0x442c, .data4 = .{ 0x8a, 0x77, 0xb8, 0x79, 0x92, 0xf8, 0xe2, 0xd6 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Id: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
-        Type: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Id(self: *@This()) !u32 { var out: u32 = 0; try hrCheck(self.lpVtbl.Id(self, &out)); return out; }
-    pub fn Type(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.Type(self, &out)); return out; }
-};
-
-pub const CoreVirtualKeyStates = struct {
-    pub const None: i32 = 0;
-    pub const Down: i32 = 1;
-    pub const Locked: i32 = 2;
-};
-
-pub const AutomationProviderRequestedEventArgs = extern struct {
-    pub const IID = IAutomationProviderRequestedEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IAutomationProviderRequestedEventArgs.VTable;
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub fn AutomationProvider() void {}
-    pub fn get_AutomationProvider() void {}
-    pub fn SetAutomationProvider() void {}
-    pub fn put_AutomationProvider() void {}
-    pub fn Handled() void {}
-    pub fn get_Handled() void {}
-    pub fn SetHandled() void {}
-    pub fn put_Handled() void {}
-};
-
-pub const IAutomationProviderRequestedEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0x961ff258, .data2 = 0x21bf, .data3 = 0x4b42, .data4 = .{ 0xa2, 0x98, 0xfa, 0x47, 0x9d, 0x4c, 0x52, 0xe2 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        AutomationProvider: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetAutomationProvider: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
-    pub fn AutomationProvider(self: *@This()) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.AutomationProvider(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetAutomationProvider(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetAutomationProvider(self, value)); }
-};
-
-pub const CharacterReceivedEventArgs = extern struct {
-    pub const IID = ICharacterReceivedEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICharacterReceivedEventArgs.VTable;
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub fn KeyCode() void {}
-    pub fn get_KeyCode() void {}
-    pub fn KeyStatus() void {}
-    pub fn get_KeyStatus() void {}
-    pub fn Handled() void {}
-    pub fn get_Handled() void {}
-    pub fn SetHandled() void {}
-    pub fn put_Handled() void {}
-};
-
-pub const ICharacterReceivedEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0xc584659f, .data2 = 0x99b2, .data3 = 0x4bcc, .data4 = .{ 0xbd, 0x33, 0x04, 0xe6, 0x3f, 0x42, 0x90, 0x2e } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        KeyCode: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
-        KeyStatus: *const fn (*anyopaque, *CorePhysicalKeyStatus) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
-    pub fn KeyCode(self: *@This()) !u32 { var out: u32 = 0; try hrCheck(self.lpVtbl.KeyCode(self, &out)); return out; }
-    pub fn KeyStatus(self: *@This()) !CorePhysicalKeyStatus { var out: CorePhysicalKeyStatus = undefined; try hrCheck(self.lpVtbl.KeyStatus(self, &out)); return out; }
-};
-
-pub const CoreWindowEventArgs = extern struct {
-    pub const IID = ICoreWindowEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICoreWindowEventArgs.VTable;
-    pub fn Handled() void {}
-    pub fn get_Handled() void {}
-    pub fn SetHandled() void {}
-    pub fn put_Handled() void {}
-};
-
-pub const ICoreWindowEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0x272b1ef3, .data2 = 0xc633, .data3 = 0x4da5, .data4 = .{ 0xa2, 0x6c, 0xc6, 0xd0, 0xf5, 0x6b, 0x29, 0xda } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Handled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetHandled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Handled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.Handled(self, &out)); return out; }
-    pub fn SetHandled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetHandled(self, value)); }
-};
-
-pub const InputEnabledEventArgs = extern struct {
-    pub const IID = IInputEnabledEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IInputEnabledEventArgs.VTable;
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub fn InputEnabled() void {}
-    pub fn get_InputEnabled() void {}
-    pub fn Handled() void {}
-    pub fn get_Handled() void {}
-    pub fn SetHandled() void {}
-    pub fn put_Handled() void {}
-};
-
-pub const IInputEnabledEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0x80371d4f, .data2 = 0x2fd8, .data3 = 0x4c24, .data4 = .{ 0xaa, 0x86, 0x31, 0x63, 0xa8, 0x7b, 0x4e, 0x5a } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        InputEnabled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
-    pub fn InputEnabled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.InputEnabled(self, &out)); return out; }
-};
-
-pub const KeyEventArgs = extern struct {
-    pub const IID = IKeyEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IKeyEventArgs.VTable;
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub const Requires_IKeyEventArgs2 = true; // requires IKeyEventArgs2
-    pub fn VirtualKey() void {}
-    pub fn get_VirtualKey() void {}
-    pub fn KeyStatus() void {}
-    pub fn get_KeyStatus() void {}
-    pub fn Handled() void {}
-    pub fn get_Handled() void {}
-    pub fn SetHandled() void {}
-    pub fn put_Handled() void {}
-    pub fn DeviceId() void {}
-    pub fn get_DeviceId() void {}
-};
-
-pub const IKeyEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0x5ff5e930, .data2 = 0x2544, .data3 = 0x4a17, .data4 = .{ 0xbd, 0x78, 0x1f, 0x2f, 0xde, 0xbb, 0x10, 0x6b } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        VirtualKey: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-        KeyStatus: *const fn (*anyopaque, *CorePhysicalKeyStatus) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
-    pub fn VirtualKey(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.VirtualKey(self, &out)); return out; }
-    pub fn KeyStatus(self: *@This()) !CorePhysicalKeyStatus { var out: CorePhysicalKeyStatus = undefined; try hrCheck(self.lpVtbl.KeyStatus(self, &out)); return out; }
-};
-
-pub const PointerEventArgs = extern struct {
-    pub const IID = IPointerEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IPointerEventArgs.VTable;
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub fn CurrentPoint() void {}
-    pub fn get_CurrentPoint() void {}
-    pub fn KeyModifiers() void {}
-    pub fn get_KeyModifiers() void {}
-    pub fn GetIntermediatePoints() void {}
-    pub fn Handled() void {}
-    pub fn get_Handled() void {}
-    pub fn SetHandled() void {}
-    pub fn put_Handled() void {}
-};
-
-pub const IPointerEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0x920d9cb1, .data2 = 0xa5fc, .data3 = 0x4a21, .data4 = .{ 0x8c, 0x09, 0x49, 0xdf, 0xe6, 0xff, 0xe2, 0x5f } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        CurrentPoint: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        KeyModifiers: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-        GetIntermediatePoints: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
-    pub fn CurrentPoint(self: *@This()) !*IPointerPoint { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CurrentPoint(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn KeyModifiers(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.KeyModifiers(self, &out)); return out; }
-    pub fn getIntermediatePoints(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetIntermediatePoints(self, &out0)); return out0; }
-    pub fn GetIntermediatePoints(self: *@This()) !?*anyopaque { return self.getIntermediatePoints(); }
-};
-
-pub const TouchHitTestingEventArgs = extern struct {
-    pub const IID = ITouchHitTestingEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ITouchHitTestingEventArgs.VTable;
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub fn ProximityEvaluation() void {}
-    pub fn get_ProximityEvaluation() void {}
-    pub fn SetProximityEvaluation() void {}
-    pub fn put_ProximityEvaluation() void {}
-    pub fn Point() void {}
-    pub fn get_Point() void {}
-    pub fn BoundingBox() void {}
-    pub fn get_BoundingBox() void {}
-    pub fn EvaluateProximity() void {}
-    pub fn Handled() void {}
-    pub fn get_Handled() void {}
-    pub fn SetHandled() void {}
-    pub fn put_Handled() void {}
-};
-
-pub const ITouchHitTestingEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0x22f3b823, .data2 = 0x0b7c, .data3 = 0x424e, .data4 = .{ 0x9d, 0xf7, 0x33, 0xd4, 0xf9, 0x62, 0x93, 0x1b } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        ProximityEvaluation: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetProximityEvaluation: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        Point: *const fn (*anyopaque, *Point) callconv(.winapi) HRESULT,
-        BoundingBox: *const fn (*anyopaque, *Rect) callconv(.winapi) HRESULT,
-        EvaluateProximity: *const fn (*anyopaque, Rect, *?*anyopaque) callconv(.winapi) HRESULT,
-        EvaluateProximity_1: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
-    pub fn ProximityEvaluation(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ProximityEvaluation(self, &out)); return out orelse error.WinRTFailed; }
-    pub fn SetProximityEvaluation(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetProximityEvaluation(self, value)); }
-    pub fn GetPoint(self: *@This()) !Point { var out: Point = undefined; try hrCheck(self.lpVtbl.Point(self, &out)); return out; }
-    pub fn BoundingBox(self: *@This()) !Rect { var out: Rect = undefined; try hrCheck(self.lpVtbl.BoundingBox(self, &out)); return out; }
-    pub fn evaluateProximity(self: *@This(), p0: Rect) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.EvaluateProximity(self, p0, &out0)); return out0; }
-    pub fn EvaluateProximity(self: *@This(), p0: Rect) !?*anyopaque { return self.evaluateProximity(p0); }
-    pub fn evaluateProximity_1(self: *@This(), p0: ?*anyopaque) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.EvaluateProximity_1(self, p0, &out0)); return out0; }
-    pub fn EvaluateProximity_1(self: *@This(), p0: ?*anyopaque) !?*anyopaque { return self.evaluateProximity_1(p0); }
-};
-
-pub const VisibilityChangedEventArgs = extern struct {
-    pub const IID = IVisibilityChangedEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IVisibilityChangedEventArgs.VTable;
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub fn Visible() void {}
-    pub fn get_Visible() void {}
-    pub fn Handled() void {}
-    pub fn get_Handled() void {}
-    pub fn SetHandled() void {}
-    pub fn put_Handled() void {}
-};
-
-pub const IVisibilityChangedEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0xbf9918ea, .data2 = 0xd801, .data3 = 0x4564, .data4 = .{ 0xa4, 0x95, 0xb1, 0xe8, 0x4f, 0x8a, 0xd0, 0x85 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Visible: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
-    pub fn Visible(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.Visible(self, &out)); return out; }
-};
-
 pub const ClosestInteractiveBoundsRequestedEventArgs = extern struct {
     pub const IID = IClosestInteractiveBoundsRequestedEventArgs.IID;
     lpVtbl: *const VTable,
@@ -10446,774 +14881,6 @@ pub const ICompositorStatics = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn MaxGlobalPlaybackRate(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.MaxGlobalPlaybackRate(self, &out)); return out; }
     pub fn MinGlobalPlaybackRate(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.MinGlobalPlaybackRate(self, &out)); return out; }
-};
-
-pub const ColorKeyFrameAnimation = extern struct {
-    pub const IID = IColorKeyFrameAnimation.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IColorKeyFrameAnimation.VTable;
-    pub fn InterpolationColorSpace() void {}
-    pub fn get_InterpolationColorSpace() void {}
-    pub fn SetInterpolationColorSpace() void {}
-    pub fn put_InterpolationColorSpace() void {}
-    pub fn InsertKeyFrame() void {}
-};
-
-pub const IColorKeyFrameAnimation = extern struct {
-    pub const IID = GUID{ .data1 = 0x93adb5e9, .data2 = 0x8e05, .data3 = 0x4593, .data4 = .{ 0x84, 0xa3, 0xdc, 0xa1, 0x52, 0x78, 0x1e, 0x56 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        InterpolationColorSpace: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-        SetInterpolationColorSpace: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
-        InsertKeyFrame: *const fn (*anyopaque, f32, Color) callconv(.winapi) HRESULT,
-        InsertKeyFrame_1: *const fn (*anyopaque, f32, Color, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn InterpolationColorSpace(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.InterpolationColorSpace(self, &out)); return out; }
-    pub fn SetInterpolationColorSpace(self: *@This(), value: i32) !void { try hrCheck(self.lpVtbl.SetInterpolationColorSpace(self, value)); }
-    pub fn insertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Color) !void { try hrCheck(self.lpVtbl.InsertKeyFrame(self, normalizedProgressKey, value)); }
-    pub fn InsertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Color) !void { try self.insertKeyFrame(normalizedProgressKey, value); }
-    pub fn insertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Color, easingFunction: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertKeyFrame_1(self, normalizedProgressKey, value, easingFunction)); }
-    pub fn InsertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Color, easingFunction: ?*anyopaque) !void { try self.insertKeyFrame_1(normalizedProgressKey, value, easingFunction); }
-};
-
-pub const CompositionColorBrush = extern struct {
-    pub const IID = ICompositionColorBrush.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICompositionColorBrush.VTable;
-    pub fn Color() void {}
-    pub fn get_Color() void {}
-    pub fn SetColor() void {}
-    pub fn put_Color() void {}
-};
-
-pub const ICompositionColorBrush = extern struct {
-    pub const IID = GUID{ .data1 = 0x2b264c5e, .data2 = 0xbf35, .data3 = 0x4831, .data4 = .{ 0x86, 0x42, 0xcf, 0x70, 0xc2, 0x0f, 0xff, 0x2f } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Color: *const fn (*anyopaque, *Color) callconv(.winapi) HRESULT,
-        SetColor: *const fn (*anyopaque, Color) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn GetColor(self: *@This()) !Color { var out: Color = .{ .A = 0, .R = 0, .G = 0, .B = 0 }; try hrCheck(self.lpVtbl.Color(self, &out)); return out; }
-    pub fn SetColor(self: *@This(), value: Color) !void { try hrCheck(self.lpVtbl.SetColor(self, value)); }
-};
-
-pub const ContainerVisual = extern struct {
-    pub const IID = IContainerVisual.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IContainerVisual.VTable;
-    pub fn Children() void {}
-    pub fn get_Children() void {}
-};
-
-pub const IContainerVisual = extern struct {
-    pub const IID = GUID{ .data1 = 0x02f6bc74, .data2 = 0xed20, .data3 = 0x4773, .data4 = .{ 0xaf, 0xe6, 0xd4, 0x9b, 0x4a, 0x93, 0xdb, 0x32 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Children: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Children(self: *@This()) !*IVisualCollection { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Children(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-};
-
-pub const CubicBezierEasingFunction = extern struct {
-    pub const IID = ICubicBezierEasingFunction.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICubicBezierEasingFunction.VTable;
-    pub fn ControlPoint1() void {}
-    pub fn get_ControlPoint1() void {}
-    pub fn ControlPoint2() void {}
-    pub fn get_ControlPoint2() void {}
-};
-
-pub const ICubicBezierEasingFunction = extern struct {
-    pub const IID = GUID{ .data1 = 0x32350666, .data2 = 0xc1e8, .data3 = 0x44f9, .data4 = .{ 0x96, 0xb8, 0xc9, 0x8a, 0xcf, 0x0a, 0xe6, 0x98 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        ControlPoint1: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
-        ControlPoint2: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn ControlPoint1(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.ControlPoint1(self, &out)); return out; }
-    pub fn ControlPoint2(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.ControlPoint2(self, &out)); return out; }
-};
-
-pub const CompositionEffectFactory = extern struct {
-    pub const IID = ICompositionEffectFactory.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICompositionEffectFactory.VTable;
-    pub fn CreateBrush() void {}
-    pub fn ExtendedError() void {}
-    pub fn get_ExtendedError() void {}
-    pub fn LoadStatus() void {}
-    pub fn get_LoadStatus() void {}
-};
-
-pub const ICompositionEffectFactory = extern struct {
-    pub const IID = GUID{ .data1 = 0xbe5624af, .data2 = 0xba7e, .data3 = 0x4510, .data4 = .{ 0x98, 0x50, 0x41, 0xc0, 0xb4, 0xff, 0x74, 0xdf } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        CreateBrush: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        ExtendedError: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        LoadStatus: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn createBrush(self: *@This()) !*ICompositionEffectBrush { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateBrush(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateBrush(self: *@This()) !*ICompositionEffectBrush { return self.createBrush(); }
-    pub fn ExtendedError(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ExtendedError(self, &out)); return out orelse error.WinRTFailed; }
-    pub fn LoadStatus(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.LoadStatus(self, &out)); return out; }
-};
-
-pub const IGraphicsEffect = extern struct {
-    pub const IID = GUID{ .data1 = 0xcb51c0ce, .data2 = 0x8fe6, .data3 = 0x4636, .data4 = .{ 0xb2, 0x02, 0x86, 0x1f, 0xaa, 0x07, 0xd8, 0xf3 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Name: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-        SetName: *const fn (*anyopaque, HSTRING) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_IGraphicsEffectSource = true; // requires IGraphicsEffectSource
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Name(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.Name(self, &out)); return out; }
-    pub fn SetName(self: *@This(), name: anytype) !void { try hrCheck(self.lpVtbl.SetName(self, @ptrCast(name))); }
-};
-
-pub const ExpressionAnimation = extern struct {
-    pub const IID = IExpressionAnimation.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IExpressionAnimation.VTable;
-    pub fn Expression() void {}
-    pub fn get_Expression() void {}
-    pub fn SetExpression() void {}
-    pub fn put_Expression() void {}
-};
-
-pub const IExpressionAnimation = extern struct {
-    pub const IID = GUID{ .data1 = 0x6acc5431, .data2 = 0x7d3d, .data3 = 0x4bf3, .data4 = .{ 0xab, 0xb6, 0xf4, 0x4b, 0xdc, 0x48, 0x88, 0xc1 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Expression: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-        SetExpression: *const fn (*anyopaque, HSTRING) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Expression(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.Expression(self, &out)); return out; }
-    pub fn SetExpression(self: *@This(), value: anytype) !void { try hrCheck(self.lpVtbl.SetExpression(self, @ptrCast(value))); }
-};
-
-pub const InsetClip = extern struct {
-    pub const IID = IInsetClip.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IInsetClip.VTable;
-    pub fn BottomInset() void {}
-    pub fn get_BottomInset() void {}
-    pub fn SetBottomInset() void {}
-    pub fn put_BottomInset() void {}
-    pub fn LeftInset() void {}
-    pub fn get_LeftInset() void {}
-    pub fn SetLeftInset() void {}
-    pub fn put_LeftInset() void {}
-    pub fn RightInset() void {}
-    pub fn get_RightInset() void {}
-    pub fn SetRightInset() void {}
-    pub fn put_RightInset() void {}
-    pub fn TopInset() void {}
-    pub fn get_TopInset() void {}
-    pub fn SetTopInset() void {}
-    pub fn put_TopInset() void {}
-};
-
-pub const IInsetClip = extern struct {
-    pub const IID = GUID{ .data1 = 0x1e73e647, .data2 = 0x84c7, .data3 = 0x477a, .data4 = .{ 0xb4, 0x74, 0x58, 0x80, 0xe0, 0x44, 0x2e, 0x15 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        BottomInset: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        SetBottomInset: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
-        LeftInset: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        SetLeftInset: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
-        RightInset: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        SetRightInset: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
-        TopInset: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        SetTopInset: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn BottomInset(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.BottomInset(self, &out)); return out; }
-    pub fn SetBottomInset(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetBottomInset(self, value)); }
-    pub fn LeftInset(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.LeftInset(self, &out)); return out; }
-    pub fn SetLeftInset(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetLeftInset(self, value)); }
-    pub fn RightInset(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.RightInset(self, &out)); return out; }
-    pub fn SetRightInset(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetRightInset(self, value)); }
-    pub fn TopInset(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.TopInset(self, &out)); return out; }
-    pub fn SetTopInset(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetTopInset(self, value)); }
-};
-
-pub const LinearEasingFunction = extern struct {
-    pub const IID = ILinearEasingFunction.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ILinearEasingFunction.VTable;
-};
-
-pub const ILinearEasingFunction = extern struct {
-    pub const IID = GUID{ .data1 = 0x9400975a, .data2 = 0xc7a6, .data3 = 0x46b3, .data4 = .{ 0xac, 0xf7, 0x1a, 0x26, 0x8a, 0x0a, 0x11, 0x7d } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-};
-
-pub const CompositionPropertySet = extern struct {
-    pub const IID = ICompositionPropertySet.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICompositionPropertySet.VTable;
-    pub const Requires_ICompositionPropertySet2 = true; // requires ICompositionPropertySet2
-    pub fn InsertColor() void {}
-    pub fn InsertMatrix3x2() void {}
-    pub fn InsertMatrix4x4() void {}
-    pub fn InsertQuaternion() void {}
-    pub fn InsertScalar() void {}
-    pub fn InsertVector2() void {}
-    pub fn InsertVector3() void {}
-    pub fn InsertVector4() void {}
-    pub fn TryGetColor() void {}
-    pub fn TryGetMatrix3x2() void {}
-    pub fn TryGetMatrix4x4() void {}
-    pub fn TryGetQuaternion() void {}
-    pub fn TryGetScalar() void {}
-    pub fn TryGetVector2() void {}
-    pub fn TryGetVector3() void {}
-    pub fn TryGetVector4() void {}
-    pub fn InsertBoolean() void {}
-    pub fn TryGetBoolean() void {}
-};
-
-pub const ICompositionPropertySet = extern struct {
-    pub const IID = GUID{ .data1 = 0xc9d6d202, .data2 = 0x5f67, .data3 = 0x4453, .data4 = .{ 0x91, 0x17, 0x9e, 0xad, 0xd4, 0x30, 0xd3, 0xc2 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        InsertColor: *const fn (*anyopaque, HSTRING, Color) callconv(.winapi) HRESULT,
-        InsertMatrix3x2: *const fn (*anyopaque, HSTRING, Matrix3x2) callconv(.winapi) HRESULT,
-        InsertMatrix4x4: *const fn (*anyopaque, HSTRING, Matrix4x4) callconv(.winapi) HRESULT,
-        InsertQuaternion: *const fn (*anyopaque, HSTRING, Quaternion) callconv(.winapi) HRESULT,
-        InsertScalar: *const fn (*anyopaque, HSTRING, f32) callconv(.winapi) HRESULT,
-        InsertVector2: *const fn (*anyopaque, HSTRING, Vector2) callconv(.winapi) HRESULT,
-        InsertVector3: *const fn (*anyopaque, HSTRING, Vector3) callconv(.winapi) HRESULT,
-        InsertVector4: *const fn (*anyopaque, HSTRING, ?*anyopaque) callconv(.winapi) HRESULT,
-        TryGetColor: *const fn (*anyopaque, HSTRING, *Color, *i32) callconv(.winapi) HRESULT,
-        TryGetMatrix3x2: *const fn (*anyopaque, HSTRING, *Matrix3x2, *i32) callconv(.winapi) HRESULT,
-        TryGetMatrix4x4: *const fn (*anyopaque, HSTRING, *Matrix4x4, *i32) callconv(.winapi) HRESULT,
-        TryGetQuaternion: *const fn (*anyopaque, HSTRING, *Quaternion, *i32) callconv(.winapi) HRESULT,
-        TryGetScalar: *const fn (*anyopaque, HSTRING, *f32, *i32) callconv(.winapi) HRESULT,
-        TryGetVector2: *const fn (*anyopaque, HSTRING, *Vector2, *i32) callconv(.winapi) HRESULT,
-        TryGetVector3: *const fn (*anyopaque, HSTRING, *Vector3, *i32) callconv(.winapi) HRESULT,
-        TryGetVector4: *const fn (*anyopaque, HSTRING, *?*anyopaque, *i32) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn insertColor(self: *@This(), propertyName: anytype, value: Color) !void { try hrCheck(self.lpVtbl.InsertColor(self, @ptrCast(propertyName), value)); }
-    pub fn InsertColor(self: *@This(), propertyName: anytype, value: Color) !void { try self.insertColor(propertyName, value); }
-    pub fn insertMatrix3x2(self: *@This(), propertyName: anytype, value: Matrix3x2) !void { try hrCheck(self.lpVtbl.InsertMatrix3x2(self, @ptrCast(propertyName), value)); }
-    pub fn InsertMatrix3x2(self: *@This(), propertyName: anytype, value: Matrix3x2) !void { try self.insertMatrix3x2(propertyName, value); }
-    pub fn insertMatrix4x4(self: *@This(), propertyName: anytype, value: Matrix4x4) !void { try hrCheck(self.lpVtbl.InsertMatrix4x4(self, @ptrCast(propertyName), value)); }
-    pub fn InsertMatrix4x4(self: *@This(), propertyName: anytype, value: Matrix4x4) !void { try self.insertMatrix4x4(propertyName, value); }
-    pub fn insertQuaternion(self: *@This(), propertyName: anytype, value: Quaternion) !void { try hrCheck(self.lpVtbl.InsertQuaternion(self, @ptrCast(propertyName), value)); }
-    pub fn InsertQuaternion(self: *@This(), propertyName: anytype, value: Quaternion) !void { try self.insertQuaternion(propertyName, value); }
-    pub fn insertScalar(self: *@This(), propertyName: anytype, value: f32) !void { try hrCheck(self.lpVtbl.InsertScalar(self, @ptrCast(propertyName), value)); }
-    pub fn InsertScalar(self: *@This(), propertyName: anytype, value: f32) !void { try self.insertScalar(propertyName, value); }
-    pub fn insertVector2(self: *@This(), propertyName: anytype, value: Vector2) !void { try hrCheck(self.lpVtbl.InsertVector2(self, @ptrCast(propertyName), value)); }
-    pub fn InsertVector2(self: *@This(), propertyName: anytype, value: Vector2) !void { try self.insertVector2(propertyName, value); }
-    pub fn insertVector3(self: *@This(), propertyName: anytype, value: Vector3) !void { try hrCheck(self.lpVtbl.InsertVector3(self, @ptrCast(propertyName), value)); }
-    pub fn InsertVector3(self: *@This(), propertyName: anytype, value: Vector3) !void { try self.insertVector3(propertyName, value); }
-    pub fn insertVector4(self: *@This(), propertyName: anytype, value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertVector4(self, @ptrCast(propertyName), value)); }
-    pub fn InsertVector4(self: *@This(), propertyName: anytype, value: ?*anyopaque) !void { try self.insertVector4(propertyName, value); }
-    pub fn tryGetColor(self: *@This(), p0: anytype) !struct { value: Color, value_1: i32 } { var out0: Color = undefined; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetColor(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
-    pub fn TryGetColor(self: *@This(), p0: anytype) !struct { value: Color, value_1: i32 } { return self.tryGetColor(p0); }
-    pub fn tryGetMatrix3x2(self: *@This(), p0: anytype) !struct { value: Matrix3x2, value_1: i32 } { var out0: Matrix3x2 = undefined; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetMatrix3x2(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
-    pub fn TryGetMatrix3x2(self: *@This(), p0: anytype) !struct { value: Matrix3x2, value_1: i32 } { return self.tryGetMatrix3x2(p0); }
-    pub fn tryGetMatrix4x4(self: *@This(), p0: anytype) !struct { value: Matrix4x4, value_1: i32 } { var out0: Matrix4x4 = undefined; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetMatrix4x4(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
-    pub fn TryGetMatrix4x4(self: *@This(), p0: anytype) !struct { value: Matrix4x4, value_1: i32 } { return self.tryGetMatrix4x4(p0); }
-    pub fn tryGetQuaternion(self: *@This(), p0: anytype) !struct { value: Quaternion, value_1: i32 } { var out0: Quaternion = undefined; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetQuaternion(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
-    pub fn TryGetQuaternion(self: *@This(), p0: anytype) !struct { value: Quaternion, value_1: i32 } { return self.tryGetQuaternion(p0); }
-    pub fn tryGetScalar(self: *@This(), p0: anytype) !struct { value: f32, value_1: i32 } { var out0: f32 = 0; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetScalar(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
-    pub fn TryGetScalar(self: *@This(), p0: anytype) !struct { value: f32, value_1: i32 } { return self.tryGetScalar(p0); }
-    pub fn tryGetVector2(self: *@This(), p0: anytype) !struct { value: Vector2, value_1: i32 } { var out0: Vector2 = undefined; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetVector2(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
-    pub fn TryGetVector2(self: *@This(), p0: anytype) !struct { value: Vector2, value_1: i32 } { return self.tryGetVector2(p0); }
-    pub fn tryGetVector3(self: *@This(), p0: anytype) !struct { value: Vector3, value_1: i32 } { var out0: Vector3 = undefined; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetVector3(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
-    pub fn TryGetVector3(self: *@This(), p0: anytype) !struct { value: Vector3, value_1: i32 } { return self.tryGetVector3(p0); }
-    pub fn tryGetVector4(self: *@This(), p0: anytype) !struct { value: ?*anyopaque, value_1: i32 } { var out0: ?*anyopaque = null; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetVector4(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
-    pub fn TryGetVector4(self: *@This(), p0: anytype) !struct { value: ?*anyopaque, value_1: i32 } { return self.tryGetVector4(p0); }
-};
-
-pub const QuaternionKeyFrameAnimation = extern struct {
-    pub const IID = IQuaternionKeyFrameAnimation.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IQuaternionKeyFrameAnimation.VTable;
-    pub fn InsertKeyFrame() void {}
-};
-
-pub const IQuaternionKeyFrameAnimation = extern struct {
-    pub const IID = GUID{ .data1 = 0x404e5835, .data2 = 0xecf6, .data3 = 0x4240, .data4 = .{ 0x85, 0x20, 0x67, 0x12, 0x79, 0xcf, 0x36, 0xbc } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        InsertKeyFrame: *const fn (*anyopaque, f32, Quaternion) callconv(.winapi) HRESULT,
-        InsertKeyFrame_1: *const fn (*anyopaque, f32, Quaternion, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn insertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Quaternion) !void { try hrCheck(self.lpVtbl.InsertKeyFrame(self, normalizedProgressKey, value)); }
-    pub fn InsertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Quaternion) !void { try self.insertKeyFrame(normalizedProgressKey, value); }
-    pub fn insertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Quaternion, easingFunction: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertKeyFrame_1(self, normalizedProgressKey, value, easingFunction)); }
-    pub fn InsertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Quaternion, easingFunction: ?*anyopaque) !void { try self.insertKeyFrame_1(normalizedProgressKey, value, easingFunction); }
-};
-
-pub const ScalarKeyFrameAnimation = extern struct {
-    pub const IID = IScalarKeyFrameAnimation.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IScalarKeyFrameAnimation.VTable;
-    pub fn InsertKeyFrame() void {}
-};
-
-pub const IScalarKeyFrameAnimation = extern struct {
-    pub const IID = GUID{ .data1 = 0xae288fa9, .data2 = 0x252c, .data3 = 0x4b95, .data4 = .{ 0xa7, 0x25, 0xbf, 0x85, 0xe3, 0x80, 0x00, 0xa1 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        InsertKeyFrame: *const fn (*anyopaque, f32, f32) callconv(.winapi) HRESULT,
-        InsertKeyFrame_1: *const fn (*anyopaque, f32, f32, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn insertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: f32) !void { try hrCheck(self.lpVtbl.InsertKeyFrame(self, normalizedProgressKey, value)); }
-    pub fn InsertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: f32) !void { try self.insertKeyFrame(normalizedProgressKey, value); }
-    pub fn insertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: f32, easingFunction: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertKeyFrame_1(self, normalizedProgressKey, value, easingFunction)); }
-    pub fn InsertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: f32, easingFunction: ?*anyopaque) !void { try self.insertKeyFrame_1(normalizedProgressKey, value, easingFunction); }
-};
-
-pub const CompositionScopedBatch = extern struct {
-    pub const IID = ICompositionScopedBatch.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICompositionScopedBatch.VTable;
-    pub fn IsActive() void {}
-    pub fn get_IsActive() void {}
-    pub fn IsEnded() void {}
-    pub fn get_IsEnded() void {}
-    pub fn End() void {}
-    pub fn Resume() void {}
-    pub fn Suspend() void {}
-    pub fn AddCompleted() void {}
-    pub fn add_Completed() void {}
-    pub fn RemoveCompleted() void {}
-    pub fn remove_Completed() void {}
-};
-
-pub const ICompositionScopedBatch = extern struct {
-    pub const IID = GUID{ .data1 = 0x0d00dad0, .data2 = 0xfb07, .data3 = 0x46fd, .data4 = .{ 0x8c, 0x72, 0x62, 0x80, 0xd1, 0xa3, 0xd1, 0xdd } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        IsActive: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        IsEnded: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        End: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        Resume: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        Suspend: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        Completed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveCompleted: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn IsActive(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsActive(self, &out)); return out; }
-    pub fn IsEnded(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsEnded(self, &out)); return out; }
-    pub fn end(self: *@This()) !void { try hrCheck(self.lpVtbl.End(self)); }
-    pub fn End(self: *@This()) !void { try self.end(); }
-    pub fn @"resume"(self: *@This()) !void { try hrCheck(self.lpVtbl.Resume(self)); }
-    pub fn Resume(self: *@This()) !void { try self.@"resume"(); }
-    pub fn @"suspend"(self: *@This()) !void { try hrCheck(self.lpVtbl.Suspend(self)); }
-    pub fn Suspend(self: *@This()) !void { try self.@"suspend"(); }
-    pub fn AddCompleted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.Completed(self, p0, &out0)); return out0; }
-    pub fn Completed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddCompleted(p0); }
-    pub fn RemoveCompleted(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveCompleted(self, token)); }
-};
-
-pub const CompositionBatchTypes = struct {
-    pub const None: i32 = 0;
-    pub const Animation: i32 = 1;
-    pub const Effect: i32 = 2;
-    pub const InfiniteAnimation: i32 = 4;
-    pub const AllAnimations: i32 = 5;
-};
-
-pub const SpriteVisual = extern struct {
-    pub const IID = ISpriteVisual.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ISpriteVisual.VTable;
-    pub const Requires_ISpriteVisual2 = true; // requires ISpriteVisual2
-    pub fn Brush() void {}
-    pub fn get_Brush() void {}
-    pub fn SetBrush() void {}
-    pub fn put_Brush() void {}
-    pub fn Shadow() void {}
-    pub fn get_Shadow() void {}
-    pub fn SetShadow() void {}
-    pub fn put_Shadow() void {}
-};
-
-pub const ISpriteVisual = extern struct {
-    pub const IID = GUID{ .data1 = 0x08e05581, .data2 = 0x1ad1, .data3 = 0x4f97, .data4 = .{ 0x97, 0x57, 0x40, 0x2d, 0x76, 0xe4, 0x23, 0x3b } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Brush: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetBrush: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Brush(self: *@This()) !*ICompositionBrush { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Brush(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetBrush(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetBrush(self, value)); }
-};
-
-pub const CompositionSurfaceBrush = extern struct {
-    pub const IID = ICompositionSurfaceBrush.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICompositionSurfaceBrush.VTable;
-    pub const Requires_ICompositionSurfaceBrush2 = true; // requires ICompositionSurfaceBrush2
-    pub const Requires_ICompositionSurfaceBrush3 = true; // requires ICompositionSurfaceBrush3
-    pub fn BitmapInterpolationMode() void {}
-    pub fn get_BitmapInterpolationMode() void {}
-    pub fn SetBitmapInterpolationMode() void {}
-    pub fn put_BitmapInterpolationMode() void {}
-    pub fn HorizontalAlignmentRatio() void {}
-    pub fn get_HorizontalAlignmentRatio() void {}
-    pub fn SetHorizontalAlignmentRatio() void {}
-    pub fn put_HorizontalAlignmentRatio() void {}
-    pub fn Stretch() void {}
-    pub fn get_Stretch() void {}
-    pub fn SetStretch() void {}
-    pub fn put_Stretch() void {}
-    pub fn Surface() void {}
-    pub fn get_Surface() void {}
-    pub fn SetSurface() void {}
-    pub fn put_Surface() void {}
-    pub fn VerticalAlignmentRatio() void {}
-    pub fn get_VerticalAlignmentRatio() void {}
-    pub fn SetVerticalAlignmentRatio() void {}
-    pub fn put_VerticalAlignmentRatio() void {}
-    pub fn AnchorPoint() void {}
-    pub fn get_AnchorPoint() void {}
-    pub fn SetAnchorPoint() void {}
-    pub fn put_AnchorPoint() void {}
-    pub fn CenterPoint() void {}
-    pub fn get_CenterPoint() void {}
-    pub fn SetCenterPoint() void {}
-    pub fn put_CenterPoint() void {}
-    pub fn Offset() void {}
-    pub fn get_Offset() void {}
-    pub fn SetOffset() void {}
-    pub fn put_Offset() void {}
-    pub fn RotationAngle() void {}
-    pub fn get_RotationAngle() void {}
-    pub fn SetRotationAngle() void {}
-    pub fn put_RotationAngle() void {}
-    pub fn RotationAngleInDegrees() void {}
-    pub fn get_RotationAngleInDegrees() void {}
-    pub fn SetRotationAngleInDegrees() void {}
-    pub fn put_RotationAngleInDegrees() void {}
-    pub fn Scale() void {}
-    pub fn get_Scale() void {}
-    pub fn SetScale() void {}
-    pub fn put_Scale() void {}
-    pub fn TransformMatrix() void {}
-    pub fn get_TransformMatrix() void {}
-    pub fn SetTransformMatrix() void {}
-    pub fn put_TransformMatrix() void {}
-    pub fn SnapToPixels() void {}
-    pub fn get_SnapToPixels() void {}
-    pub fn SetSnapToPixels() void {}
-    pub fn put_SnapToPixels() void {}
-};
-
-pub const ICompositionSurfaceBrush = extern struct {
-    pub const IID = GUID{ .data1 = 0xad016d79, .data2 = 0x1e4c, .data3 = 0x4c0d, .data4 = .{ 0x9c, 0x29, 0x83, 0x33, 0x8c, 0x87, 0xc1, 0x62 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        BitmapInterpolationMode: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-        SetBitmapInterpolationMode: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
-        HorizontalAlignmentRatio: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        SetHorizontalAlignmentRatio: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
-        Stretch: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-        SetStretch: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
-        Surface: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetSurface: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        VerticalAlignmentRatio: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        SetVerticalAlignmentRatio: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn BitmapInterpolationMode(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.BitmapInterpolationMode(self, &out)); return out; }
-    pub fn SetBitmapInterpolationMode(self: *@This(), value: i32) !void { try hrCheck(self.lpVtbl.SetBitmapInterpolationMode(self, value)); }
-    pub fn HorizontalAlignmentRatio(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.HorizontalAlignmentRatio(self, &out)); return out; }
-    pub fn SetHorizontalAlignmentRatio(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetHorizontalAlignmentRatio(self, value)); }
-    pub fn Stretch(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.Stretch(self, &out)); return out; }
-    pub fn SetStretch(self: *@This(), value: i32) !void { try hrCheck(self.lpVtbl.SetStretch(self, value)); }
-    pub fn Surface(self: *@This()) !*ICompositionSurface { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Surface(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetSurface(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetSurface(self, value)); }
-    pub fn VerticalAlignmentRatio(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.VerticalAlignmentRatio(self, &out)); return out; }
-    pub fn SetVerticalAlignmentRatio(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetVerticalAlignmentRatio(self, value)); }
-};
-
-pub const ICompositionSurface = extern struct {
-    pub const IID = GUID{ .data1 = 0x1527540d, .data2 = 0x42c7, .data3 = 0x47a6, .data4 = .{ 0xa4, 0x08, 0x66, 0x8f, 0x79, 0xa9, 0x0d, 0xfb } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-};
-
-pub const CompositionTarget = extern struct {
-    pub const IID = ICompositionTarget.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICompositionTarget.VTable;
-};
-
-pub const ICompositionTarget = extern struct {
-    pub const IID = GUID{ .data1 = 0xa1bea8ba, .data2 = 0xd726, .data3 = 0x4663, .data4 = .{ 0x81, 0x29, 0x6b, 0x5e, 0x79, 0x27, 0xff, 0xa6 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Root: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetRoot: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Root(self: *@This()) !*IVisual { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Root(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetRoot(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetRoot(self, value)); }
-};
-
-pub const Vector2KeyFrameAnimation = extern struct {
-    pub const IID = IVector2KeyFrameAnimation.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IVector2KeyFrameAnimation.VTable;
-    pub fn InsertKeyFrame() void {}
-};
-
-pub const IVector2KeyFrameAnimation = extern struct {
-    pub const IID = GUID{ .data1 = 0xdf414515, .data2 = 0x4e29, .data3 = 0x4f11, .data4 = .{ 0xb5, 0x5e, 0xbf, 0x2a, 0x6e, 0xb3, 0x62, 0x94 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        InsertKeyFrame: *const fn (*anyopaque, f32, Vector2) callconv(.winapi) HRESULT,
-        InsertKeyFrame_1: *const fn (*anyopaque, f32, Vector2, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn insertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Vector2) !void { try hrCheck(self.lpVtbl.InsertKeyFrame(self, normalizedProgressKey, value)); }
-    pub fn InsertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Vector2) !void { try self.insertKeyFrame(normalizedProgressKey, value); }
-    pub fn insertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Vector2, easingFunction: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertKeyFrame_1(self, normalizedProgressKey, value, easingFunction)); }
-    pub fn InsertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Vector2, easingFunction: ?*anyopaque) !void { try self.insertKeyFrame_1(normalizedProgressKey, value, easingFunction); }
-};
-
-pub const Vector3KeyFrameAnimation = extern struct {
-    pub const IID = IVector3KeyFrameAnimation.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IVector3KeyFrameAnimation.VTable;
-    pub fn InsertKeyFrame() void {}
-};
-
-pub const IVector3KeyFrameAnimation = extern struct {
-    pub const IID = GUID{ .data1 = 0xc8039daa, .data2 = 0xa281, .data3 = 0x43c2, .data4 = .{ 0xa7, 0x3d, 0xb6, 0x8e, 0x3c, 0x53, 0x3c, 0x40 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        InsertKeyFrame: *const fn (*anyopaque, f32, Vector3) callconv(.winapi) HRESULT,
-        InsertKeyFrame_1: *const fn (*anyopaque, f32, Vector3, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn insertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Vector3) !void { try hrCheck(self.lpVtbl.InsertKeyFrame(self, normalizedProgressKey, value)); }
-    pub fn InsertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: Vector3) !void { try self.insertKeyFrame(normalizedProgressKey, value); }
-    pub fn insertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Vector3, easingFunction: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertKeyFrame_1(self, normalizedProgressKey, value, easingFunction)); }
-    pub fn InsertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: Vector3, easingFunction: ?*anyopaque) !void { try self.insertKeyFrame_1(normalizedProgressKey, value, easingFunction); }
-};
-
-pub const Vector4KeyFrameAnimation = extern struct {
-    pub const IID = IVector4KeyFrameAnimation.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IVector4KeyFrameAnimation.VTable;
-    pub fn InsertKeyFrame() void {}
-};
-
-pub const IVector4KeyFrameAnimation = extern struct {
-    pub const IID = GUID{ .data1 = 0x2457945b, .data2 = 0xaddd, .data3 = 0x4385, .data4 = .{ 0x96, 0x06, 0xb6, 0xa3, 0xd5, 0xe4, 0xe1, 0xb9 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        InsertKeyFrame: *const fn (*anyopaque, f32, ?*anyopaque) callconv(.winapi) HRESULT,
-        InsertKeyFrame_1: *const fn (*anyopaque, f32, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn insertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertKeyFrame(self, normalizedProgressKey, value)); }
-    pub fn InsertKeyFrame(self: *@This(), normalizedProgressKey: f32, value: ?*anyopaque) !void { try self.insertKeyFrame(normalizedProgressKey, value); }
-    pub fn insertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: ?*anyopaque, easingFunction: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertKeyFrame_1(self, normalizedProgressKey, value, easingFunction)); }
-    pub fn InsertKeyFrame_1(self: *@This(), normalizedProgressKey: f32, value: ?*anyopaque, easingFunction: ?*anyopaque) !void { try self.insertKeyFrame_1(normalizedProgressKey, value, easingFunction); }
-};
-
-pub const CompositionCommitBatch = extern struct {
-    pub const IID = ICompositionCommitBatch.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICompositionCommitBatch.VTable;
-    pub fn IsActive() void {}
-    pub fn get_IsActive() void {}
-    pub fn IsEnded() void {}
-    pub fn get_IsEnded() void {}
-    pub fn AddCompleted() void {}
-    pub fn add_Completed() void {}
-    pub fn RemoveCompleted() void {}
-    pub fn remove_Completed() void {}
-};
-
-pub const ICompositionCommitBatch = extern struct {
-    pub const IID = GUID{ .data1 = 0x0d00dad0, .data2 = 0xca07, .data3 = 0x4400, .data4 = .{ 0x8c, 0x8e, 0xcb, 0x5d, 0xb0, 0x85, 0x59, 0xcc } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        IsActive: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        IsEnded: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        Completed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveCompleted: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn IsActive(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsActive(self, &out)); return out; }
-    pub fn IsEnded(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsEnded(self, &out)); return out; }
-    pub fn AddCompleted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.Completed(self, p0, &out0)); return out0; }
-    pub fn Completed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddCompleted(p0); }
-    pub fn RemoveCompleted(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveCompleted(self, token)); }
 };
 
 pub const AmbientLight = extern struct {
@@ -13313,9 +16980,136 @@ pub const DispatchedHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This()) !void { try hrCheck(self.lpVtbl.Invoke(self)); }
     pub fn Invoke(self: *@This()) !void { try self.invoke(); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use DispatchedHandlerImpl instead"); }
 };
 
+pub fn DispatchedHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = DispatchedHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const IdleDispatchedHandler = extern struct {
     pub const IID = GUID{ .data1 = 0xa42b0c24, .data2 = 0x7f21, .data3 = 0x4abc, .data4 = .{ 0x99, 0xc1, 0x8f, 0x01, 0x00, 0x7f, 0x08, 0x80 } };
     lpVtbl: *const VTable,
@@ -13332,9 +17126,136 @@ pub const IdleDispatchedHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, e)); }
     pub fn Invoke(self: *@This(), e: ?*anyopaque) !void { try self.invoke(e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use IdleDispatchedHandlerImpl instead"); }
 };
 
+pub fn IdleDispatchedHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = IdleDispatchedHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const AcceleratorKeyEventArgs = extern struct {
     pub const IID = IAcceleratorKeyEventArgs.IID;
     lpVtbl: *const VTable,
@@ -13448,114 +17369,6 @@ pub const IDispatcherQueueStatics = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn getForCurrentThread(self: *@This()) !*IDispatcherQueue { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetForCurrentThread(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
     pub fn GetForCurrentThread(self: *@This()) !*IDispatcherQueue { return self.getForCurrentThread(); }
-};
-
-pub const DispatcherQueueTimer = extern struct {
-    pub const IID = IDispatcherQueueTimer.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IDispatcherQueueTimer.VTable;
-    pub fn Interval() void {}
-    pub fn get_Interval() void {}
-    pub fn SetInterval() void {}
-    pub fn put_Interval() void {}
-    pub fn IsRunning() void {}
-    pub fn get_IsRunning() void {}
-    pub fn IsRepeating() void {}
-    pub fn get_IsRepeating() void {}
-    pub fn SetIsRepeating() void {}
-    pub fn put_IsRepeating() void {}
-    pub fn Start() void {}
-    pub fn Stop() void {}
-    pub fn AddTick() void {}
-    pub fn add_Tick() void {}
-    pub fn RemoveTick() void {}
-    pub fn remove_Tick() void {}
-};
-
-pub const IDispatcherQueueTimer = extern struct {
-    pub const IID = GUID{ .data1 = 0x5feabb1d, .data2 = 0xa31c, .data3 = 0x4727, .data4 = .{ 0xb1, 0xac, 0x37, 0x45, 0x46, 0x49, 0xd5, 0x6a } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Interval: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetInterval: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        IsRunning: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        IsRepeating: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetIsRepeating: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-        Start: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        Stop: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        Tick: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveTick: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Interval(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Interval(self, &out)); return out orelse error.WinRTFailed; }
-    pub fn SetInterval(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetInterval(self, value)); }
-    pub fn IsRunning(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsRunning(self, &out)); return out; }
-    pub fn IsRepeating(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsRepeating(self, &out)); return out; }
-    pub fn SetIsRepeating(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsRepeating(self, value)); }
-    pub fn start(self: *@This()) !void { try hrCheck(self.lpVtbl.Start(self)); }
-    pub fn Start(self: *@This()) !void { try self.start(); }
-    pub fn stop(self: *@This()) !void { try hrCheck(self.lpVtbl.Stop(self)); }
-    pub fn Stop(self: *@This()) !void { try self.stop(); }
-    pub fn AddTick(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.Tick(self, p0, &out0)); return out0; }
-    pub fn Tick(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddTick(p0); }
-    pub fn RemoveTick(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveTick(self, token)); }
-};
-
-pub const DispatcherQueueHandler = extern struct {
-    pub const IID = GUID{ .data1 = 0xdfa2dc9c, .data2 = 0x1a2d, .data3 = 0x4917, .data4 = .{ 0x98, 0xf2, 0x93, 0x9a, 0xf1, 0xd6, 0xe0, 0xc8 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Invoke: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn invoke(self: *@This()) !void { try hrCheck(self.lpVtbl.Invoke(self)); }
-    pub fn Invoke(self: *@This()) !void { try self.invoke(); }
-    pub fn new() !*@This() { return error.NotImplemented; }
-};
-
-pub const DispatcherQueuePriority = struct {
-    pub const Low: i32 = -10;
-    pub const Normal: i32 = 0;
-    pub const High: i32 = 10;
-};
-
-pub const DispatcherQueueShutdownStartingEventArgs = extern struct {
-    pub const IID = IDispatcherQueueShutdownStartingEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IDispatcherQueueShutdownStartingEventArgs.VTable;
-    pub fn GetDeferral() void {}
-};
-
-pub const IDispatcherQueueShutdownStartingEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0xc4724c4c, .data2 = 0xff97, .data3 = 0x40c0, .data4 = .{ 0xa2, 0x26, 0xcc, 0x0a, 0xaa, 0x54, 0x5e, 0x89 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        GetDeferral: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn getDeferral(self: *@This()) !*IDeferral { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetDeferral(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn GetDeferral(self: *@This()) !*IDeferral { return self.getDeferral(); }
 };
 
 pub const DispatcherRunOptions = struct {
@@ -14007,9 +17820,136 @@ pub const DependencyPropertyChangedCallback = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, dp: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, dp)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, dp: ?*anyopaque) !void { try self.invoke(sender, dp); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use DependencyPropertyChangedCallbackImpl instead"); }
 };
 
+pub fn DependencyPropertyChangedCallbackImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = DependencyPropertyChangedCallback;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const IKeyboardAcceleratorStatics = extern struct {
     pub const IID = GUID{ .data1 = 0x73e674ca, .data2 = 0x73f4, .data3 = 0x5e77, .data4 = .{ 0xb8, 0xd6, 0xff, 0x78, 0x52, 0xa6, 0x3b, 0x0b } };
     lpVtbl: *const VTable,
@@ -14058,6 +17998,23 @@ pub const IXamlRoot2 = extern struct {
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn ContentIslandEnvironment(self: *@This()) !*IContentIslandEnvironment { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ContentIslandEnvironment(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+};
+
+pub const IXamlRoot3 = extern struct {
+    pub const IID = GUID{ .data1 = 0xb71dbf3b, .data2 = 0x2e0f, .data3 = 0x5de0, .data4 = .{ 0xac, 0x68, 0xf0, 0xc1, 0xf6, 0x51, 0x14, 0xc8 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CoordinateConverter: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn CoordinateConverter(self: *@This()) !*IContentCoordinateConverter { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CoordinateConverter(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
 };
 
 pub const XamlRootChangedEventArgs = extern struct {
@@ -14126,6 +18083,49 @@ pub const IContentIslandEnvironment = extern struct {
     pub fn AddStateChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.StateChanged(self, p0, &out0)); return out0; }
     pub fn StateChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddStateChanged(p0); }
     pub fn RemoveStateChanged(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveStateChanged(self, token)); }
+};
+
+pub const ContentCoordinateConverter = extern struct {
+    pub const IID = IContentCoordinateConverter.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IContentCoordinateConverter.VTable;
+    pub const Requires_IContentCoordinateConverterStatics = true; // requires IContentCoordinateConverterStatics
+    pub fn ConvertLocalToScreen() void {}
+    pub fn ConvertScreenToLocal() void {}
+    pub fn CreateForWindowId() void {}
+};
+
+pub const IContentCoordinateConverter = extern struct {
+    pub const IID = GUID{ .data1 = 0x10a11230, .data2 = 0x5eb4, .data3 = 0x5840, .data4 = .{ 0xa3, 0x46, 0x57, 0x0f, 0x4a, 0x49, 0x04, 0x0f } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        ConvertLocalToScreen: *const fn (*anyopaque, Point, *?*anyopaque) callconv(.winapi) HRESULT,
+        ConvertLocalToScreen_1: *const fn (*anyopaque, ?*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
+        ConvertLocalToScreen_2: *const fn (*anyopaque, ?*anyopaque, i32, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
+        ConvertLocalToScreen_3: *const fn (*anyopaque, Rect, *?*anyopaque) callconv(.winapi) HRESULT,
+        ConvertScreenToLocal: *const fn (*anyopaque, ?*anyopaque, *Point) callconv(.winapi) HRESULT,
+        ConvertScreenToLocal_1: *const fn (*anyopaque, ?*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
+        ConvertScreenToLocal_2: *const fn (*anyopaque, ?*anyopaque, *Rect) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn convertLocalToScreen(self: *@This(), p0: Point) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.ConvertLocalToScreen(self, p0, &out0)); return out0; }
+    pub fn ConvertLocalToScreen(self: *@This(), p0: Point) !?*anyopaque { return self.convertLocalToScreen(p0); }
+    pub fn convertLocalToScreen_1(self: *@This(), p0: ?*anyopaque) !struct { count: u32, definitions: ?*anyopaque } { var out0: u32 = 0; var out1: ?*anyopaque = null; try hrCheck(self.lpVtbl.ConvertLocalToScreen_1(self, p0, &out0, &out1)); return .{ .count = out0, .definitions = out1 }; }
+    pub fn ConvertLocalToScreen_1(self: *@This(), p0: ?*anyopaque) !struct { count: u32, definitions: ?*anyopaque } { return self.convertLocalToScreen_1(p0); }
+    pub fn ConvertLocalToScreen_2(self: *@This(), p0: ?*anyopaque, p1: i32) !struct { count: u32, definitions: ?*anyopaque } { return self.convertLocalToScreen_1(p0, p1); }
+    pub fn ConvertLocalToScreen_3(self: *@This(), p0: Rect) !?*anyopaque { return self.convertLocalToScreen_1(p0); }
+    pub fn convertScreenToLocal(self: *@This(), p0: ?*anyopaque) !Point { var out0: Point = undefined; try hrCheck(self.lpVtbl.ConvertScreenToLocal(self, p0, &out0)); return out0; }
+    pub fn ConvertScreenToLocal(self: *@This(), p0: ?*anyopaque) !Point { return self.convertScreenToLocal(p0); }
+    pub fn convertScreenToLocal_1(self: *@This(), p0: ?*anyopaque) !struct { count: u32, definitions: ?*anyopaque } { var out0: u32 = 0; var out1: ?*anyopaque = null; try hrCheck(self.lpVtbl.ConvertScreenToLocal_1(self, p0, &out0, &out1)); return .{ .count = out0, .definitions = out1 }; }
+    pub fn ConvertScreenToLocal_1(self: *@This(), p0: ?*anyopaque) !struct { count: u32, definitions: ?*anyopaque } { return self.convertScreenToLocal_1(p0); }
+    pub fn ConvertScreenToLocal_2(self: *@This(), p0: ?*anyopaque) !Rect { return self.convertScreenToLocal_1(p0); }
 };
 
 pub const KeyRoutedEventArgs = extern struct {
@@ -14903,9 +18903,136 @@ pub const AsyncOperationCompletedHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), asyncInfo: ?*anyopaque, asyncStatus: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, asyncInfo, asyncStatus)); }
     pub fn Invoke(self: *@This(), asyncInfo: ?*anyopaque, asyncStatus: ?*anyopaque) !void { try self.invoke(asyncInfo, asyncStatus); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use AsyncOperationCompletedHandlerImpl instead"); }
 };
 
+pub fn AsyncOperationCompletedHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = AsyncOperationCompletedHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const IAsyncInfo = extern struct {
     pub const IID = GUID{ .data1 = 0x00000036, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
     lpVtbl: *const VTable,
@@ -15931,23 +20058,6 @@ pub const IInputScopeName = extern struct {
     pub fn SetNameValue(self: *@This(), value: i32) !void { try hrCheck(self.lpVtbl.SetNameValue(self, value)); }
 };
 
-pub const ISolidColorBrushStatics = extern struct {
-    pub const IID = GUID{ .data1 = 0x6bc16da0, .data2 = 0xc4e6, .data3 = 0x59b8, .data4 = .{ 0x99, 0x5b, 0xb3, 0x1e, 0x48, 0x42, 0x4c, 0x07 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        ColorProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn ColorProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ColorProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-};
-
 pub const ISolidColorBrushFactory = extern struct {
     pub const IID = GUID{ .data1 = 0x7b559384, .data2 = 0x4daa, .data3 = 0x54f4, .data4 = .{ 0x91, 0xef, 0x33, 0xa2, 0x3f, 0xd8, 0x16, 0xca } };
     lpVtbl: *const VTable,
@@ -15964,6 +20074,23 @@ pub const ISolidColorBrushFactory = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn createInstanceWithColor(self: *@This(), p0: Color) !*ISolidColorBrush { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateInstanceWithColor(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
     pub fn CreateInstanceWithColor(self: *@This(), p0: Color) !*ISolidColorBrush { return self.createInstanceWithColor(p0); }
+};
+
+pub const ISolidColorBrushStatics = extern struct {
+    pub const IID = GUID{ .data1 = 0x6bc16da0, .data2 = 0xc4e6, .data3 = 0x59b8, .data4 = .{ 0x99, 0x5b, 0xb3, 0x1e, 0x48, 0x42, 0x4c, 0x07 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        ColorProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn ColorProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ColorProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
 };
 
 pub const TextChangedEventArgs = extern struct {
@@ -16122,6 +20249,62 @@ pub const ITextBoxStatics = extern struct {
     pub fn TextReadingOrderProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.TextReadingOrderProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
 };
 
+pub const ITabView2 = extern struct {
+    pub const IID = GUID{ .data1 = 0xdeaa552e, .data2 = 0x4e6c, .data3 = 0x5239, .data4 = .{ 0xac, 0x75, 0xd9, 0x41, 0x9a, 0x23, 0x09, 0xda } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CanTearOutTabs: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetCanTearOutTabs: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        TabTearOutWindowRequested: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveTabTearOutWindowRequested: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        TabTearOutRequested: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveTabTearOutRequested: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        ExternalTornOutTabsDropping: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveExternalTornOutTabsDropping: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        ExternalTornOutTabsDropped: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveExternalTornOutTabsDropped: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn CanTearOutTabs(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.CanTearOutTabs(self, &out)); return out; }
+    pub fn SetCanTearOutTabs(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetCanTearOutTabs(self, value)); }
+    pub fn AddTabTearOutWindowRequested(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.TabTearOutWindowRequested(self, p0, &out0)); return out0; }
+    pub fn TabTearOutWindowRequested(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddTabTearOutWindowRequested(p0); }
+    pub fn RemoveTabTearOutWindowRequested(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveTabTearOutWindowRequested(self, token)); }
+    pub fn AddTabTearOutRequested(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.TabTearOutRequested(self, p0, &out0)); return out0; }
+    pub fn TabTearOutRequested(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddTabTearOutRequested(p0); }
+    pub fn RemoveTabTearOutRequested(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveTabTearOutRequested(self, token)); }
+    pub fn AddExternalTornOutTabsDropping(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.ExternalTornOutTabsDropping(self, p0, &out0)); return out0; }
+    pub fn ExternalTornOutTabsDropping(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddExternalTornOutTabsDropping(p0); }
+    pub fn RemoveExternalTornOutTabsDropping(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveExternalTornOutTabsDropping(self, token)); }
+    pub fn AddExternalTornOutTabsDropped(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.ExternalTornOutTabsDropped(self, p0, &out0)); return out0; }
+    pub fn ExternalTornOutTabsDropped(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddExternalTornOutTabsDropped(p0); }
+    pub fn RemoveExternalTornOutTabsDropped(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveExternalTornOutTabsDropped(self, token)); }
+};
+
+pub const ITabViewStatics2 = extern struct {
+    pub const IID = GUID{ .data1 = 0xb589da39, .data2 = 0x25f2, .data3 = 0x517c, .data4 = .{ 0x82, 0xd1, 0xc5, 0x1d, 0x80, 0x85, 0x55, 0x0e } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CanTearOutTabsProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn CanTearOutTabsProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CanTearOutTabsProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+};
+
 pub const ITabViewStatics = extern struct {
     pub const IID = GUID{ .data1 = 0xf4326c08, .data2 = 0x1b94, .data3 = 0x53d7, .data4 = .{ 0x93, 0x4f, 0xe6, 0xae, 0x0d, 0x3d, 0x18, 0xab } };
     lpVtbl: *const VTable,
@@ -16171,6 +20354,150 @@ pub const ITabViewStatics = extern struct {
     pub fn AllowDropTabsProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.AllowDropTabsProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
     pub fn SelectedIndexProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.SelectedIndexProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
     pub fn SelectedItemProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.SelectedItemProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+};
+
+pub const TabViewTabTearOutWindowRequestedEventArgs = extern struct {
+    pub const IID = ITabViewTabTearOutWindowRequestedEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ITabViewTabTearOutWindowRequestedEventArgs.VTable;
+    pub fn Items() void {}
+    pub fn get_Items() void {}
+    pub fn Tabs() void {}
+    pub fn get_Tabs() void {}
+    pub fn NewWindowId() void {}
+    pub fn get_NewWindowId() void {}
+    pub fn SetNewWindowId() void {}
+    pub fn put_NewWindowId() void {}
+};
+
+pub const ITabViewTabTearOutWindowRequestedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0x0c13afa7, .data2 = 0xf291, .data3 = 0x5bac, .data4 = .{ 0xa6, 0xe8, 0xcc, 0x67, 0xa6, 0x9b, 0x04, 0xc9 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Items: *const fn (*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
+        Tabs: *const fn (*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
+        NewWindowId: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetNewWindowId: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Items(self: *@This()) !void { var out: void = undefined; try hrCheck(self.lpVtbl.Items(self, &out)); return out; }
+    pub fn Tabs(self: *@This()) !void { var out: void = undefined; try hrCheck(self.lpVtbl.Tabs(self, &out)); return out; }
+    pub fn NewWindowId(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.NewWindowId(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn SetNewWindowId(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetNewWindowId(self, value)); }
+};
+
+pub const TabViewTabTearOutRequestedEventArgs = extern struct {
+    pub const IID = ITabViewTabTearOutRequestedEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ITabViewTabTearOutRequestedEventArgs.VTable;
+    pub fn Items() void {}
+    pub fn get_Items() void {}
+    pub fn Tabs() void {}
+    pub fn get_Tabs() void {}
+    pub fn NewWindowId() void {}
+    pub fn get_NewWindowId() void {}
+};
+
+pub const ITabViewTabTearOutRequestedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xe8a0c441, .data2 = 0x66c5, .data3 = 0x578a, .data4 = .{ 0x81, 0x77, 0x47, 0xdf, 0xff, 0xb9, 0x7b, 0x83 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Items: *const fn (*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
+        Tabs: *const fn (*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
+        NewWindowId: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Items(self: *@This()) !void { var out: void = undefined; try hrCheck(self.lpVtbl.Items(self, &out)); return out; }
+    pub fn Tabs(self: *@This()) !void { var out: void = undefined; try hrCheck(self.lpVtbl.Tabs(self, &out)); return out; }
+    pub fn NewWindowId(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.NewWindowId(self, &out)); return out orelse error.WinRTFailed; }
+};
+
+pub const TabViewExternalTornOutTabsDroppingEventArgs = extern struct {
+    pub const IID = ITabViewExternalTornOutTabsDroppingEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ITabViewExternalTornOutTabsDroppingEventArgs.VTable;
+    pub fn Items() void {}
+    pub fn get_Items() void {}
+    pub fn Tabs() void {}
+    pub fn get_Tabs() void {}
+    pub fn DropIndex() void {}
+    pub fn get_DropIndex() void {}
+    pub fn AllowDrop() void {}
+    pub fn get_AllowDrop() void {}
+    pub fn SetAllowDrop() void {}
+    pub fn put_AllowDrop() void {}
+};
+
+pub const ITabViewExternalTornOutTabsDroppingEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xb2378908, .data2 = 0xc5d7, .data3 = 0x560e, .data4 = .{ 0xa2, 0xe2, 0x46, 0x40, 0x3e, 0x13, 0xe5, 0xad } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Items: *const fn (*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
+        Tabs: *const fn (*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
+        DropIndex: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        AllowDrop: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetAllowDrop: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Items(self: *@This()) !void { var out: void = undefined; try hrCheck(self.lpVtbl.Items(self, &out)); return out; }
+    pub fn Tabs(self: *@This()) !void { var out: void = undefined; try hrCheck(self.lpVtbl.Tabs(self, &out)); return out; }
+    pub fn DropIndex(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.DropIndex(self, &out)); return out; }
+    pub fn AllowDrop(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.AllowDrop(self, &out)); return out; }
+    pub fn SetAllowDrop(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetAllowDrop(self, value)); }
+};
+
+pub const TabViewExternalTornOutTabsDroppedEventArgs = extern struct {
+    pub const IID = ITabViewExternalTornOutTabsDroppedEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ITabViewExternalTornOutTabsDroppedEventArgs.VTable;
+    pub fn Items() void {}
+    pub fn get_Items() void {}
+    pub fn Tabs() void {}
+    pub fn get_Tabs() void {}
+    pub fn DropIndex() void {}
+    pub fn get_DropIndex() void {}
+};
+
+pub const ITabViewExternalTornOutTabsDroppedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0x69912428, .data2 = 0x34d9, .data3 = 0x5aac, .data4 = .{ 0x85, 0xb7, 0xa9, 0x1d, 0x71, 0xc1, 0x33, 0xaa } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Items: *const fn (*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
+        Tabs: *const fn (*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
+        DropIndex: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Items(self: *@This()) !void { var out: void = undefined; try hrCheck(self.lpVtbl.Items(self, &out)); return out; }
+    pub fn Tabs(self: *@This()) !void { var out: void = undefined; try hrCheck(self.lpVtbl.Tabs(self, &out)); return out; }
+    pub fn DropIndex(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.DropIndex(self, &out)); return out; }
 };
 
 pub const CollectionChange = struct {
@@ -16298,23 +20625,6 @@ pub const ITabViewItemTemplateSettings2 = extern struct {
     pub fn SetTabGeometry(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetTabGeometry(self, value)); }
 };
 
-pub const ITabViewItemTemplateSettingsStatics2 = extern struct {
-    pub const IID = GUID{ .data1 = 0xd31ab42b, .data2 = 0x3842, .data3 = 0x5e4d, .data4 = .{ 0x88, 0x45, 0x62, 0x32, 0xee, 0xa8, 0xee, 0x1d } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        TabGeometryProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn TabGeometryProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.TabGeometryProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-};
-
 pub const ITabViewItemTemplateSettingsStatics = extern struct {
     pub const IID = GUID{ .data1 = 0xeb62dd88, .data2 = 0xfc12, .data3 = 0x5338, .data4 = .{ 0x8e, 0x88, 0x78, 0x8b, 0xe7, 0x2d, 0x07, 0xd6 } };
     lpVtbl: *const VTable,
@@ -16330,6 +20640,23 @@ pub const ITabViewItemTemplateSettingsStatics = extern struct {
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn IconElementProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IconElementProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+};
+
+pub const ITabViewItemTemplateSettingsStatics2 = extern struct {
+    pub const IID = GUID{ .data1 = 0xd31ab42b, .data2 = 0x3842, .data3 = 0x5e4d, .data4 = .{ 0x88, 0x45, 0x62, 0x32, 0xee, 0xa8, 0xee, 0x1d } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        TabGeometryProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn TabGeometryProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.TabGeometryProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
 };
 
 pub const Geometry = extern struct {
@@ -16508,8 +20835,19 @@ pub const IPointerPointProperties2 = extern struct {
     pub fn ZDistance(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ZDistance(self, &out)); return out orelse error.WinRTFailed; }
 };
 
-pub const IResourceManager = extern struct {
-    pub const IID = GUID{ .data1 = 0xf744d97b, .data2 = 0x9988, .data3 = 0x44fb, .data4 = .{ 0xab, 0xd6, 0x53, 0x78, 0x84, 0x4c, 0xfa, 0x8b } };
+pub const Deferral = extern struct {
+    pub const IID = IDeferral.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IDeferral.VTable;
+    pub const Requires_IClosable = true; // requires IClosable
+    pub const Requires_IDeferralFactory = true; // requires IDeferralFactory
+    pub fn Complete() void {}
+    pub fn Close() void {}
+    pub fn Create() void {}
+};
+
+pub const IDeferral = extern struct {
+    pub const IID = GUID{ .data1 = 0xd6269732, .data2 = 0x3b7f, .data3 = 0x46a7, .data4 = .{ 0xb4, 0x0b, 0x4f, 0xdc, 0xa2, 0xa2, 0xc6, 0x93 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -16518,21 +20856,476 @@ pub const IResourceManager = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        MainResourceMap: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        AllResourceMaps: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        DefaultContext: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        LoadPriFiles: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        UnloadPriFiles: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        Complete: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_IClosable = true; // requires IClosable
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
+    pub fn complete(self: *@This()) !void { try hrCheck(self.lpVtbl.Complete(self)); }
+    pub fn Complete(self: *@This()) !void { try self.complete(); }
+};
+
+pub const CompositionColorSpace = struct {
+    pub const Auto: i32 = 0;
+    pub const Hsl: i32 = 1;
+    pub const Rgb: i32 = 2;
+    pub const HslLinear: i32 = 3;
+    pub const RgbLinear: i32 = 4;
+};
+
+pub const CompositionEasingFunction = extern struct {
+    pub const IID = ICompositionEasingFunction.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICompositionEasingFunction.VTable;
+    pub const Requires_ICompositionEasingFunctionStatics = true; // requires ICompositionEasingFunctionStatics
+    pub fn CreateCubicBezierEasingFunction() void {}
+    pub fn CreateLinearEasingFunction() void {}
+    pub fn CreateStepEasingFunction() void {}
+    pub fn CreateBackEasingFunction() void {}
+    pub fn CreateBounceEasingFunction() void {}
+    pub fn CreateCircleEasingFunction() void {}
+    pub fn CreateElasticEasingFunction() void {}
+    pub fn CreateExponentialEasingFunction() void {}
+    pub fn CreatePowerEasingFunction() void {}
+    pub fn CreateSineEasingFunction() void {}
+};
+
+pub const ICompositionEasingFunction = extern struct {
+    pub const IID = GUID{ .data1 = 0x5145e356, .data2 = 0xbf79, .data3 = 0x4ea8, .data4 = .{ 0x8c, 0xc2, 0x6b, 0x5b, 0x47, 0x2e, 0x6c, 0x9a } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn MainResourceMap(self: *@This()) !*IResourceMap { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.MainResourceMap(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn AllResourceMaps(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.AllResourceMaps(self, &out)); return out orelse error.WinRTFailed; }
-    pub fn DefaultContext(self: *@This()) !*IResourceContext { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.DefaultContext(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn loadPriFiles(self: *@This(), files: ?*anyopaque) !void { try hrCheck(self.lpVtbl.LoadPriFiles(self, files)); }
-    pub fn LoadPriFiles(self: *@This(), files: ?*anyopaque) !void { try self.loadPriFiles(files); }
-    pub fn unloadPriFiles(self: *@This(), files: ?*anyopaque) !void { try hrCheck(self.lpVtbl.UnloadPriFiles(self, files)); }
-    pub fn UnloadPriFiles(self: *@This(), files: ?*anyopaque) !void { try self.unloadPriFiles(files); }
+};
+
+pub const VisualCollection = extern struct {
+    pub const IID = IVisualCollection.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IVisualCollection.VTable;
+    pub const Requires_IIterable = true; // requires IIterable
+    pub fn Count() void {}
+    pub fn get_Count() void {}
+    pub fn InsertAbove() void {}
+    pub fn InsertAtBottom() void {}
+    pub fn InsertAtTop() void {}
+    pub fn InsertBelow() void {}
+    pub fn Remove() void {}
+    pub fn RemoveAll() void {}
+    pub fn First() void {}
+};
+
+pub const IVisualCollection = extern struct {
+    pub const IID = GUID{ .data1 = 0x8b745505, .data2 = 0xfd3e, .data3 = 0x4a98, .data4 = .{ 0x84, 0xa8, 0xe9, 0x49, 0x46, 0x8c, 0x6b, 0xcb } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Count: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        InsertAbove: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        InsertAtBottom: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        InsertAtTop: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        InsertBelow: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        Remove: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        RemoveAll: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Count(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.Count(self, &out)); return out; }
+    pub fn insertAbove(self: *@This(), newChild: ?*anyopaque, sibling: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertAbove(self, newChild, sibling)); }
+    pub fn InsertAbove(self: *@This(), newChild: ?*anyopaque, sibling: ?*anyopaque) !void { try self.insertAbove(newChild, sibling); }
+    pub fn insertAtBottom(self: *@This(), newChild: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertAtBottom(self, newChild)); }
+    pub fn InsertAtBottom(self: *@This(), newChild: ?*anyopaque) !void { try self.insertAtBottom(newChild); }
+    pub fn insertAtTop(self: *@This(), newChild: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertAtTop(self, newChild)); }
+    pub fn InsertAtTop(self: *@This(), newChild: ?*anyopaque) !void { try self.insertAtTop(newChild); }
+    pub fn insertBelow(self: *@This(), newChild: ?*anyopaque, sibling: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertBelow(self, newChild, sibling)); }
+    pub fn InsertBelow(self: *@This(), newChild: ?*anyopaque, sibling: ?*anyopaque) !void { try self.insertBelow(newChild, sibling); }
+    pub fn remove(self: *@This(), child: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Remove(self, child)); }
+    pub fn Remove(self: *@This(), child: ?*anyopaque) !void { try self.remove(child); }
+    pub fn removeAll(self: *@This()) !void { try hrCheck(self.lpVtbl.RemoveAll(self)); }
+    pub fn RemoveAll(self: *@This()) !void { try self.removeAll(); }
+};
+
+pub const CompositionEffectBrush = extern struct {
+    pub const IID = ICompositionEffectBrush.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICompositionEffectBrush.VTable;
+    pub fn GetSourceParameter() void {}
+    pub fn SetSourceParameter() void {}
+};
+
+pub const ICompositionEffectBrush = extern struct {
+    pub const IID = GUID{ .data1 = 0xbf7f795e, .data2 = 0x83cc, .data3 = 0x44bf, .data4 = .{ 0xa4, 0x47, 0x3e, 0x3c, 0x07, 0x17, 0x89, 0xec } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        GetSourceParameter: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetSourceParameter: *const fn (*anyopaque, HSTRING, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn getSourceParameter(self: *@This(), p0: anytype) !*ICompositionBrush { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetSourceParameter(self, @ptrCast(p0), &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn GetSourceParameter(self: *@This(), p0: anytype) !*ICompositionBrush { return self.getSourceParameter(p0); }
+    pub fn setSourceParameter(self: *@This(), name: anytype, source: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetSourceParameter(self, @ptrCast(name), source)); }
+    pub fn SetSourceParameter(self: *@This(), name: anytype, source: ?*anyopaque) !void { try self.setSourceParameter(name, source); }
+};
+
+pub const CompositionEffectFactoryLoadStatus = struct {
+    pub const Success: i32 = 0;
+    pub const EffectTooComplex: i32 = 1;
+    pub const Pending: i32 = 2;
+    pub const Other: i32 = -1;
+};
+
+pub const IGraphicsEffectSource = extern struct {
+    pub const IID = GUID{ .data1 = 0x2d8f9ddc, .data2 = 0x4339, .data3 = 0x4eb9, .data4 = .{ 0x92, 0x16, 0xf9, 0xde, 0xb7, 0x56, 0x58, 0xa2 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+};
+
+pub const ICompositionPropertySet2 = extern struct {
+    pub const IID = GUID{ .data1 = 0xde80731e, .data2 = 0xa211, .data3 = 0x4455, .data4 = .{ 0x88, 0x80, 0x7d, 0x0f, 0x3f, 0x6a, 0x44, 0xfd } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        InsertBoolean: *const fn (*anyopaque, HSTRING, bool) callconv(.winapi) HRESULT,
+        TryGetBoolean: *const fn (*anyopaque, HSTRING, *bool, *i32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn insertBoolean(self: *@This(), propertyName: anytype, value: bool) !void { try hrCheck(self.lpVtbl.InsertBoolean(self, @ptrCast(propertyName), value)); }
+    pub fn InsertBoolean(self: *@This(), propertyName: anytype, value: bool) !void { try self.insertBoolean(propertyName, value); }
+    pub fn tryGetBoolean(self: *@This(), p0: anytype) !struct { value: bool, value_1: i32 } { var out0: bool = false; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetBoolean(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
+    pub fn TryGetBoolean(self: *@This(), p0: anytype) !struct { value: bool, value_1: i32 } { return self.tryGetBoolean(p0); }
+};
+
+pub const Matrix3x2 = extern struct {
+    M11: f32,
+    M12: f32,
+    M21: f32,
+    M22: f32,
+    M31: f32,
+    M32: f32,
+};
+
+pub const Quaternion = extern struct {
+    X: f32,
+    Y: f32,
+    Z: f32,
+    W: f32,
+};
+
+pub const Vector4 = extern struct {
+    X: f32,
+    Y: f32,
+    Z: f32,
+    W: f32,
+};
+
+pub const CompositionGetValueStatus = struct {
+    pub const Succeeded: i32 = 0;
+    pub const TypeMismatch: i32 = 1;
+    pub const NotFound: i32 = 2;
+};
+
+pub const CompositionBatchCompletedEventArgs = extern struct {
+    pub const IID = ICompositionBatchCompletedEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICompositionBatchCompletedEventArgs.VTable;
+};
+
+pub const ICompositionBatchCompletedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0x0d00dad0, .data2 = 0x9464, .data3 = 0x450a, .data4 = .{ 0xa5, 0x62, 0x2e, 0x26, 0x98, 0xb0, 0xa8, 0x12 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+};
+
+pub const ISpriteVisual2 = extern struct {
+    pub const IID = GUID{ .data1 = 0x588c9664, .data2 = 0x997a, .data3 = 0x4850, .data4 = .{ 0x91, 0xfe, 0x53, 0xcb, 0x58, 0xf8, 0x1c, 0xe9 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Shadow: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetShadow: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Shadow(self: *@This()) !*ICompositionShadow { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Shadow(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetShadow(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetShadow(self, value)); }
+};
+
+pub const CompositionBrush = extern struct {
+    pub const IID = ICompositionBrush.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICompositionBrush.VTable;
+};
+
+pub const ICompositionBrush = extern struct {
+    pub const IID = GUID{ .data1 = 0xab0d7608, .data2 = 0x30c0, .data3 = 0x40e9, .data4 = .{ 0xb5, 0x68, 0xb6, 0x0a, 0x6b, 0xd1, 0xfb, 0x46 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+};
+
+pub const CompositionShadow = extern struct {
+    pub const IID = ICompositionShadow.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ICompositionShadow.VTable;
+};
+
+pub const ICompositionShadow = extern struct {
+    pub const IID = GUID{ .data1 = 0x329e52e2, .data2 = 0x4335, .data3 = 0x49cc, .data4 = .{ 0xb1, 0x4a, 0x37, 0x78, 0x2d, 0x10, 0xf0, 0xc4 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+};
+
+pub const ICompositionSurfaceBrush2 = extern struct {
+    pub const IID = GUID{ .data1 = 0xd27174d5, .data2 = 0x64f5, .data3 = 0x4692, .data4 = .{ 0x9d, 0xc7, 0x71, 0xb6, 0x1d, 0x7e, 0x58, 0x80 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        AnchorPoint: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
+        SetAnchorPoint: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
+        CenterPoint: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
+        SetCenterPoint: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
+        Offset: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
+        SetOffset: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
+        RotationAngle: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        SetRotationAngle: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
+        RotationAngleInDegrees: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        SetRotationAngleInDegrees: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
+        Scale: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
+        SetScale: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
+        TransformMatrix: *const fn (*anyopaque, *Matrix3x2) callconv(.winapi) HRESULT,
+        SetTransformMatrix: *const fn (*anyopaque, Matrix3x2) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn AnchorPoint(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.AnchorPoint(self, &out)); return out; }
+    pub fn SetAnchorPoint(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetAnchorPoint(self, value)); }
+    pub fn CenterPoint(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.CenterPoint(self, &out)); return out; }
+    pub fn SetCenterPoint(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetCenterPoint(self, value)); }
+    pub fn Offset(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.Offset(self, &out)); return out; }
+    pub fn SetOffset(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetOffset(self, value)); }
+    pub fn RotationAngle(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.RotationAngle(self, &out)); return out; }
+    pub fn SetRotationAngle(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetRotationAngle(self, value)); }
+    pub fn RotationAngleInDegrees(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.RotationAngleInDegrees(self, &out)); return out; }
+    pub fn SetRotationAngleInDegrees(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetRotationAngleInDegrees(self, value)); }
+    pub fn Scale(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.Scale(self, &out)); return out; }
+    pub fn SetScale(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetScale(self, value)); }
+    pub fn TransformMatrix(self: *@This()) !Matrix3x2 { var out: Matrix3x2 = .{ .M11 = 0, .M12 = 0, .M21 = 0, .M22 = 0, .M31 = 0, .M32 = 0 }; try hrCheck(self.lpVtbl.TransformMatrix(self, &out)); return out; }
+    pub fn SetTransformMatrix(self: *@This(), value: Matrix3x2) !void { try hrCheck(self.lpVtbl.SetTransformMatrix(self, value)); }
+};
+
+pub const ICompositionSurfaceBrush3 = extern struct {
+    pub const IID = GUID{ .data1 = 0x550bb289, .data2 = 0x1fe0, .data3 = 0x42e5, .data4 = .{ 0x81, 0x95, 0x1e, 0xef, 0xa8, 0x7f, 0xf0, 0x8e } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        SnapToPixels: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetSnapToPixels: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn SnapToPixels(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.SnapToPixels(self, &out)); return out; }
+    pub fn SetSnapToPixels(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetSnapToPixels(self, value)); }
+};
+
+pub const CompositionBitmapInterpolationMode = struct {
+    pub const NearestNeighbor: i32 = 0;
+    pub const Linear: i32 = 1;
+    pub const MagLinearMinLinearMipLinear: i32 = 2;
+    pub const MagLinearMinLinearMipNearest: i32 = 3;
+    pub const MagLinearMinNearestMipLinear: i32 = 4;
+    pub const MagLinearMinNearestMipNearest: i32 = 5;
+    pub const MagNearestMinLinearMipLinear: i32 = 6;
+    pub const MagNearestMinLinearMipNearest: i32 = 7;
+    pub const MagNearestMinNearestMipLinear: i32 = 8;
+    pub const MagNearestMinNearestMipNearest: i32 = 9;
+};
+
+pub const CompositionStretch = struct {
+    pub const None: i32 = 0;
+    pub const Fill: i32 = 1;
+    pub const Uniform: i32 = 2;
+    pub const UniformToFill: i32 = 3;
+};
+
+pub const BindingFailedEventArgs = extern struct {
+    pub const IID = IBindingFailedEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IBindingFailedEventArgs.VTable;
+    pub fn Message() void {}
+    pub fn get_Message() void {}
+};
+
+pub const IBindingFailedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xa7bf50f3, .data2 = 0xdbc0, .data3 = 0x5b44, .data4 = .{ 0xbe, 0x74, 0x56, 0xe8, 0xf8, 0x0f, 0xd7, 0x16 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Message: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Message(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.Message(self, &out)); return out; }
+};
+
+pub const IObservableMap = extern struct {
+    pub const IID = GUID{ .data1 = 0x65df2bf5, .data2 = 0xbf39, .data3 = 0x41b5, .data4 = .{ 0xae, 0xbc, 0x5a, 0x9d, 0x86, 0x5e, 0x47, 0x2b } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        MapChanged: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveMapChanged: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn AddMapChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.MapChanged(self, p0, &out0)); return out0; }
+    pub fn MapChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddMapChanged(p0); }
+    pub fn RemoveMapChanged(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveMapChanged(self, token)); }
+};
+
+pub const ICoreCursorFactory = extern struct {
+    pub const IID = GUID{ .data1 = 0xf6359621, .data2 = 0xa79d, .data3 = 0x4ed3, .data4 = .{ 0x8c, 0x32, 0xa9, 0xef, 0x9d, 0x6b, 0x76, 0xa4 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CreateCursor: *const fn (*anyopaque, i32, u32, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn createCursor(self: *@This(), p0: i32, p1: u32) !*ICoreCursor { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateCursor(self, p0, p1, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateCursor(self: *@This(), p0: i32, p1: u32) !*ICoreCursor { return self.createCursor(p0, p1); }
+};
+
+pub const CoreCursorType = struct {
+    pub const Arrow: i32 = 0;
+    pub const Cross: i32 = 1;
+    pub const Custom: i32 = 2;
+    pub const Hand: i32 = 3;
+    pub const Help: i32 = 4;
+    pub const IBeam: i32 = 5;
+    pub const SizeAll: i32 = 6;
+    pub const SizeNortheastSouthwest: i32 = 7;
+    pub const SizeNorthSouth: i32 = 8;
+    pub const SizeNorthwestSoutheast: i32 = 9;
+    pub const SizeWestEast: i32 = 10;
+    pub const UniversalNo: i32 = 11;
+    pub const UpArrow: i32 = 12;
+    pub const Wait: i32 = 13;
+    pub const Pin: i32 = 14;
+    pub const Person: i32 = 15;
+};
+
+pub const IKeyEventArgs2 = extern struct {
+    pub const IID = GUID{ .data1 = 0x583add98, .data2 = 0x0790, .data3 = 0x4571, .data4 = .{ 0x9b, 0x12, 0x64, 0x5e, 0xf9, 0xd7, 0x9e, 0x42 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        DeviceId: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
+    pub fn DeviceId(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.DeviceId(self, &out)); return out; }
+};
+
+pub const CoreProximityEvaluation = extern struct {
+    Score: i32,
+    AdjustedPoint: Point,
 };
 
 pub const IWwwFormUrlDecoderEntry = extern struct {
@@ -16572,16 +21365,26 @@ pub const IWwwFormUrlDecoderRuntimeClassFactory = extern struct {
     pub fn CreateWwwFormUrlDecoder(self: *@This(), p0: anytype) !*IWwwFormUrlDecoderRuntimeClass { return self.createWwwFormUrlDecoder(p0); }
 };
 
-pub const BindingFailedEventArgs = extern struct {
-    pub const IID = IBindingFailedEventArgs.IID;
+pub const ResourceMap = extern struct {
+    pub const IID = IResourceMap.IID;
     lpVtbl: *const VTable,
-    pub const VTable = IBindingFailedEventArgs.VTable;
-    pub fn Message() void {}
-    pub fn get_Message() void {}
+    pub const VTable = IResourceMap.VTable;
+    pub const Requires_IMapView = true; // requires IMapView
+    pub const Requires_IIterable = true; // requires IIterable
+    pub fn Uri() void {}
+    pub fn get_Uri() void {}
+    pub fn GetValue() void {}
+    pub fn GetSubtree() void {}
+    pub fn Lookup() void {}
+    pub fn Size() void {}
+    pub fn get_Size() void {}
+    pub fn HasKey() void {}
+    pub fn Split() void {}
+    pub fn First() void {}
 };
 
-pub const IBindingFailedEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0xa7bf50f3, .data2 = 0xdbc0, .data3 = 0x5b44, .data4 = .{ 0xbe, 0x74, 0x56, 0xe8, 0xf8, 0x0f, 0xd7, 0x16 } };
+pub const IResourceMap = extern struct {
+    pub const IID = GUID{ .data1 = 0x72284824, .data2 = 0xdb8c, .data3 = 0x42f8, .data4 = .{ 0xb0, 0x8c, 0x53, 0xff, 0x35, 0x7d, 0xad, 0x82 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -16590,11 +21393,136 @@ pub const IBindingFailedEventArgs = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        Message: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+        Uri: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetValue: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetValue_1: *const fn (*anyopaque, HSTRING, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetSubtree: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Message(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.Message(self, &out)); return out; }
+    pub fn Uri(self: *@This()) !*IUriRuntimeClass { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Uri(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn getValue(self: *@This(), p0: anytype) !*IResourceCandidate { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetValue(self, @ptrCast(p0), &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn GetValue(self: *@This(), p0: anytype) !*IResourceCandidate { return self.getValue(p0); }
+    pub fn getValue_1(self: *@This(), p0: anytype, p1: ?*anyopaque) !*IResourceCandidate { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetValue_1(self, @ptrCast(p0), p1, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn GetValue_1(self: *@This(), p0: anytype, p1: ?*anyopaque) !*IResourceCandidate { return self.getValue_1(p0, p1); }
+    pub fn getSubtree(self: *@This(), p0: anytype) !*IResourceMap { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetSubtree(self, @ptrCast(p0), &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn GetSubtree(self: *@This(), p0: anytype) !*IResourceMap { return self.getSubtree(p0); }
+};
+
+pub const ResourceContext = extern struct {
+    pub const IID = IResourceContext.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IResourceContext.VTable;
+    pub const Requires_IResourceContextStatics = true; // requires IResourceContextStatics
+    pub const Requires_IResourceContextStatics3 = true; // requires IResourceContextStatics3
+    pub const Requires_IResourceContextStatics4 = true; // requires IResourceContextStatics4
+    pub const Requires_IResourceContextStatics2 = true; // requires IResourceContextStatics2
+    pub fn QualifierValues() void {}
+    pub fn get_QualifierValues() void {}
+    pub fn Reset() void {}
+    pub fn OverrideToMatch() void {}
+    pub fn Clone() void {}
+    pub fn Languages() void {}
+    pub fn get_Languages() void {}
+    pub fn SetLanguages() void {}
+    pub fn put_Languages() void {}
+    pub fn CreateMatchingContext() void {}
+    pub fn SetGlobalQualifierValue() void {}
+    pub fn GetForUIContext() void {}
+    pub fn GetForCurrentView() void {}
+    pub fn ResetGlobalQualifierValues() void {}
+    pub fn GetForViewIndependentUse() void {}
+};
+
+pub const IResourceContext = extern struct {
+    pub const IID = GUID{ .data1 = 0x2fa22f4b, .data2 = 0x707e, .data3 = 0x4b27, .data4 = .{ 0xad, 0x0d, 0xd0, 0xd8, 0xcd, 0x46, 0x8f, 0xd2 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        QualifierValues: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        Reset: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        Reset_1: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        OverrideToMatch: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        Clone: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        Languages: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetLanguages: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn QualifierValues(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.QualifierValues(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
+    pub fn Reset(self: *@This()) !void { try self.reset(); }
+    pub fn reset_1(self: *@This(), qualifierNames: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Reset_1(self, qualifierNames)); }
+    pub fn Reset_1(self: *@This(), qualifierNames: ?*anyopaque) !void { try self.reset_1(qualifierNames); }
+    pub fn overrideToMatch(self: *@This(), result: ?*anyopaque) !void { try hrCheck(self.lpVtbl.OverrideToMatch(self, result)); }
+    pub fn OverrideToMatch(self: *@This(), result: ?*anyopaque) !void { try self.overrideToMatch(result); }
+    pub fn clone(self: *@This()) !*IResourceContext { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.Clone(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn Clone(self: *@This()) !*IResourceContext { return self.clone(); }
+    pub fn Languages(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Languages(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn SetLanguages(self: *@This(), languages: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetLanguages(self, languages)); }
+};
+
+pub const IStorageFile = extern struct {
+    pub const IID = GUID{ .data1 = 0xfa3f6186, .data2 = 0x4214, .data3 = 0x428c, .data4 = .{ 0xa6, 0x4c, 0x14, 0xc9, 0xac, 0x73, 0x15, 0xea } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        FileType: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+        ContentType: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+        OpenAsync: *const fn (*anyopaque, i32, *?*anyopaque) callconv(.winapi) HRESULT,
+        OpenTransactedWriteAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CopyAsync: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CopyAsync_1: *const fn (*anyopaque, ?*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+        CopyAsync_2: *const fn (*anyopaque, ?*anyopaque, HSTRING, i32, *?*anyopaque) callconv(.winapi) HRESULT,
+        CopyAndReplaceAsync: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        MoveAsync: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        MoveAsync_1: *const fn (*anyopaque, ?*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+        MoveAsync_2: *const fn (*anyopaque, ?*anyopaque, HSTRING, i32, *?*anyopaque) callconv(.winapi) HRESULT,
+        MoveAndReplaceAsync: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_IStorageItem = true; // requires IStorageItem
+    pub const Requires_IRandomAccessStreamReference = true; // requires IRandomAccessStreamReference
+    pub const Requires_IInputStreamReference = true; // requires IInputStreamReference
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn DeleteAsync(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.DeleteAsync(); }
+    pub fn GetBasicPropertiesAsync(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.GetBasicPropertiesAsync(); }
+    pub fn Name(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.Name(); }
+    pub fn Path(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.Path(); }
+    pub fn Attributes(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.Attributes(); }
+    pub fn DateCreated(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.DateCreated(); }
+    pub fn OpenReadAsync(self: *@This()) !void { const base = try self.queryInterface(IRandomAccessStreamReference); _ = try base.OpenReadAsync(); }
+    pub fn OpenSequentialReadAsync(self: *@This()) !void { const base = try self.queryInterface(IInputStreamReference); _ = try base.OpenSequentialReadAsync(); }
+    pub fn FileType(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.FileType(self, &out)); return out; }
+    pub fn ContentType(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.ContentType(self, &out)); return out; }
+    pub fn openAsync(self: *@This(), p0: i32) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.OpenAsync(self, p0, &out0)); return out0; }
+    pub fn OpenAsync(self: *@This(), p0: i32) !?*anyopaque { return self.openAsync(p0); }
+    pub fn openTransactedWriteAsync(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.OpenTransactedWriteAsync(self, &out0)); return out0; }
+    pub fn OpenTransactedWriteAsync(self: *@This()) !?*anyopaque { return self.openTransactedWriteAsync(); }
+    pub fn copyAsync(self: *@This(), p0: ?*anyopaque) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CopyAsync(self, p0, &out0)); return out0; }
+    pub fn CopyAsync(self: *@This(), p0: ?*anyopaque) !?*anyopaque { return self.copyAsync(p0); }
+    pub fn copyAsync_1(self: *@This(), p0: ?*anyopaque, p1: anytype) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CopyAsync_1(self, p0, @ptrCast(p1), &out0)); return out0; }
+    pub fn CopyAsync_1(self: *@This(), p0: ?*anyopaque, p1: anytype) !?*anyopaque { return self.copyAsync_1(p0, p1); }
+    pub fn CopyAsync_2(self: *@This(), p0: ?*anyopaque, p1: anytype, p2: i32) !?*anyopaque { return self.copyAsync_1(p0, p1, p2); }
+    pub fn copyAndReplaceAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CopyAndReplaceAsync(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CopyAndReplaceAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { return self.copyAndReplaceAsync(p0); }
+    pub fn moveAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.MoveAsync(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn MoveAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { return self.moveAsync(p0); }
+    pub fn moveAsync_1(self: *@This(), p0: ?*anyopaque, p1: anytype) !*IAsyncAction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.MoveAsync_1(self, p0, @ptrCast(p1), &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn MoveAsync_1(self: *@This(), p0: ?*anyopaque, p1: anytype) !*IAsyncAction { return self.moveAsync_1(p0, p1); }
+    pub fn MoveAsync_2(self: *@This(), p0: ?*anyopaque, p1: anytype, p2: i32) !*IAsyncAction { return self.moveAsync_1(p0, p1, p2); }
+    pub fn moveAndReplaceAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.MoveAndReplaceAsync(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn MoveAndReplaceAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { return self.moveAndReplaceAsync(p0); }
 };
 
 pub const IInputCursorStatics = extern struct {
@@ -16973,8 +21901,8 @@ pub const AutomationPeerAnnotation = extern struct {
     pub const IID = IAutomationPeerAnnotation.IID;
     lpVtbl: *const VTable,
     pub const VTable = IAutomationPeerAnnotation.VTable;
-    pub const Requires_IAutomationPeerAnnotationStatics = true; // requires IAutomationPeerAnnotationStatics
     pub const Requires_IAutomationPeerAnnotationFactory = true; // requires IAutomationPeerAnnotationFactory
+    pub const Requires_IAutomationPeerAnnotationStatics = true; // requires IAutomationPeerAnnotationStatics
     pub fn Type() void {}
     pub fn get_Type() void {}
     pub fn SetType() void {}
@@ -16983,12 +21911,12 @@ pub const AutomationPeerAnnotation = extern struct {
     pub fn get_Peer() void {}
     pub fn SetPeer() void {}
     pub fn put_Peer() void {}
+    pub fn CreateInstance() void {}
+    pub fn CreateWithPeerParameter() void {}
     pub fn TypeProperty() void {}
     pub fn get_TypeProperty() void {}
     pub fn PeerProperty() void {}
     pub fn get_PeerProperty() void {}
-    pub fn CreateInstance() void {}
-    pub fn CreateWithPeerParameter() void {}
 };
 
 pub const IAutomationPeerAnnotation = extern struct {
@@ -17319,443 +22247,6 @@ pub const CompositionCompositeMode = struct {
     pub const SourceOver: i32 = 1;
     pub const DestinationInvert: i32 = 2;
     pub const MinBlend: i32 = 3;
-};
-
-pub const Quaternion = extern struct {
-    X: f32,
-    Y: f32,
-    Z: f32,
-    W: f32,
-};
-
-pub const IObservableMap = extern struct {
-    pub const IID = GUID{ .data1 = 0x65df2bf5, .data2 = 0xbf39, .data3 = 0x41b5, .data4 = .{ 0xae, 0xbc, 0x5a, 0x9d, 0x86, 0x5e, 0x47, 0x2b } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        MapChanged: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveMapChanged: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddMapChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.MapChanged(self, p0, &out0)); return out0; }
-    pub fn MapChanged(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddMapChanged(p0); }
-    pub fn RemoveMapChanged(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveMapChanged(self, token)); }
-};
-
-pub const ICoreCursorFactory = extern struct {
-    pub const IID = GUID{ .data1 = 0xf6359621, .data2 = 0xa79d, .data3 = 0x4ed3, .data4 = .{ 0x8c, 0x32, 0xa9, 0xef, 0x9d, 0x6b, 0x76, 0xa4 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        CreateCursor: *const fn (*anyopaque, i32, u32, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn createCursor(self: *@This(), p0: i32, p1: u32) !*ICoreCursor { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateCursor(self, p0, p1, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateCursor(self: *@This(), p0: i32, p1: u32) !*ICoreCursor { return self.createCursor(p0, p1); }
-};
-
-pub const CoreCursorType = struct {
-    pub const Arrow: i32 = 0;
-    pub const Cross: i32 = 1;
-    pub const Custom: i32 = 2;
-    pub const Hand: i32 = 3;
-    pub const Help: i32 = 4;
-    pub const IBeam: i32 = 5;
-    pub const SizeAll: i32 = 6;
-    pub const SizeNortheastSouthwest: i32 = 7;
-    pub const SizeNorthSouth: i32 = 8;
-    pub const SizeNorthwestSoutheast: i32 = 9;
-    pub const SizeWestEast: i32 = 10;
-    pub const UniversalNo: i32 = 11;
-    pub const UpArrow: i32 = 12;
-    pub const Wait: i32 = 13;
-    pub const Pin: i32 = 14;
-    pub const Person: i32 = 15;
-};
-
-pub const IKeyEventArgs2 = extern struct {
-    pub const IID = GUID{ .data1 = 0x583add98, .data2 = 0x0790, .data3 = 0x4571, .data4 = .{ 0x9b, 0x12, 0x64, 0x5e, 0xf9, 0xd7, 0x9e, 0x42 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        DeviceId: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Handled(self: *@This()) !void { const base = try self.queryInterface(ICoreWindowEventArgs); _ = try base.Handled(); }
-    pub fn DeviceId(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.DeviceId(self, &out)); return out; }
-};
-
-pub const CoreProximityEvaluation = extern struct {
-    Score: i32,
-    AdjustedPoint: Point,
-};
-
-pub const CompositionColorSpace = struct {
-    pub const Auto: i32 = 0;
-    pub const Hsl: i32 = 1;
-    pub const Rgb: i32 = 2;
-    pub const HslLinear: i32 = 3;
-    pub const RgbLinear: i32 = 4;
-};
-
-pub const CompositionEasingFunction = extern struct {
-    pub const IID = ICompositionEasingFunction.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICompositionEasingFunction.VTable;
-    pub const Requires_ICompositionEasingFunctionStatics = true; // requires ICompositionEasingFunctionStatics
-    pub fn CreateCubicBezierEasingFunction() void {}
-    pub fn CreateLinearEasingFunction() void {}
-    pub fn CreateStepEasingFunction() void {}
-    pub fn CreateBackEasingFunction() void {}
-    pub fn CreateBounceEasingFunction() void {}
-    pub fn CreateCircleEasingFunction() void {}
-    pub fn CreateElasticEasingFunction() void {}
-    pub fn CreateExponentialEasingFunction() void {}
-    pub fn CreatePowerEasingFunction() void {}
-    pub fn CreateSineEasingFunction() void {}
-};
-
-pub const ICompositionEasingFunction = extern struct {
-    pub const IID = GUID{ .data1 = 0x5145e356, .data2 = 0xbf79, .data3 = 0x4ea8, .data4 = .{ 0x8c, 0xc2, 0x6b, 0x5b, 0x47, 0x2e, 0x6c, 0x9a } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-};
-
-pub const VisualCollection = extern struct {
-    pub const IID = IVisualCollection.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IVisualCollection.VTable;
-    pub const Requires_IIterable = true; // requires IIterable
-    pub fn Count() void {}
-    pub fn get_Count() void {}
-    pub fn InsertAbove() void {}
-    pub fn InsertAtBottom() void {}
-    pub fn InsertAtTop() void {}
-    pub fn InsertBelow() void {}
-    pub fn Remove() void {}
-    pub fn RemoveAll() void {}
-    pub fn First() void {}
-};
-
-pub const IVisualCollection = extern struct {
-    pub const IID = GUID{ .data1 = 0x8b745505, .data2 = 0xfd3e, .data3 = 0x4a98, .data4 = .{ 0x84, 0xa8, 0xe9, 0x49, 0x46, 0x8c, 0x6b, 0xcb } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Count: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-        InsertAbove: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        InsertAtBottom: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        InsertAtTop: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        InsertBelow: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        Remove: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        RemoveAll: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Count(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.Count(self, &out)); return out; }
-    pub fn insertAbove(self: *@This(), newChild: ?*anyopaque, sibling: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertAbove(self, newChild, sibling)); }
-    pub fn InsertAbove(self: *@This(), newChild: ?*anyopaque, sibling: ?*anyopaque) !void { try self.insertAbove(newChild, sibling); }
-    pub fn insertAtBottom(self: *@This(), newChild: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertAtBottom(self, newChild)); }
-    pub fn InsertAtBottom(self: *@This(), newChild: ?*anyopaque) !void { try self.insertAtBottom(newChild); }
-    pub fn insertAtTop(self: *@This(), newChild: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertAtTop(self, newChild)); }
-    pub fn InsertAtTop(self: *@This(), newChild: ?*anyopaque) !void { try self.insertAtTop(newChild); }
-    pub fn insertBelow(self: *@This(), newChild: ?*anyopaque, sibling: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertBelow(self, newChild, sibling)); }
-    pub fn InsertBelow(self: *@This(), newChild: ?*anyopaque, sibling: ?*anyopaque) !void { try self.insertBelow(newChild, sibling); }
-    pub fn remove(self: *@This(), child: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Remove(self, child)); }
-    pub fn Remove(self: *@This(), child: ?*anyopaque) !void { try self.remove(child); }
-    pub fn removeAll(self: *@This()) !void { try hrCheck(self.lpVtbl.RemoveAll(self)); }
-    pub fn RemoveAll(self: *@This()) !void { try self.removeAll(); }
-};
-
-pub const CompositionEffectBrush = extern struct {
-    pub const IID = ICompositionEffectBrush.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICompositionEffectBrush.VTable;
-    pub fn GetSourceParameter() void {}
-    pub fn SetSourceParameter() void {}
-};
-
-pub const ICompositionEffectBrush = extern struct {
-    pub const IID = GUID{ .data1 = 0xbf7f795e, .data2 = 0x83cc, .data3 = 0x44bf, .data4 = .{ 0xa4, 0x47, 0x3e, 0x3c, 0x07, 0x17, 0x89, 0xec } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        GetSourceParameter: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetSourceParameter: *const fn (*anyopaque, HSTRING, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn getSourceParameter(self: *@This(), p0: anytype) !*ICompositionBrush { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetSourceParameter(self, @ptrCast(p0), &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn GetSourceParameter(self: *@This(), p0: anytype) !*ICompositionBrush { return self.getSourceParameter(p0); }
-    pub fn setSourceParameter(self: *@This(), name: anytype, source: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetSourceParameter(self, @ptrCast(name), source)); }
-    pub fn SetSourceParameter(self: *@This(), name: anytype, source: ?*anyopaque) !void { try self.setSourceParameter(name, source); }
-};
-
-pub const CompositionEffectFactoryLoadStatus = struct {
-    pub const Success: i32 = 0;
-    pub const EffectTooComplex: i32 = 1;
-    pub const Pending: i32 = 2;
-    pub const Other: i32 = -1;
-};
-
-pub const IGraphicsEffectSource = extern struct {
-    pub const IID = GUID{ .data1 = 0x2d8f9ddc, .data2 = 0x4339, .data3 = 0x4eb9, .data4 = .{ 0x92, 0x16, 0xf9, 0xde, 0xb7, 0x56, 0x58, 0xa2 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-};
-
-pub const ICompositionPropertySet2 = extern struct {
-    pub const IID = GUID{ .data1 = 0xde80731e, .data2 = 0xa211, .data3 = 0x4455, .data4 = .{ 0x88, 0x80, 0x7d, 0x0f, 0x3f, 0x6a, 0x44, 0xfd } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        InsertBoolean: *const fn (*anyopaque, HSTRING, bool) callconv(.winapi) HRESULT,
-        TryGetBoolean: *const fn (*anyopaque, HSTRING, *bool, *i32) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn insertBoolean(self: *@This(), propertyName: anytype, value: bool) !void { try hrCheck(self.lpVtbl.InsertBoolean(self, @ptrCast(propertyName), value)); }
-    pub fn InsertBoolean(self: *@This(), propertyName: anytype, value: bool) !void { try self.insertBoolean(propertyName, value); }
-    pub fn tryGetBoolean(self: *@This(), p0: anytype) !struct { value: bool, value_1: i32 } { var out0: bool = false; var out1: i32 = 0; try hrCheck(self.lpVtbl.TryGetBoolean(self, @ptrCast(p0), &out0, &out1)); return .{ .value = out0, .value_1 = out1 }; }
-    pub fn TryGetBoolean(self: *@This(), p0: anytype) !struct { value: bool, value_1: i32 } { return self.tryGetBoolean(p0); }
-};
-
-pub const Matrix3x2 = extern struct {
-    M11: f32,
-    M12: f32,
-    M21: f32,
-    M22: f32,
-    M31: f32,
-    M32: f32,
-};
-
-pub const Vector4 = extern struct {
-    X: f32,
-    Y: f32,
-    Z: f32,
-    W: f32,
-};
-
-pub const CompositionGetValueStatus = struct {
-    pub const Succeeded: i32 = 0;
-    pub const TypeMismatch: i32 = 1;
-    pub const NotFound: i32 = 2;
-};
-
-pub const CompositionBatchCompletedEventArgs = extern struct {
-    pub const IID = ICompositionBatchCompletedEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICompositionBatchCompletedEventArgs.VTable;
-};
-
-pub const ICompositionBatchCompletedEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0x0d00dad0, .data2 = 0x9464, .data3 = 0x450a, .data4 = .{ 0xa5, 0x62, 0x2e, 0x26, 0x98, 0xb0, 0xa8, 0x12 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-};
-
-pub const ISpriteVisual2 = extern struct {
-    pub const IID = GUID{ .data1 = 0x588c9664, .data2 = 0x997a, .data3 = 0x4850, .data4 = .{ 0x91, 0xfe, 0x53, 0xcb, 0x58, 0xf8, 0x1c, 0xe9 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Shadow: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetShadow: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Shadow(self: *@This()) !*ICompositionShadow { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Shadow(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetShadow(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetShadow(self, value)); }
-};
-
-pub const CompositionBrush = extern struct {
-    pub const IID = ICompositionBrush.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICompositionBrush.VTable;
-};
-
-pub const ICompositionBrush = extern struct {
-    pub const IID = GUID{ .data1 = 0xab0d7608, .data2 = 0x30c0, .data3 = 0x40e9, .data4 = .{ 0xb5, 0x68, 0xb6, 0x0a, 0x6b, 0xd1, 0xfb, 0x46 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-};
-
-pub const CompositionShadow = extern struct {
-    pub const IID = ICompositionShadow.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ICompositionShadow.VTable;
-};
-
-pub const ICompositionShadow = extern struct {
-    pub const IID = GUID{ .data1 = 0x329e52e2, .data2 = 0x4335, .data3 = 0x49cc, .data4 = .{ 0xb1, 0x4a, 0x37, 0x78, 0x2d, 0x10, 0xf0, 0xc4 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-};
-
-pub const ICompositionSurfaceBrush2 = extern struct {
-    pub const IID = GUID{ .data1 = 0xd27174d5, .data2 = 0x64f5, .data3 = 0x4692, .data4 = .{ 0x9d, 0xc7, 0x71, 0xb6, 0x1d, 0x7e, 0x58, 0x80 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        AnchorPoint: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
-        SetAnchorPoint: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
-        CenterPoint: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
-        SetCenterPoint: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
-        Offset: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
-        SetOffset: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
-        RotationAngle: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        SetRotationAngle: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
-        RotationAngleInDegrees: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        SetRotationAngleInDegrees: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
-        Scale: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
-        SetScale: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
-        TransformMatrix: *const fn (*anyopaque, *Matrix3x2) callconv(.winapi) HRESULT,
-        SetTransformMatrix: *const fn (*anyopaque, Matrix3x2) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AnchorPoint(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.AnchorPoint(self, &out)); return out; }
-    pub fn SetAnchorPoint(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetAnchorPoint(self, value)); }
-    pub fn CenterPoint(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.CenterPoint(self, &out)); return out; }
-    pub fn SetCenterPoint(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetCenterPoint(self, value)); }
-    pub fn Offset(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.Offset(self, &out)); return out; }
-    pub fn SetOffset(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetOffset(self, value)); }
-    pub fn RotationAngle(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.RotationAngle(self, &out)); return out; }
-    pub fn SetRotationAngle(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetRotationAngle(self, value)); }
-    pub fn RotationAngleInDegrees(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.RotationAngleInDegrees(self, &out)); return out; }
-    pub fn SetRotationAngleInDegrees(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetRotationAngleInDegrees(self, value)); }
-    pub fn Scale(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.Scale(self, &out)); return out; }
-    pub fn SetScale(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetScale(self, value)); }
-    pub fn TransformMatrix(self: *@This()) !Matrix3x2 { var out: Matrix3x2 = .{ .M11 = 0, .M12 = 0, .M21 = 0, .M22 = 0, .M31 = 0, .M32 = 0 }; try hrCheck(self.lpVtbl.TransformMatrix(self, &out)); return out; }
-    pub fn SetTransformMatrix(self: *@This(), value: Matrix3x2) !void { try hrCheck(self.lpVtbl.SetTransformMatrix(self, value)); }
-};
-
-pub const ICompositionSurfaceBrush3 = extern struct {
-    pub const IID = GUID{ .data1 = 0x550bb289, .data2 = 0x1fe0, .data3 = 0x42e5, .data4 = .{ 0x81, 0x95, 0x1e, 0xef, 0xa8, 0x7f, 0xf0, 0x8e } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        SnapToPixels: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetSnapToPixels: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn SnapToPixels(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.SnapToPixels(self, &out)); return out; }
-    pub fn SetSnapToPixels(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetSnapToPixels(self, value)); }
-};
-
-pub const CompositionBitmapInterpolationMode = struct {
-    pub const NearestNeighbor: i32 = 0;
-    pub const Linear: i32 = 1;
-    pub const MagLinearMinLinearMipLinear: i32 = 2;
-    pub const MagLinearMinLinearMipNearest: i32 = 3;
-    pub const MagLinearMinNearestMipLinear: i32 = 4;
-    pub const MagLinearMinNearestMipNearest: i32 = 5;
-    pub const MagNearestMinLinearMipLinear: i32 = 6;
-    pub const MagNearestMinLinearMipNearest: i32 = 7;
-    pub const MagNearestMinNearestMipLinear: i32 = 8;
-    pub const MagNearestMinNearestMipNearest: i32 = 9;
-};
-
-pub const CompositionStretch = struct {
-    pub const None: i32 = 0;
-    pub const Fill: i32 = 1;
-    pub const Uniform: i32 = 2;
-    pub const UniformToFill: i32 = 3;
 };
 
 pub const IAmbientLight2 = extern struct {
@@ -18105,9 +22596,136 @@ pub const AsyncActionCompletedHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), asyncInfo: ?*anyopaque, asyncStatus: i32) !void { try hrCheck(self.lpVtbl.Invoke(self, asyncInfo, asyncStatus)); }
     pub fn Invoke(self: *@This(), asyncInfo: ?*anyopaque, asyncStatus: i32) !void { try self.invoke(asyncInfo, asyncStatus); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use AsyncActionCompletedHandlerImpl instead"); }
 };
 
+pub fn AsyncActionCompletedHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = AsyncActionCompletedHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const CompositionProjectedShadowCasterCollection = extern struct {
     pub const IID = ICompositionProjectedShadowCasterCollection.IID;
     lpVtbl: *const VTable,
@@ -18279,37 +22897,6 @@ pub const CoreAcceleratorKeyEventType = struct {
     pub const SystemKeyDown: i32 = 4;
     pub const SystemKeyUp: i32 = 5;
     pub const UnicodeCharacter: i32 = 8;
-};
-
-pub const Deferral = extern struct {
-    pub const IID = IDeferral.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IDeferral.VTable;
-    pub const Requires_IClosable = true; // requires IClosable
-    pub const Requires_IDeferralFactory = true; // requires IDeferralFactory
-    pub fn Complete() void {}
-    pub fn Close() void {}
-    pub fn Create() void {}
-};
-
-pub const IDeferral = extern struct {
-    pub const IID = GUID{ .data1 = 0xd6269732, .data2 = 0x3b7f, .data3 = 0x46a7, .data4 = .{ 0xb4, 0x0b, 0x4f, 0xdc, 0xa2, 0xa2, 0xc6, 0x93 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Complete: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_IClosable = true; // requires IClosable
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
-    pub fn complete(self: *@This()) !void { try hrCheck(self.lpVtbl.Complete(self)); }
-    pub fn Complete(self: *@This()) !void { try self.complete(); }
 };
 
 pub const ISystemBackdropOverrides = extern struct {
@@ -18543,6 +23130,43 @@ pub const IContentEnvironmentStateChangedEventArgs = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn DidAppWindowIdChange(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.DidAppWindowIdChange(self, &out)); return out; }
     pub fn DidDisplayIdChange(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.DidDisplayIdChange(self, &out)); return out; }
+};
+
+pub const IContentCoordinateConverterStatics = extern struct {
+    pub const IID = GUID{ .data1 = 0xf56374ce, .data2 = 0xb6df, .data3 = 0x5b42, .data4 = .{ 0xa5, 0x8f, 0x4e, 0x3b, 0xb0, 0x39, 0xe3, 0xa9 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CreateForWindowId: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn createForWindowId(self: *@This(), p0: ?*anyopaque) !*IContentCoordinateConverter { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateForWindowId(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateForWindowId(self: *@This(), p0: ?*anyopaque) !*IContentCoordinateConverter { return self.createForWindowId(p0); }
+};
+
+pub const PointInt32 = extern struct {
+    X: i32,
+    Y: i32,
+};
+
+pub const ContentCoordinateRoundingMode = struct {
+    pub const Auto: i32 = 0;
+    pub const Floor: i32 = 1;
+    pub const Round: i32 = 2;
+    pub const Ceiling: i32 = 3;
+};
+
+pub const RectInt32 = extern struct {
+    X: i32,
+    Y: i32,
+    Width: i32,
+    Height: i32,
 };
 
 pub const IDataPackage2 = extern struct {
@@ -18841,9 +23465,136 @@ pub const DataProviderHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), request: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, request)); }
     pub fn Invoke(self: *@This(), request: ?*anyopaque) !void { try self.invoke(request); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use DataProviderHandlerImpl instead"); }
 };
 
+pub fn DataProviderHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = DataProviderHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const RandomAccessStreamReference = extern struct {
     pub const IID = IRandomAccessStreamReference.IID;
     lpVtbl: *const VTable,
@@ -19653,9 +24404,136 @@ pub const CreateDefaultValueCallback = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This()) !*IInspectable { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.Invoke(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
     pub fn Invoke(self: *@This()) !*IInspectable { return self.invoke(); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use CreateDefaultValueCallbackImpl instead"); }
 };
 
+pub fn CreateDefaultValueCallbackImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = CreateDefaultValueCallback;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const PropertyChangedCallback = extern struct {
     pub const IID = GUID{ .data1 = 0x5fd9243a, .data2 = 0x2422, .data3 = 0x53c9, .data4 = .{ 0x8d, 0x6f, 0xf1, 0xba, 0x1a, 0x0b, 0xba, 0x9a } };
     lpVtbl: *const VTable,
@@ -19672,9 +24550,136 @@ pub const PropertyChangedCallback = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), d: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, d, e)); }
     pub fn Invoke(self: *@This(), d: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(d, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use PropertyChangedCallbackImpl instead"); }
 };
 
+pub fn PropertyChangedCallbackImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = PropertyChangedCallback;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const PropertyPath = extern struct {
     pub const IID = IPropertyPath.IID;
     lpVtbl: *const VTable,
@@ -19964,26 +24969,8 @@ pub const IGeometryStatics = extern struct {
     pub fn TransformProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.TransformProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
 };
 
-pub const ResourceMap = extern struct {
-    pub const IID = IResourceMap.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IResourceMap.VTable;
-    pub const Requires_IMapView = true; // requires IMapView
-    pub const Requires_IIterable = true; // requires IIterable
-    pub fn Uri() void {}
-    pub fn get_Uri() void {}
-    pub fn GetValue() void {}
-    pub fn GetSubtree() void {}
-    pub fn Lookup() void {}
-    pub fn Size() void {}
-    pub fn get_Size() void {}
-    pub fn HasKey() void {}
-    pub fn Split() void {}
-    pub fn First() void {}
-};
-
-pub const IResourceMap = extern struct {
-    pub const IID = GUID{ .data1 = 0x72284824, .data2 = 0xdb8c, .data3 = 0x42f8, .data4 = .{ 0xb0, 0x8c, 0x53, 0xff, 0x35, 0x7d, 0xad, 0x82 } };
+pub const IDeferralFactory = extern struct {
+    pub const IID = GUID{ .data1 = 0x65a1ecc5, .data2 = 0x3fb5, .data3 = 0x4832, .data4 = .{ 0x8c, 0xa9, 0xf0, 0x61, 0xb2, 0x81, 0xd1, 0x3a } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -19992,49 +24979,16 @@ pub const IResourceMap = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        Uri: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        GetValue: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
-        GetValue_1: *const fn (*anyopaque, HSTRING, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        GetSubtree: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+        Create: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Uri(self: *@This()) !*IUriRuntimeClass { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Uri(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn getValue(self: *@This(), p0: anytype) !*IResourceCandidate { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetValue(self, @ptrCast(p0), &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn GetValue(self: *@This(), p0: anytype) !*IResourceCandidate { return self.getValue(p0); }
-    pub fn getValue_1(self: *@This(), p0: anytype, p1: ?*anyopaque) !*IResourceCandidate { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetValue_1(self, @ptrCast(p0), p1, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn GetValue_1(self: *@This(), p0: anytype, p1: ?*anyopaque) !*IResourceCandidate { return self.getValue_1(p0, p1); }
-    pub fn getSubtree(self: *@This(), p0: anytype) !*IResourceMap { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetSubtree(self, @ptrCast(p0), &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn GetSubtree(self: *@This(), p0: anytype) !*IResourceMap { return self.getSubtree(p0); }
+    pub fn create(self: *@This(), p0: ?*anyopaque) !*IDeferral { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.Create(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn Create(self: *@This(), p0: ?*anyopaque) !*IDeferral { return self.create(p0); }
 };
 
-pub const ResourceContext = extern struct {
-    pub const IID = IResourceContext.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IResourceContext.VTable;
-    pub const Requires_IResourceContextStatics = true; // requires IResourceContextStatics
-    pub const Requires_IResourceContextStatics3 = true; // requires IResourceContextStatics3
-    pub const Requires_IResourceContextStatics4 = true; // requires IResourceContextStatics4
-    pub const Requires_IResourceContextStatics2 = true; // requires IResourceContextStatics2
-    pub fn QualifierValues() void {}
-    pub fn get_QualifierValues() void {}
-    pub fn Reset() void {}
-    pub fn OverrideToMatch() void {}
-    pub fn Clone() void {}
-    pub fn Languages() void {}
-    pub fn get_Languages() void {}
-    pub fn SetLanguages() void {}
-    pub fn put_Languages() void {}
-    pub fn CreateMatchingContext() void {}
-    pub fn SetGlobalQualifierValue() void {}
-    pub fn GetForUIContext() void {}
-    pub fn GetForCurrentView() void {}
-    pub fn ResetGlobalQualifierValues() void {}
-    pub fn GetForViewIndependentUse() void {}
-};
-
-pub const IResourceContext = extern struct {
-    pub const IID = GUID{ .data1 = 0x2fa22f4b, .data2 = 0x707e, .data3 = 0x4b27, .data4 = .{ 0xad, 0x0d, 0xd0, 0xd8, 0xcd, 0x46, 0x8f, 0xd2 } };
+pub const DeferralCompletedHandler = extern struct {
+    pub const IID = GUID{ .data1 = 0xed32a372, .data2 = 0xf3c8, .data3 = 0x4faa, .data4 = .{ 0x9c, 0xfb, 0x47, 0x01, 0x48, 0xda, 0x38, 0x88 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -20043,317 +24997,142 @@ pub const IResourceContext = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        QualifierValues: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        Reset: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        Reset_1: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        OverrideToMatch: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        Clone: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        Languages: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetLanguages: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        Invoke: *const fn (*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn QualifierValues(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.QualifierValues(self, &out)); return out orelse error.WinRTFailed; }
-    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
-    pub fn Reset(self: *@This()) !void { try self.reset(); }
-    pub fn reset_1(self: *@This(), qualifierNames: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Reset_1(self, qualifierNames)); }
-    pub fn Reset_1(self: *@This(), qualifierNames: ?*anyopaque) !void { try self.reset_1(qualifierNames); }
-    pub fn overrideToMatch(self: *@This(), result: ?*anyopaque) !void { try hrCheck(self.lpVtbl.OverrideToMatch(self, result)); }
-    pub fn OverrideToMatch(self: *@This(), result: ?*anyopaque) !void { try self.overrideToMatch(result); }
-    pub fn clone(self: *@This()) !*IResourceContext { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.Clone(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn Clone(self: *@This()) !*IResourceContext { return self.clone(); }
-    pub fn Languages(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Languages(self, &out)); return out orelse error.WinRTFailed; }
-    pub fn SetLanguages(self: *@This(), languages: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetLanguages(self, languages)); }
+    pub fn invoke(self: *@This()) !void { try hrCheck(self.lpVtbl.Invoke(self)); }
+    pub fn Invoke(self: *@This()) !void { try self.invoke(); }
+    pub fn new() !*@This() { @compileError("use DeferralCompletedHandlerImpl instead"); }
 };
 
-pub const IStorageFile = extern struct {
-    pub const IID = GUID{ .data1 = 0xfa3f6186, .data2 = 0x4214, .data3 = 0x428c, .data4 = .{ 0xa6, 0x4c, 0x14, 0xc9, 0xac, 0x73, 0x15, 0xea } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        FileType: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-        ContentType: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-        OpenAsync: *const fn (*anyopaque, i32, *?*anyopaque) callconv(.winapi) HRESULT,
-        OpenTransactedWriteAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CopyAsync: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CopyAsync_1: *const fn (*anyopaque, ?*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
-        CopyAsync_2: *const fn (*anyopaque, ?*anyopaque, HSTRING, i32, *?*anyopaque) callconv(.winapi) HRESULT,
-        CopyAndReplaceAsync: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        MoveAsync: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        MoveAsync_1: *const fn (*anyopaque, ?*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
-        MoveAsync_2: *const fn (*anyopaque, ?*anyopaque, HSTRING, i32, *?*anyopaque) callconv(.winapi) HRESULT,
-        MoveAndReplaceAsync: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+pub fn DeferralCompletedHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = DeferralCompletedHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
     };
-    pub const Requires_IStorageItem = true; // requires IStorageItem
-    pub const Requires_IRandomAccessStreamReference = true; // requires IRandomAccessStreamReference
-    pub const Requires_IInputStreamReference = true; // requires IInputStreamReference
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn DeleteAsync(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.DeleteAsync(); }
-    pub fn GetBasicPropertiesAsync(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.GetBasicPropertiesAsync(); }
-    pub fn Name(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.Name(); }
-    pub fn Path(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.Path(); }
-    pub fn Attributes(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.Attributes(); }
-    pub fn DateCreated(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.DateCreated(); }
-    pub fn OpenReadAsync(self: *@This()) !void { const base = try self.queryInterface(IRandomAccessStreamReference); _ = try base.OpenReadAsync(); }
-    pub fn OpenSequentialReadAsync(self: *@This()) !void { const base = try self.queryInterface(IInputStreamReference); _ = try base.OpenSequentialReadAsync(); }
-    pub fn FileType(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.FileType(self, &out)); return out; }
-    pub fn ContentType(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.ContentType(self, &out)); return out; }
-    pub fn openAsync(self: *@This(), p0: i32) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.OpenAsync(self, p0, &out0)); return out0; }
-    pub fn OpenAsync(self: *@This(), p0: i32) !?*anyopaque { return self.openAsync(p0); }
-    pub fn openTransactedWriteAsync(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.OpenTransactedWriteAsync(self, &out0)); return out0; }
-    pub fn OpenTransactedWriteAsync(self: *@This()) !?*anyopaque { return self.openTransactedWriteAsync(); }
-    pub fn copyAsync(self: *@This(), p0: ?*anyopaque) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CopyAsync(self, p0, &out0)); return out0; }
-    pub fn CopyAsync(self: *@This(), p0: ?*anyopaque) !?*anyopaque { return self.copyAsync(p0); }
-    pub fn copyAsync_1(self: *@This(), p0: ?*anyopaque, p1: anytype) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CopyAsync_1(self, p0, @ptrCast(p1), &out0)); return out0; }
-    pub fn CopyAsync_1(self: *@This(), p0: ?*anyopaque, p1: anytype) !?*anyopaque { return self.copyAsync_1(p0, p1); }
-    pub fn CopyAsync_2(self: *@This(), p0: ?*anyopaque, p1: anytype, p2: i32) !?*anyopaque { return self.copyAsync_1(p0, p1, p2); }
-    pub fn copyAndReplaceAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CopyAndReplaceAsync(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CopyAndReplaceAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { return self.copyAndReplaceAsync(p0); }
-    pub fn moveAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.MoveAsync(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn MoveAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { return self.moveAsync(p0); }
-    pub fn moveAsync_1(self: *@This(), p0: ?*anyopaque, p1: anytype) !*IAsyncAction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.MoveAsync_1(self, p0, @ptrCast(p1), &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn MoveAsync_1(self: *@This(), p0: ?*anyopaque, p1: anytype) !*IAsyncAction { return self.moveAsync_1(p0, p1); }
-    pub fn MoveAsync_2(self: *@This(), p0: ?*anyopaque, p1: anytype, p2: i32) !*IAsyncAction { return self.moveAsync_1(p0, p1, p2); }
-    pub fn moveAndReplaceAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.MoveAndReplaceAsync(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn MoveAndReplaceAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { return self.moveAndReplaceAsync(p0); }
-};
-
-pub const IAutomationPeerAnnotationStatics = extern struct {
-    pub const IID = GUID{ .data1 = 0xc46105d7, .data2 = 0x8ca3, .data3 = 0x50e3, .data4 = .{ 0xa1, 0xbc, 0xb6, 0xbb, 0x2f, 0x9c, 0xe1, 0xcd } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        TypeProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        PeerProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn TypeProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.TypeProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn PeerProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.PeerProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-};
-
-pub const IAutomationPeerAnnotationFactory = extern struct {
-    pub const IID = GUID{ .data1 = 0x25a1a202, .data2 = 0xbd68, .data3 = 0x5d41, .data4 = .{ 0xa3, 0x11, 0xf8, 0x4a, 0xf9, 0xc8, 0xc4, 0x40 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        CreateInstance: *const fn (*anyopaque, i32, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateWithPeerParameter: *const fn (*anyopaque, i32, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn CreateInstance(self: *@This(), p0: i32) !*IAutomationPeerAnnotation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateInstance(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn createWithPeerParameter(self: *@This(), p0: i32, p1: ?*anyopaque) !*IAutomationPeerAnnotation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateWithPeerParameter(self, p0, p1, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateWithPeerParameter(self: *@This(), p0: i32, p1: ?*anyopaque) !*IAutomationPeerAnnotation { return self.createWithPeerParameter(p0, p1); }
-};
-
-pub const AnnotationType = struct {
-    pub const Unknown: i32 = 60000;
-    pub const SpellingError: i32 = 60001;
-    pub const GrammarError: i32 = 60002;
-    pub const Comment: i32 = 60003;
-    pub const FormulaError: i32 = 60004;
-    pub const TrackChanges: i32 = 60005;
-    pub const Header: i32 = 60006;
-    pub const Footer: i32 = 60007;
-    pub const Highlighted: i32 = 60008;
-    pub const Endnote: i32 = 60009;
-    pub const Footnote: i32 = 60010;
-    pub const InsertionChange: i32 = 60011;
-    pub const DeletionChange: i32 = 60012;
-    pub const MoveChange: i32 = 60013;
-    pub const FormatChange: i32 = 60014;
-    pub const UnsyncedChange: i32 = 60015;
-    pub const EditingLockedChange: i32 = 60016;
-    pub const ExternalChange: i32 = 60017;
-    pub const ConflictingChange: i32 = 60018;
-    pub const Author: i32 = 60019;
-    pub const AdvancedProofingIssue: i32 = 60020;
-    pub const DataValidationError: i32 = 60021;
-    pub const CircularReferenceError: i32 = 60022;
-};
-
-pub const ICompositionObject2 = extern struct {
-    pub const IID = GUID{ .data1 = 0xef874ea1, .data2 = 0x5cff, .data3 = 0x4b68, .data4 = .{ 0x9e, 0x30, 0xa1, 0x51, 0x9d, 0x08, 0xba, 0x03 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Comment: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-        SetComment: *const fn (*anyopaque, HSTRING) callconv(.winapi) HRESULT,
-        ImplicitAnimations: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetImplicitAnimations: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        StartAnimationGroup: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        StopAnimationGroup: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Comment(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.Comment(self, &out)); return out; }
-    pub fn SetComment(self: *@This(), value: anytype) !void { try hrCheck(self.lpVtbl.SetComment(self, @ptrCast(value))); }
-    pub fn ImplicitAnimations(self: *@This()) !*IImplicitAnimationCollection { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ImplicitAnimations(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetImplicitAnimations(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetImplicitAnimations(self, value)); }
-    pub fn startAnimationGroup(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.StartAnimationGroup(self, value)); }
-    pub fn StartAnimationGroup(self: *@This(), value: ?*anyopaque) !void { try self.startAnimationGroup(value); }
-    pub fn stopAnimationGroup(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.StopAnimationGroup(self, value)); }
-    pub fn StopAnimationGroup(self: *@This(), value: ?*anyopaque) !void { try self.stopAnimationGroup(value); }
-};
-
-pub const ICompositionObject3 = extern struct {
-    pub const IID = GUID{ .data1 = 0x4bc27925, .data2 = 0xdacd, .data3 = 0x4cf2, .data4 = .{ 0x98, 0xb1, 0x98, 0x6b, 0x76, 0xe7, 0xeb, 0xe6 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        DispatcherQueue: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn DispatcherQueue(self: *@This()) !*IDispatcherQueue { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.DispatcherQueue(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-};
-
-pub const ICompositionObject4 = extern struct {
-    pub const IID = GUID{ .data1 = 0x0bb3784c, .data2 = 0x346b, .data3 = 0x4a7c, .data4 = .{ 0x96, 0x6b, 0x73, 0x10, 0x96, 0x65, 0x53, 0xd5 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        TryGetAnimationController: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn tryGetAnimationController(self: *@This(), p0: anytype) !*IAnimationController { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.TryGetAnimationController(self, @ptrCast(p0), &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn TryGetAnimationController(self: *@This(), p0: anytype) !*IAnimationController { return self.tryGetAnimationController(p0); }
-};
-
-pub const ICompositionObject5 = extern struct {
-    pub const IID = GUID{ .data1 = 0x1d7f391b, .data2 = 0xa130, .data3 = 0x5265, .data4 = .{ 0xa6, 0x2b, 0x60, 0xb8, 0xe6, 0x68, 0x96, 0x5a } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        StartAnimation: *const fn (*anyopaque, HSTRING, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn startAnimation(self: *@This(), propertyName: anytype, animation: ?*anyopaque, animationController: ?*anyopaque) !void { try hrCheck(self.lpVtbl.StartAnimation(self, @ptrCast(propertyName), animation, animationController)); }
-    pub fn StartAnimation(self: *@This(), propertyName: anytype, animation: ?*anyopaque, animationController: ?*anyopaque) !void { try self.startAnimation(propertyName, animation, animationController); }
-};
-
-pub const ICompositionObjectStatics = extern struct {
-    pub const IID = GUID{ .data1 = 0xc1ed052f, .data2 = 0x1ba2, .data3 = 0x44ba, .data4 = .{ 0xa9, 0x04, 0x6a, 0x88, 0x2a, 0x0a, 0x5a, 0xdb } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        StartAnimationWithIAnimationObject: *const fn (*anyopaque, ?*anyopaque, HSTRING, ?*anyopaque) callconv(.winapi) HRESULT,
-        StartAnimationGroupWithIAnimationObject: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn startAnimationWithIAnimationObject(self: *@This(), target: ?*anyopaque, propertyName: anytype, animation: ?*anyopaque) !void { try hrCheck(self.lpVtbl.StartAnimationWithIAnimationObject(self, target, @ptrCast(propertyName), animation)); }
-    pub fn StartAnimationWithIAnimationObject(self: *@This(), target: ?*anyopaque, propertyName: anytype, animation: ?*anyopaque) !void { try self.startAnimationWithIAnimationObject(target, propertyName, animation); }
-    pub fn startAnimationGroupWithIAnimationObject(self: *@This(), target: ?*anyopaque, animation: ?*anyopaque) !void { try hrCheck(self.lpVtbl.StartAnimationGroupWithIAnimationObject(self, target, animation)); }
-    pub fn StartAnimationGroupWithIAnimationObject(self: *@This(), target: ?*anyopaque, animation: ?*anyopaque) !void { try self.startAnimationGroupWithIAnimationObject(target, animation); }
-};
-
-pub const ICompositionClip2 = extern struct {
-    pub const IID = GUID{ .data1 = 0x5893e069, .data2 = 0x3516, .data3 = 0x40e1, .data4 = .{ 0x89, 0xe0, 0x5b, 0xa9, 0x24, 0x92, 0x72, 0x35 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        AnchorPoint: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
-        SetAnchorPoint: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
-        CenterPoint: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
-        SetCenterPoint: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
-        Offset: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
-        SetOffset: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
-        RotationAngle: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        SetRotationAngle: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
-        RotationAngleInDegrees: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
-        SetRotationAngleInDegrees: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
-        Scale: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
-        SetScale: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
-        TransformMatrix: *const fn (*anyopaque, *Matrix3x2) callconv(.winapi) HRESULT,
-        SetTransformMatrix: *const fn (*anyopaque, Matrix3x2) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AnchorPoint(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.AnchorPoint(self, &out)); return out; }
-    pub fn SetAnchorPoint(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetAnchorPoint(self, value)); }
-    pub fn CenterPoint(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.CenterPoint(self, &out)); return out; }
-    pub fn SetCenterPoint(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetCenterPoint(self, value)); }
-    pub fn Offset(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.Offset(self, &out)); return out; }
-    pub fn SetOffset(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetOffset(self, value)); }
-    pub fn RotationAngle(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.RotationAngle(self, &out)); return out; }
-    pub fn SetRotationAngle(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetRotationAngle(self, value)); }
-    pub fn RotationAngleInDegrees(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.RotationAngleInDegrees(self, &out)); return out; }
-    pub fn SetRotationAngleInDegrees(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetRotationAngleInDegrees(self, value)); }
-    pub fn Scale(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.Scale(self, &out)); return out; }
-    pub fn SetScale(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetScale(self, value)); }
-    pub fn TransformMatrix(self: *@This()) !Matrix3x2 { var out: Matrix3x2 = .{ .M11 = 0, .M12 = 0, .M21 = 0, .M22 = 0, .M31 = 0, .M32 = 0 }; try hrCheck(self.lpVtbl.TransformMatrix(self, &out)); return out; }
-    pub fn SetTransformMatrix(self: *@This(), value: Matrix3x2) !void { try hrCheck(self.lpVtbl.SetTransformMatrix(self, value)); }
-};
-
-pub const MapChangedEventHandler = extern struct {
-    pub const IID = GUID{ .data1 = 0x179517f3, .data2 = 0x94ee, .data3 = 0x41f8, .data4 = .{ 0xbd, 0xdc, 0x76, 0x8a, 0x89, 0x55, 0x44, 0xf3 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn invoke(self: *@This(), sender: ?*anyopaque, event: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, event)); }
-    pub fn Invoke(self: *@This(), sender: ?*anyopaque, event: ?*anyopaque) !void { try self.invoke(sender, event); }
-    pub fn new() !*@This() { return error.NotImplemented; }
-};
-
+}
 pub const ICompositionEasingFunctionStatics = extern struct {
     pub const IID = GUID{ .data1 = 0x17a766b6, .data2 = 0x2936, .data3 = 0x53ea, .data4 = .{ 0xb5, 0xaf, 0xc6, 0x42, 0xf4, 0xa6, 0x10, 0x83 } };
     lpVtbl: *const VTable,
@@ -20611,6 +25390,914 @@ pub const ISineEasingFunction = extern struct {
     pub fn Mode(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.Mode(self, &out)); return out; }
 };
 
+pub const MapChangedEventHandler = extern struct {
+    pub const IID = GUID{ .data1 = 0x179517f3, .data2 = 0x94ee, .data3 = 0x41f8, .data4 = .{ 0xbd, 0xdc, 0x76, 0x8a, 0x89, 0x55, 0x44, 0xf3 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn invoke(self: *@This(), sender: ?*anyopaque, event: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, event)); }
+    pub fn Invoke(self: *@This(), sender: ?*anyopaque, event: ?*anyopaque) !void { try self.invoke(sender, event); }
+    pub fn new() !*@This() { @compileError("use MapChangedEventHandlerImpl instead"); }
+};
+
+pub fn MapChangedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = MapChangedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
+pub const NamedResource = extern struct {
+    pub const IID = INamedResource.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = INamedResource.VTable;
+    pub fn Uri() void {}
+    pub fn get_Uri() void {}
+    pub fn Candidates() void {}
+    pub fn get_Candidates() void {}
+    pub fn Resolve() void {}
+    pub fn ResolveAll() void {}
+};
+
+pub const INamedResource = extern struct {
+    pub const IID = GUID{ .data1 = 0x1c98c219, .data2 = 0x0b13, .data3 = 0x4240, .data4 = .{ 0x89, 0xa5, 0xd4, 0x95, 0xdc, 0x18, 0x9a, 0x00 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Uri: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        Candidates: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        Resolve: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        Resolve_1: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        ResolveAll: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        ResolveAll_1: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Uri(self: *@This()) !*IUriRuntimeClass { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Uri(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn Candidates(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Candidates(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn resolve(self: *@This()) !*IResourceCandidate { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.Resolve(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn Resolve(self: *@This()) !*IResourceCandidate { return self.resolve(); }
+    pub fn resolve_1(self: *@This(), p0: ?*anyopaque) !*IResourceCandidate { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.Resolve_1(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn Resolve_1(self: *@This(), p0: ?*anyopaque) !*IResourceCandidate { return self.resolve_1(p0); }
+    pub fn resolveAll(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.ResolveAll(self, &out0)); return out0; }
+    pub fn ResolveAll(self: *@This()) !?*anyopaque { return self.resolveAll(); }
+    pub fn resolveAll_1(self: *@This(), p0: ?*anyopaque) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.ResolveAll_1(self, p0, &out0)); return out0; }
+    pub fn ResolveAll_1(self: *@This(), p0: ?*anyopaque) !?*anyopaque { return self.resolveAll_1(p0); }
+};
+
+pub const ResourceCandidate = extern struct {
+    pub const IID = IResourceCandidate.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IResourceCandidate.VTable;
+    pub const Requires_IResourceCandidate2 = true; // requires IResourceCandidate2
+    pub const Requires_IResourceCandidate3 = true; // requires IResourceCandidate3
+    pub fn Qualifiers() void {}
+    pub fn get_Qualifiers() void {}
+    pub fn IsMatch() void {}
+    pub fn get_IsMatch() void {}
+    pub fn IsMatchAsDefault() void {}
+    pub fn get_IsMatchAsDefault() void {}
+    pub fn IsDefault() void {}
+    pub fn get_IsDefault() void {}
+    pub fn ValueAsString() void {}
+    pub fn get_ValueAsString() void {}
+    pub fn GetValueAsFileAsync() void {}
+    pub fn GetQualifierValue() void {}
+    pub fn GetValueAsStreamAsync() void {}
+    pub fn Kind() void {}
+    pub fn get_Kind() void {}
+};
+
+pub const IResourceCandidate = extern struct {
+    pub const IID = GUID{ .data1 = 0xaf5207d9, .data2 = 0xc433, .data3 = 0x4764, .data4 = .{ 0xb3, 0xfd, 0x8f, 0xa6, 0xbf, 0xbc, 0xba, 0xdc } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Qualifiers: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        IsMatch: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        IsMatchAsDefault: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        IsDefault: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        ValueAsString: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+        GetValueAsFileAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetQualifierValue: *const fn (*anyopaque, HSTRING, *HSTRING) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Qualifiers(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Qualifiers(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn IsMatch(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsMatch(self, &out)); return out; }
+    pub fn IsMatchAsDefault(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsMatchAsDefault(self, &out)); return out; }
+    pub fn IsDefault(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsDefault(self, &out)); return out; }
+    pub fn ValueAsString(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.ValueAsString(self, &out)); return out; }
+    pub fn getValueAsFileAsync(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetValueAsFileAsync(self, &out0)); return out0; }
+    pub fn GetValueAsFileAsync(self: *@This()) !?*anyopaque { return self.getValueAsFileAsync(); }
+    pub fn getQualifierValue(self: *@This(), p0: anytype) !HSTRING { var out0: HSTRING = undefined; try hrCheck(self.lpVtbl.GetQualifierValue(self, @ptrCast(p0), &out0)); return out0; }
+    pub fn GetQualifierValue(self: *@This(), p0: anytype) !HSTRING { return self.getQualifierValue(p0); }
+};
+
+pub const IResourceContextStatics = extern struct {
+    pub const IID = GUID{ .data1 = 0x98be9d6c, .data2 = 0x6338, .data3 = 0x4b31, .data4 = .{ 0x99, 0xdf, 0xb2, 0xb4, 0x42, 0xf1, 0x71, 0x49 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CreateMatchingContext: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn createMatchingContext(self: *@This(), p0: ?*anyopaque) !*IResourceContext { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateMatchingContext(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateMatchingContext(self: *@This(), p0: ?*anyopaque) !*IResourceContext { return self.createMatchingContext(p0); }
+};
+
+pub const IResourceContextStatics3 = extern struct {
+    pub const IID = GUID{ .data1 = 0x20cf492c, .data2 = 0xaf0f, .data3 = 0x450b, .data4 = .{ 0x9d, 0xa6, 0x10, 0x6d, 0xd0, 0xc2, 0x9a, 0x39 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        SetGlobalQualifierValue: *const fn (*anyopaque, HSTRING, HSTRING, i32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn setGlobalQualifierValue(self: *@This(), key: anytype, value: anytype, persistence: i32) !void { try hrCheck(self.lpVtbl.SetGlobalQualifierValue(self, @ptrCast(key), @ptrCast(value), persistence)); }
+    pub fn SetGlobalQualifierValue(self: *@This(), key: anytype, value: anytype, persistence: i32) !void { try self.setGlobalQualifierValue(key, value, persistence); }
+};
+
+pub const IResourceContextStatics4 = extern struct {
+    pub const IID = GUID{ .data1 = 0x22eb9ccd, .data2 = 0xfb31, .data3 = 0x4bfa, .data4 = .{ 0xb8, 0x6b, 0xdf, 0x9d, 0x9d, 0x7b, 0xdc, 0x39 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        GetForUIContext: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn getForUIContext(self: *@This(), p0: ?*anyopaque) !*IResourceContext { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetForUIContext(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn GetForUIContext(self: *@This(), p0: ?*anyopaque) !*IResourceContext { return self.getForUIContext(p0); }
+};
+
+pub const IResourceContextStatics2 = extern struct {
+    pub const IID = GUID{ .data1 = 0x41f752ef, .data2 = 0x12af, .data3 = 0x41b9, .data4 = .{ 0xab, 0x36, 0xb1, 0xeb, 0x4b, 0x51, 0x24, 0x60 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        GetForCurrentView: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetGlobalQualifierValue: *const fn (*anyopaque, HSTRING, HSTRING) callconv(.winapi) HRESULT,
+        ResetGlobalQualifierValues: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        ResetGlobalQualifierValues_1: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        GetForViewIndependentUse: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn getForCurrentView(self: *@This()) !*IResourceContext { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetForCurrentView(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn GetForCurrentView(self: *@This()) !*IResourceContext { return self.getForCurrentView(); }
+    pub fn setGlobalQualifierValue(self: *@This(), key: anytype, value: anytype) !void { try hrCheck(self.lpVtbl.SetGlobalQualifierValue(self, @ptrCast(key), @ptrCast(value))); }
+    pub fn SetGlobalQualifierValue(self: *@This(), key: anytype, value: anytype) !void { try self.setGlobalQualifierValue(key, value); }
+    pub fn resetGlobalQualifierValues(self: *@This()) !void { try hrCheck(self.lpVtbl.ResetGlobalQualifierValues(self)); }
+    pub fn ResetGlobalQualifierValues(self: *@This()) !void { try self.resetGlobalQualifierValues(); }
+    pub fn resetGlobalQualifierValues_1(self: *@This(), qualifierNames: ?*anyopaque) !void { try hrCheck(self.lpVtbl.ResetGlobalQualifierValues_1(self, qualifierNames)); }
+    pub fn ResetGlobalQualifierValues_1(self: *@This(), qualifierNames: ?*anyopaque) !void { try self.resetGlobalQualifierValues_1(qualifierNames); }
+    pub fn getForViewIndependentUse(self: *@This()) !*IResourceContext { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetForViewIndependentUse(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn GetForViewIndependentUse(self: *@This()) !*IResourceContext { return self.getForViewIndependentUse(); }
+};
+
+pub const ResourceQualifier = extern struct {
+    pub const IID = IResourceQualifier.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IResourceQualifier.VTable;
+    pub fn QualifierName() void {}
+    pub fn get_QualifierName() void {}
+    pub fn QualifierValue() void {}
+    pub fn get_QualifierValue() void {}
+    pub fn IsDefault() void {}
+    pub fn get_IsDefault() void {}
+    pub fn IsMatch() void {}
+    pub fn get_IsMatch() void {}
+    pub fn Score() void {}
+    pub fn get_Score() void {}
+};
+
+pub const IResourceQualifier = extern struct {
+    pub const IID = GUID{ .data1 = 0x785da5b2, .data2 = 0x4afd, .data3 = 0x4376, .data4 = .{ 0xa8, 0x88, 0xc5, 0xf9, 0xa6, 0xb7, 0xa0, 0x5c } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        QualifierName: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+        QualifierValue: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+        IsDefault: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        IsMatch: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        Score: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn QualifierName(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.QualifierName(self, &out)); return out; }
+    pub fn QualifierValue(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.QualifierValue(self, &out)); return out; }
+    pub fn IsDefault(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsDefault(self, &out)); return out; }
+    pub fn IsMatch(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsMatch(self, &out)); return out; }
+    pub fn Score(self: *@This()) !f64 { var out: f64 = 0; try hrCheck(self.lpVtbl.Score(self, &out)); return out; }
+};
+
+pub const ResourceQualifierPersistence = struct {
+    pub const None: i32 = 0;
+    pub const LocalMachine: i32 = 1;
+};
+
+pub const IRandomAccessStream = extern struct {
+    pub const IID = GUID{ .data1 = 0x905a0fe1, .data2 = 0xbc53, .data3 = 0x11df, .data4 = .{ 0x8c, 0x49, 0x00, 0x1e, 0x4f, 0xc6, 0x86, 0xda } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Size: *const fn (*anyopaque, *u64) callconv(.winapi) HRESULT,
+        SetSize: *const fn (*anyopaque, u64) callconv(.winapi) HRESULT,
+        GetInputStreamAt: *const fn (*anyopaque, u64, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetOutputStreamAt: *const fn (*anyopaque, u64, *?*anyopaque) callconv(.winapi) HRESULT,
+        Position: *const fn (*anyopaque, *u64) callconv(.winapi) HRESULT,
+        Seek: *const fn (*anyopaque, u64) callconv(.winapi) HRESULT,
+        CloneStream: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CanRead: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        CanWrite: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_IClosable = true; // requires IClosable
+    pub const Requires_IInputStream = true; // requires IInputStream
+    pub const Requires_IOutputStream = true; // requires IOutputStream
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
+    pub fn FlushAsync(self: *@This()) !void { const base = try self.queryInterface(IOutputStream); _ = try base.FlushAsync(); }
+    pub fn Size(self: *@This()) !u64 { var out: u64 = 0; try hrCheck(self.lpVtbl.Size(self, &out)); return out; }
+    pub fn SetSize(self: *@This(), value: u64) !void { try hrCheck(self.lpVtbl.SetSize(self, value)); }
+    pub fn getInputStreamAt(self: *@This(), p0: u64) !*IInputStream { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetInputStreamAt(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn GetInputStreamAt(self: *@This(), p0: u64) !*IInputStream { return self.getInputStreamAt(p0); }
+    pub fn getOutputStreamAt(self: *@This(), p0: u64) !*IOutputStream { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetOutputStreamAt(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn GetOutputStreamAt(self: *@This(), p0: u64) !*IOutputStream { return self.getOutputStreamAt(p0); }
+    pub fn Position(self: *@This()) !u64 { var out: u64 = 0; try hrCheck(self.lpVtbl.Position(self, &out)); return out; }
+    pub fn seek(self: *@This(), position: u64) !void { try hrCheck(self.lpVtbl.Seek(self, position)); }
+    pub fn Seek(self: *@This(), position: u64) !void { try self.seek(position); }
+    pub fn cloneStream(self: *@This()) !*IRandomAccessStream { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CloneStream(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CloneStream(self: *@This()) !*IRandomAccessStream { return self.cloneStream(); }
+    pub fn CanRead(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.CanRead(self, &out)); return out; }
+    pub fn CanWrite(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.CanWrite(self, &out)); return out; }
+};
+
+pub const FileAccessMode = struct {
+    pub const Read: i32 = 0;
+    pub const ReadWrite: i32 = 1;
+};
+
+pub const StorageStreamTransaction = extern struct {
+    pub const IID = IStorageStreamTransaction.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IStorageStreamTransaction.VTable;
+    pub const Requires_IClosable = true; // requires IClosable
+    pub fn Stream() void {}
+    pub fn get_Stream() void {}
+    pub fn CommitAsync() void {}
+    pub fn Close() void {}
+};
+
+pub const IStorageStreamTransaction = extern struct {
+    pub const IID = GUID{ .data1 = 0xf67cf363, .data2 = 0xa53d, .data3 = 0x4d94, .data4 = .{ 0xae, 0x2c, 0x67, 0x23, 0x2d, 0x93, 0xac, 0xdd } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Stream: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CommitAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_IClosable = true; // requires IClosable
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
+    pub fn Stream(self: *@This()) !*IRandomAccessStream { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Stream(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn commitAsync(self: *@This()) !*IAsyncAction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CommitAsync(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CommitAsync(self: *@This()) !*IAsyncAction { return self.commitAsync(); }
+};
+
+pub const StorageFile = extern struct {
+    pub const IID = IStorageFile.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IStorageFile.VTable;
+    pub const Requires_IInputStreamReference = true; // requires IInputStreamReference
+    pub const Requires_IRandomAccessStreamReference = true; // requires IRandomAccessStreamReference
+    pub const Requires_IStorageItem = true; // requires IStorageItem
+    pub const Requires_IStorageItemProperties = true; // requires IStorageItemProperties
+    pub const Requires_IStorageItemProperties2 = true; // requires IStorageItemProperties2
+    pub const Requires_IStorageItem2 = true; // requires IStorageItem2
+    pub const Requires_IStorageItemPropertiesWithProvider = true; // requires IStorageItemPropertiesWithProvider
+    pub const Requires_IStorageFilePropertiesWithAvailability = true; // requires IStorageFilePropertiesWithAvailability
+    pub const Requires_IStorageFile2 = true; // requires IStorageFile2
+    pub const Requires_IStorageFileStatics = true; // requires IStorageFileStatics
+    pub const Requires_IStorageFileStatics2 = true; // requires IStorageFileStatics2
+    pub fn FileType() void {}
+    pub fn get_FileType() void {}
+    pub fn ContentType() void {}
+    pub fn get_ContentType() void {}
+    pub fn OpenAsync() void {}
+    pub fn OpenTransactedWriteAsync() void {}
+    pub fn CopyAsync() void {}
+    pub fn CopyAndReplaceAsync() void {}
+    pub fn MoveAsync() void {}
+    pub fn MoveAndReplaceAsync() void {}
+    pub fn OpenSequentialReadAsync() void {}
+    pub fn OpenReadAsync() void {}
+    pub fn RenameAsync() void {}
+    pub fn DeleteAsync() void {}
+    pub fn GetBasicPropertiesAsync() void {}
+    pub fn Name() void {}
+    pub fn get_Name() void {}
+    pub fn Path() void {}
+    pub fn get_Path() void {}
+    pub fn Attributes() void {}
+    pub fn get_Attributes() void {}
+    pub fn DateCreated() void {}
+    pub fn get_DateCreated() void {}
+    pub fn IsOfType() void {}
+    pub fn GetThumbnailAsync() void {}
+    pub fn DisplayName() void {}
+    pub fn get_DisplayName() void {}
+    pub fn DisplayType() void {}
+    pub fn get_DisplayType() void {}
+    pub fn FolderRelativeId() void {}
+    pub fn get_FolderRelativeId() void {}
+    pub fn Properties() void {}
+    pub fn get_Properties() void {}
+    pub fn GetScaledImageAsThumbnailAsync() void {}
+    pub fn GetParentAsync() void {}
+    pub fn IsEqual() void {}
+    pub fn Provider() void {}
+    pub fn get_Provider() void {}
+    pub fn IsAvailable() void {}
+    pub fn get_IsAvailable() void {}
+    pub fn GetFileFromPathAsync() void {}
+    pub fn GetFileFromApplicationUriAsync() void {}
+    pub fn CreateStreamedFileAsync() void {}
+    pub fn ReplaceWithStreamedFileAsync() void {}
+    pub fn CreateStreamedFileFromUriAsync() void {}
+    pub fn ReplaceWithStreamedFileFromUriAsync() void {}
+    pub fn GetFileFromPathForUserAsync() void {}
+};
+
+pub const IStorageFolder = extern struct {
+    pub const IID = GUID{ .data1 = 0x72d1cb78, .data2 = 0xb3ef, .data3 = 0x4f75, .data4 = .{ 0xa8, 0x0b, 0x6f, 0xd9, 0xda, 0xe2, 0x94, 0x4b } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CreateFileAsync: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateFileAsync_1: *const fn (*anyopaque, HSTRING, i32, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateFolderAsync: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateFolderAsync_1: *const fn (*anyopaque, HSTRING, i32, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetFileAsync: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetFolderAsync: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetItemAsync: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetFilesAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetFoldersAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetItemsAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_IStorageItem = true; // requires IStorageItem
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn DeleteAsync(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.DeleteAsync(); }
+    pub fn GetBasicPropertiesAsync(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.GetBasicPropertiesAsync(); }
+    pub fn Name(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.Name(); }
+    pub fn Path(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.Path(); }
+    pub fn Attributes(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.Attributes(); }
+    pub fn DateCreated(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.DateCreated(); }
+    pub fn createFileAsync(self: *@This(), p0: anytype) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateFileAsync(self, @ptrCast(p0), &out0)); return out0; }
+    pub fn CreateFileAsync(self: *@This(), p0: anytype) !?*anyopaque { return self.createFileAsync(p0); }
+    pub fn createFileAsync_1(self: *@This(), p0: anytype, p1: i32) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateFileAsync_1(self, @ptrCast(p0), p1, &out0)); return out0; }
+    pub fn CreateFileAsync_1(self: *@This(), p0: anytype, p1: i32) !?*anyopaque { return self.createFileAsync_1(p0, p1); }
+    pub fn createFolderAsync(self: *@This(), p0: anytype) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateFolderAsync(self, @ptrCast(p0), &out0)); return out0; }
+    pub fn CreateFolderAsync(self: *@This(), p0: anytype) !?*anyopaque { return self.createFolderAsync(p0); }
+    pub fn createFolderAsync_1(self: *@This(), p0: anytype, p1: i32) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateFolderAsync_1(self, @ptrCast(p0), p1, &out0)); return out0; }
+    pub fn CreateFolderAsync_1(self: *@This(), p0: anytype, p1: i32) !?*anyopaque { return self.createFolderAsync_1(p0, p1); }
+    pub fn getFileAsync(self: *@This(), p0: anytype) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetFileAsync(self, @ptrCast(p0), &out0)); return out0; }
+    pub fn GetFileAsync(self: *@This(), p0: anytype) !?*anyopaque { return self.getFileAsync(p0); }
+    pub fn getFolderAsync(self: *@This(), p0: anytype) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetFolderAsync(self, @ptrCast(p0), &out0)); return out0; }
+    pub fn GetFolderAsync(self: *@This(), p0: anytype) !?*anyopaque { return self.getFolderAsync(p0); }
+    pub fn getItemAsync(self: *@This(), p0: anytype) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetItemAsync(self, @ptrCast(p0), &out0)); return out0; }
+    pub fn GetItemAsync(self: *@This(), p0: anytype) !?*anyopaque { return self.getItemAsync(p0); }
+    pub fn getFilesAsync(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetFilesAsync(self, &out0)); return out0; }
+    pub fn GetFilesAsync(self: *@This()) !?*anyopaque { return self.getFilesAsync(); }
+    pub fn getFoldersAsync(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetFoldersAsync(self, &out0)); return out0; }
+    pub fn GetFoldersAsync(self: *@This()) !?*anyopaque { return self.getFoldersAsync(); }
+    pub fn getItemsAsync(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetItemsAsync(self, &out0)); return out0; }
+    pub fn GetItemsAsync(self: *@This()) !?*anyopaque { return self.getItemsAsync(); }
+};
+
+pub const NameCollisionOption = struct {
+    pub const GenerateUniqueName: i32 = 0;
+    pub const ReplaceExisting: i32 = 1;
+    pub const FailIfExists: i32 = 2;
+};
+
+pub const IInputStreamReference = extern struct {
+    pub const IID = GUID{ .data1 = 0x43929d18, .data2 = 0x5ec9, .data3 = 0x4b5a, .data4 = .{ 0x91, 0x9c, 0x42, 0x05, 0xb0, 0xc8, 0x04, 0xb6 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        OpenSequentialReadAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn openSequentialReadAsync(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.OpenSequentialReadAsync(self, &out0)); return out0; }
+    pub fn OpenSequentialReadAsync(self: *@This()) !?*anyopaque { return self.openSequentialReadAsync(); }
+};
+
+pub const StorageDeleteOption = struct {
+    pub const Default: i32 = 0;
+    pub const PermanentDelete: i32 = 1;
+};
+
+pub const BasicProperties = extern struct {
+    pub const IID = IBasicProperties.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IBasicProperties.VTable;
+    pub const Requires_IStorageItemExtraProperties = true; // requires IStorageItemExtraProperties
+    pub fn Size() void {}
+    pub fn get_Size() void {}
+    pub fn DateModified() void {}
+    pub fn get_DateModified() void {}
+    pub fn ItemDate() void {}
+    pub fn get_ItemDate() void {}
+    pub fn RetrievePropertiesAsync() void {}
+    pub fn SavePropertiesAsync() void {}
+};
+
+pub const IBasicProperties = extern struct {
+    pub const IID = GUID{ .data1 = 0xd05d55db, .data2 = 0x785e, .data3 = 0x4a66, .data4 = .{ 0xbe, 0x02, 0x9b, 0xee, 0xc5, 0x8a, 0xea, 0x81 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Size: *const fn (*anyopaque, *u64) callconv(.winapi) HRESULT,
+        DateModified: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        ItemDate: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Size(self: *@This()) !u64 { var out: u64 = 0; try hrCheck(self.lpVtbl.Size(self, &out)); return out; }
+    pub fn DateModified(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.DateModified(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn ItemDate(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ItemDate(self, &out)); return out orelse error.WinRTFailed; }
+};
+
+pub const FileAttributes = struct {
+    pub const Normal: i32 = 0;
+    pub const ReadOnly: i32 = 1;
+    pub const Directory: i32 = 16;
+    pub const Archive: i32 = 32;
+    pub const Temporary: i32 = 256;
+    pub const LocallyIncomplete: i32 = 512;
+};
+
+pub const StorageItemTypes = struct {
+    pub const None: i32 = 0;
+    pub const File: i32 = 1;
+    pub const Folder: i32 = 2;
+};
+
+pub const IRandomAccessStreamWithContentType = extern struct {
+    pub const IID = GUID{ .data1 = 0xcc254827, .data2 = 0x4b3d, .data3 = 0x438f, .data4 = .{ 0x92, 0x32, 0x10, 0xc7, 0x6b, 0xc7, 0xe0, 0x38 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+    };
+    pub const Requires_IRandomAccessStream = true; // requires IRandomAccessStream
+    pub const Requires_IClosable = true; // requires IClosable
+    pub const Requires_IInputStream = true; // requires IInputStream
+    pub const Requires_IOutputStream = true; // requires IOutputStream
+    pub const Requires_IContentTypeProvider = true; // requires IContentTypeProvider
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Size(self: *@This()) !void { const base = try self.queryInterface(IRandomAccessStream); _ = try base.Size(); }
+    pub fn Position(self: *@This()) !void { const base = try self.queryInterface(IRandomAccessStream); _ = try base.Position(); }
+    pub fn CloneStream(self: *@This()) !void { const base = try self.queryInterface(IRandomAccessStream); _ = try base.CloneStream(); }
+    pub fn CanRead(self: *@This()) !void { const base = try self.queryInterface(IRandomAccessStream); _ = try base.CanRead(); }
+    pub fn CanWrite(self: *@This()) !void { const base = try self.queryInterface(IRandomAccessStream); _ = try base.CanWrite(); }
+    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
+    pub fn FlushAsync(self: *@This()) !void { const base = try self.queryInterface(IOutputStream); _ = try base.FlushAsync(); }
+    pub fn ContentType(self: *@This()) !void { const base = try self.queryInterface(IContentTypeProvider); _ = try base.ContentType(); }
+};
+
+pub const IInputStream = extern struct {
+    pub const IID = GUID{ .data1 = 0x905a0fe2, .data2 = 0xbc53, .data3 = 0x11df, .data4 = .{ 0x8c, 0x49, 0x00, 0x1e, 0x4f, 0xc6, 0x86, 0xda } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        ReadAsync: *const fn (*anyopaque, ?*anyopaque, u32, i32, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_IClosable = true; // requires IClosable
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
+    pub fn readAsync(self: *@This(), p0: ?*anyopaque, p1: u32, p2: i32) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.ReadAsync(self, p0, p1, p2, &out0)); return out0; }
+    pub fn ReadAsync(self: *@This(), p0: ?*anyopaque, p1: u32, p2: i32) !?*anyopaque { return self.readAsync(p0, p1, p2); }
+};
+
+pub const IAutomationPeerAnnotationFactory = extern struct {
+    pub const IID = GUID{ .data1 = 0x25a1a202, .data2 = 0xbd68, .data3 = 0x5d41, .data4 = .{ 0xa3, 0x11, 0xf8, 0x4a, 0xf9, 0xc8, 0xc4, 0x40 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CreateInstance: *const fn (*anyopaque, i32, *?*anyopaque) callconv(.winapi) HRESULT,
+        CreateWithPeerParameter: *const fn (*anyopaque, i32, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn CreateInstance(self: *@This(), p0: i32) !*IAutomationPeerAnnotation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateInstance(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn createWithPeerParameter(self: *@This(), p0: i32, p1: ?*anyopaque) !*IAutomationPeerAnnotation { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateWithPeerParameter(self, p0, p1, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateWithPeerParameter(self: *@This(), p0: i32, p1: ?*anyopaque) !*IAutomationPeerAnnotation { return self.createWithPeerParameter(p0, p1); }
+};
+
+pub const IAutomationPeerAnnotationStatics = extern struct {
+    pub const IID = GUID{ .data1 = 0xc46105d7, .data2 = 0x8ca3, .data3 = 0x50e3, .data4 = .{ 0xa1, 0xbc, 0xb6, 0xbb, 0x2f, 0x9c, 0xe1, 0xcd } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        TypeProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        PeerProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn TypeProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.TypeProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn PeerProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.PeerProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+};
+
+pub const AnnotationType = struct {
+    pub const Unknown: i32 = 60000;
+    pub const SpellingError: i32 = 60001;
+    pub const GrammarError: i32 = 60002;
+    pub const Comment: i32 = 60003;
+    pub const FormulaError: i32 = 60004;
+    pub const TrackChanges: i32 = 60005;
+    pub const Header: i32 = 60006;
+    pub const Footer: i32 = 60007;
+    pub const Highlighted: i32 = 60008;
+    pub const Endnote: i32 = 60009;
+    pub const Footnote: i32 = 60010;
+    pub const InsertionChange: i32 = 60011;
+    pub const DeletionChange: i32 = 60012;
+    pub const MoveChange: i32 = 60013;
+    pub const FormatChange: i32 = 60014;
+    pub const UnsyncedChange: i32 = 60015;
+    pub const EditingLockedChange: i32 = 60016;
+    pub const ExternalChange: i32 = 60017;
+    pub const ConflictingChange: i32 = 60018;
+    pub const Author: i32 = 60019;
+    pub const AdvancedProofingIssue: i32 = 60020;
+    pub const DataValidationError: i32 = 60021;
+    pub const CircularReferenceError: i32 = 60022;
+};
+
+pub const ICompositionObject2 = extern struct {
+    pub const IID = GUID{ .data1 = 0xef874ea1, .data2 = 0x5cff, .data3 = 0x4b68, .data4 = .{ 0x9e, 0x30, 0xa1, 0x51, 0x9d, 0x08, 0xba, 0x03 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Comment: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+        SetComment: *const fn (*anyopaque, HSTRING) callconv(.winapi) HRESULT,
+        ImplicitAnimations: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetImplicitAnimations: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        StartAnimationGroup: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        StopAnimationGroup: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Comment(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.Comment(self, &out)); return out; }
+    pub fn SetComment(self: *@This(), value: anytype) !void { try hrCheck(self.lpVtbl.SetComment(self, @ptrCast(value))); }
+    pub fn ImplicitAnimations(self: *@This()) !*IImplicitAnimationCollection { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ImplicitAnimations(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetImplicitAnimations(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetImplicitAnimations(self, value)); }
+    pub fn startAnimationGroup(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.StartAnimationGroup(self, value)); }
+    pub fn StartAnimationGroup(self: *@This(), value: ?*anyopaque) !void { try self.startAnimationGroup(value); }
+    pub fn stopAnimationGroup(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.StopAnimationGroup(self, value)); }
+    pub fn StopAnimationGroup(self: *@This(), value: ?*anyopaque) !void { try self.stopAnimationGroup(value); }
+};
+
+pub const ICompositionObject3 = extern struct {
+    pub const IID = GUID{ .data1 = 0x4bc27925, .data2 = 0xdacd, .data3 = 0x4cf2, .data4 = .{ 0x98, 0xb1, 0x98, 0x6b, 0x76, 0xe7, 0xeb, 0xe6 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        DispatcherQueue: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn DispatcherQueue(self: *@This()) !*IDispatcherQueue { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.DispatcherQueue(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+};
+
+pub const ICompositionObject4 = extern struct {
+    pub const IID = GUID{ .data1 = 0x0bb3784c, .data2 = 0x346b, .data3 = 0x4a7c, .data4 = .{ 0x96, 0x6b, 0x73, 0x10, 0x96, 0x65, 0x53, 0xd5 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        TryGetAnimationController: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn tryGetAnimationController(self: *@This(), p0: anytype) !*IAnimationController { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.TryGetAnimationController(self, @ptrCast(p0), &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn TryGetAnimationController(self: *@This(), p0: anytype) !*IAnimationController { return self.tryGetAnimationController(p0); }
+};
+
+pub const ICompositionObject5 = extern struct {
+    pub const IID = GUID{ .data1 = 0x1d7f391b, .data2 = 0xa130, .data3 = 0x5265, .data4 = .{ 0xa6, 0x2b, 0x60, 0xb8, 0xe6, 0x68, 0x96, 0x5a } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        StartAnimation: *const fn (*anyopaque, HSTRING, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn startAnimation(self: *@This(), propertyName: anytype, animation: ?*anyopaque, animationController: ?*anyopaque) !void { try hrCheck(self.lpVtbl.StartAnimation(self, @ptrCast(propertyName), animation, animationController)); }
+    pub fn StartAnimation(self: *@This(), propertyName: anytype, animation: ?*anyopaque, animationController: ?*anyopaque) !void { try self.startAnimation(propertyName, animation, animationController); }
+};
+
+pub const ICompositionObjectStatics = extern struct {
+    pub const IID = GUID{ .data1 = 0xc1ed052f, .data2 = 0x1ba2, .data3 = 0x44ba, .data4 = .{ 0xa9, 0x04, 0x6a, 0x88, 0x2a, 0x0a, 0x5a, 0xdb } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        StartAnimationWithIAnimationObject: *const fn (*anyopaque, ?*anyopaque, HSTRING, ?*anyopaque) callconv(.winapi) HRESULT,
+        StartAnimationGroupWithIAnimationObject: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn startAnimationWithIAnimationObject(self: *@This(), target: ?*anyopaque, propertyName: anytype, animation: ?*anyopaque) !void { try hrCheck(self.lpVtbl.StartAnimationWithIAnimationObject(self, target, @ptrCast(propertyName), animation)); }
+    pub fn StartAnimationWithIAnimationObject(self: *@This(), target: ?*anyopaque, propertyName: anytype, animation: ?*anyopaque) !void { try self.startAnimationWithIAnimationObject(target, propertyName, animation); }
+    pub fn startAnimationGroupWithIAnimationObject(self: *@This(), target: ?*anyopaque, animation: ?*anyopaque) !void { try hrCheck(self.lpVtbl.StartAnimationGroupWithIAnimationObject(self, target, animation)); }
+    pub fn StartAnimationGroupWithIAnimationObject(self: *@This(), target: ?*anyopaque, animation: ?*anyopaque) !void { try self.startAnimationGroupWithIAnimationObject(target, animation); }
+};
+
+pub const ICompositionClip2 = extern struct {
+    pub const IID = GUID{ .data1 = 0x5893e069, .data2 = 0x3516, .data3 = 0x40e1, .data4 = .{ 0x89, 0xe0, 0x5b, 0xa9, 0x24, 0x92, 0x72, 0x35 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        AnchorPoint: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
+        SetAnchorPoint: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
+        CenterPoint: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
+        SetCenterPoint: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
+        Offset: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
+        SetOffset: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
+        RotationAngle: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        SetRotationAngle: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
+        RotationAngleInDegrees: *const fn (*anyopaque, *f32) callconv(.winapi) HRESULT,
+        SetRotationAngleInDegrees: *const fn (*anyopaque, f32) callconv(.winapi) HRESULT,
+        Scale: *const fn (*anyopaque, *Vector2) callconv(.winapi) HRESULT,
+        SetScale: *const fn (*anyopaque, Vector2) callconv(.winapi) HRESULT,
+        TransformMatrix: *const fn (*anyopaque, *Matrix3x2) callconv(.winapi) HRESULT,
+        SetTransformMatrix: *const fn (*anyopaque, Matrix3x2) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn AnchorPoint(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.AnchorPoint(self, &out)); return out; }
+    pub fn SetAnchorPoint(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetAnchorPoint(self, value)); }
+    pub fn CenterPoint(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.CenterPoint(self, &out)); return out; }
+    pub fn SetCenterPoint(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetCenterPoint(self, value)); }
+    pub fn Offset(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.Offset(self, &out)); return out; }
+    pub fn SetOffset(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetOffset(self, value)); }
+    pub fn RotationAngle(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.RotationAngle(self, &out)); return out; }
+    pub fn SetRotationAngle(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetRotationAngle(self, value)); }
+    pub fn RotationAngleInDegrees(self: *@This()) !f32 { var out: f32 = 0; try hrCheck(self.lpVtbl.RotationAngleInDegrees(self, &out)); return out; }
+    pub fn SetRotationAngleInDegrees(self: *@This(), value: f32) !void { try hrCheck(self.lpVtbl.SetRotationAngleInDegrees(self, value)); }
+    pub fn Scale(self: *@This()) !Vector2 { var out: Vector2 = .{ .X = 0, .Y = 0 }; try hrCheck(self.lpVtbl.Scale(self, &out)); return out; }
+    pub fn SetScale(self: *@This(), value: Vector2) !void { try hrCheck(self.lpVtbl.SetScale(self, value)); }
+    pub fn TransformMatrix(self: *@This()) !Matrix3x2 { var out: Matrix3x2 = .{ .M11 = 0, .M12 = 0, .M21 = 0, .M22 = 0, .M31 = 0, .M32 = 0 }; try hrCheck(self.lpVtbl.TransformMatrix(self, &out)); return out; }
+    pub fn SetTransformMatrix(self: *@This(), value: Matrix3x2) !void { try hrCheck(self.lpVtbl.SetTransformMatrix(self, value)); }
+};
+
 pub const ICompositionAnimation2 = extern struct {
     pub const IID = GUID{ .data1 = 0x369b603e, .data2 = 0xa80f, .data3 = 0x4948, .data4 = .{ 0x93, 0xe3, 0xed, 0x23, 0xfb, 0x38, 0xc6, 0xcb } };
     lpVtbl: *const VTable,
@@ -20766,43 +26453,6 @@ pub const ICompositionProjectedShadowCasterCollectionStatics = extern struct {
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn MaxRespectedCasters(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.MaxRespectedCasters(self, &out)); return out; }
-};
-
-pub const IDeferralFactory = extern struct {
-    pub const IID = GUID{ .data1 = 0x65a1ecc5, .data2 = 0x3fb5, .data3 = 0x4832, .data4 = .{ 0x8c, 0xa9, 0xf0, 0x61, 0xb2, 0x81, 0xd1, 0x3a } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Create: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn create(self: *@This(), p0: ?*anyopaque) !*IDeferral { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.Create(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn Create(self: *@This(), p0: ?*anyopaque) !*IDeferral { return self.create(p0); }
-};
-
-pub const DeferralCompletedHandler = extern struct {
-    pub const IID = GUID{ .data1 = 0xed32a372, .data2 = 0xf3c8, .data3 = 0x4faa, .data4 = .{ 0x9c, 0xfb, 0x47, 0x01, 0x48, 0xda, 0x38, 0x88 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Invoke: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn invoke(self: *@This()) !void { try hrCheck(self.lpVtbl.Invoke(self)); }
-    pub fn Invoke(self: *@This()) !void { try self.invoke(); }
-    pub fn new() !*@This() { return error.NotImplemented; }
 };
 
 pub const SystemBackdropTheme = struct {
@@ -21104,138 +26754,6 @@ pub const IRandomAccessStreamReferenceStatics = extern struct {
     pub fn CreateFromStream(self: *@This(), p0: ?*anyopaque) !*IRandomAccessStreamReference { return self.createFromStream(p0); }
 };
 
-pub const IRandomAccessStreamWithContentType = extern struct {
-    pub const IID = GUID{ .data1 = 0xcc254827, .data2 = 0x4b3d, .data3 = 0x438f, .data4 = .{ 0x92, 0x32, 0x10, 0xc7, 0x6b, 0xc7, 0xe0, 0x38 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-    };
-    pub const Requires_IRandomAccessStream = true; // requires IRandomAccessStream
-    pub const Requires_IClosable = true; // requires IClosable
-    pub const Requires_IInputStream = true; // requires IInputStream
-    pub const Requires_IOutputStream = true; // requires IOutputStream
-    pub const Requires_IContentTypeProvider = true; // requires IContentTypeProvider
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Size(self: *@This()) !void { const base = try self.queryInterface(IRandomAccessStream); _ = try base.Size(); }
-    pub fn Position(self: *@This()) !void { const base = try self.queryInterface(IRandomAccessStream); _ = try base.Position(); }
-    pub fn CloneStream(self: *@This()) !void { const base = try self.queryInterface(IRandomAccessStream); _ = try base.CloneStream(); }
-    pub fn CanRead(self: *@This()) !void { const base = try self.queryInterface(IRandomAccessStream); _ = try base.CanRead(); }
-    pub fn CanWrite(self: *@This()) !void { const base = try self.queryInterface(IRandomAccessStream); _ = try base.CanWrite(); }
-    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
-    pub fn FlushAsync(self: *@This()) !void { const base = try self.queryInterface(IOutputStream); _ = try base.FlushAsync(); }
-    pub fn ContentType(self: *@This()) !void { const base = try self.queryInterface(IContentTypeProvider); _ = try base.ContentType(); }
-};
-
-pub const IRandomAccessStream = extern struct {
-    pub const IID = GUID{ .data1 = 0x905a0fe1, .data2 = 0xbc53, .data3 = 0x11df, .data4 = .{ 0x8c, 0x49, 0x00, 0x1e, 0x4f, 0xc6, 0x86, 0xda } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Size: *const fn (*anyopaque, *u64) callconv(.winapi) HRESULT,
-        SetSize: *const fn (*anyopaque, u64) callconv(.winapi) HRESULT,
-        GetInputStreamAt: *const fn (*anyopaque, u64, *?*anyopaque) callconv(.winapi) HRESULT,
-        GetOutputStreamAt: *const fn (*anyopaque, u64, *?*anyopaque) callconv(.winapi) HRESULT,
-        Position: *const fn (*anyopaque, *u64) callconv(.winapi) HRESULT,
-        Seek: *const fn (*anyopaque, u64) callconv(.winapi) HRESULT,
-        CloneStream: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CanRead: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        CanWrite: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_IClosable = true; // requires IClosable
-    pub const Requires_IInputStream = true; // requires IInputStream
-    pub const Requires_IOutputStream = true; // requires IOutputStream
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
-    pub fn FlushAsync(self: *@This()) !void { const base = try self.queryInterface(IOutputStream); _ = try base.FlushAsync(); }
-    pub fn Size(self: *@This()) !u64 { var out: u64 = 0; try hrCheck(self.lpVtbl.Size(self, &out)); return out; }
-    pub fn SetSize(self: *@This(), value: u64) !void { try hrCheck(self.lpVtbl.SetSize(self, value)); }
-    pub fn getInputStreamAt(self: *@This(), p0: u64) !*IInputStream { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetInputStreamAt(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn GetInputStreamAt(self: *@This(), p0: u64) !*IInputStream { return self.getInputStreamAt(p0); }
-    pub fn getOutputStreamAt(self: *@This(), p0: u64) !*IOutputStream { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetOutputStreamAt(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn GetOutputStreamAt(self: *@This(), p0: u64) !*IOutputStream { return self.getOutputStreamAt(p0); }
-    pub fn Position(self: *@This()) !u64 { var out: u64 = 0; try hrCheck(self.lpVtbl.Position(self, &out)); return out; }
-    pub fn seek(self: *@This(), position: u64) !void { try hrCheck(self.lpVtbl.Seek(self, position)); }
-    pub fn Seek(self: *@This(), position: u64) !void { try self.seek(position); }
-    pub fn cloneStream(self: *@This()) !*IRandomAccessStream { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CloneStream(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CloneStream(self: *@This()) !*IRandomAccessStream { return self.cloneStream(); }
-    pub fn CanRead(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.CanRead(self, &out)); return out; }
-    pub fn CanWrite(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.CanWrite(self, &out)); return out; }
-};
-
-pub const NameCollisionOption = struct {
-    pub const GenerateUniqueName: i32 = 0;
-    pub const ReplaceExisting: i32 = 1;
-    pub const FailIfExists: i32 = 2;
-};
-
-pub const StorageDeleteOption = struct {
-    pub const Default: i32 = 0;
-    pub const PermanentDelete: i32 = 1;
-};
-
-pub const BasicProperties = extern struct {
-    pub const IID = IBasicProperties.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IBasicProperties.VTable;
-    pub const Requires_IStorageItemExtraProperties = true; // requires IStorageItemExtraProperties
-    pub fn Size() void {}
-    pub fn get_Size() void {}
-    pub fn DateModified() void {}
-    pub fn get_DateModified() void {}
-    pub fn ItemDate() void {}
-    pub fn get_ItemDate() void {}
-    pub fn RetrievePropertiesAsync() void {}
-    pub fn SavePropertiesAsync() void {}
-};
-
-pub const IBasicProperties = extern struct {
-    pub const IID = GUID{ .data1 = 0xd05d55db, .data2 = 0x785e, .data3 = 0x4a66, .data4 = .{ 0xbe, 0x02, 0x9b, 0xee, 0xc5, 0x8a, 0xea, 0x81 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Size: *const fn (*anyopaque, *u64) callconv(.winapi) HRESULT,
-        DateModified: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        ItemDate: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Size(self: *@This()) !u64 { var out: u64 = 0; try hrCheck(self.lpVtbl.Size(self, &out)); return out; }
-    pub fn DateModified(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.DateModified(self, &out)); return out orelse error.WinRTFailed; }
-    pub fn ItemDate(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ItemDate(self, &out)); return out orelse error.WinRTFailed; }
-};
-
-pub const FileAttributes = struct {
-    pub const Normal: i32 = 0;
-    pub const ReadOnly: i32 = 1;
-    pub const Directory: i32 = 16;
-    pub const Archive: i32 = 32;
-    pub const Temporary: i32 = 256;
-    pub const LocallyIncomplete: i32 = 512;
-};
-
-pub const StorageItemTypes = struct {
-    pub const None: i32 = 0;
-    pub const File: i32 = 1;
-    pub const Folder: i32 = 2;
-};
-
 pub const ShareTargetInfo = extern struct {
     pub const IID = IShareTargetInfo.IID;
     lpVtbl: *const VTable,
@@ -21340,9 +26858,136 @@ pub const DownloadProgressEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use DownloadProgressEventHandlerImpl instead"); }
 };
 
+pub fn DownloadProgressEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = DownloadProgressEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const ExceptionRoutedEventHandler = extern struct {
     pub const IID = GUID{ .data1 = 0x45fbb85d, .data2 = 0x54f9, .data3 = 0x5a2a, .data4 = .{ 0x8a, 0x38, 0x00, 0xa3, 0xb7, 0x76, 0x1f, 0x96 } };
     lpVtbl: *const VTable,
@@ -21359,9 +27004,136 @@ pub const ExceptionRoutedEventHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
     pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use ExceptionRoutedEventHandlerImpl instead"); }
 };
 
+pub fn ExceptionRoutedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = ExceptionRoutedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const ISoftwareBitmapFactory = extern struct {
     pub const IID = GUID{ .data1 = 0xc99feb69, .data2 = 0x2d62, .data3 = 0x4d47, .data4 = .{ 0xa6, 0xb3, 0x4f, 0xdb, 0x6a, 0x07, 0xfd, 0xf8 } };
     lpVtbl: *const VTable,
@@ -21922,1305 +27694,6 @@ pub const IListViewBase = extern struct {
     pub fn SetFooterTransitions(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetFooterTransitions(self, value)); }
 };
 
-pub const NamedResource = extern struct {
-    pub const IID = INamedResource.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = INamedResource.VTable;
-    pub fn Uri() void {}
-    pub fn get_Uri() void {}
-    pub fn Candidates() void {}
-    pub fn get_Candidates() void {}
-    pub fn Resolve() void {}
-    pub fn ResolveAll() void {}
-};
-
-pub const INamedResource = extern struct {
-    pub const IID = GUID{ .data1 = 0x1c98c219, .data2 = 0x0b13, .data3 = 0x4240, .data4 = .{ 0x89, 0xa5, 0xd4, 0x95, 0xdc, 0x18, 0x9a, 0x00 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Uri: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        Candidates: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        Resolve: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        Resolve_1: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        ResolveAll: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        ResolveAll_1: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Uri(self: *@This()) !*IUriRuntimeClass { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Uri(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn Candidates(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Candidates(self, &out)); return out orelse error.WinRTFailed; }
-    pub fn resolve(self: *@This()) !*IResourceCandidate { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.Resolve(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn Resolve(self: *@This()) !*IResourceCandidate { return self.resolve(); }
-    pub fn resolve_1(self: *@This(), p0: ?*anyopaque) !*IResourceCandidate { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.Resolve_1(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn Resolve_1(self: *@This(), p0: ?*anyopaque) !*IResourceCandidate { return self.resolve_1(p0); }
-    pub fn resolveAll(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.ResolveAll(self, &out0)); return out0; }
-    pub fn ResolveAll(self: *@This()) !?*anyopaque { return self.resolveAll(); }
-    pub fn resolveAll_1(self: *@This(), p0: ?*anyopaque) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.ResolveAll_1(self, p0, &out0)); return out0; }
-    pub fn ResolveAll_1(self: *@This(), p0: ?*anyopaque) !?*anyopaque { return self.resolveAll_1(p0); }
-};
-
-pub const ResourceCandidate = extern struct {
-    pub const IID = IResourceCandidate.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IResourceCandidate.VTable;
-    pub const Requires_IResourceCandidate2 = true; // requires IResourceCandidate2
-    pub const Requires_IResourceCandidate3 = true; // requires IResourceCandidate3
-    pub fn Qualifiers() void {}
-    pub fn get_Qualifiers() void {}
-    pub fn IsMatch() void {}
-    pub fn get_IsMatch() void {}
-    pub fn IsMatchAsDefault() void {}
-    pub fn get_IsMatchAsDefault() void {}
-    pub fn IsDefault() void {}
-    pub fn get_IsDefault() void {}
-    pub fn ValueAsString() void {}
-    pub fn get_ValueAsString() void {}
-    pub fn GetValueAsFileAsync() void {}
-    pub fn GetQualifierValue() void {}
-    pub fn GetValueAsStreamAsync() void {}
-    pub fn Kind() void {}
-    pub fn get_Kind() void {}
-};
-
-pub const IResourceCandidate = extern struct {
-    pub const IID = GUID{ .data1 = 0xaf5207d9, .data2 = 0xc433, .data3 = 0x4764, .data4 = .{ 0xb3, 0xfd, 0x8f, 0xa6, 0xbf, 0xbc, 0xba, 0xdc } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Qualifiers: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        IsMatch: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        IsMatchAsDefault: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        IsDefault: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        ValueAsString: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-        GetValueAsFileAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        GetQualifierValue: *const fn (*anyopaque, HSTRING, *HSTRING) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Qualifiers(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Qualifiers(self, &out)); return out orelse error.WinRTFailed; }
-    pub fn IsMatch(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsMatch(self, &out)); return out; }
-    pub fn IsMatchAsDefault(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsMatchAsDefault(self, &out)); return out; }
-    pub fn IsDefault(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsDefault(self, &out)); return out; }
-    pub fn ValueAsString(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.ValueAsString(self, &out)); return out; }
-    pub fn getValueAsFileAsync(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetValueAsFileAsync(self, &out0)); return out0; }
-    pub fn GetValueAsFileAsync(self: *@This()) !?*anyopaque { return self.getValueAsFileAsync(); }
-    pub fn getQualifierValue(self: *@This(), p0: anytype) !HSTRING { var out0: HSTRING = undefined; try hrCheck(self.lpVtbl.GetQualifierValue(self, @ptrCast(p0), &out0)); return out0; }
-    pub fn GetQualifierValue(self: *@This(), p0: anytype) !HSTRING { return self.getQualifierValue(p0); }
-};
-
-pub const IResourceContextStatics = extern struct {
-    pub const IID = GUID{ .data1 = 0x98be9d6c, .data2 = 0x6338, .data3 = 0x4b31, .data4 = .{ 0x99, 0xdf, 0xb2, 0xb4, 0x42, 0xf1, 0x71, 0x49 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        CreateMatchingContext: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn createMatchingContext(self: *@This(), p0: ?*anyopaque) !*IResourceContext { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateMatchingContext(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateMatchingContext(self: *@This(), p0: ?*anyopaque) !*IResourceContext { return self.createMatchingContext(p0); }
-};
-
-pub const IResourceContextStatics3 = extern struct {
-    pub const IID = GUID{ .data1 = 0x20cf492c, .data2 = 0xaf0f, .data3 = 0x450b, .data4 = .{ 0x9d, 0xa6, 0x10, 0x6d, 0xd0, 0xc2, 0x9a, 0x39 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        SetGlobalQualifierValue: *const fn (*anyopaque, HSTRING, HSTRING, i32) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn setGlobalQualifierValue(self: *@This(), key: anytype, value: anytype, persistence: i32) !void { try hrCheck(self.lpVtbl.SetGlobalQualifierValue(self, @ptrCast(key), @ptrCast(value), persistence)); }
-    pub fn SetGlobalQualifierValue(self: *@This(), key: anytype, value: anytype, persistence: i32) !void { try self.setGlobalQualifierValue(key, value, persistence); }
-};
-
-pub const IResourceContextStatics4 = extern struct {
-    pub const IID = GUID{ .data1 = 0x22eb9ccd, .data2 = 0xfb31, .data3 = 0x4bfa, .data4 = .{ 0xb8, 0x6b, 0xdf, 0x9d, 0x9d, 0x7b, 0xdc, 0x39 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        GetForUIContext: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn getForUIContext(self: *@This(), p0: ?*anyopaque) !*IResourceContext { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetForUIContext(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn GetForUIContext(self: *@This(), p0: ?*anyopaque) !*IResourceContext { return self.getForUIContext(p0); }
-};
-
-pub const IResourceContextStatics2 = extern struct {
-    pub const IID = GUID{ .data1 = 0x41f752ef, .data2 = 0x12af, .data3 = 0x41b9, .data4 = .{ 0xab, 0x36, 0xb1, 0xeb, 0x4b, 0x51, 0x24, 0x60 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        GetForCurrentView: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetGlobalQualifierValue: *const fn (*anyopaque, HSTRING, HSTRING) callconv(.winapi) HRESULT,
-        ResetGlobalQualifierValues: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        ResetGlobalQualifierValues_1: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        GetForViewIndependentUse: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn getForCurrentView(self: *@This()) !*IResourceContext { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetForCurrentView(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn GetForCurrentView(self: *@This()) !*IResourceContext { return self.getForCurrentView(); }
-    pub fn setGlobalQualifierValue(self: *@This(), key: anytype, value: anytype) !void { try hrCheck(self.lpVtbl.SetGlobalQualifierValue(self, @ptrCast(key), @ptrCast(value))); }
-    pub fn SetGlobalQualifierValue(self: *@This(), key: anytype, value: anytype) !void { try self.setGlobalQualifierValue(key, value); }
-    pub fn resetGlobalQualifierValues(self: *@This()) !void { try hrCheck(self.lpVtbl.ResetGlobalQualifierValues(self)); }
-    pub fn ResetGlobalQualifierValues(self: *@This()) !void { try self.resetGlobalQualifierValues(); }
-    pub fn resetGlobalQualifierValues_1(self: *@This(), qualifierNames: ?*anyopaque) !void { try hrCheck(self.lpVtbl.ResetGlobalQualifierValues_1(self, qualifierNames)); }
-    pub fn ResetGlobalQualifierValues_1(self: *@This(), qualifierNames: ?*anyopaque) !void { try self.resetGlobalQualifierValues_1(qualifierNames); }
-    pub fn getForViewIndependentUse(self: *@This()) !*IResourceContext { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetForViewIndependentUse(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn GetForViewIndependentUse(self: *@This()) !*IResourceContext { return self.getForViewIndependentUse(); }
-};
-
-pub const ResourceQualifier = extern struct {
-    pub const IID = IResourceQualifier.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IResourceQualifier.VTable;
-    pub fn QualifierName() void {}
-    pub fn get_QualifierName() void {}
-    pub fn QualifierValue() void {}
-    pub fn get_QualifierValue() void {}
-    pub fn IsDefault() void {}
-    pub fn get_IsDefault() void {}
-    pub fn IsMatch() void {}
-    pub fn get_IsMatch() void {}
-    pub fn Score() void {}
-    pub fn get_Score() void {}
-};
-
-pub const IResourceQualifier = extern struct {
-    pub const IID = GUID{ .data1 = 0x785da5b2, .data2 = 0x4afd, .data3 = 0x4376, .data4 = .{ 0xa8, 0x88, 0xc5, 0xf9, 0xa6, 0xb7, 0xa0, 0x5c } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        QualifierName: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-        QualifierValue: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-        IsDefault: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        IsMatch: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        Score: *const fn (*anyopaque, *f64) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn QualifierName(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.QualifierName(self, &out)); return out; }
-    pub fn QualifierValue(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.QualifierValue(self, &out)); return out; }
-    pub fn IsDefault(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsDefault(self, &out)); return out; }
-    pub fn IsMatch(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsMatch(self, &out)); return out; }
-    pub fn Score(self: *@This()) !f64 { var out: f64 = 0; try hrCheck(self.lpVtbl.Score(self, &out)); return out; }
-};
-
-pub const ResourceQualifierPersistence = struct {
-    pub const None: i32 = 0;
-    pub const LocalMachine: i32 = 1;
-};
-
-pub const FileAccessMode = struct {
-    pub const Read: i32 = 0;
-    pub const ReadWrite: i32 = 1;
-};
-
-pub const StorageStreamTransaction = extern struct {
-    pub const IID = IStorageStreamTransaction.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IStorageStreamTransaction.VTable;
-    pub const Requires_IClosable = true; // requires IClosable
-    pub fn Stream() void {}
-    pub fn get_Stream() void {}
-    pub fn CommitAsync() void {}
-    pub fn Close() void {}
-};
-
-pub const IStorageStreamTransaction = extern struct {
-    pub const IID = GUID{ .data1 = 0xf67cf363, .data2 = 0xa53d, .data3 = 0x4d94, .data4 = .{ 0xae, 0x2c, 0x67, 0x23, 0x2d, 0x93, 0xac, 0xdd } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Stream: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CommitAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_IClosable = true; // requires IClosable
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
-    pub fn Stream(self: *@This()) !*IRandomAccessStream { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Stream(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn commitAsync(self: *@This()) !*IAsyncAction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CommitAsync(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CommitAsync(self: *@This()) !*IAsyncAction { return self.commitAsync(); }
-};
-
-pub const StorageFile = extern struct {
-    pub const IID = IStorageFile.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IStorageFile.VTable;
-    pub const Requires_IInputStreamReference = true; // requires IInputStreamReference
-    pub const Requires_IRandomAccessStreamReference = true; // requires IRandomAccessStreamReference
-    pub const Requires_IStorageItem = true; // requires IStorageItem
-    pub const Requires_IStorageItemProperties = true; // requires IStorageItemProperties
-    pub const Requires_IStorageItemProperties2 = true; // requires IStorageItemProperties2
-    pub const Requires_IStorageItem2 = true; // requires IStorageItem2
-    pub const Requires_IStorageItemPropertiesWithProvider = true; // requires IStorageItemPropertiesWithProvider
-    pub const Requires_IStorageFilePropertiesWithAvailability = true; // requires IStorageFilePropertiesWithAvailability
-    pub const Requires_IStorageFile2 = true; // requires IStorageFile2
-    pub const Requires_IStorageFileStatics = true; // requires IStorageFileStatics
-    pub const Requires_IStorageFileStatics2 = true; // requires IStorageFileStatics2
-    pub fn FileType() void {}
-    pub fn get_FileType() void {}
-    pub fn ContentType() void {}
-    pub fn get_ContentType() void {}
-    pub fn OpenAsync() void {}
-    pub fn OpenTransactedWriteAsync() void {}
-    pub fn CopyAsync() void {}
-    pub fn CopyAndReplaceAsync() void {}
-    pub fn MoveAsync() void {}
-    pub fn MoveAndReplaceAsync() void {}
-    pub fn OpenSequentialReadAsync() void {}
-    pub fn OpenReadAsync() void {}
-    pub fn RenameAsync() void {}
-    pub fn DeleteAsync() void {}
-    pub fn GetBasicPropertiesAsync() void {}
-    pub fn Name() void {}
-    pub fn get_Name() void {}
-    pub fn Path() void {}
-    pub fn get_Path() void {}
-    pub fn Attributes() void {}
-    pub fn get_Attributes() void {}
-    pub fn DateCreated() void {}
-    pub fn get_DateCreated() void {}
-    pub fn IsOfType() void {}
-    pub fn GetThumbnailAsync() void {}
-    pub fn DisplayName() void {}
-    pub fn get_DisplayName() void {}
-    pub fn DisplayType() void {}
-    pub fn get_DisplayType() void {}
-    pub fn FolderRelativeId() void {}
-    pub fn get_FolderRelativeId() void {}
-    pub fn Properties() void {}
-    pub fn get_Properties() void {}
-    pub fn GetScaledImageAsThumbnailAsync() void {}
-    pub fn GetParentAsync() void {}
-    pub fn IsEqual() void {}
-    pub fn Provider() void {}
-    pub fn get_Provider() void {}
-    pub fn IsAvailable() void {}
-    pub fn get_IsAvailable() void {}
-    pub fn GetFileFromPathAsync() void {}
-    pub fn GetFileFromApplicationUriAsync() void {}
-    pub fn CreateStreamedFileAsync() void {}
-    pub fn ReplaceWithStreamedFileAsync() void {}
-    pub fn CreateStreamedFileFromUriAsync() void {}
-    pub fn ReplaceWithStreamedFileFromUriAsync() void {}
-    pub fn GetFileFromPathForUserAsync() void {}
-};
-
-pub const IStorageFolder = extern struct {
-    pub const IID = GUID{ .data1 = 0x72d1cb78, .data2 = 0xb3ef, .data3 = 0x4f75, .data4 = .{ 0xa8, 0x0b, 0x6f, 0xd9, 0xda, 0xe2, 0x94, 0x4b } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        CreateFileAsync: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateFileAsync_1: *const fn (*anyopaque, HSTRING, i32, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateFolderAsync: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
-        CreateFolderAsync_1: *const fn (*anyopaque, HSTRING, i32, *?*anyopaque) callconv(.winapi) HRESULT,
-        GetFileAsync: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
-        GetFolderAsync: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
-        GetItemAsync: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
-        GetFilesAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        GetFoldersAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        GetItemsAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_IStorageItem = true; // requires IStorageItem
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn DeleteAsync(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.DeleteAsync(); }
-    pub fn GetBasicPropertiesAsync(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.GetBasicPropertiesAsync(); }
-    pub fn Name(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.Name(); }
-    pub fn Path(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.Path(); }
-    pub fn Attributes(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.Attributes(); }
-    pub fn DateCreated(self: *@This()) !void { const base = try self.queryInterface(IStorageItem); _ = try base.DateCreated(); }
-    pub fn createFileAsync(self: *@This(), p0: anytype) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateFileAsync(self, @ptrCast(p0), &out0)); return out0; }
-    pub fn CreateFileAsync(self: *@This(), p0: anytype) !?*anyopaque { return self.createFileAsync(p0); }
-    pub fn createFileAsync_1(self: *@This(), p0: anytype, p1: i32) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateFileAsync_1(self, @ptrCast(p0), p1, &out0)); return out0; }
-    pub fn CreateFileAsync_1(self: *@This(), p0: anytype, p1: i32) !?*anyopaque { return self.createFileAsync_1(p0, p1); }
-    pub fn createFolderAsync(self: *@This(), p0: anytype) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateFolderAsync(self, @ptrCast(p0), &out0)); return out0; }
-    pub fn CreateFolderAsync(self: *@This(), p0: anytype) !?*anyopaque { return self.createFolderAsync(p0); }
-    pub fn createFolderAsync_1(self: *@This(), p0: anytype, p1: i32) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateFolderAsync_1(self, @ptrCast(p0), p1, &out0)); return out0; }
-    pub fn CreateFolderAsync_1(self: *@This(), p0: anytype, p1: i32) !?*anyopaque { return self.createFolderAsync_1(p0, p1); }
-    pub fn getFileAsync(self: *@This(), p0: anytype) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetFileAsync(self, @ptrCast(p0), &out0)); return out0; }
-    pub fn GetFileAsync(self: *@This(), p0: anytype) !?*anyopaque { return self.getFileAsync(p0); }
-    pub fn getFolderAsync(self: *@This(), p0: anytype) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetFolderAsync(self, @ptrCast(p0), &out0)); return out0; }
-    pub fn GetFolderAsync(self: *@This(), p0: anytype) !?*anyopaque { return self.getFolderAsync(p0); }
-    pub fn getItemAsync(self: *@This(), p0: anytype) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetItemAsync(self, @ptrCast(p0), &out0)); return out0; }
-    pub fn GetItemAsync(self: *@This(), p0: anytype) !?*anyopaque { return self.getItemAsync(p0); }
-    pub fn getFilesAsync(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetFilesAsync(self, &out0)); return out0; }
-    pub fn GetFilesAsync(self: *@This()) !?*anyopaque { return self.getFilesAsync(); }
-    pub fn getFoldersAsync(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetFoldersAsync(self, &out0)); return out0; }
-    pub fn GetFoldersAsync(self: *@This()) !?*anyopaque { return self.getFoldersAsync(); }
-    pub fn getItemsAsync(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetItemsAsync(self, &out0)); return out0; }
-    pub fn GetItemsAsync(self: *@This()) !?*anyopaque { return self.getItemsAsync(); }
-};
-
-pub const IInputStreamReference = extern struct {
-    pub const IID = GUID{ .data1 = 0x43929d18, .data2 = 0x5ec9, .data3 = 0x4b5a, .data4 = .{ 0x91, 0x9c, 0x42, 0x05, 0xb0, 0xc8, 0x04, 0xb6 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        OpenSequentialReadAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn openSequentialReadAsync(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.OpenSequentialReadAsync(self, &out0)); return out0; }
-    pub fn OpenSequentialReadAsync(self: *@This()) !?*anyopaque { return self.openSequentialReadAsync(); }
-};
-
-pub const IInputStream = extern struct {
-    pub const IID = GUID{ .data1 = 0x905a0fe2, .data2 = 0xbc53, .data3 = 0x11df, .data4 = .{ 0x8c, 0x49, 0x00, 0x1e, 0x4f, 0xc6, 0x86, 0xda } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        ReadAsync: *const fn (*anyopaque, ?*anyopaque, u32, i32, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_IClosable = true; // requires IClosable
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
-    pub fn readAsync(self: *@This(), p0: ?*anyopaque, p1: u32, p2: i32) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.ReadAsync(self, p0, p1, p2, &out0)); return out0; }
-    pub fn ReadAsync(self: *@This(), p0: ?*anyopaque, p1: u32, p2: i32) !?*anyopaque { return self.readAsync(p0, p1, p2); }
-};
-
-pub const IDataPackagePropertySetView2 = extern struct {
-    pub const IID = GUID{ .data1 = 0x6054509b, .data2 = 0x8ebe, .data3 = 0x4feb, .data4 = .{ 0x9c, 0x1e, 0x75, 0xe6, 0x9d, 0xe5, 0x4b, 0x84 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        PackageFamilyName: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-        ContentSourceWebLink: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        ContentSourceApplicationLink: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        Square30x30Logo: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        LogoBackgroundColor: *const fn (*anyopaque, *Color) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn PackageFamilyName(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.PackageFamilyName(self, &out)); return out; }
-    pub fn ContentSourceWebLink(self: *@This()) !*IUriRuntimeClass { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ContentSourceWebLink(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn ContentSourceApplicationLink(self: *@This()) !*IUriRuntimeClass { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ContentSourceApplicationLink(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn Square30x30Logo(self: *@This()) !*IRandomAccessStreamReference { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Square30x30Logo(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn LogoBackgroundColor(self: *@This()) !Color { var out: Color = .{ .A = 0, .R = 0, .G = 0, .B = 0 }; try hrCheck(self.lpVtbl.LogoBackgroundColor(self, &out)); return out; }
-};
-
-pub const IDataPackagePropertySetView3 = extern struct {
-    pub const IID = GUID{ .data1 = 0xdb764ce5, .data2 = 0xd174, .data3 = 0x495c, .data4 = .{ 0x84, 0xfc, 0x1a, 0x51, 0xf6, 0xab, 0x45, 0xd7 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        EnterpriseId: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn EnterpriseId(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.EnterpriseId(self, &out)); return out; }
-};
-
-pub const IDataPackagePropertySetView4 = extern struct {
-    pub const IID = GUID{ .data1 = 0x4474c80d, .data2 = 0xd16f, .data3 = 0x40ae, .data4 = .{ 0x95, 0x80, 0x6f, 0x85, 0x62, 0xb9, 0x42, 0x35 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        ContentSourceUserActivityJson: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn ContentSourceUserActivityJson(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.ContentSourceUserActivityJson(self, &out)); return out; }
-};
-
-pub const IDataPackagePropertySetView5 = extern struct {
-    pub const IID = GUID{ .data1 = 0x6f0a9445, .data2 = 0x3760, .data3 = 0x50bb, .data4 = .{ 0x85, 0x23, 0xc4, 0x20, 0x2d, 0xed, 0x7d, 0x78 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        IsFromRoamingClipboard: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn IsFromRoamingClipboard(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsFromRoamingClipboard(self, &out)); return out; }
-};
-
-pub const DataProviderDeferral = extern struct {
-    pub const IID = IDataProviderDeferral.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IDataProviderDeferral.VTable;
-    pub fn Complete() void {}
-};
-
-pub const IDataProviderDeferral = extern struct {
-    pub const IID = GUID{ .data1 = 0xc2cf2373, .data2 = 0x2d26, .data3 = 0x43d9, .data4 = .{ 0xb6, 0x9d, 0xdc, 0xb8, 0x6d, 0x03, 0xf6, 0xda } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Complete: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn complete(self: *@This()) !void { try hrCheck(self.lpVtbl.Complete(self)); }
-    pub fn Complete(self: *@This()) !void { try self.complete(); }
-};
-
-pub const IOutputStream = extern struct {
-    pub const IID = GUID{ .data1 = 0x905a0fe6, .data2 = 0xbc53, .data3 = 0x11df, .data4 = .{ 0x8c, 0x49, 0x00, 0x1e, 0x4f, 0xc6, 0x86, 0xda } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        WriteAsync: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        FlushAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_IClosable = true; // requires IClosable
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
-    pub fn writeAsync(self: *@This(), p0: ?*anyopaque) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.WriteAsync(self, p0, &out0)); return out0; }
-    pub fn WriteAsync(self: *@This(), p0: ?*anyopaque) !?*anyopaque { return self.writeAsync(p0); }
-    pub fn flushAsync(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.FlushAsync(self, &out0)); return out0; }
-    pub fn FlushAsync(self: *@This()) !?*anyopaque { return self.flushAsync(); }
-};
-
-pub const IContentTypeProvider = extern struct {
-    pub const IID = GUID{ .data1 = 0x97d098a5, .data2 = 0x3b99, .data3 = 0x4de9, .data4 = .{ 0x88, 0xa5, 0xe1, 0x1d, 0x2f, 0x50, 0xc7, 0x95 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        ContentType: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn ContentType(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.ContentType(self, &out)); return out; }
-};
-
-pub const IAsyncOperationWithProgress = extern struct {
-    pub const IID = GUID{ .data1 = 0xb5d036d7, .data2 = 0xe297, .data3 = 0x498f, .data4 = .{ 0xba, 0x60, 0x02, 0x89, 0xe7, 0x6e, 0x23, 0xdd } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        SetProgress: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        Progress: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetCompleted: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        Completed: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        GetResults: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_IAsyncInfo = true; // requires IAsyncInfo
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Id(self: *@This()) !void { const base = try self.queryInterface(IAsyncInfo); _ = try base.Id(); }
-    pub fn Status(self: *@This()) !void { const base = try self.queryInterface(IAsyncInfo); _ = try base.Status(); }
-    pub fn ErrorCode(self: *@This()) !void { const base = try self.queryInterface(IAsyncInfo); _ = try base.ErrorCode(); }
-    pub fn Cancel(self: *@This()) !void { const base = try self.queryInterface(IAsyncInfo); _ = try base.Cancel(); }
-    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IAsyncInfo); _ = try base.Close(); }
-    pub fn SetProgress(self: *@This(), handler: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetProgress(self, handler)); }
-    pub fn Progress(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Progress(self, &out)); return out orelse error.WinRTFailed; }
-    pub fn SetCompleted(self: *@This(), handler: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetCompleted(self, handler)); }
-    pub fn Completed(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Completed(self, &out)); return out orelse error.WinRTFailed; }
-    pub fn getResults(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetResults(self, &out0)); return out0; }
-    pub fn GetResults(self: *@This()) !?*anyopaque { return self.getResults(); }
-};
-
-pub const InputStreamOptions = struct {
-    pub const None: i32 = 0;
-    pub const Partial: i32 = 1;
-    pub const ReadAhead: i32 = 2;
-};
-
-pub const IStorageItemExtraProperties = extern struct {
-    pub const IID = GUID{ .data1 = 0xc54361b2, .data2 = 0x54cd, .data3 = 0x432b, .data4 = .{ 0xbd, 0xbc, 0x4b, 0x19, 0xc4, 0xb4, 0x70, 0xd7 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        RetrievePropertiesAsync: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SavePropertiesAsync: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SavePropertiesAsync_1: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn retrievePropertiesAsync(self: *@This(), p0: ?*anyopaque) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.RetrievePropertiesAsync(self, p0, &out0)); return out0; }
-    pub fn RetrievePropertiesAsync(self: *@This(), p0: ?*anyopaque) !?*anyopaque { return self.retrievePropertiesAsync(p0); }
-    pub fn savePropertiesAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.SavePropertiesAsync(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn SavePropertiesAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { return self.savePropertiesAsync(p0); }
-    pub fn savePropertiesAsync_1(self: *@This()) !*IAsyncAction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.SavePropertiesAsync_1(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn SavePropertiesAsync_1(self: *@This()) !*IAsyncAction { return self.savePropertiesAsync_1(); }
-};
-
-pub const ShareProvider = extern struct {
-    pub const IID = IShareProvider.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IShareProvider.VTable;
-    pub const Requires_IShareProviderFactory = true; // requires IShareProviderFactory
-    pub fn Title() void {}
-    pub fn get_Title() void {}
-    pub fn DisplayIcon() void {}
-    pub fn get_DisplayIcon() void {}
-    pub fn BackgroundColor() void {}
-    pub fn get_BackgroundColor() void {}
-    pub fn Tag() void {}
-    pub fn get_Tag() void {}
-    pub fn SetTag() void {}
-    pub fn put_Tag() void {}
-    pub fn Create() void {}
-};
-
-pub const IShareProvider = extern struct {
-    pub const IID = GUID{ .data1 = 0x2fabe026, .data2 = 0x443e, .data3 = 0x4cda, .data4 = .{ 0xaf, 0x25, 0x8d, 0x81, 0x07, 0x0e, 0xfd, 0x80 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Title: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-        DisplayIcon: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        BackgroundColor: *const fn (*anyopaque, *Color) callconv(.winapi) HRESULT,
-        Tag: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetTag: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Title(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.Title(self, &out)); return out; }
-    pub fn DisplayIcon(self: *@This()) !*IRandomAccessStreamReference { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.DisplayIcon(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn BackgroundColor(self: *@This()) !Color { var out: Color = .{ .A = 0, .R = 0, .G = 0, .B = 0 }; try hrCheck(self.lpVtbl.BackgroundColor(self, &out)); return out; }
-    pub fn Tag(self: *@This()) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Tag(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetTag(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetTag(self, value)); }
-};
-
-pub const DownloadProgressEventArgs = extern struct {
-    pub const IID = IDownloadProgressEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IDownloadProgressEventArgs.VTable;
-    pub fn Progress() void {}
-    pub fn get_Progress() void {}
-    pub fn SetProgress() void {}
-    pub fn put_Progress() void {}
-};
-
-pub const IDownloadProgressEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0x9a0ea80b, .data2 = 0x1a17, .data3 = 0x50d5, .data4 = .{ 0x83, 0xf3, 0x37, 0x77, 0x38, 0x21, 0x26, 0x19 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Progress: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-        SetProgress: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Progress(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.Progress(self, &out)); return out; }
-    pub fn SetProgress(self: *@This(), value: i32) !void { try hrCheck(self.lpVtbl.SetProgress(self, value)); }
-};
-
-pub const ExceptionRoutedEventArgs = extern struct {
-    pub const IID = IExceptionRoutedEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IExceptionRoutedEventArgs.VTable;
-    pub fn ErrorMessage() void {}
-    pub fn get_ErrorMessage() void {}
-};
-
-pub const IExceptionRoutedEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0xe8bcb6d2, .data2 = 0xd3f5, .data3 = 0x5393, .data4 = .{ 0xa8, 0x4f, 0xdf, 0xcd, 0x44, 0xa2, 0xdf, 0x34 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        ErrorMessage: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn ErrorMessage(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.ErrorMessage(self, &out)); return out; }
-};
-
-pub const IMemoryBuffer = extern struct {
-    pub const IID = GUID{ .data1 = 0xfbc4dd2a, .data2 = 0x245b, .data3 = 0x11e4, .data4 = .{ 0xaf, 0x98, 0x68, 0x94, 0x23, 0x26, 0x0c, 0xf8 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        CreateReference: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_IClosable = true; // requires IClosable
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
-    pub fn createReference(self: *@This()) !*IMemoryBufferReference { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateReference(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn CreateReference(self: *@This()) !*IMemoryBufferReference { return self.createReference(); }
-};
-
-pub const BitmapPlaneDescription = extern struct {
-    StartIndex: i32,
-    Width: i32,
-    Height: i32,
-    Stride: i32,
-};
-
-pub const IMemoryBufferReference = extern struct {
-    pub const IID = GUID{ .data1 = 0xfbc4dd29, .data2 = 0x245b, .data3 = 0x11e4, .data4 = .{ 0xaf, 0x98, 0x68, 0x94, 0x23, 0x26, 0x0c, 0xf8 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Capacity: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
-        Closed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveClosed: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-    };
-    pub const Requires_IClosable = true; // requires IClosable
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
-    pub fn Capacity(self: *@This()) !u32 { var out: u32 = 0; try hrCheck(self.lpVtbl.Capacity(self, &out)); return out; }
-    pub fn AddClosed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.Closed(self, p0, &out0)); return out0; }
-    pub fn Closed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddClosed(p0); }
-    pub fn RemoveClosed(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveClosed(self, cookie)); }
-};
-
-pub const Direct3DSurfaceDescription = extern struct {
-    Width: i32,
-    Height: i32,
-    Format: i32,
-    MultisampleDescription: Direct3DMultisampleDescription,
-};
-
-pub const ISelectorItemStatics = extern struct {
-    pub const IID = GUID{ .data1 = 0x4b201a54, .data2 = 0xa414, .data3 = 0x5e79, .data4 = .{ 0x9b, 0x6b, 0x3d, 0xa9, 0xde, 0x44, 0x2a, 0x35 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        IsSelectedProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn IsSelectedProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsSelectedProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-};
-
-pub const ISemanticZoomInformation = extern struct {
-    pub const IID = GUID{ .data1 = 0x12d62b04, .data2 = 0xbb13, .data3 = 0x50f2, .data4 = .{ 0x9d, 0x8b, 0xe5, 0x7c, 0x02, 0xb4, 0xbd, 0xe4 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        SemanticZoomOwner: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetSemanticZoomOwner: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        IsActiveView: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetIsActiveView: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-        IsZoomedInView: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetIsZoomedInView: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-        InitializeViewChange: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        CompleteViewChange: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        MakeVisible: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        StartViewChangeFrom: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        StartViewChangeTo: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        CompleteViewChangeFrom: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        CompleteViewChangeTo: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn SemanticZoomOwner(self: *@This()) !*ISemanticZoom { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.SemanticZoomOwner(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetSemanticZoomOwner(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetSemanticZoomOwner(self, value)); }
-    pub fn IsActiveView(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsActiveView(self, &out)); return out; }
-    pub fn SetIsActiveView(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsActiveView(self, value)); }
-    pub fn IsZoomedInView(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsZoomedInView(self, &out)); return out; }
-    pub fn SetIsZoomedInView(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsZoomedInView(self, value)); }
-    pub fn initializeViewChange(self: *@This()) !void { try hrCheck(self.lpVtbl.InitializeViewChange(self)); }
-    pub fn InitializeViewChange(self: *@This()) !void { try self.initializeViewChange(); }
-    pub fn completeViewChange(self: *@This()) !void { try hrCheck(self.lpVtbl.CompleteViewChange(self)); }
-    pub fn CompleteViewChange(self: *@This()) !void { try self.completeViewChange(); }
-    pub fn makeVisible(self: *@This(), item: ?*anyopaque) !void { try hrCheck(self.lpVtbl.MakeVisible(self, item)); }
-    pub fn MakeVisible(self: *@This(), item: ?*anyopaque) !void { try self.makeVisible(item); }
-    pub fn startViewChangeFrom(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try hrCheck(self.lpVtbl.StartViewChangeFrom(self, source, destination)); }
-    pub fn StartViewChangeFrom(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try self.startViewChangeFrom(source, destination); }
-    pub fn startViewChangeTo(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try hrCheck(self.lpVtbl.StartViewChangeTo(self, source, destination)); }
-    pub fn StartViewChangeTo(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try self.startViewChangeTo(source, destination); }
-    pub fn completeViewChangeFrom(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try hrCheck(self.lpVtbl.CompleteViewChangeFrom(self, source, destination)); }
-    pub fn CompleteViewChangeFrom(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try self.completeViewChangeFrom(source, destination); }
-    pub fn completeViewChangeTo(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try hrCheck(self.lpVtbl.CompleteViewChangeTo(self, source, destination)); }
-    pub fn CompleteViewChangeTo(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try self.completeViewChangeTo(source, destination); }
-};
-
-pub const IListViewBaseStatics = extern struct {
-    pub const IID = GUID{ .data1 = 0xb8487e94, .data2 = 0x010f, .data3 = 0x56d4, .data4 = .{ 0x9f, 0x76, 0x94, 0xbf, 0x8c, 0x46, 0x27, 0x45 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        SelectionModeProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        IsSwipeEnabledProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CanDragItemsProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CanReorderItemsProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        IsItemClickEnabledProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        DataFetchSizeProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        IncrementalLoadingThresholdProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        IncrementalLoadingTriggerProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        ShowsScrollingPlaceholdersProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        ReorderModeProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        IsMultiSelectCheckBoxEnabledProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SingleSelectionFollowsFocusProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SemanticZoomOwnerProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        IsActiveViewProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        IsZoomedInViewProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        HeaderProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        HeaderTemplateProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        HeaderTransitionsProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        FooterProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        FooterTemplateProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        FooterTransitionsProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn SelectionModeProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.SelectionModeProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn IsSwipeEnabledProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsSwipeEnabledProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn CanDragItemsProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CanDragItemsProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn CanReorderItemsProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CanReorderItemsProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn IsItemClickEnabledProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsItemClickEnabledProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn DataFetchSizeProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.DataFetchSizeProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn IncrementalLoadingThresholdProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IncrementalLoadingThresholdProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn IncrementalLoadingTriggerProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IncrementalLoadingTriggerProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn ShowsScrollingPlaceholdersProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ShowsScrollingPlaceholdersProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn ReorderModeProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ReorderModeProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn IsMultiSelectCheckBoxEnabledProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsMultiSelectCheckBoxEnabledProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SingleSelectionFollowsFocusProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.SingleSelectionFollowsFocusProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SemanticZoomOwnerProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.SemanticZoomOwnerProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn IsActiveViewProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsActiveViewProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn IsZoomedInViewProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsZoomedInViewProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn HeaderProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.HeaderProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn HeaderTemplateProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.HeaderTemplateProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn HeaderTransitionsProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.HeaderTransitionsProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn FooterProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.FooterProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn FooterTemplateProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.FooterTemplateProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn FooterTransitionsProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.FooterTransitionsProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-};
-
-pub const ListViewSelectionMode = struct {
-    pub const None: i32 = 0;
-    pub const Single: i32 = 1;
-    pub const Multiple: i32 = 2;
-    pub const Extended: i32 = 3;
-};
-
-pub const IncrementalLoadingTrigger = struct {
-    pub const None: i32 = 0;
-    pub const Edge: i32 = 1;
-};
-
-pub const ListViewReorderMode = struct {
-    pub const Disabled: i32 = 0;
-    pub const Enabled: i32 = 1;
-};
-
-pub const ItemIndexRange = extern struct {
-    pub const IID = IItemIndexRange.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IItemIndexRange.VTable;
-    pub fn FirstIndex() void {}
-    pub fn get_FirstIndex() void {}
-    pub fn Length() void {}
-    pub fn get_Length() void {}
-    pub fn LastIndex() void {}
-    pub fn get_LastIndex() void {}
-};
-
-pub const IItemIndexRange = extern struct {
-    pub const IID = GUID{ .data1 = 0xeba09846, .data2 = 0x2554, .data3 = 0x5b86, .data4 = .{ 0xac, 0x17, 0x61, 0x4f, 0x05, 0x10, 0x5f, 0xa2 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        FirstIndex: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-        Length: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
-        LastIndex: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn FirstIndex(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.FirstIndex(self, &out)); return out; }
-    pub fn Length(self: *@This()) !u32 { var out: u32 = 0; try hrCheck(self.lpVtbl.Length(self, &out)); return out; }
-    pub fn LastIndex(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.LastIndex(self, &out)); return out; }
-};
-
-pub const ItemClickEventHandler = extern struct {
-    pub const IID = GUID{ .data1 = 0xa3903624, .data2 = 0x3393, .data3 = 0x566c, .data4 = .{ 0xa6, 0xb9, 0xa6, 0xb4, 0xb3, 0xe3, 0x01, 0xc3 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
-    pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
-};
-
-pub const DragItemsStartingEventHandler = extern struct {
-    pub const IID = GUID{ .data1 = 0x55532800, .data2 = 0x7617, .data3 = 0x5d67, .data4 = .{ 0x80, 0xbf, 0xb9, 0x8c, 0x0a, 0x41, 0xb9, 0xd6 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
-    pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
-};
-
-pub const DragItemsCompletedEventArgs = extern struct {
-    pub const IID = IDragItemsCompletedEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IDragItemsCompletedEventArgs.VTable;
-    pub fn Items() void {}
-    pub fn get_Items() void {}
-    pub fn DropResult() void {}
-    pub fn get_DropResult() void {}
-};
-
-pub const IDragItemsCompletedEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0xc0138552, .data2 = 0xf467, .data3 = 0x5c3e, .data4 = .{ 0x8a, 0xf4, 0x59, 0x36, 0x07, 0x76, 0x28, 0x44 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Items: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        DropResult: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Items(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Items(self, &out)); return out orelse error.WinRTFailed; }
-    pub fn DropResult(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.DropResult(self, &out)); return out; }
-};
-
-pub const ChoosingItemContainerEventArgs = extern struct {
-    pub const IID = IChoosingItemContainerEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IChoosingItemContainerEventArgs.VTable;
-    pub fn ItemIndex() void {}
-    pub fn get_ItemIndex() void {}
-    pub fn Item() void {}
-    pub fn get_Item() void {}
-    pub fn ItemContainer() void {}
-    pub fn get_ItemContainer() void {}
-    pub fn SetItemContainer() void {}
-    pub fn put_ItemContainer() void {}
-    pub fn IsContainerPrepared() void {}
-    pub fn get_IsContainerPrepared() void {}
-    pub fn SetIsContainerPrepared() void {}
-    pub fn put_IsContainerPrepared() void {}
-};
-
-pub const IChoosingItemContainerEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0xb479b9d2, .data2 = 0xa63f, .data3 = 0x5638, .data4 = .{ 0x94, 0x86, 0x8c, 0xcc, 0x1f, 0x40, 0x25, 0x1e } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        ItemIndex: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-        Item: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        ItemContainer: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetItemContainer: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        IsContainerPrepared: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetIsContainerPrepared: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn ItemIndex(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.ItemIndex(self, &out)); return out; }
-    pub fn Item(self: *@This()) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Item(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn ItemContainer(self: *@This()) !*ISelectorItem { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ItemContainer(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetItemContainer(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetItemContainer(self, value)); }
-    pub fn IsContainerPrepared(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsContainerPrepared(self, &out)); return out; }
-    pub fn SetIsContainerPrepared(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsContainerPrepared(self, value)); }
-};
-
-pub const ChoosingGroupHeaderContainerEventArgs = extern struct {
-    pub const IID = IChoosingGroupHeaderContainerEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IChoosingGroupHeaderContainerEventArgs.VTable;
-    pub fn GroupHeaderContainer() void {}
-    pub fn get_GroupHeaderContainer() void {}
-    pub fn SetGroupHeaderContainer() void {}
-    pub fn put_GroupHeaderContainer() void {}
-    pub fn GroupIndex() void {}
-    pub fn get_GroupIndex() void {}
-    pub fn Group() void {}
-    pub fn get_Group() void {}
-};
-
-pub const IChoosingGroupHeaderContainerEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0x2db1b0b0, .data2 = 0xaee9, .data3 = 0x55fa, .data4 = .{ 0x8c, 0x30, 0xc9, 0x8f, 0x00, 0x64, 0x3d, 0x00 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        GroupHeaderContainer: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetGroupHeaderContainer: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        GroupIndex: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
-        Group: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn GroupHeaderContainer(self: *@This()) !*IListViewBaseHeaderItem { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.GroupHeaderContainer(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetGroupHeaderContainer(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetGroupHeaderContainer(self, value)); }
-    pub fn GroupIndex(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.GroupIndex(self, &out)); return out; }
-    pub fn Group(self: *@This()) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Group(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-};
-
-pub const LoadMoreItemsResult = extern struct {
-    Count: u32,
-};
-
-pub const ScrollIntoViewAlignment = struct {
-    pub const Default: i32 = 0;
-    pub const Leading: i32 = 1;
-};
-
-pub const ConnectedAnimation = extern struct {
-    pub const IID = IConnectedAnimation.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IConnectedAnimation.VTable;
-    pub fn IsScaleAnimationEnabled() void {}
-    pub fn get_IsScaleAnimationEnabled() void {}
-    pub fn SetIsScaleAnimationEnabled() void {}
-    pub fn put_IsScaleAnimationEnabled() void {}
-    pub fn Configuration() void {}
-    pub fn get_Configuration() void {}
-    pub fn SetConfiguration() void {}
-    pub fn put_Configuration() void {}
-    pub fn AddCompleted() void {}
-    pub fn add_Completed() void {}
-    pub fn RemoveCompleted() void {}
-    pub fn remove_Completed() void {}
-    pub fn TryStart() void {}
-    pub fn Cancel() void {}
-    pub fn SetAnimationComponent() void {}
-};
-
-pub const IConnectedAnimation = extern struct {
-    pub const IID = GUID{ .data1 = 0xa9c1c6ad, .data2 = 0x7670, .data3 = 0x589c, .data4 = .{ 0xa6, 0x08, 0x9b, 0x5c, 0x01, 0xce, 0xc7, 0x1f } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        IsScaleAnimationEnabled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetIsScaleAnimationEnabled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-        Configuration: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetConfiguration: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        Completed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveCompleted: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        TryStart: *const fn (*anyopaque, ?*anyopaque, *bool) callconv(.winapi) HRESULT,
-        TryStart_1: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque, *bool) callconv(.winapi) HRESULT,
-        Cancel: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        SetAnimationComponent: *const fn (*anyopaque, i32, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn IsScaleAnimationEnabled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsScaleAnimationEnabled(self, &out)); return out; }
-    pub fn SetIsScaleAnimationEnabled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsScaleAnimationEnabled(self, value)); }
-    pub fn Configuration(self: *@This()) !*IConnectedAnimationConfiguration { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Configuration(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetConfiguration(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetConfiguration(self, value)); }
-    pub fn AddCompleted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.Completed(self, p0, &out0)); return out0; }
-    pub fn Completed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddCompleted(p0); }
-    pub fn RemoveCompleted(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveCompleted(self, token)); }
-    pub fn tryStart(self: *@This(), p0: ?*anyopaque) !bool { var out0: bool = false; try hrCheck(self.lpVtbl.TryStart(self, p0, &out0)); return out0; }
-    pub fn TryStart(self: *@This(), p0: ?*anyopaque) !bool { return self.tryStart(p0); }
-    pub fn tryStart_1(self: *@This(), p0: ?*anyopaque, p1: ?*anyopaque) !bool { var out0: bool = false; try hrCheck(self.lpVtbl.TryStart_1(self, p0, p1, &out0)); return out0; }
-    pub fn TryStart_1(self: *@This(), p0: ?*anyopaque, p1: ?*anyopaque) !bool { return self.tryStart_1(p0, p1); }
-    pub fn cancel(self: *@This()) !void { try hrCheck(self.lpVtbl.Cancel(self)); }
-    pub fn Cancel(self: *@This()) !void { try self.cancel(); }
-    pub fn setAnimationComponent(self: *@This(), component: i32, animation: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetAnimationComponent(self, component, animation)); }
-    pub fn SetAnimationComponent(self: *@This(), component: i32, animation: ?*anyopaque) !void { try self.setAnimationComponent(component, animation); }
-};
-
-pub const SemanticZoom = extern struct {
-    pub const IID = ISemanticZoom.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ISemanticZoom.VTable;
-    pub const Requires_ISemanticZoomStatics = true; // requires ISemanticZoomStatics
-    pub fn ZoomedInView() void {}
-    pub fn get_ZoomedInView() void {}
-    pub fn SetZoomedInView() void {}
-    pub fn put_ZoomedInView() void {}
-    pub fn ZoomedOutView() void {}
-    pub fn get_ZoomedOutView() void {}
-    pub fn SetZoomedOutView() void {}
-    pub fn put_ZoomedOutView() void {}
-    pub fn IsZoomedInViewActive() void {}
-    pub fn get_IsZoomedInViewActive() void {}
-    pub fn SetIsZoomedInViewActive() void {}
-    pub fn put_IsZoomedInViewActive() void {}
-    pub fn CanChangeViews() void {}
-    pub fn get_CanChangeViews() void {}
-    pub fn SetCanChangeViews() void {}
-    pub fn put_CanChangeViews() void {}
-    pub fn AddViewChangeStarted() void {}
-    pub fn add_ViewChangeStarted() void {}
-    pub fn RemoveViewChangeStarted() void {}
-    pub fn remove_ViewChangeStarted() void {}
-    pub fn AddViewChangeCompleted() void {}
-    pub fn add_ViewChangeCompleted() void {}
-    pub fn RemoveViewChangeCompleted() void {}
-    pub fn remove_ViewChangeCompleted() void {}
-    pub fn ToggleActiveView() void {}
-    pub fn IsZoomOutButtonEnabled() void {}
-    pub fn get_IsZoomOutButtonEnabled() void {}
-    pub fn SetIsZoomOutButtonEnabled() void {}
-    pub fn put_IsZoomOutButtonEnabled() void {}
-    pub fn ZoomedInViewProperty() void {}
-    pub fn get_ZoomedInViewProperty() void {}
-    pub fn ZoomedOutViewProperty() void {}
-    pub fn get_ZoomedOutViewProperty() void {}
-    pub fn IsZoomedInViewActiveProperty() void {}
-    pub fn get_IsZoomedInViewActiveProperty() void {}
-    pub fn CanChangeViewsProperty() void {}
-    pub fn get_CanChangeViewsProperty() void {}
-    pub fn IsZoomOutButtonEnabledProperty() void {}
-    pub fn get_IsZoomOutButtonEnabledProperty() void {}
-};
-
-pub const ISemanticZoom = extern struct {
-    pub const IID = GUID{ .data1 = 0x7e14616d, .data2 = 0x55ef, .data3 = 0x548c, .data4 = .{ 0xa9, 0x97, 0xc9, 0x23, 0xe3, 0x02, 0x71, 0x8f } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        ZoomedInView: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetZoomedInView: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        ZoomedOutView: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetZoomedOutView: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        IsZoomedInViewActive: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetIsZoomedInViewActive: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-        CanChangeViews: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetCanChangeViews: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-        ViewChangeStarted: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveViewChangeStarted: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        ViewChangeCompleted: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
-        RemoveViewChangeCompleted: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
-        ToggleActiveView: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        IsZoomOutButtonEnabled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetIsZoomOutButtonEnabled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn ZoomedInView(self: *@This()) !*ISemanticZoomInformation { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ZoomedInView(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetZoomedInView(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetZoomedInView(self, value)); }
-    pub fn ZoomedOutView(self: *@This()) !*ISemanticZoomInformation { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ZoomedOutView(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetZoomedOutView(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetZoomedOutView(self, value)); }
-    pub fn IsZoomedInViewActive(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsZoomedInViewActive(self, &out)); return out; }
-    pub fn SetIsZoomedInViewActive(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsZoomedInViewActive(self, value)); }
-    pub fn CanChangeViews(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.CanChangeViews(self, &out)); return out; }
-    pub fn SetCanChangeViews(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetCanChangeViews(self, value)); }
-    pub fn AddViewChangeStarted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.ViewChangeStarted(self, p0, &out0)); return out0; }
-    pub fn ViewChangeStarted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddViewChangeStarted(p0); }
-    pub fn RemoveViewChangeStarted(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveViewChangeStarted(self, token)); }
-    pub fn AddViewChangeCompleted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.ViewChangeCompleted(self, p0, &out0)); return out0; }
-    pub fn ViewChangeCompleted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddViewChangeCompleted(p0); }
-    pub fn RemoveViewChangeCompleted(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveViewChangeCompleted(self, token)); }
-    pub fn toggleActiveView(self: *@This()) !void { try hrCheck(self.lpVtbl.ToggleActiveView(self)); }
-    pub fn ToggleActiveView(self: *@This()) !void { try self.toggleActiveView(); }
-    pub fn IsZoomOutButtonEnabled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsZoomOutButtonEnabled(self, &out)); return out; }
-    pub fn SetIsZoomOutButtonEnabled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsZoomOutButtonEnabled(self, value)); }
-};
-
-pub const SemanticZoomLocation = extern struct {
-    pub const IID = ISemanticZoomLocation.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = ISemanticZoomLocation.VTable;
-    pub fn Item() void {}
-    pub fn get_Item() void {}
-    pub fn SetItem() void {}
-    pub fn put_Item() void {}
-    pub fn Bounds() void {}
-    pub fn get_Bounds() void {}
-    pub fn SetBounds() void {}
-    pub fn put_Bounds() void {}
-};
-
-pub const ISemanticZoomLocation = extern struct {
-    pub const IID = GUID{ .data1 = 0x41c1dec7, .data2 = 0xf34f, .data3 = 0x51db, .data4 = .{ 0x95, 0x25, 0x5c, 0x14, 0x9b, 0x05, 0xa5, 0x27 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Item: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetItem: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        Bounds: *const fn (*anyopaque, *Rect) callconv(.winapi) HRESULT,
-        SetBounds: *const fn (*anyopaque, Rect) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Item(self: *@This()) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Item(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetItem(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetItem(self, value)); }
-    pub fn Bounds(self: *@This()) !Rect { var out: Rect = undefined; try hrCheck(self.lpVtbl.Bounds(self, &out)); return out; }
-    pub fn SetBounds(self: *@This(), value: Rect) !void { try hrCheck(self.lpVtbl.SetBounds(self, value)); }
-};
-
 pub const IResourceCandidate2 = extern struct {
     pub const IID = GUID{ .data1 = 0x69e5b468, .data2 = 0xf6fc, .data3 = 0x4013, .data4 = .{ 0xaa, 0xa2, 0xd5, 0x3f, 0x17, 0x57, 0xd3, 0xb5 } };
     lpVtbl: *const VTable,
@@ -23260,6 +27733,67 @@ pub const ResourceCandidateKind = struct {
     pub const String: i32 = 0;
     pub const File: i32 = 1;
     pub const EmbeddedData: i32 = 2;
+};
+
+pub const IOutputStream = extern struct {
+    pub const IID = GUID{ .data1 = 0x905a0fe6, .data2 = 0xbc53, .data3 = 0x11df, .data4 = .{ 0x8c, 0x49, 0x00, 0x1e, 0x4f, 0xc6, 0x86, 0xda } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        WriteAsync: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        FlushAsync: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_IClosable = true; // requires IClosable
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
+    pub fn writeAsync(self: *@This(), p0: ?*anyopaque) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.WriteAsync(self, p0, &out0)); return out0; }
+    pub fn WriteAsync(self: *@This(), p0: ?*anyopaque) !?*anyopaque { return self.writeAsync(p0); }
+    pub fn flushAsync(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.FlushAsync(self, &out0)); return out0; }
+    pub fn FlushAsync(self: *@This()) !?*anyopaque { return self.flushAsync(); }
+};
+
+pub const IAsyncOperationWithProgress = extern struct {
+    pub const IID = GUID{ .data1 = 0xb5d036d7, .data2 = 0xe297, .data3 = 0x498f, .data4 = .{ 0xba, 0x60, 0x02, 0x89, 0xe7, 0x6e, 0x23, 0xdd } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        SetProgress: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        Progress: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetCompleted: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        Completed: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetResults: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_IAsyncInfo = true; // requires IAsyncInfo
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Id(self: *@This()) !void { const base = try self.queryInterface(IAsyncInfo); _ = try base.Id(); }
+    pub fn Status(self: *@This()) !void { const base = try self.queryInterface(IAsyncInfo); _ = try base.Status(); }
+    pub fn ErrorCode(self: *@This()) !void { const base = try self.queryInterface(IAsyncInfo); _ = try base.ErrorCode(); }
+    pub fn Cancel(self: *@This()) !void { const base = try self.queryInterface(IAsyncInfo); _ = try base.Cancel(); }
+    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IAsyncInfo); _ = try base.Close(); }
+    pub fn SetProgress(self: *@This(), handler: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetProgress(self, handler)); }
+    pub fn Progress(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Progress(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn SetCompleted(self: *@This(), handler: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetCompleted(self, handler)); }
+    pub fn Completed(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Completed(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn getResults(self: *@This()) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetResults(self, &out0)); return out0; }
+    pub fn GetResults(self: *@This()) !?*anyopaque { return self.getResults(); }
+};
+
+pub const InputStreamOptions = struct {
+    pub const None: i32 = 0;
+    pub const Partial: i32 = 1;
+    pub const ReadAhead: i32 = 2;
 };
 
 pub const IStorageItemProperties = extern struct {
@@ -23675,9 +28209,136 @@ pub const StreamedFileDataRequestedHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), stream: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, stream)); }
     pub fn Invoke(self: *@This(), stream: ?*anyopaque) !void { try self.invoke(stream); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use StreamedFileDataRequestedHandlerImpl instead"); }
 };
 
+pub fn StreamedFileDataRequestedHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = StreamedFileDataRequestedHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const User = extern struct {
     pub const IID = IUser.IID;
     lpVtbl: *const VTable,
@@ -23738,6 +28399,1079 @@ pub const CreationCollisionOption = struct {
     pub const OpenIfExists: i32 = 3;
 };
 
+pub const IStorageItemExtraProperties = extern struct {
+    pub const IID = GUID{ .data1 = 0xc54361b2, .data2 = 0x54cd, .data3 = 0x432b, .data4 = .{ 0xbd, 0xbc, 0x4b, 0x19, 0xc4, 0xb4, 0x70, 0xd7 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        RetrievePropertiesAsync: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SavePropertiesAsync: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SavePropertiesAsync_1: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn retrievePropertiesAsync(self: *@This(), p0: ?*anyopaque) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.RetrievePropertiesAsync(self, p0, &out0)); return out0; }
+    pub fn RetrievePropertiesAsync(self: *@This(), p0: ?*anyopaque) !?*anyopaque { return self.retrievePropertiesAsync(p0); }
+    pub fn savePropertiesAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.SavePropertiesAsync(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn SavePropertiesAsync(self: *@This(), p0: ?*anyopaque) !*IAsyncAction { return self.savePropertiesAsync(p0); }
+    pub fn savePropertiesAsync_1(self: *@This()) !*IAsyncAction { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.SavePropertiesAsync_1(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn SavePropertiesAsync_1(self: *@This()) !*IAsyncAction { return self.savePropertiesAsync_1(); }
+};
+
+pub const IContentTypeProvider = extern struct {
+    pub const IID = GUID{ .data1 = 0x97d098a5, .data2 = 0x3b99, .data3 = 0x4de9, .data4 = .{ 0x88, 0xa5, 0xe1, 0x1d, 0x2f, 0x50, 0xc7, 0x95 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        ContentType: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn ContentType(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.ContentType(self, &out)); return out; }
+};
+
+pub const IDataPackagePropertySetView2 = extern struct {
+    pub const IID = GUID{ .data1 = 0x6054509b, .data2 = 0x8ebe, .data3 = 0x4feb, .data4 = .{ 0x9c, 0x1e, 0x75, 0xe6, 0x9d, 0xe5, 0x4b, 0x84 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        PackageFamilyName: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+        ContentSourceWebLink: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        ContentSourceApplicationLink: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        Square30x30Logo: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        LogoBackgroundColor: *const fn (*anyopaque, *Color) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn PackageFamilyName(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.PackageFamilyName(self, &out)); return out; }
+    pub fn ContentSourceWebLink(self: *@This()) !*IUriRuntimeClass { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ContentSourceWebLink(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn ContentSourceApplicationLink(self: *@This()) !*IUriRuntimeClass { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ContentSourceApplicationLink(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn Square30x30Logo(self: *@This()) !*IRandomAccessStreamReference { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Square30x30Logo(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn LogoBackgroundColor(self: *@This()) !Color { var out: Color = .{ .A = 0, .R = 0, .G = 0, .B = 0 }; try hrCheck(self.lpVtbl.LogoBackgroundColor(self, &out)); return out; }
+};
+
+pub const IDataPackagePropertySetView3 = extern struct {
+    pub const IID = GUID{ .data1 = 0xdb764ce5, .data2 = 0xd174, .data3 = 0x495c, .data4 = .{ 0x84, 0xfc, 0x1a, 0x51, 0xf6, 0xab, 0x45, 0xd7 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        EnterpriseId: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn EnterpriseId(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.EnterpriseId(self, &out)); return out; }
+};
+
+pub const IDataPackagePropertySetView4 = extern struct {
+    pub const IID = GUID{ .data1 = 0x4474c80d, .data2 = 0xd16f, .data3 = 0x40ae, .data4 = .{ 0x95, 0x80, 0x6f, 0x85, 0x62, 0xb9, 0x42, 0x35 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        ContentSourceUserActivityJson: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn ContentSourceUserActivityJson(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.ContentSourceUserActivityJson(self, &out)); return out; }
+};
+
+pub const IDataPackagePropertySetView5 = extern struct {
+    pub const IID = GUID{ .data1 = 0x6f0a9445, .data2 = 0x3760, .data3 = 0x50bb, .data4 = .{ 0x85, 0x23, 0xc4, 0x20, 0x2d, 0xed, 0x7d, 0x78 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        IsFromRoamingClipboard: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn IsFromRoamingClipboard(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsFromRoamingClipboard(self, &out)); return out; }
+};
+
+pub const DataProviderDeferral = extern struct {
+    pub const IID = IDataProviderDeferral.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IDataProviderDeferral.VTable;
+    pub fn Complete() void {}
+};
+
+pub const IDataProviderDeferral = extern struct {
+    pub const IID = GUID{ .data1 = 0xc2cf2373, .data2 = 0x2d26, .data3 = 0x43d9, .data4 = .{ 0xb6, 0x9d, 0xdc, 0xb8, 0x6d, 0x03, 0xf6, 0xda } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Complete: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn complete(self: *@This()) !void { try hrCheck(self.lpVtbl.Complete(self)); }
+    pub fn Complete(self: *@This()) !void { try self.complete(); }
+};
+
+pub const ShareProvider = extern struct {
+    pub const IID = IShareProvider.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IShareProvider.VTable;
+    pub const Requires_IShareProviderFactory = true; // requires IShareProviderFactory
+    pub fn Title() void {}
+    pub fn get_Title() void {}
+    pub fn DisplayIcon() void {}
+    pub fn get_DisplayIcon() void {}
+    pub fn BackgroundColor() void {}
+    pub fn get_BackgroundColor() void {}
+    pub fn Tag() void {}
+    pub fn get_Tag() void {}
+    pub fn SetTag() void {}
+    pub fn put_Tag() void {}
+    pub fn Create() void {}
+};
+
+pub const IShareProvider = extern struct {
+    pub const IID = GUID{ .data1 = 0x2fabe026, .data2 = 0x443e, .data3 = 0x4cda, .data4 = .{ 0xaf, 0x25, 0x8d, 0x81, 0x07, 0x0e, 0xfd, 0x80 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Title: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+        DisplayIcon: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        BackgroundColor: *const fn (*anyopaque, *Color) callconv(.winapi) HRESULT,
+        Tag: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetTag: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Title(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.Title(self, &out)); return out; }
+    pub fn DisplayIcon(self: *@This()) !*IRandomAccessStreamReference { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.DisplayIcon(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn BackgroundColor(self: *@This()) !Color { var out: Color = .{ .A = 0, .R = 0, .G = 0, .B = 0 }; try hrCheck(self.lpVtbl.BackgroundColor(self, &out)); return out; }
+    pub fn Tag(self: *@This()) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Tag(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetTag(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetTag(self, value)); }
+};
+
+pub const DownloadProgressEventArgs = extern struct {
+    pub const IID = IDownloadProgressEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IDownloadProgressEventArgs.VTable;
+    pub fn Progress() void {}
+    pub fn get_Progress() void {}
+    pub fn SetProgress() void {}
+    pub fn put_Progress() void {}
+};
+
+pub const IDownloadProgressEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0x9a0ea80b, .data2 = 0x1a17, .data3 = 0x50d5, .data4 = .{ 0x83, 0xf3, 0x37, 0x77, 0x38, 0x21, 0x26, 0x19 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Progress: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        SetProgress: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Progress(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.Progress(self, &out)); return out; }
+    pub fn SetProgress(self: *@This(), value: i32) !void { try hrCheck(self.lpVtbl.SetProgress(self, value)); }
+};
+
+pub const ExceptionRoutedEventArgs = extern struct {
+    pub const IID = IExceptionRoutedEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IExceptionRoutedEventArgs.VTable;
+    pub fn ErrorMessage() void {}
+    pub fn get_ErrorMessage() void {}
+};
+
+pub const IExceptionRoutedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xe8bcb6d2, .data2 = 0xd3f5, .data3 = 0x5393, .data4 = .{ 0xa8, 0x4f, 0xdf, 0xcd, 0x44, 0xa2, 0xdf, 0x34 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        ErrorMessage: *const fn (*anyopaque, *HSTRING) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn ErrorMessage(self: *@This()) !HSTRING { var out: HSTRING = null; try hrCheck(self.lpVtbl.ErrorMessage(self, &out)); return out; }
+};
+
+pub const IMemoryBuffer = extern struct {
+    pub const IID = GUID{ .data1 = 0xfbc4dd2a, .data2 = 0x245b, .data3 = 0x11e4, .data4 = .{ 0xaf, 0x98, 0x68, 0x94, 0x23, 0x26, 0x0c, 0xf8 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CreateReference: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_IClosable = true; // requires IClosable
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
+    pub fn createReference(self: *@This()) !*IMemoryBufferReference { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateReference(self, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn CreateReference(self: *@This()) !*IMemoryBufferReference { return self.createReference(); }
+};
+
+pub const BitmapPlaneDescription = extern struct {
+    StartIndex: i32,
+    Width: i32,
+    Height: i32,
+    Stride: i32,
+};
+
+pub const IMemoryBufferReference = extern struct {
+    pub const IID = GUID{ .data1 = 0xfbc4dd29, .data2 = 0x245b, .data3 = 0x11e4, .data4 = .{ 0xaf, 0x98, 0x68, 0x94, 0x23, 0x26, 0x0c, 0xf8 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Capacity: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
+        Closed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveClosed: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+    };
+    pub const Requires_IClosable = true; // requires IClosable
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Close(self: *@This()) !void { const base = try self.queryInterface(IClosable); _ = try base.Close(); }
+    pub fn Capacity(self: *@This()) !u32 { var out: u32 = 0; try hrCheck(self.lpVtbl.Capacity(self, &out)); return out; }
+    pub fn AddClosed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.Closed(self, p0, &out0)); return out0; }
+    pub fn Closed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddClosed(p0); }
+    pub fn RemoveClosed(self: *@This(), cookie: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveClosed(self, cookie)); }
+};
+
+pub const Direct3DSurfaceDescription = extern struct {
+    Width: i32,
+    Height: i32,
+    Format: i32,
+    MultisampleDescription: Direct3DMultisampleDescription,
+};
+
+pub const ISelectorItemStatics = extern struct {
+    pub const IID = GUID{ .data1 = 0x4b201a54, .data2 = 0xa414, .data3 = 0x5e79, .data4 = .{ 0x9b, 0x6b, 0x3d, 0xa9, 0xde, 0x44, 0x2a, 0x35 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        IsSelectedProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn IsSelectedProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsSelectedProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+};
+
+pub const ISemanticZoomInformation = extern struct {
+    pub const IID = GUID{ .data1 = 0x12d62b04, .data2 = 0xbb13, .data3 = 0x50f2, .data4 = .{ 0x9d, 0x8b, 0xe5, 0x7c, 0x02, 0xb4, 0xbd, 0xe4 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        SemanticZoomOwner: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetSemanticZoomOwner: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        IsActiveView: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetIsActiveView: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        IsZoomedInView: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetIsZoomedInView: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        InitializeViewChange: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        CompleteViewChange: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        MakeVisible: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        StartViewChangeFrom: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        StartViewChangeTo: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        CompleteViewChangeFrom: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        CompleteViewChangeTo: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn SemanticZoomOwner(self: *@This()) !*ISemanticZoom { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.SemanticZoomOwner(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetSemanticZoomOwner(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetSemanticZoomOwner(self, value)); }
+    pub fn IsActiveView(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsActiveView(self, &out)); return out; }
+    pub fn SetIsActiveView(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsActiveView(self, value)); }
+    pub fn IsZoomedInView(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsZoomedInView(self, &out)); return out; }
+    pub fn SetIsZoomedInView(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsZoomedInView(self, value)); }
+    pub fn initializeViewChange(self: *@This()) !void { try hrCheck(self.lpVtbl.InitializeViewChange(self)); }
+    pub fn InitializeViewChange(self: *@This()) !void { try self.initializeViewChange(); }
+    pub fn completeViewChange(self: *@This()) !void { try hrCheck(self.lpVtbl.CompleteViewChange(self)); }
+    pub fn CompleteViewChange(self: *@This()) !void { try self.completeViewChange(); }
+    pub fn makeVisible(self: *@This(), item: ?*anyopaque) !void { try hrCheck(self.lpVtbl.MakeVisible(self, item)); }
+    pub fn MakeVisible(self: *@This(), item: ?*anyopaque) !void { try self.makeVisible(item); }
+    pub fn startViewChangeFrom(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try hrCheck(self.lpVtbl.StartViewChangeFrom(self, source, destination)); }
+    pub fn StartViewChangeFrom(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try self.startViewChangeFrom(source, destination); }
+    pub fn startViewChangeTo(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try hrCheck(self.lpVtbl.StartViewChangeTo(self, source, destination)); }
+    pub fn StartViewChangeTo(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try self.startViewChangeTo(source, destination); }
+    pub fn completeViewChangeFrom(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try hrCheck(self.lpVtbl.CompleteViewChangeFrom(self, source, destination)); }
+    pub fn CompleteViewChangeFrom(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try self.completeViewChangeFrom(source, destination); }
+    pub fn completeViewChangeTo(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try hrCheck(self.lpVtbl.CompleteViewChangeTo(self, source, destination)); }
+    pub fn CompleteViewChangeTo(self: *@This(), source: ?*anyopaque, destination: ?*anyopaque) !void { try self.completeViewChangeTo(source, destination); }
+};
+
+pub const IListViewBaseStatics = extern struct {
+    pub const IID = GUID{ .data1 = 0xb8487e94, .data2 = 0x010f, .data3 = 0x56d4, .data4 = .{ 0x9f, 0x76, 0x94, 0xbf, 0x8c, 0x46, 0x27, 0x45 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        SelectionModeProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        IsSwipeEnabledProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CanDragItemsProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CanReorderItemsProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        IsItemClickEnabledProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        DataFetchSizeProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        IncrementalLoadingThresholdProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        IncrementalLoadingTriggerProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        ShowsScrollingPlaceholdersProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        ReorderModeProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        IsMultiSelectCheckBoxEnabledProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SingleSelectionFollowsFocusProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SemanticZoomOwnerProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        IsActiveViewProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        IsZoomedInViewProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        HeaderProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        HeaderTemplateProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        HeaderTransitionsProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        FooterProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        FooterTemplateProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        FooterTransitionsProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn SelectionModeProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.SelectionModeProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn IsSwipeEnabledProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsSwipeEnabledProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn CanDragItemsProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CanDragItemsProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn CanReorderItemsProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CanReorderItemsProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn IsItemClickEnabledProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsItemClickEnabledProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn DataFetchSizeProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.DataFetchSizeProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn IncrementalLoadingThresholdProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IncrementalLoadingThresholdProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn IncrementalLoadingTriggerProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IncrementalLoadingTriggerProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn ShowsScrollingPlaceholdersProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ShowsScrollingPlaceholdersProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn ReorderModeProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ReorderModeProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn IsMultiSelectCheckBoxEnabledProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsMultiSelectCheckBoxEnabledProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SingleSelectionFollowsFocusProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.SingleSelectionFollowsFocusProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SemanticZoomOwnerProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.SemanticZoomOwnerProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn IsActiveViewProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsActiveViewProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn IsZoomedInViewProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsZoomedInViewProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn HeaderProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.HeaderProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn HeaderTemplateProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.HeaderTemplateProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn HeaderTransitionsProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.HeaderTransitionsProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn FooterProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.FooterProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn FooterTemplateProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.FooterTemplateProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn FooterTransitionsProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.FooterTransitionsProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+};
+
+pub const ListViewSelectionMode = struct {
+    pub const None: i32 = 0;
+    pub const Single: i32 = 1;
+    pub const Multiple: i32 = 2;
+    pub const Extended: i32 = 3;
+};
+
+pub const IncrementalLoadingTrigger = struct {
+    pub const None: i32 = 0;
+    pub const Edge: i32 = 1;
+};
+
+pub const ListViewReorderMode = struct {
+    pub const Disabled: i32 = 0;
+    pub const Enabled: i32 = 1;
+};
+
+pub const ItemIndexRange = extern struct {
+    pub const IID = IItemIndexRange.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IItemIndexRange.VTable;
+    pub fn FirstIndex() void {}
+    pub fn get_FirstIndex() void {}
+    pub fn Length() void {}
+    pub fn get_Length() void {}
+    pub fn LastIndex() void {}
+    pub fn get_LastIndex() void {}
+};
+
+pub const IItemIndexRange = extern struct {
+    pub const IID = GUID{ .data1 = 0xeba09846, .data2 = 0x2554, .data3 = 0x5b86, .data4 = .{ 0xac, 0x17, 0x61, 0x4f, 0x05, 0x10, 0x5f, 0xa2 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        FirstIndex: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        Length: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
+        LastIndex: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn FirstIndex(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.FirstIndex(self, &out)); return out; }
+    pub fn Length(self: *@This()) !u32 { var out: u32 = 0; try hrCheck(self.lpVtbl.Length(self, &out)); return out; }
+    pub fn LastIndex(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.LastIndex(self, &out)); return out; }
+};
+
+pub const ItemClickEventHandler = extern struct {
+    pub const IID = GUID{ .data1 = 0xa3903624, .data2 = 0x3393, .data3 = 0x566c, .data4 = .{ 0xa6, 0xb9, 0xa6, 0xb4, 0xb3, 0xe3, 0x01, 0xc3 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
+    pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
+    pub fn new() !*@This() { @compileError("use ItemClickEventHandlerImpl instead"); }
+};
+
+pub fn ItemClickEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = ItemClickEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
+pub const DragItemsStartingEventHandler = extern struct {
+    pub const IID = GUID{ .data1 = 0x55532800, .data2 = 0x7617, .data3 = 0x5d67, .data4 = .{ 0x80, 0xbf, 0xb9, 0x8c, 0x0a, 0x41, 0xb9, 0xd6 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
+    pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
+    pub fn new() !*@This() { @compileError("use DragItemsStartingEventHandlerImpl instead"); }
+};
+
+pub fn DragItemsStartingEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = DragItemsStartingEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
+pub const DragItemsCompletedEventArgs = extern struct {
+    pub const IID = IDragItemsCompletedEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IDragItemsCompletedEventArgs.VTable;
+    pub fn Items() void {}
+    pub fn get_Items() void {}
+    pub fn DropResult() void {}
+    pub fn get_DropResult() void {}
+};
+
+pub const IDragItemsCompletedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xc0138552, .data2 = 0xf467, .data3 = 0x5c3e, .data4 = .{ 0x8a, 0xf4, 0x59, 0x36, 0x07, 0x76, 0x28, 0x44 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Items: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        DropResult: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Items(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Items(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn DropResult(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.DropResult(self, &out)); return out; }
+};
+
+pub const ChoosingItemContainerEventArgs = extern struct {
+    pub const IID = IChoosingItemContainerEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IChoosingItemContainerEventArgs.VTable;
+    pub fn ItemIndex() void {}
+    pub fn get_ItemIndex() void {}
+    pub fn Item() void {}
+    pub fn get_Item() void {}
+    pub fn ItemContainer() void {}
+    pub fn get_ItemContainer() void {}
+    pub fn SetItemContainer() void {}
+    pub fn put_ItemContainer() void {}
+    pub fn IsContainerPrepared() void {}
+    pub fn get_IsContainerPrepared() void {}
+    pub fn SetIsContainerPrepared() void {}
+    pub fn put_IsContainerPrepared() void {}
+};
+
+pub const IChoosingItemContainerEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xb479b9d2, .data2 = 0xa63f, .data3 = 0x5638, .data4 = .{ 0x94, 0x86, 0x8c, 0xcc, 0x1f, 0x40, 0x25, 0x1e } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        ItemIndex: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        Item: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        ItemContainer: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetItemContainer: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        IsContainerPrepared: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetIsContainerPrepared: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn ItemIndex(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.ItemIndex(self, &out)); return out; }
+    pub fn Item(self: *@This()) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Item(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn ItemContainer(self: *@This()) !*ISelectorItem { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ItemContainer(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetItemContainer(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetItemContainer(self, value)); }
+    pub fn IsContainerPrepared(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsContainerPrepared(self, &out)); return out; }
+    pub fn SetIsContainerPrepared(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsContainerPrepared(self, value)); }
+};
+
+pub const ChoosingGroupHeaderContainerEventArgs = extern struct {
+    pub const IID = IChoosingGroupHeaderContainerEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IChoosingGroupHeaderContainerEventArgs.VTable;
+    pub fn GroupHeaderContainer() void {}
+    pub fn get_GroupHeaderContainer() void {}
+    pub fn SetGroupHeaderContainer() void {}
+    pub fn put_GroupHeaderContainer() void {}
+    pub fn GroupIndex() void {}
+    pub fn get_GroupIndex() void {}
+    pub fn Group() void {}
+    pub fn get_Group() void {}
+};
+
+pub const IChoosingGroupHeaderContainerEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0x2db1b0b0, .data2 = 0xaee9, .data3 = 0x55fa, .data4 = .{ 0x8c, 0x30, 0xc9, 0x8f, 0x00, 0x64, 0x3d, 0x00 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        GroupHeaderContainer: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetGroupHeaderContainer: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        GroupIndex: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        Group: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn GroupHeaderContainer(self: *@This()) !*IListViewBaseHeaderItem { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.GroupHeaderContainer(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetGroupHeaderContainer(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetGroupHeaderContainer(self, value)); }
+    pub fn GroupIndex(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.GroupIndex(self, &out)); return out; }
+    pub fn Group(self: *@This()) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Group(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+};
+
+pub const LoadMoreItemsResult = extern struct {
+    Count: u32,
+};
+
+pub const ScrollIntoViewAlignment = struct {
+    pub const Default: i32 = 0;
+    pub const Leading: i32 = 1;
+};
+
+pub const ConnectedAnimation = extern struct {
+    pub const IID = IConnectedAnimation.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IConnectedAnimation.VTable;
+    pub fn IsScaleAnimationEnabled() void {}
+    pub fn get_IsScaleAnimationEnabled() void {}
+    pub fn SetIsScaleAnimationEnabled() void {}
+    pub fn put_IsScaleAnimationEnabled() void {}
+    pub fn Configuration() void {}
+    pub fn get_Configuration() void {}
+    pub fn SetConfiguration() void {}
+    pub fn put_Configuration() void {}
+    pub fn AddCompleted() void {}
+    pub fn add_Completed() void {}
+    pub fn RemoveCompleted() void {}
+    pub fn remove_Completed() void {}
+    pub fn TryStart() void {}
+    pub fn Cancel() void {}
+    pub fn SetAnimationComponent() void {}
+};
+
+pub const IConnectedAnimation = extern struct {
+    pub const IID = GUID{ .data1 = 0xa9c1c6ad, .data2 = 0x7670, .data3 = 0x589c, .data4 = .{ 0xa6, 0x08, 0x9b, 0x5c, 0x01, 0xce, 0xc7, 0x1f } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        IsScaleAnimationEnabled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetIsScaleAnimationEnabled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        Configuration: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetConfiguration: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        Completed: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveCompleted: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        TryStart: *const fn (*anyopaque, ?*anyopaque, *bool) callconv(.winapi) HRESULT,
+        TryStart_1: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque, *bool) callconv(.winapi) HRESULT,
+        Cancel: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        SetAnimationComponent: *const fn (*anyopaque, i32, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn IsScaleAnimationEnabled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsScaleAnimationEnabled(self, &out)); return out; }
+    pub fn SetIsScaleAnimationEnabled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsScaleAnimationEnabled(self, value)); }
+    pub fn Configuration(self: *@This()) !*IConnectedAnimationConfiguration { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Configuration(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetConfiguration(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetConfiguration(self, value)); }
+    pub fn AddCompleted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.Completed(self, p0, &out0)); return out0; }
+    pub fn Completed(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddCompleted(p0); }
+    pub fn RemoveCompleted(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveCompleted(self, token)); }
+    pub fn tryStart(self: *@This(), p0: ?*anyopaque) !bool { var out0: bool = false; try hrCheck(self.lpVtbl.TryStart(self, p0, &out0)); return out0; }
+    pub fn TryStart(self: *@This(), p0: ?*anyopaque) !bool { return self.tryStart(p0); }
+    pub fn tryStart_1(self: *@This(), p0: ?*anyopaque, p1: ?*anyopaque) !bool { var out0: bool = false; try hrCheck(self.lpVtbl.TryStart_1(self, p0, p1, &out0)); return out0; }
+    pub fn TryStart_1(self: *@This(), p0: ?*anyopaque, p1: ?*anyopaque) !bool { return self.tryStart_1(p0, p1); }
+    pub fn cancel(self: *@This()) !void { try hrCheck(self.lpVtbl.Cancel(self)); }
+    pub fn Cancel(self: *@This()) !void { try self.cancel(); }
+    pub fn setAnimationComponent(self: *@This(), component: i32, animation: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetAnimationComponent(self, component, animation)); }
+    pub fn SetAnimationComponent(self: *@This(), component: i32, animation: ?*anyopaque) !void { try self.setAnimationComponent(component, animation); }
+};
+
+pub const SemanticZoom = extern struct {
+    pub const IID = ISemanticZoom.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ISemanticZoom.VTable;
+    pub const Requires_ISemanticZoomStatics = true; // requires ISemanticZoomStatics
+    pub fn ZoomedInView() void {}
+    pub fn get_ZoomedInView() void {}
+    pub fn SetZoomedInView() void {}
+    pub fn put_ZoomedInView() void {}
+    pub fn ZoomedOutView() void {}
+    pub fn get_ZoomedOutView() void {}
+    pub fn SetZoomedOutView() void {}
+    pub fn put_ZoomedOutView() void {}
+    pub fn IsZoomedInViewActive() void {}
+    pub fn get_IsZoomedInViewActive() void {}
+    pub fn SetIsZoomedInViewActive() void {}
+    pub fn put_IsZoomedInViewActive() void {}
+    pub fn CanChangeViews() void {}
+    pub fn get_CanChangeViews() void {}
+    pub fn SetCanChangeViews() void {}
+    pub fn put_CanChangeViews() void {}
+    pub fn AddViewChangeStarted() void {}
+    pub fn add_ViewChangeStarted() void {}
+    pub fn RemoveViewChangeStarted() void {}
+    pub fn remove_ViewChangeStarted() void {}
+    pub fn AddViewChangeCompleted() void {}
+    pub fn add_ViewChangeCompleted() void {}
+    pub fn RemoveViewChangeCompleted() void {}
+    pub fn remove_ViewChangeCompleted() void {}
+    pub fn ToggleActiveView() void {}
+    pub fn IsZoomOutButtonEnabled() void {}
+    pub fn get_IsZoomOutButtonEnabled() void {}
+    pub fn SetIsZoomOutButtonEnabled() void {}
+    pub fn put_IsZoomOutButtonEnabled() void {}
+    pub fn ZoomedInViewProperty() void {}
+    pub fn get_ZoomedInViewProperty() void {}
+    pub fn ZoomedOutViewProperty() void {}
+    pub fn get_ZoomedOutViewProperty() void {}
+    pub fn IsZoomedInViewActiveProperty() void {}
+    pub fn get_IsZoomedInViewActiveProperty() void {}
+    pub fn CanChangeViewsProperty() void {}
+    pub fn get_CanChangeViewsProperty() void {}
+    pub fn IsZoomOutButtonEnabledProperty() void {}
+    pub fn get_IsZoomOutButtonEnabledProperty() void {}
+};
+
+pub const ISemanticZoom = extern struct {
+    pub const IID = GUID{ .data1 = 0x7e14616d, .data2 = 0x55ef, .data3 = 0x548c, .data4 = .{ 0xa9, 0x97, 0xc9, 0x23, 0xe3, 0x02, 0x71, 0x8f } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        ZoomedInView: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetZoomedInView: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        ZoomedOutView: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetZoomedOutView: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        IsZoomedInViewActive: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetIsZoomedInViewActive: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        CanChangeViews: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetCanChangeViews: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        ViewChangeStarted: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveViewChangeStarted: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        ViewChangeCompleted: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveViewChangeCompleted: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        ToggleActiveView: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+        IsZoomOutButtonEnabled: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetIsZoomOutButtonEnabled: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn ZoomedInView(self: *@This()) !*ISemanticZoomInformation { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ZoomedInView(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetZoomedInView(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetZoomedInView(self, value)); }
+    pub fn ZoomedOutView(self: *@This()) !*ISemanticZoomInformation { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ZoomedOutView(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetZoomedOutView(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetZoomedOutView(self, value)); }
+    pub fn IsZoomedInViewActive(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsZoomedInViewActive(self, &out)); return out; }
+    pub fn SetIsZoomedInViewActive(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsZoomedInViewActive(self, value)); }
+    pub fn CanChangeViews(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.CanChangeViews(self, &out)); return out; }
+    pub fn SetCanChangeViews(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetCanChangeViews(self, value)); }
+    pub fn AddViewChangeStarted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.ViewChangeStarted(self, p0, &out0)); return out0; }
+    pub fn ViewChangeStarted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddViewChangeStarted(p0); }
+    pub fn RemoveViewChangeStarted(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveViewChangeStarted(self, token)); }
+    pub fn AddViewChangeCompleted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { var out0: EventRegistrationToken = 0; try hrCheck(self.lpVtbl.ViewChangeCompleted(self, p0, &out0)); return out0; }
+    pub fn ViewChangeCompleted(self: *@This(), p0: ?*anyopaque) !EventRegistrationToken { return self.AddViewChangeCompleted(p0); }
+    pub fn RemoveViewChangeCompleted(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveViewChangeCompleted(self, token)); }
+    pub fn toggleActiveView(self: *@This()) !void { try hrCheck(self.lpVtbl.ToggleActiveView(self)); }
+    pub fn ToggleActiveView(self: *@This()) !void { try self.toggleActiveView(); }
+    pub fn IsZoomOutButtonEnabled(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsZoomOutButtonEnabled(self, &out)); return out; }
+    pub fn SetIsZoomOutButtonEnabled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsZoomOutButtonEnabled(self, value)); }
+};
+
+pub const SemanticZoomLocation = extern struct {
+    pub const IID = ISemanticZoomLocation.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ISemanticZoomLocation.VTable;
+    pub fn Item() void {}
+    pub fn get_Item() void {}
+    pub fn SetItem() void {}
+    pub fn put_Item() void {}
+    pub fn Bounds() void {}
+    pub fn get_Bounds() void {}
+    pub fn SetBounds() void {}
+    pub fn put_Bounds() void {}
+};
+
+pub const ISemanticZoomLocation = extern struct {
+    pub const IID = GUID{ .data1 = 0x41c1dec7, .data2 = 0xf34f, .data3 = 0x51db, .data4 = .{ 0x95, 0x25, 0x5c, 0x14, 0x9b, 0x05, 0xa5, 0x27 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Item: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetItem: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        Bounds: *const fn (*anyopaque, *Rect) callconv(.winapi) HRESULT,
+        SetBounds: *const fn (*anyopaque, Rect) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Item(self: *@This()) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Item(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetItem(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetItem(self, value)); }
+    pub fn Bounds(self: *@This()) !Rect { var out: Rect = undefined; try hrCheck(self.lpVtbl.Bounds(self, &out)); return out; }
+    pub fn SetBounds(self: *@This(), value: Rect) !void { try hrCheck(self.lpVtbl.SetBounds(self, value)); }
+};
+
 pub const AsyncOperationProgressHandler = extern struct {
     pub const IID = GUID{ .data1 = 0x55690902, .data2 = 0x0aab, .data3 = 0x421a, .data4 = .{ 0x87, 0x78, 0xf8, 0xce, 0x50, 0x26, 0xd7, 0x58 } };
     lpVtbl: *const VTable,
@@ -23754,9 +29488,136 @@ pub const AsyncOperationProgressHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), asyncInfo: ?*anyopaque, progressInfo: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, asyncInfo, progressInfo)); }
     pub fn Invoke(self: *@This(), asyncInfo: ?*anyopaque, progressInfo: ?*anyopaque) !void { try self.invoke(asyncInfo, progressInfo); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use AsyncOperationProgressHandlerImpl instead"); }
 };
 
+pub fn AsyncOperationProgressHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = AsyncOperationProgressHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const AsyncOperationWithProgressCompletedHandler = extern struct {
     pub const IID = GUID{ .data1 = 0xe85df41d, .data2 = 0x6aa7, .data3 = 0x46e3, .data4 = .{ 0xa8, 0xe2, 0xf0, 0x09, 0xd8, 0x40, 0xc6, 0x27 } };
     lpVtbl: *const VTable,
@@ -23773,331 +29634,136 @@ pub const AsyncOperationWithProgressCompletedHandler = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn invoke(self: *@This(), asyncInfo: ?*anyopaque, asyncStatus: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, asyncInfo, asyncStatus)); }
     pub fn Invoke(self: *@This(), asyncInfo: ?*anyopaque, asyncStatus: ?*anyopaque) !void { try self.invoke(asyncInfo, asyncStatus); }
-    pub fn new() !*@This() { return error.NotImplemented; }
+    pub fn new() !*@This() { @compileError("use AsyncOperationWithProgressCompletedHandlerImpl instead"); }
 };
 
-pub const IShareProviderFactory = extern struct {
-    pub const IID = GUID{ .data1 = 0x172a174c, .data2 = 0xe79e, .data3 = 0x4f6d, .data4 = .{ 0xb0, 0x7d, 0x12, 0x8f, 0x46, 0x9e, 0x02, 0x96 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Create: *const fn (*anyopaque, HSTRING, ?*anyopaque, Color, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+pub fn AsyncOperationWithProgressCompletedHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = AsyncOperationWithProgressCompletedHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
     };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn create(self: *@This(), p0: anytype, p1: ?*anyopaque, p2: Color, p3: ?*anyopaque) !*IShareProvider { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.Create(self, @ptrCast(p0), p1, p2, p3, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
-    pub fn Create(self: *@This(), p0: anytype, p1: ?*anyopaque, p2: Color, p3: ?*anyopaque) !*IShareProvider { return self.create(p0, p1, p2, p3); }
-};
-
-pub const ShareProviderHandler = extern struct {
-    pub const IID = GUID{ .data1 = 0xe7f9d9ba, .data2 = 0xe1ba, .data3 = 0x4e4d, .data4 = .{ 0xbd, 0x65, 0xd4, 0x38, 0x45, 0xd3, 0x21, 0x2f } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Invoke: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn invoke(self: *@This(), operation: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, operation)); }
-    pub fn Invoke(self: *@This(), operation: ?*anyopaque) !void { try self.invoke(operation); }
-    pub fn new() !*@This() { return error.NotImplemented; }
-};
-
-pub const DirectXPixelFormat = struct {
-    pub const Unknown: i32 = 0;
-    pub const R32G32B32A32Typeless: i32 = 1;
-    pub const R32G32B32A32Float: i32 = 2;
-    pub const R32G32B32A32UInt: i32 = 3;
-    pub const R32G32B32A32Int: i32 = 4;
-    pub const R32G32B32Typeless: i32 = 5;
-    pub const R32G32B32Float: i32 = 6;
-    pub const R32G32B32UInt: i32 = 7;
-    pub const R32G32B32Int: i32 = 8;
-    pub const R16G16B16A16Typeless: i32 = 9;
-    pub const R16G16B16A16Float: i32 = 10;
-    pub const R16G16B16A16UIntNormalized: i32 = 11;
-    pub const R16G16B16A16UInt: i32 = 12;
-    pub const R16G16B16A16IntNormalized: i32 = 13;
-    pub const R16G16B16A16Int: i32 = 14;
-    pub const R32G32Typeless: i32 = 15;
-    pub const R32G32Float: i32 = 16;
-    pub const R32G32UInt: i32 = 17;
-    pub const R32G32Int: i32 = 18;
-    pub const R32G8X24Typeless: i32 = 19;
-    pub const D32FloatS8X24UInt: i32 = 20;
-    pub const R32FloatX8X24Typeless: i32 = 21;
-    pub const X32TypelessG8X24UInt: i32 = 22;
-    pub const R10G10B10A2Typeless: i32 = 23;
-    pub const R10G10B10A2UIntNormalized: i32 = 24;
-    pub const R10G10B10A2UInt: i32 = 25;
-    pub const R11G11B10Float: i32 = 26;
-    pub const R8G8B8A8Typeless: i32 = 27;
-    pub const R8G8B8A8UIntNormalized: i32 = 28;
-    pub const R8G8B8A8UIntNormalizedSrgb: i32 = 29;
-    pub const R8G8B8A8UInt: i32 = 30;
-    pub const R8G8B8A8IntNormalized: i32 = 31;
-    pub const R8G8B8A8Int: i32 = 32;
-    pub const R16G16Typeless: i32 = 33;
-    pub const R16G16Float: i32 = 34;
-    pub const R16G16UIntNormalized: i32 = 35;
-    pub const R16G16UInt: i32 = 36;
-    pub const R16G16IntNormalized: i32 = 37;
-    pub const R16G16Int: i32 = 38;
-    pub const R32Typeless: i32 = 39;
-    pub const D32Float: i32 = 40;
-    pub const R32Float: i32 = 41;
-    pub const R32UInt: i32 = 42;
-    pub const R32Int: i32 = 43;
-    pub const R24G8Typeless: i32 = 44;
-    pub const D24UIntNormalizedS8UInt: i32 = 45;
-    pub const R24UIntNormalizedX8Typeless: i32 = 46;
-    pub const X24TypelessG8UInt: i32 = 47;
-    pub const R8G8Typeless: i32 = 48;
-    pub const R8G8UIntNormalized: i32 = 49;
-    pub const R8G8UInt: i32 = 50;
-    pub const R8G8IntNormalized: i32 = 51;
-    pub const R8G8Int: i32 = 52;
-    pub const R16Typeless: i32 = 53;
-    pub const R16Float: i32 = 54;
-    pub const D16UIntNormalized: i32 = 55;
-    pub const R16UIntNormalized: i32 = 56;
-    pub const R16UInt: i32 = 57;
-    pub const R16IntNormalized: i32 = 58;
-    pub const R16Int: i32 = 59;
-    pub const R8Typeless: i32 = 60;
-    pub const R8UIntNormalized: i32 = 61;
-    pub const R8UInt: i32 = 62;
-    pub const R8IntNormalized: i32 = 63;
-    pub const R8Int: i32 = 64;
-    pub const A8UIntNormalized: i32 = 65;
-    pub const R1UIntNormalized: i32 = 66;
-    pub const R9G9B9E5SharedExponent: i32 = 67;
-    pub const R8G8B8G8UIntNormalized: i32 = 68;
-    pub const G8R8G8B8UIntNormalized: i32 = 69;
-    pub const BC1Typeless: i32 = 70;
-    pub const BC1UIntNormalized: i32 = 71;
-    pub const BC1UIntNormalizedSrgb: i32 = 72;
-    pub const BC2Typeless: i32 = 73;
-    pub const BC2UIntNormalized: i32 = 74;
-    pub const BC2UIntNormalizedSrgb: i32 = 75;
-    pub const BC3Typeless: i32 = 76;
-    pub const BC3UIntNormalized: i32 = 77;
-    pub const BC3UIntNormalizedSrgb: i32 = 78;
-    pub const BC4Typeless: i32 = 79;
-    pub const BC4UIntNormalized: i32 = 80;
-    pub const BC4IntNormalized: i32 = 81;
-    pub const BC5Typeless: i32 = 82;
-    pub const BC5UIntNormalized: i32 = 83;
-    pub const BC5IntNormalized: i32 = 84;
-    pub const B5G6R5UIntNormalized: i32 = 85;
-    pub const B5G5R5A1UIntNormalized: i32 = 86;
-    pub const B8G8R8A8UIntNormalized: i32 = 87;
-    pub const B8G8R8X8UIntNormalized: i32 = 88;
-    pub const R10G10B10XRBiasA2UIntNormalized: i32 = 89;
-    pub const B8G8R8A8Typeless: i32 = 90;
-    pub const B8G8R8A8UIntNormalizedSrgb: i32 = 91;
-    pub const B8G8R8X8Typeless: i32 = 92;
-    pub const B8G8R8X8UIntNormalizedSrgb: i32 = 93;
-    pub const BC6HTypeless: i32 = 94;
-    pub const BC6H16UnsignedFloat: i32 = 95;
-    pub const BC6H16Float: i32 = 96;
-    pub const BC7Typeless: i32 = 97;
-    pub const BC7UIntNormalized: i32 = 98;
-    pub const BC7UIntNormalizedSrgb: i32 = 99;
-    pub const Ayuv: i32 = 100;
-    pub const Y410: i32 = 101;
-    pub const Y416: i32 = 102;
-    pub const NV12: i32 = 103;
-    pub const P010: i32 = 104;
-    pub const P016: i32 = 105;
-    pub const Opaque420: i32 = 106;
-    pub const Yuy2: i32 = 107;
-    pub const Y210: i32 = 108;
-    pub const Y216: i32 = 109;
-    pub const NV11: i32 = 110;
-    pub const AI44: i32 = 111;
-    pub const IA44: i32 = 112;
-    pub const P8: i32 = 113;
-    pub const A8P8: i32 = 114;
-    pub const B4G4R4A4UIntNormalized: i32 = 115;
-    pub const P208: i32 = 130;
-    pub const V208: i32 = 131;
-    pub const V408: i32 = 132;
-    pub const SamplerFeedbackMinMipOpaque: i32 = 189;
-    pub const SamplerFeedbackMipRegionUsedOpaque: i32 = 190;
-    pub const A4B4G4R4: i32 = 191;
-};
-
-pub const Direct3DMultisampleDescription = extern struct {
-    Count: i32,
-    Quality: i32,
-};
-
-pub const ItemClickEventArgs = extern struct {
-    pub const IID = IItemClickEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IItemClickEventArgs.VTable;
-    pub fn ClickedItem() void {}
-    pub fn get_ClickedItem() void {}
-};
-
-pub const IItemClickEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0x1cf87a70, .data2 = 0x6348, .data3 = 0x57ec, .data4 = .{ 0x9e, 0xac, 0xfa, 0x05, 0x65, 0xad, 0xc6, 0x0f } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        ClickedItem: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn ClickedItem(self: *@This()) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ClickedItem(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-};
-
-pub const DragItemsStartingEventArgs = extern struct {
-    pub const IID = IDragItemsStartingEventArgs.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IDragItemsStartingEventArgs.VTable;
-    pub fn Cancel() void {}
-    pub fn get_Cancel() void {}
-    pub fn SetCancel() void {}
-    pub fn put_Cancel() void {}
-    pub fn Items() void {}
-    pub fn get_Items() void {}
-    pub fn Data() void {}
-    pub fn get_Data() void {}
-};
-
-pub const IDragItemsStartingEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0xa6938886, .data2 = 0x20df, .data3 = 0x558e, .data4 = .{ 0xac, 0x74, 0xbb, 0x5b, 0x7f, 0x2f, 0x7e, 0x90 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Cancel: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetCancel: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-        Items: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        Data: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Cancel(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.Cancel(self, &out)); return out; }
-    pub fn SetCancel(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetCancel(self, value)); }
-    pub fn Items(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Items(self, &out)); return out orelse error.WinRTFailed; }
-    pub fn Data(self: *@This()) !*IDataPackage { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Data(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-};
-
-pub const ListViewBaseHeaderItem = extern struct {
-    pub const IID = IListViewBaseHeaderItem.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IListViewBaseHeaderItem.VTable;
-};
-
-pub const IListViewBaseHeaderItem = extern struct {
-    pub const IID = GUID{ .data1 = 0x9220c4ff, .data2 = 0x1974, .data3 = 0x53fd, .data4 = .{ 0xad, 0x74, 0xc2, 0x9e, 0x7b, 0x36, 0x0a, 0x06 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-};
-
-pub const ConnectedAnimationConfiguration = extern struct {
-    pub const IID = IConnectedAnimationConfiguration.IID;
-    lpVtbl: *const VTable,
-    pub const VTable = IConnectedAnimationConfiguration.VTable;
-};
-
-pub const IConnectedAnimationConfiguration = extern struct {
-    pub const IID = GUID{ .data1 = 0xe848379d, .data2 = 0x7e25, .data3 = 0x5976, .data4 = .{ 0xbf, 0xb3, 0x08, 0x6b, 0xac, 0x4e, 0x88, 0x49 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-};
-
-pub const ConnectedAnimationComponent = struct {
-    pub const OffsetX: i32 = 0;
-    pub const OffsetY: i32 = 1;
-    pub const CrossFade: i32 = 2;
-    pub const Scale: i32 = 3;
-};
-
-pub const ISemanticZoomStatics = extern struct {
-    pub const IID = GUID{ .data1 = 0xe4fbd358, .data2 = 0x9342, .data3 = 0x56d3, .data4 = .{ 0xb5, 0xc2, 0xbf, 0x80, 0xde, 0x6f, 0x47, 0xed } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        ZoomedInViewProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        ZoomedOutViewProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        IsZoomedInViewActiveProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        CanChangeViewsProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        IsZoomOutButtonEnabledProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn ZoomedInViewProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ZoomedInViewProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn ZoomedOutViewProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ZoomedOutViewProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn IsZoomedInViewActiveProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsZoomedInViewActiveProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn CanChangeViewsProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CanChangeViewsProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn IsZoomOutButtonEnabledProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsZoomOutButtonEnabledProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-};
-
-pub const SemanticZoomViewChangedEventHandler = extern struct {
-    pub const IID = GUID{ .data1 = 0x4cc95c52, .data2 = 0x8a54, .data3 = 0x53b7, .data4 = .{ 0x92, 0x51, 0x0b, 0x3e, 0xfa, 0x60, 0x53, 0x98 } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
-    pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
-    pub fn new() !*@This() { return error.NotImplemented; }
-};
-
+}
 pub const IThumbnailProperties = extern struct {
     pub const IID = GUID{ .data1 = 0x693dd42f, .data2 = 0xdbe7, .data3 = 0x49b5, .data4 = .{ 0xb3, 0xb3, 0x28, 0x93, 0xac, 0x5d, 0x34, 0x23 } };
     lpVtbl: *const VTable,
@@ -25182,19 +30848,341 @@ pub const IUserWatcher = extern struct {
     pub fn RemoveStopped(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveStopped(self, token)); }
 };
 
-pub const ShareProviderOperation = extern struct {
-    pub const IID = IShareProviderOperation.IID;
+pub const IShareProviderFactory = extern struct {
+    pub const IID = GUID{ .data1 = 0x172a174c, .data2 = 0xe79e, .data3 = 0x4f6d, .data4 = .{ 0xb0, 0x7d, 0x12, 0x8f, 0x46, 0x9e, 0x02, 0x96 } };
     lpVtbl: *const VTable,
-    pub const VTable = IShareProviderOperation.VTable;
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Create: *const fn (*anyopaque, HSTRING, ?*anyopaque, Color, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn create(self: *@This(), p0: anytype, p1: ?*anyopaque, p2: Color, p3: ?*anyopaque) !*IShareProvider { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.Create(self, @ptrCast(p0), p1, p2, p3, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
+    pub fn Create(self: *@This(), p0: anytype, p1: ?*anyopaque, p2: Color, p3: ?*anyopaque) !*IShareProvider { return self.create(p0, p1, p2, p3); }
+};
+
+pub const ShareProviderHandler = extern struct {
+    pub const IID = GUID{ .data1 = 0xe7f9d9ba, .data2 = 0xe1ba, .data3 = 0x4e4d, .data4 = .{ 0xbd, 0x65, 0xd4, 0x38, 0x45, 0xd3, 0x21, 0x2f } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Invoke: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn invoke(self: *@This(), operation: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, operation)); }
+    pub fn Invoke(self: *@This(), operation: ?*anyopaque) !void { try self.invoke(operation); }
+    pub fn new() !*@This() { @compileError("use ShareProviderHandlerImpl instead"); }
+};
+
+pub fn ShareProviderHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = ShareProviderHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
+pub const DirectXPixelFormat = struct {
+    pub const Unknown: i32 = 0;
+    pub const R32G32B32A32Typeless: i32 = 1;
+    pub const R32G32B32A32Float: i32 = 2;
+    pub const R32G32B32A32UInt: i32 = 3;
+    pub const R32G32B32A32Int: i32 = 4;
+    pub const R32G32B32Typeless: i32 = 5;
+    pub const R32G32B32Float: i32 = 6;
+    pub const R32G32B32UInt: i32 = 7;
+    pub const R32G32B32Int: i32 = 8;
+    pub const R16G16B16A16Typeless: i32 = 9;
+    pub const R16G16B16A16Float: i32 = 10;
+    pub const R16G16B16A16UIntNormalized: i32 = 11;
+    pub const R16G16B16A16UInt: i32 = 12;
+    pub const R16G16B16A16IntNormalized: i32 = 13;
+    pub const R16G16B16A16Int: i32 = 14;
+    pub const R32G32Typeless: i32 = 15;
+    pub const R32G32Float: i32 = 16;
+    pub const R32G32UInt: i32 = 17;
+    pub const R32G32Int: i32 = 18;
+    pub const R32G8X24Typeless: i32 = 19;
+    pub const D32FloatS8X24UInt: i32 = 20;
+    pub const R32FloatX8X24Typeless: i32 = 21;
+    pub const X32TypelessG8X24UInt: i32 = 22;
+    pub const R10G10B10A2Typeless: i32 = 23;
+    pub const R10G10B10A2UIntNormalized: i32 = 24;
+    pub const R10G10B10A2UInt: i32 = 25;
+    pub const R11G11B10Float: i32 = 26;
+    pub const R8G8B8A8Typeless: i32 = 27;
+    pub const R8G8B8A8UIntNormalized: i32 = 28;
+    pub const R8G8B8A8UIntNormalizedSrgb: i32 = 29;
+    pub const R8G8B8A8UInt: i32 = 30;
+    pub const R8G8B8A8IntNormalized: i32 = 31;
+    pub const R8G8B8A8Int: i32 = 32;
+    pub const R16G16Typeless: i32 = 33;
+    pub const R16G16Float: i32 = 34;
+    pub const R16G16UIntNormalized: i32 = 35;
+    pub const R16G16UInt: i32 = 36;
+    pub const R16G16IntNormalized: i32 = 37;
+    pub const R16G16Int: i32 = 38;
+    pub const R32Typeless: i32 = 39;
+    pub const D32Float: i32 = 40;
+    pub const R32Float: i32 = 41;
+    pub const R32UInt: i32 = 42;
+    pub const R32Int: i32 = 43;
+    pub const R24G8Typeless: i32 = 44;
+    pub const D24UIntNormalizedS8UInt: i32 = 45;
+    pub const R24UIntNormalizedX8Typeless: i32 = 46;
+    pub const X24TypelessG8UInt: i32 = 47;
+    pub const R8G8Typeless: i32 = 48;
+    pub const R8G8UIntNormalized: i32 = 49;
+    pub const R8G8UInt: i32 = 50;
+    pub const R8G8IntNormalized: i32 = 51;
+    pub const R8G8Int: i32 = 52;
+    pub const R16Typeless: i32 = 53;
+    pub const R16Float: i32 = 54;
+    pub const D16UIntNormalized: i32 = 55;
+    pub const R16UIntNormalized: i32 = 56;
+    pub const R16UInt: i32 = 57;
+    pub const R16IntNormalized: i32 = 58;
+    pub const R16Int: i32 = 59;
+    pub const R8Typeless: i32 = 60;
+    pub const R8UIntNormalized: i32 = 61;
+    pub const R8UInt: i32 = 62;
+    pub const R8IntNormalized: i32 = 63;
+    pub const R8Int: i32 = 64;
+    pub const A8UIntNormalized: i32 = 65;
+    pub const R1UIntNormalized: i32 = 66;
+    pub const R9G9B9E5SharedExponent: i32 = 67;
+    pub const R8G8B8G8UIntNormalized: i32 = 68;
+    pub const G8R8G8B8UIntNormalized: i32 = 69;
+    pub const BC1Typeless: i32 = 70;
+    pub const BC1UIntNormalized: i32 = 71;
+    pub const BC1UIntNormalizedSrgb: i32 = 72;
+    pub const BC2Typeless: i32 = 73;
+    pub const BC2UIntNormalized: i32 = 74;
+    pub const BC2UIntNormalizedSrgb: i32 = 75;
+    pub const BC3Typeless: i32 = 76;
+    pub const BC3UIntNormalized: i32 = 77;
+    pub const BC3UIntNormalizedSrgb: i32 = 78;
+    pub const BC4Typeless: i32 = 79;
+    pub const BC4UIntNormalized: i32 = 80;
+    pub const BC4IntNormalized: i32 = 81;
+    pub const BC5Typeless: i32 = 82;
+    pub const BC5UIntNormalized: i32 = 83;
+    pub const BC5IntNormalized: i32 = 84;
+    pub const B5G6R5UIntNormalized: i32 = 85;
+    pub const B5G5R5A1UIntNormalized: i32 = 86;
+    pub const B8G8R8A8UIntNormalized: i32 = 87;
+    pub const B8G8R8X8UIntNormalized: i32 = 88;
+    pub const R10G10B10XRBiasA2UIntNormalized: i32 = 89;
+    pub const B8G8R8A8Typeless: i32 = 90;
+    pub const B8G8R8A8UIntNormalizedSrgb: i32 = 91;
+    pub const B8G8R8X8Typeless: i32 = 92;
+    pub const B8G8R8X8UIntNormalizedSrgb: i32 = 93;
+    pub const BC6HTypeless: i32 = 94;
+    pub const BC6H16UnsignedFloat: i32 = 95;
+    pub const BC6H16Float: i32 = 96;
+    pub const BC7Typeless: i32 = 97;
+    pub const BC7UIntNormalized: i32 = 98;
+    pub const BC7UIntNormalizedSrgb: i32 = 99;
+    pub const Ayuv: i32 = 100;
+    pub const Y410: i32 = 101;
+    pub const Y416: i32 = 102;
+    pub const NV12: i32 = 103;
+    pub const P010: i32 = 104;
+    pub const P016: i32 = 105;
+    pub const Opaque420: i32 = 106;
+    pub const Yuy2: i32 = 107;
+    pub const Y210: i32 = 108;
+    pub const Y216: i32 = 109;
+    pub const NV11: i32 = 110;
+    pub const AI44: i32 = 111;
+    pub const IA44: i32 = 112;
+    pub const P8: i32 = 113;
+    pub const A8P8: i32 = 114;
+    pub const B4G4R4A4UIntNormalized: i32 = 115;
+    pub const P208: i32 = 130;
+    pub const V208: i32 = 131;
+    pub const V408: i32 = 132;
+    pub const SamplerFeedbackMinMipOpaque: i32 = 189;
+    pub const SamplerFeedbackMipRegionUsedOpaque: i32 = 190;
+    pub const A4B4G4R4: i32 = 191;
+};
+
+pub const Direct3DMultisampleDescription = extern struct {
+    Count: i32,
+    Quality: i32,
+};
+
+pub const ItemClickEventArgs = extern struct {
+    pub const IID = IItemClickEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IItemClickEventArgs.VTable;
+    pub fn ClickedItem() void {}
+    pub fn get_ClickedItem() void {}
+};
+
+pub const IItemClickEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0x1cf87a70, .data2 = 0x6348, .data3 = 0x57ec, .data4 = .{ 0x9e, 0xac, 0xfa, 0x05, 0x65, 0xad, 0xc6, 0x0f } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        ClickedItem: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn ClickedItem(self: *@This()) !*IInspectable { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ClickedItem(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+};
+
+pub const DragItemsStartingEventArgs = extern struct {
+    pub const IID = IDragItemsStartingEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IDragItemsStartingEventArgs.VTable;
+    pub fn Cancel() void {}
+    pub fn get_Cancel() void {}
+    pub fn SetCancel() void {}
+    pub fn put_Cancel() void {}
+    pub fn Items() void {}
+    pub fn get_Items() void {}
     pub fn Data() void {}
     pub fn get_Data() void {}
-    pub fn Provider() void {}
-    pub fn get_Provider() void {}
-    pub fn ReportCompleted() void {}
 };
 
-pub const IShareProviderOperation = extern struct {
-    pub const IID = GUID{ .data1 = 0x19cef937, .data2 = 0xd435, .data3 = 0x4179, .data4 = .{ 0xb6, 0xaf, 0x14, 0xe0, 0x49, 0x2b, 0x69, 0xf6 } };
+pub const IDragItemsStartingEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xa6938886, .data2 = 0x20df, .data3 = 0x558e, .data4 = .{ 0xac, 0x74, 0xbb, 0x5b, 0x7f, 0x2f, 0x7e, 0x90 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -25203,38 +31191,27 @@ pub const IShareProviderOperation = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
+        Cancel: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetCancel: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        Items: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
         Data: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        Provider: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        ReportCompleted: *const fn (*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Data(self: *@This()) !*IDataPackageView { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Data(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn Provider(self: *@This()) !*IShareProvider { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Provider(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn reportCompleted(self: *@This()) !void { try hrCheck(self.lpVtbl.ReportCompleted(self)); }
-    pub fn ReportCompleted(self: *@This()) !void { try self.reportCompleted(); }
+    pub fn Cancel(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.Cancel(self, &out)); return out; }
+    pub fn SetCancel(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetCancel(self, value)); }
+    pub fn Items(self: *@This()) !*anyopaque { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Items(self, &out)); return out orelse error.WinRTFailed; }
+    pub fn Data(self: *@This()) !*IDataPackage { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Data(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
 };
 
-pub const SemanticZoomViewChangedEventArgs = extern struct {
-    pub const IID = ISemanticZoomViewChangedEventArgs.IID;
+pub const ListViewBaseHeaderItem = extern struct {
+    pub const IID = IListViewBaseHeaderItem.IID;
     lpVtbl: *const VTable,
-    pub const VTable = ISemanticZoomViewChangedEventArgs.VTable;
-    pub fn IsSourceZoomedInView() void {}
-    pub fn get_IsSourceZoomedInView() void {}
-    pub fn SetIsSourceZoomedInView() void {}
-    pub fn put_IsSourceZoomedInView() void {}
-    pub fn SourceItem() void {}
-    pub fn get_SourceItem() void {}
-    pub fn SetSourceItem() void {}
-    pub fn put_SourceItem() void {}
-    pub fn DestinationItem() void {}
-    pub fn get_DestinationItem() void {}
-    pub fn SetDestinationItem() void {}
-    pub fn put_DestinationItem() void {}
+    pub const VTable = IListViewBaseHeaderItem.VTable;
 };
 
-pub const ISemanticZoomViewChangedEventArgs = extern struct {
-    pub const IID = GUID{ .data1 = 0xcf62d53d, .data2 = 0x97d3, .data3 = 0x5cef, .data4 = .{ 0x96, 0xf3, 0x1c, 0x41, 0x3f, 0x52, 0x4e, 0xca } };
+pub const IListViewBaseHeaderItem = extern struct {
+    pub const IID = GUID{ .data1 = 0x9220c4ff, .data2 = 0x1974, .data3 = 0x53fd, .data4 = .{ 0xad, 0x74, 0xc2, 0x9e, 0x7b, 0x36, 0x0a, 0x06 } };
     lpVtbl: *const VTable,
     pub const VTable = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
@@ -25243,23 +31220,210 @@ pub const ISemanticZoomViewChangedEventArgs = extern struct {
         GetIids: VtblPlaceholder,
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
-        IsSourceZoomedInView: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        SetIsSourceZoomedInView: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
-        SourceItem: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetSourceItem: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-        DestinationItem: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        SetDestinationItem: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn IsSourceZoomedInView(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsSourceZoomedInView(self, &out)); return out; }
-    pub fn SetIsSourceZoomedInView(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsSourceZoomedInView(self, value)); }
-    pub fn SourceItem(self: *@This()) !*ISemanticZoomLocation { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.SourceItem(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetSourceItem(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetSourceItem(self, value)); }
-    pub fn DestinationItem(self: *@This()) !*ISemanticZoomLocation { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.DestinationItem(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
-    pub fn SetDestinationItem(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetDestinationItem(self, value)); }
 };
 
+pub const ConnectedAnimationConfiguration = extern struct {
+    pub const IID = IConnectedAnimationConfiguration.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IConnectedAnimationConfiguration.VTable;
+};
+
+pub const IConnectedAnimationConfiguration = extern struct {
+    pub const IID = GUID{ .data1 = 0xe848379d, .data2 = 0x7e25, .data3 = 0x5976, .data4 = .{ 0xbf, 0xb3, 0x08, 0x6b, 0xac, 0x4e, 0x88, 0x49 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+};
+
+pub const ConnectedAnimationComponent = struct {
+    pub const OffsetX: i32 = 0;
+    pub const OffsetY: i32 = 1;
+    pub const CrossFade: i32 = 2;
+    pub const Scale: i32 = 3;
+};
+
+pub const ISemanticZoomStatics = extern struct {
+    pub const IID = GUID{ .data1 = 0xe4fbd358, .data2 = 0x9342, .data3 = 0x56d3, .data4 = .{ 0xb5, 0xc2, 0xbf, 0x80, 0xde, 0x6f, 0x47, 0xed } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        ZoomedInViewProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        ZoomedOutViewProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        IsZoomedInViewActiveProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        CanChangeViewsProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        IsZoomOutButtonEnabledProperty: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn ZoomedInViewProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ZoomedInViewProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn ZoomedOutViewProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.ZoomedOutViewProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn IsZoomedInViewActiveProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsZoomedInViewActiveProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn CanChangeViewsProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CanChangeViewsProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn IsZoomOutButtonEnabledProperty(self: *@This()) !*IDependencyProperty { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.IsZoomOutButtonEnabledProperty(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+};
+
+pub const SemanticZoomViewChangedEventHandler = extern struct {
+    pub const IID = GUID{ .data1 = 0x4cc95c52, .data2 = 0x8a54, .data3 = 0x53b7, .data4 = .{ 0x92, 0x51, 0x0b, 0x3e, 0xfa, 0x60, 0x53, 0x98 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, e)); }
+    pub fn Invoke(self: *@This(), sender: ?*anyopaque, e: ?*anyopaque) !void { try self.invoke(sender, e); }
+    pub fn new() !*@This() { @compileError("use SemanticZoomViewChangedEventHandlerImpl instead"); }
+};
+
+pub fn SemanticZoomViewChangedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = SemanticZoomViewChangedEventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .GetIids = null,
+            .GetRuntimeClassName = null,
+            .GetTrustLevel = null,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
 pub const VideoOrientation = struct {
     pub const Normal: i32 = 0;
     pub const Rotate90: i32 = 90;
@@ -25592,6 +31756,84 @@ pub const IUserAuthenticationStatusChangingEventArgs = extern struct {
     pub fn User(self: *@This()) !*IUser { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.User(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
     pub fn NewStatus(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.NewStatus(self, &out)); return out; }
     pub fn CurrentStatus(self: *@This()) !i32 { var out: i32 = 0; try hrCheck(self.lpVtbl.CurrentStatus(self, &out)); return out; }
+};
+
+pub const ShareProviderOperation = extern struct {
+    pub const IID = IShareProviderOperation.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = IShareProviderOperation.VTable;
+    pub fn Data() void {}
+    pub fn get_Data() void {}
+    pub fn Provider() void {}
+    pub fn get_Provider() void {}
+    pub fn ReportCompleted() void {}
+};
+
+pub const IShareProviderOperation = extern struct {
+    pub const IID = GUID{ .data1 = 0x19cef937, .data2 = 0xd435, .data3 = 0x4179, .data4 = .{ 0xb6, 0xaf, 0x14, 0xe0, 0x49, 0x2b, 0x69, 0xf6 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Data: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        Provider: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        ReportCompleted: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Data(self: *@This()) !*IDataPackageView { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Data(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn Provider(self: *@This()) !*IShareProvider { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Provider(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn reportCompleted(self: *@This()) !void { try hrCheck(self.lpVtbl.ReportCompleted(self)); }
+    pub fn ReportCompleted(self: *@This()) !void { try self.reportCompleted(); }
+};
+
+pub const SemanticZoomViewChangedEventArgs = extern struct {
+    pub const IID = ISemanticZoomViewChangedEventArgs.IID;
+    lpVtbl: *const VTable,
+    pub const VTable = ISemanticZoomViewChangedEventArgs.VTable;
+    pub fn IsSourceZoomedInView() void {}
+    pub fn get_IsSourceZoomedInView() void {}
+    pub fn SetIsSourceZoomedInView() void {}
+    pub fn put_IsSourceZoomedInView() void {}
+    pub fn SourceItem() void {}
+    pub fn get_SourceItem() void {}
+    pub fn SetSourceItem() void {}
+    pub fn put_SourceItem() void {}
+    pub fn DestinationItem() void {}
+    pub fn get_DestinationItem() void {}
+    pub fn SetDestinationItem() void {}
+    pub fn put_DestinationItem() void {}
+};
+
+pub const ISemanticZoomViewChangedEventArgs = extern struct {
+    pub const IID = GUID{ .data1 = 0xcf62d53d, .data2 = 0x97d3, .data3 = 0x5cef, .data4 = .{ 0x96, 0xf3, 0x1c, 0x41, 0x3f, 0x52, 0x4e, 0xca } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        IsSourceZoomedInView: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SetIsSourceZoomedInView: *const fn (*anyopaque, bool) callconv(.winapi) HRESULT,
+        SourceItem: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetSourceItem: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        DestinationItem: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetDestinationItem: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn IsSourceZoomedInView(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.IsSourceZoomedInView(self, &out)); return out; }
+    pub fn SetIsSourceZoomedInView(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetIsSourceZoomedInView(self, value)); }
+    pub fn SourceItem(self: *@This()) !*ISemanticZoomLocation { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.SourceItem(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetSourceItem(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetSourceItem(self, value)); }
+    pub fn DestinationItem(self: *@This()) !*ISemanticZoomLocation { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.DestinationItem(self, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+    pub fn SetDestinationItem(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetDestinationItem(self, value)); }
 };
 
 pub const IStorageLibraryChangeReader2 = extern struct {
