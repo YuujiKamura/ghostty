@@ -14,7 +14,8 @@ param(
     [int]$Duration = 120,
     [switch]$NoBuild,
     [int]$SampleInterval = 5,
-    [string]$ExePath = "zig-out-winui3\bin\ghostty.exe"
+    [string]$ExePath = "zig-out-winui3\bin\ghostty.exe",
+    [ValidateSet("steady","targeted")][string]$Load = "targeted"
 )
 
 $ErrorActionPreference = "Stop"
@@ -68,7 +69,8 @@ public class Win32Soak {
 "@
 
 Start-Sleep -Seconds 2
-$loadCmd = "python $($repoRoot -replace '\\','/')/scripts/steady_load.py $Duration"
+$scriptName = if ($Load -eq "targeted") { "targeted_load.py" } else { "steady_load.py" }
+$loadCmd = "python $($repoRoot -replace '\\','/')/scripts/$scriptName $Duration"
 foreach ($ch in $loadCmd.ToCharArray()) {
     [Win32Soak]::PostMessage($hwnd, 0x0102, [IntPtr]::new([int]$ch), [IntPtr]::Zero) | Out-Null
 }
