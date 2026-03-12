@@ -21,18 +21,35 @@ pub fn activateAndLoadResources(self: anytype, window: *com.IWindow) !void {
         // DWM frame extension (Windows Terminal style — NOT ExtendsContentIntoTitleBar).
         // Extend the DWM frame into the client area by the titlebar height so we can
         // draw our own content (TabView) in that region while keeping the DWM shadow.
+        // cyTopHeight must be DPI-scaled (40px at 96 DPI).
+        const dpi = os.GetDpiForWindow(h);
+        const scale: f32 = if (dpi > 0) @as(f32, @floatFromInt(dpi)) / 96.0 else 1.0;
+        const top_height: c_int = @intFromFloat(40.0 * scale);
         const margins = os.MARGINS{
             .cxLeftWidth = 0,
             .cxRightWidth = 0,
-            .cyTopHeight = 40, // titlebar height in px
+            .cyTopHeight = top_height,
             .cyBottomHeight = 0,
         };
         const hr = os.DwmExtendFrameIntoClientArea(h, &margins);
         if (hr >= 0) {
-            log.info("initXaml: DwmExtendFrameIntoClientArea OK (cyTopHeight=40)", .{});
+            log.info("initXaml: DwmExtendFrameIntoClientArea OK (cyTopHeight={} dpi={})", .{ top_height, dpi });
         } else {
             log.warn("initXaml: DwmExtendFrameIntoClientArea failed: hr=0x{x}", .{@as(u32, @bitCast(hr))});
         }
+        // Force WM_NCCALCSIZE to run immediately so the system titlebar is
+        // removed from the start. Without this, the titlebar is visible on
+        // initial show but disappears on the first resize — an inconsistency
+        // that looks like a bug ("titlebar disappears on resize").
+        _ = os.SetWindowPos(
+            h,
+            null,
+            0,
+            0,
+            0,
+            0,
+            os.SWP_FRAMECHANGED | os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOZORDER,
+        );
 
         // Enable dark mode for DWM caption buttons (white icons on dark background).
         const dark_mode: u32 = 1;

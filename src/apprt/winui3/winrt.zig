@@ -101,6 +101,12 @@ pub fn deleteHString(str: HSTRING) void {
     _ = WindowsDeleteString(str);
 }
 
+pub fn hstringSliceRaw(str: ?*anyopaque) []const u16 {
+    var len: u32 = 0;
+    const ptr = WindowsGetStringRawBuffer(str, &len);
+    return ptr[0..len];
+}
+
 /// Helper: create HSTRING from comptime UTF-8 literal.
 /// The returned HSTRING must be freed with deleteHString.
 pub fn hstring(comptime utf8: []const u8) WinRTError!HSTRING {
@@ -243,6 +249,7 @@ const RoActivateInstanceFn = *const fn (HSTRING, *?*IInspectable) callconv(.wina
 const RoGetActivationFactoryFn = *const fn (HSTRING, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT;
 const WindowsCreateStringFn = *const fn ([*]const u16, UINT32, *?HSTRING) callconv(.winapi) HRESULT;
 const WindowsDeleteStringFn = *const fn (?HSTRING) callconv(.winapi) HRESULT;
+const WindowsGetStringRawBufferFn = *const fn (?*anyopaque, ?*u32) callconv(.winapi) [*]const u16;
 
 var combase_loaded = std.atomic.Value(bool).init(false);
 var fn_RoInitialize: ?RoInitializeFn = null;
@@ -251,6 +258,7 @@ var fn_RoActivateInstance: ?RoActivateInstanceFn = null;
 var fn_RoGetActivationFactory: ?RoGetActivationFactoryFn = null;
 var fn_WindowsCreateString: ?WindowsCreateStringFn = null;
 var fn_WindowsDeleteString: ?WindowsDeleteStringFn = null;
+var fn_WindowsGetStringRawBuffer: ?WindowsGetStringRawBufferFn = null;
 
 var combase_module: ?HANDLE = null;
 
@@ -272,6 +280,7 @@ fn loadCombase() WinRTError!void {
     fn_RoGetActivationFactory = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "RoGetActivationFactory") orelse return error.WinRTFailed);
     fn_WindowsCreateString = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "WindowsCreateString") orelse return error.WinRTFailed);
     fn_WindowsDeleteString = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "WindowsDeleteString") orelse return error.WinRTFailed);
+    fn_WindowsGetStringRawBuffer = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "WindowsGetStringRawBuffer") orelse return error.WinRTFailed);
 
     combase_loaded.store(true, .release);
 }
@@ -303,6 +312,11 @@ pub fn WindowsCreateString(src: [*]const u16, len: UINT32, out: *?HSTRING) HRESU
 pub fn WindowsDeleteString(str: ?HSTRING) HRESULT {
     loadCombase() catch return @bitCast(@as(u32, 0x80004005));
     return fn_WindowsDeleteString.?(str);
+}
+
+pub fn WindowsGetStringRawBuffer(str: ?*anyopaque, len: ?*u32) [*]const u16 {
+    loadCombase() catch return &.{0};
+    return fn_WindowsGetStringRawBuffer.?(str, len);
 }
 
 // ============================================================================

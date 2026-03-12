@@ -27,6 +27,14 @@ pub fn subclassProc(
 ) callconv(.winapi) os.LRESULT {
     const app: *App = @ptrFromInt(ref_data);
 
+    // Let DWM handle caption button rendering and hit-testing first.
+    // DwmDefWindowProc returns TRUE (nonzero) if it handled the message
+    // (e.g. for caption buttons on WM_NCHITTEST, WM_NCLBUTTONDOWN, etc.).
+    var dwm_result: os.LRESULT = 0;
+    if (os.DwmDefWindowProc(hwnd, msg, wparam, lparam, &dwm_result) != 0) {
+        return dwm_result;
+    }
+
     switch (msg) {
         os.WM_NCCALCSIZE => {
             if (wparam != 0) {
@@ -59,9 +67,16 @@ pub fn subclassProc(
         os.WM_EXITSIZEMOVE => return handleExitSizeMove(app, hwnd),
         os.WM_TIMER => return handleTimer(app, hwnd, msg, wparam, lparam),
         os.WM_SIZE => return handleSize(app, hwnd, msg, wparam, lparam),
-        os.WM_KEYDOWN, os.WM_SYSKEYDOWN => return handleKeyInput(app, hwnd, msg, wparam, lparam, true),
-        os.WM_KEYUP, os.WM_SYSKEYUP => return handleKeyInput(app, hwnd, msg, wparam, lparam, false),
-        os.WM_CHAR => return handleChar(app, hwnd, msg, wparam, lparam),
+        // Keyboard input is handled by input_hwnd (inputWndProc).
+        // If keys arrive here (e.g. before input_hwnd gets focus), forward them.
+        os.WM_KEYDOWN, os.WM_SYSKEYDOWN, os.WM_KEYUP, os.WM_SYSKEYUP, os.WM_CHAR => {
+            if (app.input_hwnd) |input_hwnd| {
+                _ = os.PostMessageW(input_hwnd, msg, wparam, lparam);
+                return 0;
+            }
+            // Fallback if input_hwnd doesn't exist yet.
+            return handleKeyInputFallback(app, hwnd, msg, wparam, lparam);
+        },
         os.WM_PAINT => return handlePaint(hwnd, msg, wparam, lparam),
         os.WM_ERASEBKGND => return 1,
         os.WM_DPICHANGED => return handleDpiChanged(app, hwnd, msg, wparam, lparam),
@@ -76,12 +91,11 @@ pub fn subclassProc(
         os.WM_IME_COMPOSITION => return ime.handleIMEComposition(app, hwnd, msg, wparam, lparam),
         os.WM_IME_ENDCOMPOSITION => return ime.handleIMEEndComposition(app, hwnd, msg, wparam, lparam),
         os.WM_SETFOCUS => {
-            // Restore whichever keyboard target currently owns text input.
-            log.info("subclassProc: WM_SETFOCUS on HWND=0x{x}, restoring keyboard focus target={s}", .{
+            // Always redirect keyboard focus to input_hwnd.
+            log.info("subclassProc: WM_SETFOCUS on HWND=0x{x} -> redirecting to input_hwnd", .{
                 @intFromPtr(hwnd),
-                @tagName(app.keyboard_focus_target),
             });
-            input_runtime.restoreDesiredKeyboardTarget(app);
+            input_runtime.ensureInputFocus(app);
             return 0;
         },
         else => {},
@@ -102,7 +116,8 @@ fn handleExitSizeMove(app: *App, hwnd: os.HWND) os.LRESULT {
     _ = os.KillTimer(hwnd, RESIZE_TIMER_ID);
     app.resizing = false;
     if (app.pending_size) |sz| {
-        if (app.activeSurface()) |surface| surface.updateSize(sz.width, sz.height);
+        // Set RootGrid size → triggers XAML layout → SwapChainPanel SizeChanged → sizeCallback.
+        updateRootGridSize(app, hwnd, sz.width, sz.height);
         app.pending_size = null;
     }
     return 0;
@@ -126,7 +141,8 @@ fn handleTimer(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam
         return 0;
     }
     if (app.pending_size) |sz| {
-        if (app.activeSurface()) |surface| surface.updateSize(sz.width, sz.height);
+        // Update RootGrid → XAML layout → SwapChainPanel SizeChanged → sizeCallback.
+        updateRootGridSize(app, hwnd, sz.width, sz.height);
         app.pending_size = null;
     }
     app.drainMailbox();
@@ -137,16 +153,42 @@ fn handleSize(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam:
     const lp: usize = @bitCast(lparam);
     const width: u32 = @intCast(lp & 0xFFFF);
     const height: u32 = @intCast((lp >> 16) & 0xFFFF);
+
+    // Windows Terminal pattern: explicitly set RootGrid Width/Height in DIPs
+    // on every WM_SIZE. Without this, XAML layout doesn't track the actual
+    // window size, causing titlebar disappearance and scroll range issues.
+    updateRootGridSize(app, hwnd, width, height);
+
+    // During modal resize, defer RootGrid update until WM_EXITSIZEMOVE.
+    // Otherwise, set RootGrid size immediately → XAML layout propagates to
+    // SwapChainPanel SizeChanged → core_surface.sizeCallback().
     if (app.resizing) {
         app.pending_size = .{ .width = width, .height = height };
-    } else {
-        if (app.activeSurface()) |surface| surface.updateSize(width, height);
     }
     // Keep input HWND as a tiny focus target; never cover the render surface.
     if (app.input_hwnd) |input_hwnd| {
         _ = os.MoveWindow(input_hwnd, 0, 0, 1, 1, 0);
     }
     return os.DefSubclassProc(hwnd, msg, wparam, lparam);
+}
+
+
+/// Convert pixel dimensions to DIPs and set RootGrid Width/Height.
+/// Mirrors Windows Terminal's OnSize: `_rootGrid.Width(size.Width); _rootGrid.Height(size.Height);`
+fn updateRootGridSize(app: *App, hwnd: os.HWND, width_px: u32, height_px: u32) void {
+    const root_grid = app.root_grid orelse return;
+    if (width_px == 0 or height_px == 0) return;
+
+    const dpi = os.GetDpiForWindow(hwnd);
+    const scale: f64 = if (dpi > 0) @as(f64, @floatFromInt(dpi)) / 96.0 else 1.0;
+    const width_dips: f64 = @as(f64, @floatFromInt(width_px)) / scale;
+    const height_dips: f64 = @as(f64, @floatFromInt(height_px)) / scale;
+
+    const com = @import("com.zig");
+    const fe = root_grid.queryInterface(com.IFrameworkElement) catch return;
+    defer fe.release();
+    fe.SetWidth(width_dips) catch {};
+    fe.SetHeight(height_dips) catch {};
 }
 
 fn handlePaint(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
@@ -156,26 +198,21 @@ fn handlePaint(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM
     return os.DefSubclassProc(hwnd, msg, wparam, lparam);
 }
 
-fn handleKeyInput(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM, pressed: bool) os.LRESULT {
-    if (app.ime_composing) {
-        return os.DefSubclassProc(hwnd, msg, wparam, lparam);
+/// Fallback keyboard handler — only used if input_hwnd doesn't exist.
+fn handleKeyInputFallback(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
+    if (msg == os.WM_CHAR) {
+        if (app.activeSurface()) |surface| {
+            const wp: usize = @bitCast(wparam);
+            surface.handleCharEvent(@truncate(wp));
+        }
+        return 0;
     }
+    const pressed = (msg == os.WM_KEYDOWN or msg == os.WM_SYSKEYDOWN);
+    const wp: usize = @bitCast(wparam);
     if (app.activeSurface()) |surface| {
-        const wp: usize = @bitCast(wparam);
         surface.handleKeyEvent(@truncate(wp), pressed);
     }
     return os.DefSubclassProc(hwnd, msg, wparam, lparam);
-}
-
-fn handleChar(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
-    if (app.activeSurface()) |surface| {
-        const wp: usize = @bitCast(wparam);
-        surface.handleCharEvent(@truncate(wp));
-    }
-    _ = hwnd;
-    _ = msg;
-    _ = lparam;
-    return 0;
 }
 
 fn showContextMenu(app: *App, hwnd: os.HWND) void {
@@ -421,14 +458,11 @@ fn titleBarHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
 
     // Titlebar region: between top resize border and titlebar bottom.
     if (pt.y >= client_top_left.y + resize_border and pt.y < client_top_left.y + titlebar_h) {
-        // Caption buttons area (right side): Close / Maximize / Minimize.
-        // 3 buttons, each ~button_w wide, from right edge.
+        // Caption buttons area (right side): let Win32 child windows handle clicks.
+        // Return HTCLIENT so mouse messages reach the caption button child windows.
         const buttons_left = client_bottom_right.x - button_w * 3;
         if (pt.x >= buttons_left) {
-            // Determine which button: rightmost = Close, then Max, then Min.
-            if (pt.x >= client_bottom_right.x - button_w) return os.HTCLOSE;
-            if (pt.x >= client_bottom_right.x - button_w * 2) return os.HTMAXBUTTON;
-            return os.HTMINBUTTON;
+            return os.HTCLIENT;
         }
         // Everything else in the titlebar is draggable caption.
         return os.HTCAPTION;

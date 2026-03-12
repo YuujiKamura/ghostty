@@ -24,6 +24,11 @@ pub const IID_CharacterReceivedHandler = native.IID_CharacterReceivedHandler;
 pub const IID_ScrollEventHandler = gen.ScrollEventHandler.IID;
 pub const IID_RangeBaseValueChangedEventHandler = gen.RangeBaseValueChangedEventHandler.IID;
 pub const IRangeBaseValueChangedEventArgs = gen.IRangeBaseValueChangedEventArgs;
+pub const IID_TappedEventHandler = gen.TappedEventHandler.IID;
+pub const IID_TextChangedEventHandler = gen.TextChangedEventHandler.IID;
+pub const IID_TextCompositionStartedHandler = native.IID_TextCompositionStartedHandler;
+pub const IID_TextCompositionChangedHandler = native.IID_TextCompositionChangedHandler;
+pub const IID_TextCompositionEndedHandler = native.IID_TextCompositionEndedHandler;
 
 // --- Base interfaces (from generated) ---
 pub const IUnknown = gen.IUnknown;
@@ -60,6 +65,9 @@ pub const IXamlReaderStatics = gen.IXamlReaderStatics;
 pub const Point = gen.Point;
 pub const IKeyRoutedEventArgs = gen.IKeyRoutedEventArgs;
 pub const ICharacterReceivedRoutedEventArgs = gen.ICharacterReceivedRoutedEventArgs;
+pub const ITextCompositionStartedEventArgs = gen.ITextCompositionStartedEventArgs;
+pub const ITextCompositionChangedEventArgs = gen.ITextCompositionChangedEventArgs;
+pub const ITextCompositionEndedEventArgs = gen.ITextCompositionEndedEventArgs;
 // WinUI3 pointer interfaces use DIFFERENT IIDs and vtable layouts from UWP.
 // The generated versions are from Windows.UI.Input (UWP); the hand-written
 // native versions are from Microsoft.UI.Input (WinUI3) with correct slot order.
@@ -76,6 +84,7 @@ pub const GridLength = gen.GridLength;
 pub const GridUnitType = gen.GridUnitType;
 pub const HorizontalAlignment = gen.HorizontalAlignment;
 pub const VerticalAlignment = gen.VerticalAlignment;
+pub const FocusState = gen.FocusState;
 
 // --- Hand-written native interfaces (cannot be auto-generated from WinMD) ---
 pub const IApplicationAbi = native.IApplicationAbi;

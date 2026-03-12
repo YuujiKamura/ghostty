@@ -1,7 +1,9 @@
 /// Dedicated input HWND — bypasses WinUI3's TSF input stack.
 ///
-/// Extracted from App.zig — provides a transparent child window that receives
-/// keyboard focus and all IME messages, bypassing WinUI3's TSF layer entirely.
+/// This is the SOLE keyboard focus target. All keyboard and IME input flows
+/// through here, mimicking the Win32 apprt's direct-HWND approach.
+/// WM_KEYDOWN/WM_CHAR are forwarded to Surface.handleKeyEvent/handleCharEvent.
+/// IME composition (WM_IME_*) is handled via ime.zig.
 const builtin = @import("builtin");
 const std = @import("std");
 const os = @import("os.zig");
@@ -41,8 +43,6 @@ pub fn createInputWindow(parent: os.HWND, app_ptr: usize) ?os.HWND {
     const hinstance = os.GetModuleHandleW(null) orelse return null;
 
     // Use WS_EX_TRANSPARENT to pass mouse events through.
-    // Removed WS_EX_LAYERED as it can cause failures for child windows on some Windows versions
-    // when combined with certain parent window styles.
     const hwnd = os.CreateWindowExW(
         os.WS_EX_TRANSPARENT,
         INPUT_CLASS_NAME,
@@ -69,7 +69,9 @@ pub fn createInputWindow(parent: os.HWND, app_ptr: usize) ?os.HWND {
 }
 
 /// Window procedure for the dedicated input HWND.
-/// Handles keyboard, IME, and mouse messages. Forwards everything else to DefWindowProc.
+/// Handles ALL keyboard input and IME messages.
+/// Keyboard events are forwarded to Surface for Ghostty key processing.
+/// IME events are handled via ime.zig for composition/preedit.
 pub fn inputWndProc(
     hwnd: os.HWND,
     msg: os.UINT,
@@ -80,26 +82,44 @@ pub fn inputWndProc(
     if (app_ptr == 0) return os.DefWindowProcW(hwnd, msg, wparam, lparam);
     const app: *App = @ptrFromInt(app_ptr);
 
-    // input_hwnd only handles IME messages. Keyboard, mouse, and focus
-    // events are handled via XAML events on the SwapChainPanel.
     switch (msg) {
         os.WM_KEYDOWN, os.WM_SYSKEYDOWN => {
+            const wp_val: usize = @bitCast(wparam);
+            const vk = @as(u16, @truncate(wp_val));
+            // Forward physical key presses to Surface for Ghostty key handling.
+            // VK_PROCESSKEY (0xE5) means IME is processing — handleKeyEvent
+            // treats unmapped VKs correctly (resets pending_keydown to .none).
+            if (app.activeSurface()) |surface| {
+                surface.handleKeyEvent(vk, true);
+            }
+            // Always pass to DefWindowProcW so IME gets to process the key.
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
         os.WM_KEYUP, os.WM_SYSKEYUP => {
+            const wp_val: usize = @bitCast(wparam);
+            const vk = @as(u16, @truncate(wp_val));
+            if (app.activeSurface()) |surface| {
+                surface.handleKeyEvent(vk, false);
+            }
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
         os.WM_CHAR => {
-            // IME commit text arrives as WM_CHAR on input_hwnd.
+            // Both IME commit text and normal typing arrive here as WM_CHAR.
             const wp: usize = @bitCast(wparam);
             if (app.activeSurface()) |surface| {
                 surface.handleCharEvent(@truncate(wp));
             }
             return 0;
         },
-        os.WM_IME_STARTCOMPOSITION => return ime.handleIMEStartComposition(app, hwnd, msg, wparam, lparam),
-        os.WM_IME_COMPOSITION => return ime.handleIMEComposition(app, hwnd, msg, wparam, lparam),
-        os.WM_IME_ENDCOMPOSITION => return ime.handleIMEEndComposition(app, hwnd, msg, wparam, lparam),
+        os.WM_IME_STARTCOMPOSITION => {
+            return ime.handleIMEStartComposition(app, hwnd, msg, wparam, lparam);
+        },
+        os.WM_IME_COMPOSITION => {
+            return ime.handleIMEComposition(app, hwnd, msg, wparam, lparam);
+        },
+        os.WM_IME_ENDCOMPOSITION => {
+            return ime.handleIMEEndComposition(app, hwnd, msg, wparam, lparam);
+        },
         os.WM_IME_SETCONTEXT => {
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
@@ -114,12 +134,16 @@ pub fn inputWndProc(
         },
         os.WM_ERASEBKGND => return 1,
         os.WM_SETFOCUS => {
-            log.info("inputWndProc: WM_SETFOCUS received on input HWND=0x{x} (IME mode)", .{@intFromPtr(hwnd)});
+            log.info("inputWndProc: WM_SETFOCUS on input HWND=0x{x}", .{@intFromPtr(hwnd)});
+            // Force IME open on focus to prevent raw input state
+            const himc = os.ImmGetContext(hwnd);
+            if (himc != null) {
+                _ = os.ImmSetOpenStatus(himc.?, 1);
+                _ = os.ImmReleaseContext(hwnd, himc.?);
+            }
             return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
-        // Test hook (debug builds only): externally force ime_composing = true
-        // so that a subsequent WM_KILLFOCUS exercises the cleanup path.
-        // Stripped in ReleaseSafe/ReleaseFast/ReleaseSmall builds.
+        // Test hook (debug builds only)
         os.WM_APP_TEST_FAKE_IME_COMPOSING => if (comptime builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
             log.info("inputWndProc: WM_APP_TEST_FAKE_IME_COMPOSING — setting fake composing state", .{});
             app.ime_composing = true;
@@ -127,10 +151,7 @@ pub fn inputWndProc(
             return 0;
         },
         os.WM_KILLFOCUS => {
-            log.info("inputWndProc: WM_KILLFOCUS on input HWND=0x{x} (IME mode)", .{@intFromPtr(hwnd)});
-            // If we were composing when focus left, clean up preedit state.
-            // Windows usually sends WM_IME_ENDCOMPOSITION, but if it doesn't
-            // (e.g. user clicked TabView mid-composition), clear stale state.
+            log.info("inputWndProc: WM_KILLFOCUS on input HWND=0x{x}", .{@intFromPtr(hwnd)});
             if (app.ime_composing) {
                 log.info("inputWndProc: WM_KILLFOCUS while ime_composing — clearing preedit", .{});
                 app.ime_composing = false;

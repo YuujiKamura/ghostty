@@ -1001,11 +1001,16 @@ fn onXamlPointerPressed(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
         else => return,
     };
     // Request XAML focus on click so keyboard events flow here.
-    if (self.swap_chain_panel) |panel| {
-        if (panel.queryInterface(com.IUIElement)) |ue| {
-            defer ue.release();
-            _ = ue.focus(com.FocusState.Pointer) catch {};
-        } else |_| {}
+    // Skip during resize/maximize — XAML layout is recalculating and focus() can crash.
+    if (!self.app.resizing) {
+        if (self.swap_chain_panel) |panel| {
+            if (panel.queryInterface(com.IUIElement)) |ue| {
+                defer ue.release();
+                _ = ue.focus(com.FocusState.Pointer) catch {};
+            } else |_| {}
+        }
+    } else {
+        App.fileLog("onXamlPointerPressed: skipping focus (resizing)", .{});
     }
     self.handleMouseButton(button, .press);
     ea.SetHandled(true) catch {};

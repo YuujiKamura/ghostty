@@ -11,6 +11,9 @@ pub const RuntimeDebugConfig = struct {
     enable_handler_close: bool = true,
     enable_handler_addtab: bool = true,
     enable_handler_selection: bool = true,
+    probe_ime_comp_start_handler: bool = false,
+    probe_ime_comp_change_handler: bool = false,
+    probe_ime_comp_end_handler: bool = false,
     tabview_append_item: bool = true,
     tabview_select_first: bool = true,
 
@@ -35,6 +38,9 @@ pub const RuntimeDebugConfig = struct {
             .enable_handler_close = envBool("GHOSTTY_WINUI3_HANDLER_CLOSE", true),
             .enable_handler_addtab = envBool("GHOSTTY_WINUI3_HANDLER_ADDTAB", true),
             .enable_handler_selection = envBool("GHOSTTY_WINUI3_HANDLER_SELECTION", true),
+            .probe_ime_comp_start_handler = envBool("GHOSTTY_WINUI3_PROBE_IME_COMP_START_HANDLER", false),
+            .probe_ime_comp_change_handler = envBool("GHOSTTY_WINUI3_PROBE_IME_COMP_CHANGE_HANDLER", false),
+            .probe_ime_comp_end_handler = envBool("GHOSTTY_WINUI3_PROBE_IME_COMP_END_HANDLER", false),
             .tabview_append_item = envBool("GHOSTTY_WINUI3_TABVIEW_APPEND_ITEM", true),
             .tabview_select_first = envBool("GHOSTTY_WINUI3_TABVIEW_SELECT_FIRST", true),
 
@@ -47,7 +53,7 @@ pub const RuntimeDebugConfig = struct {
 
     pub fn log(self: RuntimeDebugConfig, logger: anytype) void {
         logger.info(
-            "winui3 debug config: tabview={} metadata_provider={} xaml_resources={} tabview_empty={} item_no_content={} handlers={} close={} addtab={} selection={} append={} select={} close_after={}ms close_tab_after={}ms new_tab={} test_resize={}",
+            "winui3 debug config: tabview={} metadata_provider={} xaml_resources={} tabview_empty={} item_no_content={} handlers={} close={} addtab={} selection={} ime_probe_start={} ime_probe_change={} ime_probe_end={} append={} select={} close_after={}ms close_tab_after={}ms new_tab={} test_resize={}",
             .{
                 self.enable_tabview,
                 self.use_ixaml_metadata_provider,
@@ -58,6 +64,9 @@ pub const RuntimeDebugConfig = struct {
                 self.enable_handler_close,
                 self.enable_handler_addtab,
                 self.enable_handler_selection,
+                self.probe_ime_comp_start_handler,
+                self.probe_ime_comp_change_handler,
+                self.probe_ime_comp_end_handler,
                 self.tabview_append_item,
                 self.tabview_select_first,
                 self.close_after_ms orelse 0,

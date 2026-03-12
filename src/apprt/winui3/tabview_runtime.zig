@@ -132,6 +132,10 @@ pub fn createRoot(
         return err;
     };
 
+    // Store root grid reference for explicit sizing on WM_SIZE (Windows Terminal pattern).
+    _ = root_grid_insp.addRef();
+    self.root_grid = root_grid_insp;
+
     log.info("initXaml step 7.5 OK: RootGrid set as Window content (TabView Row 0, TabContent Row 1)", .{});
 
     // 7. SetTitleBar(tabView) — makes the TabView act as the custom title bar.

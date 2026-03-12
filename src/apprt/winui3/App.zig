@@ -29,6 +29,7 @@ const tab_index = @import("tab_index.zig");
 const tab_manager = @import("tab_manager.zig");
 const input_runtime = @import("input_runtime.zig");
 const window_runtime = @import("window_runtime.zig");
+const caption_buttons_mod = @import("caption_buttons.zig");
 const xaml_helpers = @import("xaml_helpers.zig");
 const surface_binding = @import("surface_binding.zig");
 const event_handlers = @import("event_handlers.zig");
@@ -55,6 +56,7 @@ pub fn fileLog(comptime fmt: []const u8, args: anytype) void {
     defer _ = windows.ntdll.NtClose(h);
     _ = K32.SetFilePointerEx(h, @bitCast(@as(i64, 0)), null, 2); // FILE_END
     _ = K32.WriteFile(h, msg.ptr, @intCast(msg.len), null, null);
+    _ = os.FlushFileBuffers(h);
 }
 
 /// Timer ID for live resize preview.
@@ -149,6 +151,12 @@ active_surface_idx: usize = 0,
 
 /// The TabView control that manages tabs.
 tab_view: ?*com.ITabView = null,
+
+/// The root grid (Window.Content) — must be explicitly sized on WM_SIZE.
+/// Windows Terminal sets _rootGrid.Width/Height on every resize; without this,
+/// XAML layout doesn't track the actual window size correctly.
+root_grid: ?*winrt.IInspectable = null,
+
 
 /// The content grid (Row 1 of RootGrid) where SwapChainPanel is placed.
 /// In Issue #28 architecture, SwapChainPanel lives here, NOT in TabViewItem.Content.
@@ -282,6 +290,12 @@ pub fn initXaml(self: *App) !void {
     try self.createWindowContent(window);
     try self.scheduleDebugActions();
     self.syncVisualDiagnostics();
+
+    // Install caption buttons (minimize, maximize, close) in the TabView footer.
+    if (self.tab_view) |tv| {
+        caption_buttons_mod.install(tv, self.hwnd.?);
+    }
+
     self.setupNativeInputWindows();
     input_runtime.focusKeyboardTarget(self);
     self.startup_bootstrapped = true;
@@ -912,6 +926,7 @@ fn fullCleanup(self: *App) void {
     if (self.add_tab_handler) |h| h.release();
     if (self.selection_changed_handler) |h| h.release();
 
+    if (self.root_grid) |rg| { _ = rg.release(); self.root_grid = null; }
     if (self.tab_content_grid) |tcg| { _ = tcg.release(); self.tab_content_grid = null; }
     if (self.tab_view) |tv| tv.release();
     if (self.window) |window| window.release();

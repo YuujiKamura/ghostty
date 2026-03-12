@@ -112,6 +112,9 @@ pub const GWLP_USERDATA: c_int = -21;
 pub const CF_UNICODETEXT: UINT = 13;
 pub const GMEM_MOVEABLE: UINT = 0x0002;
 pub const SC_CLOSE: usize = 0xF060;
+pub const SC_MINIMIZE: usize = 0xF020;
+pub const SC_MAXIMIZE: usize = 0xF030;
+pub const SC_RESTORE: usize = 0xF120;
 pub const MF_STRING: UINT = 0x0000;
 pub const MF_SEPARATOR: UINT = 0x0800;
 pub const TPM_RIGHTBUTTON: UINT = 0x0002;
@@ -127,9 +130,11 @@ pub const INFINITE: DWORD = 0xFFFFFFFF;
 pub const MAPVK_VK_TO_CHAR: UINT = 2;
 
 // --- SetWindowPos flags ---
+pub const SWP_NOSIZE: UINT = 0x0001;
 pub const SWP_NOMOVE: UINT = 0x0002;
 pub const SWP_NOZORDER: UINT = 0x0004;
 pub const SWP_NOACTIVATE: UINT = 0x0010;
+pub const SWP_FRAMECHANGED: UINT = 0x0020;
 
 // --- Pixel format ---
 pub const PFD_DRAW_TO_WINDOW: DWORD = 0x00000004;
@@ -307,6 +312,7 @@ pub extern "kernel32" fn GetCurrentThreadId() callconv(.winapi) DWORD;
 pub extern "kernel32" fn GetModuleFileNameW(hModule: ?HINSTANCE, lpFilename: [*]u16, nSize: DWORD) callconv(.winapi) DWORD;
 pub extern "kernel32" fn RtlCaptureStackBackTrace(FramesToSkip: DWORD, FramesToCapture: DWORD, BackTrace: [*]?*anyopaque, BackTraceHash: ?*DWORD) callconv(.winapi) u16;
 pub extern "kernel32" fn SetUnhandledExceptionFilter(lpTopLevelExceptionFilter: ?VectoredExceptionHandler) callconv(.winapi) ?VectoredExceptionHandler;
+pub extern "kernel32" fn FlushFileBuffers(hFile: std.os.windows.HANDLE) callconv(.winapi) c_int;
 
 pub const MODULEENTRY32W = extern struct {
     dwSize: DWORD,
@@ -429,6 +435,14 @@ pub const MARGINS = extern struct {
     cyBottomHeight: c_int,
 };
 
+pub extern "dwmapi" fn DwmDefWindowProc(
+    hWnd: HWND,
+    msg: UINT,
+    wParam: WPARAM,
+    lParam: LPARAM,
+    plResult: *LRESULT,
+) callconv(.winapi) c_int; // BOOL
+
 pub extern "dwmapi" fn DwmExtendFrameIntoClientArea(
     hWnd: HWND,
     pMarInset: *const MARGINS,
@@ -448,7 +462,6 @@ pub const DWMWA_CAPTION_COLOR: DWORD = 35;
 pub const GWL_STYLE: c_int = -16;
 pub const WS_CAPTION: DWORD = 0x00C00000;
 pub const WS_THICKFRAME: DWORD = 0x00040000;
-pub const SWP_FRAMECHANGED: UINT = 0x0020;
 pub const SWP_NOOWNERZORDER: UINT = 0x0200;
 pub const MONITOR_DEFAULTTONEAREST: DWORD = 0x00000002;
 pub const HWND_TOP: ?HWND = null;
@@ -473,6 +486,40 @@ pub extern "user32" fn GetWindowPlacement(hWnd: HWND, lpwndpl: *WINDOWPLACEMENT)
 pub extern "user32" fn SetWindowPlacement(hWnd: HWND, lpwndpl: *const WINDOWPLACEMENT) callconv(.winapi) BOOL;
 pub extern "user32" fn MonitorFromWindow(hWnd: HWND, dwFlags: DWORD) callconv(.winapi) ?HANDLE;
 pub extern "user32" fn GetMonitorInfoW(hMonitor: HANDLE, lpmi: *MONITORINFO) callconv(.winapi) BOOL;
+
+// --- Caption button support ---
+pub const WS_CLIPSIBLINGS: DWORD = 0x04000000;
+pub const HGDIOBJ = ?*anyopaque;
+pub const HFONT = ?*anyopaque;
+pub const COLORREF = DWORD;
+
+pub extern "user32" fn GetParent(hWnd: HWND) callconv(.winapi) ?HWND;
+pub extern "user32" fn IsZoomed(hWnd: HWND) callconv(.winapi) BOOL;
+pub extern "user32" fn GetMenu(hWnd: HWND) callconv(.winapi) ?*anyopaque;
+pub extern "user32" fn FillRect(hDC: HDC, lprc: *const RECT, hbr: HBRUSH) callconv(.winapi) c_int;
+pub extern "user32" fn DrawTextW(hdc: HDC, lpchText: [*:0]const u16, cchText: c_int, lprc: *RECT, format: UINT) callconv(.winapi) c_int;
+
+pub extern "gdi32" fn CreateSolidBrush(color: COLORREF) callconv(.winapi) HBRUSH;
+pub extern "gdi32" fn DeleteObject(ho: HGDIOBJ) callconv(.winapi) BOOL;
+pub extern "gdi32" fn SelectObject(hdc: HDC, h: HGDIOBJ) callconv(.winapi) HGDIOBJ;
+pub extern "gdi32" fn SetBkMode(hdc: HDC, mode: c_int) callconv(.winapi) c_int;
+pub extern "gdi32" fn SetTextColor(hdc: HDC, color: COLORREF) callconv(.winapi) COLORREF;
+pub extern "gdi32" fn CreateFontW(
+    cHeight: c_int,
+    cWidth: c_int,
+    cEscapement: c_int,
+    cOrientation: c_int,
+    cWeight: c_int,
+    bItalic: DWORD,
+    bUnderline: DWORD,
+    bStrikeOut: DWORD,
+    iCharSet: DWORD,
+    iOutPrecision: DWORD,
+    iClipPrecision: DWORD,
+    iQuality: DWORD,
+    iPitchAndFamily: DWORD,
+    pszFaceName: [*:0]const u16,
+) callconv(.winapi) HFONT;
 
 // --- winmm extern declarations ---
 pub extern "winmm" fn timeBeginPeriod(uPeriod: UINT) callconv(.winapi) UINT;
