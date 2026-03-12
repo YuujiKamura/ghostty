@@ -86,8 +86,31 @@ $prevLogSize = 0
 
 Write-Host "[soak] Monitoring for $Duration sec (sample every ${SampleInterval}s)..." -ForegroundColor Yellow
 Write-Host ""
-Write-Host "  Time(s)  WorkingSet(MB)  Handles  Threads  LogSize(KB)" -ForegroundColor Gray
-Write-Host "  -------  --------------  -------  -------  -----------" -ForegroundColor Gray
+Write-Host "  Time(s)  WS(MB)  Handles  Threads | pages  pins  page_size(KB)" -ForegroundColor Gray
+Write-Host "  -------  ------  -------  ------- | -----  ----  ------------" -ForegroundColor Gray
+
+$lastDiagLine = 0  # track how far we've read in debug log
+
+function Get-LatestDiagnostic {
+    # Parse the most recent DIAGNOSTIC block from ghostty_debug.log
+    param([string]$LogPath, [ref]$LastLine)
+    $result = @{ pages = "?"; pins = "?"; page_size = "?" }
+    if (-not (Test-Path $LogPath)) { return $result }
+    try {
+        $lines = Get-Content $LogPath -Tail 50 -ErrorAction SilentlyContinue
+        if (-not $lines) { return $result }
+        # Find last surface[0] line with pages/pins/page_size
+        for ($j = $lines.Count - 1; $j -ge 0; $j--) {
+            if ($lines[$j] -match 'surface\[0\]\s+pages=(\d+)\s+rows=\d+\s+cols=\d+\s+pins=(\d+)\s+page_size=(\d+)') {
+                $result.pages = $Matches[1]
+                $result.pins = $Matches[2]
+                $result.page_size = [Math]::Round([int]$Matches[3] / 1KB, 1)
+                break
+            }
+        }
+    } catch {}
+    return $result
+}
 
 while (([DateTime]::UtcNow - $startTime).TotalSeconds -lt ($Duration + 10)) {
     Start-Sleep -Seconds $SampleInterval
@@ -107,31 +130,41 @@ while (([DateTime]::UtcNow - $startTime).TotalSeconds -lt ($Duration + 10)) {
     $threads = $proc.Threads.Count
     $elapsed = [int]([DateTime]::UtcNow - $startTime).TotalSeconds
 
-    # Check log growth (proxy for "still processing output")
-    $logSize = 0
-    if (Test-Path $debugLog) { $logSize = (Get-Item $debugLog).Length }
-    $logKB = [Math]::Round($logSize / 1KB, 1)
+    # Internal state from diagnostic log
+    $diag = Get-LatestDiagnostic -LogPath $debugLog -LastLine ([ref]$lastDiagLine)
 
     $sample = [PSCustomObject]@{
         ElapsedSec = $elapsed
         WorkingSetMB = $ws
         Handles = $handles
         Threads = $threads
-        LogSizeKB = $logKB
+        Pages = $diag.pages
+        Pins = $diag.pins
+        PageSizeKB = $diag.page_size
     }
     $samples += $sample
 
-    Write-Host ("  {0,7}  {1,14}  {2,7}  {3,7}  {4,11}" -f $elapsed, $ws, $handles, $threads, $logKB)
+    Write-Host ("  {0,7}  {1,6}  {2,7}  {3,7} | {4,5}  {5,4}  {6,12}" -f $elapsed, $ws, $handles, $threads, $diag.pages, $diag.pins, $diag.page_size)
 
     # Detect memory explosion (>1GB working set)
     if ($ws -gt 1024) {
         Write-Host "[soak] WARNING: Working set > 1GB ($ws MB)" -ForegroundColor Red
     }
 
-    # Detect hang (log size unchanged for 3 consecutive samples)
+    # Detect internal state growth
+    if ($samples.Count -ge 2 -and $diag.pages -ne "?") {
+        $prevPages = $samples[-2].Pages
+        if ($prevPages -ne "?" -and [int]$diag.pages -gt [int]$prevPages + 10) {
+            Write-Host "[soak] WARNING: Pages growing rapidly ($prevPages -> $($diag.pages))" -ForegroundColor Yellow
+        }
+    }
+
+    # Detect hang (log unchanged for 3 consecutive samples)
+    $logSize = 0
+    if (Test-Path $debugLog) { $logSize = (Get-Item $debugLog).Length }
     if ($samples.Count -ge 3) {
-        $last3 = $samples[-3..-1]
-        if (($last3 | ForEach-Object { $_.LogSizeKB } | Sort-Object -Unique).Count -eq 1) {
+        $last3LogSizes = @($samples[-3].LogSizeKB, $samples[-2].LogSizeKB, $logSize)
+        if (($last3LogSizes | Sort-Object -Unique).Count -eq 1) {
             # Log hasn't changed but process is alive — possible hang
             # Only flag if we're in the middle of the test (not at the end)
             if ($elapsed -lt ($Duration - 20)) {
