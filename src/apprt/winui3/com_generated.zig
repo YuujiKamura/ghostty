@@ -3163,9 +3163,6 @@ pub const KeyEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -3198,9 +3195,6 @@ pub fn KeyEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) ty
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -3311,9 +3305,6 @@ pub const RoutedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -3346,9 +3337,6 @@ pub fn RoutedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type)
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -4126,9 +4114,6 @@ pub const TypedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -4161,9 +4146,6 @@ pub fn TypedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) 
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -4336,9 +4318,6 @@ pub const DragEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -4371,9 +4350,6 @@ pub fn DragEventHandlerImpl(comptime Context: type, comptime CallbackFn: type) t
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -4484,9 +4460,6 @@ pub const PointerEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -4519,9 +4492,6 @@ pub fn PointerEventHandlerImpl(comptime Context: type, comptime CallbackFn: type
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -4632,9 +4602,6 @@ pub const TappedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -4667,9 +4634,6 @@ pub fn TappedEventHandlerImpl(comptime Context: type, comptime CallbackFn: type)
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -4780,9 +4744,6 @@ pub const DoubleTappedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -4815,9 +4776,6 @@ pub fn DoubleTappedEventHandlerImpl(comptime Context: type, comptime CallbackFn:
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -4928,9 +4886,6 @@ pub const HoldingEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -4963,9 +4918,6 @@ pub fn HoldingEventHandlerImpl(comptime Context: type, comptime CallbackFn: type
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -5134,9 +5086,6 @@ pub const RightTappedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -5169,9 +5118,6 @@ pub fn RightTappedEventHandlerImpl(comptime Context: type, comptime CallbackFn: 
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -5282,9 +5228,6 @@ pub const ManipulationStartingEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -5317,9 +5260,6 @@ pub fn ManipulationStartingEventHandlerImpl(comptime Context: type, comptime Cal
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -5430,9 +5370,6 @@ pub const ManipulationInertiaStartingEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -5465,9 +5402,6 @@ pub fn ManipulationInertiaStartingEventHandlerImpl(comptime Context: type, compt
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -5578,9 +5512,6 @@ pub const ManipulationStartedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -5613,9 +5544,6 @@ pub fn ManipulationStartedEventHandlerImpl(comptime Context: type, comptime Call
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -5726,9 +5654,6 @@ pub const ManipulationDeltaEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -5761,9 +5686,6 @@ pub fn ManipulationDeltaEventHandlerImpl(comptime Context: type, comptime Callba
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -5874,9 +5796,6 @@ pub const ManipulationCompletedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -5909,9 +5828,6 @@ pub fn ManipulationCompletedEventHandlerImpl(comptime Context: type, comptime Ca
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -7190,9 +7106,6 @@ pub const SizeChangedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -7225,9 +7138,6 @@ pub fn SizeChangedEventHandlerImpl(comptime Context: type, comptime CallbackFn: 
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -7338,9 +7248,6 @@ pub const EventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -7373,9 +7280,6 @@ pub fn EventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type 
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -7971,9 +7875,6 @@ pub const DependencyPropertyChangedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -8006,9 +7907,6 @@ pub fn DependencyPropertyChangedEventHandlerImpl(comptime Context: type, comptim
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -8939,9 +8837,6 @@ pub const UnhandledExceptionEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -8974,9 +8869,6 @@ pub fn UnhandledExceptionEventHandlerImpl(comptime Context: type, comptime Callb
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -9133,9 +9025,6 @@ pub const ApplicationInitializationCallback = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -9168,9 +9057,6 @@ pub fn ApplicationInitializationCallbackImpl(comptime Context: type, comptime Ca
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -9642,9 +9528,6 @@ pub const SelectionChangedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -9677,9 +9560,6 @@ pub fn SelectionChangedEventHandlerImpl(comptime Context: type, comptime Callbac
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -10063,9 +9943,6 @@ pub const TextChangedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -10098,9 +9975,6 @@ pub fn TextChangedEventHandlerImpl(comptime Context: type, comptime CallbackFn: 
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -10211,9 +10085,6 @@ pub const ContextMenuOpeningEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -10246,9 +10117,6 @@ pub fn ContextMenuOpeningEventHandlerImpl(comptime Context: type, comptime Callb
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -10359,9 +10227,6 @@ pub const TextControlPasteEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -10394,9 +10259,6 @@ pub fn TextControlPasteEventHandlerImpl(comptime Context: type, comptime Callbac
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -11469,9 +11331,6 @@ pub const RangeBaseValueChangedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -11504,9 +11363,6 @@ pub fn RangeBaseValueChangedEventHandlerImpl(comptime Context: type, comptime Ca
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -11628,9 +11484,6 @@ pub const ScrollEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -11663,9 +11516,6 @@ pub fn ScrollEventHandlerImpl(comptime Context: type, comptime CallbackFn: type)
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -12215,9 +12065,6 @@ pub const DependencyPropertyChangedCallback = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -12250,9 +12097,6 @@ pub fn DependencyPropertyChangedCallbackImpl(comptime Context: type, comptime Ca
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -14230,9 +14074,6 @@ pub const AsyncOperationCompletedHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, i32) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -14265,9 +14106,6 @@ pub fn AsyncOperationCompletedHandlerImpl(comptime Context: type, comptime Callb
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -19205,9 +19043,6 @@ pub const DispatchedHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -19240,9 +19075,6 @@ pub fn DispatchedHandlerImpl(comptime Context: type, comptime CallbackFn: type) 
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -19353,9 +19185,6 @@ pub const IdleDispatchedHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -19388,9 +19217,6 @@ pub fn IdleDispatchedHandlerImpl(comptime Context: type, comptime CallbackFn: ty
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -19677,9 +19503,6 @@ pub const DispatcherQueueHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -19712,9 +19535,6 @@ pub fn DispatcherQueueHandlerImpl(comptime Context: type, comptime CallbackFn: t
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -19941,9 +19761,6 @@ pub const BindingFailedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -19976,9 +19793,6 @@ pub fn BindingFailedEventHandlerImpl(comptime Context: type, comptime CallbackFn
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -22790,9 +22604,6 @@ pub const DataProviderHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -22825,9 +22636,6 @@ pub fn DataProviderHandlerImpl(comptime Context: type, comptime CallbackFn: type
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -23848,9 +23656,6 @@ pub const CreateDefaultValueCallback = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -23883,9 +23688,6 @@ pub fn CreateDefaultValueCallbackImpl(comptime Context: type, comptime CallbackF
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -23996,9 +23798,6 @@ pub const PropertyChangedCallback = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -24031,9 +23830,6 @@ pub fn PropertyChangedCallbackImpl(comptime Context: type, comptime CallbackFn: 
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -24976,9 +24772,6 @@ pub const AsyncActionCompletedHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, i32) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -25011,9 +24804,6 @@ pub fn AsyncActionCompletedHandlerImpl(comptime Context: type, comptime Callback
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -25702,9 +25492,6 @@ pub const ClosableNotifierHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -25737,9 +25524,6 @@ pub fn ClosableNotifierHandlerImpl(comptime Context: type, comptime CallbackFn: 
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -26692,9 +26476,6 @@ pub const DownloadProgressEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -26727,9 +26508,6 @@ pub fn DownloadProgressEventHandlerImpl(comptime Context: type, comptime Callbac
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -26840,9 +26618,6 @@ pub const ExceptionRoutedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -26875,9 +26650,6 @@ pub fn ExceptionRoutedEventHandlerImpl(comptime Context: type, comptime Callback
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -27187,9 +26959,6 @@ pub const MapChangedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -27222,9 +26991,6 @@ pub fn MapChangedEventHandlerImpl(comptime Context: type, comptime CallbackFn: t
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -27767,9 +27533,6 @@ pub const DeferralCompletedHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -27802,9 +27565,6 @@ pub fn DeferralCompletedHandlerImpl(comptime Context: type, comptime CallbackFn:
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -29350,9 +29110,6 @@ pub const ItemClickEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -29385,9 +29142,6 @@ pub fn ItemClickEventHandlerImpl(comptime Context: type, comptime CallbackFn: ty
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -29498,9 +29252,6 @@ pub const DragItemsStartingEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -29533,9 +29284,6 @@ pub fn DragItemsStartingEventHandlerImpl(comptime Context: type, comptime Callba
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -29958,9 +29706,6 @@ pub const AsyncOperationProgressHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -29993,9 +29738,6 @@ pub fn AsyncOperationProgressHandlerImpl(comptime Context: type, comptime Callba
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -30106,9 +29848,6 @@ pub const AsyncOperationWithProgressCompletedHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, i32) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -30141,9 +29880,6 @@ pub fn AsyncOperationWithProgressCompletedHandlerImpl(comptime Context: type, co
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -30651,9 +30387,6 @@ pub const StreamedFileDataRequestedHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -30686,9 +30419,6 @@ pub fn StreamedFileDataRequestedHandlerImpl(comptime Context: type, comptime Cal
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -30877,9 +30607,6 @@ pub const ShareProviderHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -30912,9 +30639,6 @@ pub fn ShareProviderHandlerImpl(comptime Context: type, comptime CallbackFn: typ
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
@@ -31332,9 +31056,6 @@ pub const SemanticZoomViewChangedEventHandler = extern struct {
         QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
         AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
         Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
         Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -31367,9 +31088,6 @@ pub fn SemanticZoomViewChangedEventHandlerImpl(comptime Context: type, comptime 
             .QueryInterface = &queryInterfaceFn,
             .AddRef = &addRefFn,
             .Release = &releaseFn,
-            .GetIids = null,
-            .GetRuntimeClassName = null,
-            .GetTrustLevel = null,
             .Invoke = &invokeFn,
         };
 
