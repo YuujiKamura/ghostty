@@ -81,24 +81,22 @@ pub fn loadXamlResources(self: anytype, xa: *com.IApplication) void {
     self.xaml_controls_resources = xcr;
 
     // 2. Try MergedDictionaries pattern (correct way)
-    const xa_abi: *com.IApplicationAbi = @ptrCast(xa);
-    if (loadXamlResourcesMerged(xa_abi, xcr)) {
+    if (loadXamlResourcesMerged(xa, xcr)) {
         log.info("loadXamlResources: OK (MergedDictionaries pattern)", .{});
         return;
     } else |err| {
-        log.warn("loadXamlResources: MergedDictionaries pattern failed: {}, falling back to direct put_Resources", .{err});
+        log.warn("loadXamlResources: MergedDictionaries pattern failed: {}, falling back to direct SetResources", .{err});
     }
 
-    // 3. Fallback: direct put_Resources
-    const put_hr = xa_abi.lpVtbl.put_Resources(xa, @ptrCast(xcr));
-    if (put_hr < 0) {
-        log.err("loadXamlResources: FAIL put_Resources hr=0x{x:0>8}", .{@as(u32, @bitCast(put_hr))});
+    // 3. Fallback: direct SetResources
+    xa.SetResources(@ptrCast(xcr)) catch |err| {
+        log.err("loadXamlResources: FAIL SetResources: {}", .{err});
         return;
-    }
-    log.info("loadXamlResources: OK (fallback direct put_Resources)", .{});
+    };
+    log.info("loadXamlResources: OK (fallback direct SetResources)", .{});
 }
 
-fn loadXamlResourcesMerged(xa_abi: *com.IApplicationAbi, xcr: *winrt.IInspectable) !void {
+fn loadXamlResourcesMerged(xa: *com.IApplication, xcr: *winrt.IInspectable) !void {
     // Create a new ResourceDictionary
     const rd_class = try winrt.hstring("Microsoft.UI.Xaml.ResourceDictionary");
     defer winrt.deleteHString(rd_class);
@@ -116,5 +114,5 @@ fn loadXamlResourcesMerged(xa_abi: *com.IApplicationAbi, xcr: *winrt.IInspectabl
     try merged.append(@ptrCast(xcr));
 
     // Set the new ResourceDictionary (with XCR merged) as Application.Resources
-    try winrt.hrCheck(xa_abi.lpVtbl.put_Resources(@ptrCast(xa_abi), @ptrCast(rd_insp)));
+    try xa.SetResources(@ptrCast(rd_insp));
 }

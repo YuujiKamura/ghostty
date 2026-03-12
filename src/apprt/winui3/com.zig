@@ -87,7 +87,6 @@ pub const VerticalAlignment = gen.VerticalAlignment;
 pub const FocusState = gen.FocusState;
 
 // --- Hand-written native interfaces (cannot be auto-generated from WinMD) ---
-pub const IApplicationAbi = native.IApplicationAbi;
 pub const IVector = native.IVector;
 pub const IPropertyValue = native.IPropertyValue;
 pub const IPropertyValueStatics = native.IPropertyValueStatics;

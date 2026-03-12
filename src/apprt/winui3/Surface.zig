@@ -333,8 +333,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         const PointerDelegate = gen.PointerEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
         const KeyDelegate = gen.KeyEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
         const RoutedDelegate = gen.RoutedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
-        const delegate_runtime = @import("delegate_runtime.zig");
-        const CharRecvDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const CharRecvDelegate = gen.TypedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
 
         // Pointer events
         const ptr_pressed = try PointerDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerPressed, &com.IID_PointerEventHandler);
@@ -362,7 +361,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         defer key_up.release();
         self.preview_key_up_token = ui_element.AddPreviewKeyUp(key_up.comPtr()) catch 0;
 
-        // CharacterReceived — text input (not in WinMD, uses hand-written delegate)
+        // CharacterReceived — text input (uses generated TypedEventHandlerImpl)
         const char_recv = try CharRecvDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlCharacterReceived, &com.IID_CharacterReceivedHandler);
         defer char_recv.release();
         self.character_received_token = ui_element.AddCharacterReceived(char_recv.comPtr()) catch 0;
@@ -382,8 +381,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
             defer ime_ue.release();
             const ImeKeyDelegate = gen.KeyEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
             const ImeRoutedDelegate = gen.RoutedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
-            const ime_delegate_runtime = @import("delegate_runtime.zig");
-            const ImeCharRecvDelegate = ime_delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+            const ImeCharRecvDelegate = gen.TypedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
 
             const ime_key_down = try ImeKeyDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxPreviewKeyDown, &com.IID_KeyEventHandler);
             defer ime_key_down.release();
@@ -407,8 +405,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         defer ime_text_changed.release();
         self.ime_text_changed_token = ime_tb.AddTextChanged(ime_text_changed.comPtr()) catch 0;
 
-        const comp_delegate_runtime = @import("delegate_runtime.zig");
-        const CompositionDelegate = comp_delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const CompositionDelegate = gen.TypedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
         const comp_start = try CompositionDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxCompositionStarted, &com.IID_TextCompositionStartedHandler);
         defer comp_start.release();
         self.ime_text_comp_start_token = ime_tb.AddTextCompositionStarted(comp_start.comPtr()) catch |err| blk: {

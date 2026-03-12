@@ -18,22 +18,6 @@ const IInspectable = gen.IInspectable;
 const Point = gen.Point;
 const Rect = gen.Rect;
 
-/// IApplication ABI — provides access to Application.Resources (get/put).
-/// Used by xaml_helpers.loadXamlResources to set XamlControlsResources.
-pub const IApplicationAbi = extern struct {
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetIids: VtblPlaceholder,
-        GetRuntimeClassName: VtblPlaceholder,
-        GetTrustLevel: VtblPlaceholder,
-        get_Resources: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
-        put_Resources: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-};
-
 pub const IVector = extern struct {
     // Windows.Foundation.Collections.IVector<IInspectable>
     pub const IID = GUID{ .data1 = 0xb32bdca4, .data2 = 0x5e52, .data3 = 0x5b27, .data4 = .{ 0xbc, 0x5d, 0xd6, 0x6a, 0x1a, 0x26, 0x8c, 0x2a } };
