@@ -24,6 +24,19 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# --- WARNING: This test grabs mouse cursor and foreground window ---
+Write-Host ""
+Write-Host "WARNING: This test uses SendInput to inject real mouse clicks." -ForegroundColor Red
+Write-Host "         Your mouse cursor WILL be moved during the test." -ForegroundColor Red
+Write-Host "         Do not touch mouse/keyboard for $Duration seconds." -ForegroundColor Red
+Write-Host ""
+$confirm = Read-Host "Continue? (y/N)"
+if ($confirm -ne "y") {
+    Write-Host "Aborted." -ForegroundColor Yellow
+    return
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $debugLog = "$env:USERPROFILE\ghostty_debug.log"
 $outDir = Join-Path $repoRoot "tmp\stress-test"
