@@ -72,7 +72,7 @@ pub fn auditActiveTabBinding(self: anytype) void {
         const first = children2.getAt(0) catch return;
         defer {
             const unk: *com.IUnknown = @ptrCast(@alignCast(first));
-            unk.release();
+            _ = unk.lpVtbl.Release(@ptrCast(unk));
         }
         log.info(
             "auditActiveTabBinding: idx={} tab_content_child=0x{x} panel=0x{x} match={}",
