@@ -1588,11 +1588,14 @@ fn logDiagnosticSnapshot(self: *App) void {
             while (it) |node| : (it = node.next) {
                 page_count += 1;
             }
-            fileLog("  surface[{}] pages={} rows={} cols={}", .{
+            const tracked_pins = screen.pages.countTrackedPins();
+            fileLog("  surface[{}] pages={} rows={} cols={} pins={} page_size={}", .{
                 i,
                 page_count,
                 screen.pages.rows,
                 screen.pages.cols,
+                tracked_pins,
+                screen.pages.page_size,
             });
         }
     }
