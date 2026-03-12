@@ -1005,17 +1005,11 @@ fn onXamlPointerPressed(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
         5 => .middle, // MiddleButtonPressed
         else => return,
     };
-    // Request XAML focus on click so keyboard events flow here.
-    // Skip during resize/maximize — XAML layout is recalculating and focus() can crash.
+    // Keyboard/IME input is handled solely by input_hwnd (Win32 focus).
+    // Do NOT call UIElement.focus() — it triggers a SETFOCUS/KILLFOCUS loop
+    // between the XAML island and input_hwnd, preventing IME from working.
     if (!self.app.resizing) {
-        if (self.swap_chain_panel) |panel| {
-            if (panel.queryInterface(com.IUIElement)) |ue| {
-                defer ue.release();
-                _ = ue.focus(com.FocusState.Pointer) catch {};
-            } else |_| {}
-        }
-    } else {
-        App.fileLog("onXamlPointerPressed: skipping focus (resizing)", .{});
+        input_runtime.focusKeyboardTarget(self.app);
     }
     self.handleMouseButton(button, .press);
     ea.SetHandled(true) catch {};
@@ -1135,7 +1129,7 @@ fn onImeTextBoxPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque)
     if (!self.core_initialized) return;
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const vk = ea.Key() catch return;
-    App.fileLog("ime_text_box: PreviewKeyDown vk=0x{x}", .{@as(u32, @bitCast(vk))});
+    App.fileLog("ime_text_box: PreviewKeyDown vk=0x{x} focus_target={s}", .{ @as(u32, @bitCast(vk)), @tagName(self.app.keyboard_focus_target) });
     if (@as(u32, @bitCast(vk)) == 0xF4) {
         App.fileLog("ime_text_box: VK_IME_OFF -> focusKeyboardTarget", .{});
         input_runtime.focusKeyboardTarget(self.app);
