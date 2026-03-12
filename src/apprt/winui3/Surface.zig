@@ -301,7 +301,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     const loaded_delegate = try LoadedDelegate.createWithIid(self.app.core_app.alloc, self, &onLoaded, &com.IID_RoutedEventHandler);
     // Note: LoadedDelegate.createWithIid returns a ref-counted COM object.
     // We pass it to addLoaded which will AddRef it again.
-    defer _ = loaded_delegate.com.lpVtbl.Release(loaded_delegate.comPtr());
+    defer loaded_delegate.release();
     self.loaded_token = try framework_element.AddLoaded(loaded_delegate.comPtr());
 
     const SizeChangedDelegate = gen.SizeChangedEventHandlerImpl(Surface, *const fn (*Surface, *anyopaque, *anyopaque) void);
@@ -311,7 +311,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         &onSizeChanged,
         &com.IID_SizeChangedEventHandler,
     );
-    defer _ = size_changed_delegate.com.lpVtbl.Release(size_changed_delegate.comPtr());
+    defer size_changed_delegate.release();
     self.size_changed_token = framework_element.AddSizeChanged(size_changed_delegate.comPtr()) catch |err| blk: {
         log.warn("SwapChainPanel.SizeChanged handler registration failed: {}", .{err});
         break :blk 0;
