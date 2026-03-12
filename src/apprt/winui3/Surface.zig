@@ -24,6 +24,10 @@ const SearchOverlay = @import("search_overlay.zig").SearchOverlay;
 
 const log = std.log.scoped(.winui3);
 
+/// Set to true to enable verbose per-frame / per-event debug logs (scroll bar, etc.).
+/// These are disabled by default to reduce Debug build overhead.
+const log_hot_path = false;
+
 /// The App that owns this surface.
 app: *App,
 
@@ -69,6 +73,14 @@ preview_key_up_token: i64 = 0,
 character_received_token: i64 = 0,
 got_focus_token: i64 = 0,
 lost_focus_token: i64 = 0,
+ime_preview_key_down_token: i64 = 0,
+ime_character_received_token: i64 = 0,
+ime_text_changed_token: i64 = 0,
+ime_got_focus_token: i64 = 0,
+ime_lost_focus_token: i64 = 0,
+ime_text_comp_start_token: i64 = 0,
+ime_text_comp_change_token: i64 = 0,
+ime_text_comp_end_token: i64 = 0,
 
 /// The SwapChainPanel for composition rendering.
 swap_chain_panel: ?*winrt.IInspectable = null,
@@ -95,6 +107,12 @@ title: ?[:0]u8 = null,
 surface_grid: ?*winrt.IInspectable = null,
 /// The vertical ScrollBar XAML control (IInspectable, QI to IScrollBar/IRangeBase).
 scroll_bar_insp: ?*winrt.IInspectable = null,
+/// Hidden XAML TextBox used as the WinUI3/TSF-backed IME focus target.
+ime_text_box: ?*com.ITextBox = null,
+ime_text_box_internal_update: bool = false,
+ime_text_box_last_text: std.ArrayListUnmanaged(u16) = .{},
+ime_text_box_sent_text: std.ArrayListUnmanaged(u16) = .{},
+ime_text_box_composing: bool = false,
 /// Event token for RangeBase.ValueChanged.
 scroll_bar_value_changed_token: i64 = 0,
 /// Flag to prevent feedback loops when programmatically updating scrollbar.
@@ -234,11 +252,45 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         defer vc_delegate.release();
         self.scroll_bar_value_changed_token = try range_base.AddValueChanged(vc_delegate.comPtr());
 
+        const ime_tb_insp = try self.app.activateXamlType("Microsoft.UI.Xaml.Controls.TextBox");
+        errdefer _ = ime_tb_insp.release();
+        const ime_tb = try ime_tb_insp.queryInterface(com.ITextBox);
+        errdefer ime_tb.release();
+        ime_tb.SetIsSpellCheckEnabled(false) catch {};
+        ime_tb.SetIsTextPredictionEnabled(false) catch {};
+        ime_tb.SetPreventKeyboardDisplayOnProgrammaticFocus(true) catch {};
+        ime_tb.SetDesiredCandidateWindowAlignment(1) catch {}; // BottomEdge
+
+        if (ime_tb_insp.queryInterface(com.IUIElement)) |ime_ue| {
+            defer ime_ue.release();
+            ime_ue.SetOpacity(0.01) catch {};
+            ime_ue.SetIsHitTestVisible(true) catch {};
+            ime_ue.SetIsTabStop(true) catch {};
+            ime_ue.SetVisibility(0) catch {};
+        } else |_| {}
+        if (ime_tb_insp.queryInterface(com.IControl)) |ime_ctrl| {
+            defer ime_ctrl.release();
+            ime_ctrl.SetIsEnabled(true) catch {};
+        } else |_| {}
+        if (ime_tb_insp.queryInterface(com.IFrameworkElement)) |ime_fe| {
+            defer ime_fe.release();
+            ime_fe.SetWidth(16) catch {};
+            ime_fe.SetHeight(16) catch {};
+            ime_fe.SetHorizontalAlignment(com.HorizontalAlignment.Left) catch {};
+            ime_fe.SetVerticalAlignment(com.VerticalAlignment.Top) catch {};
+            ime_fe.SetAllowFocusOnInteraction(true) catch {};
+            ime_fe.SetMargin(.{ .Left = 0, .Top = 0, .Right = 0, .Bottom = 0 }) catch {};
+        } else |_| {}
+
+        try grid_children.append(@ptrCast(ime_tb_insp));
+
         // Store references.
         self.surface_grid = grid_insp;
         self.scroll_bar_insp = sb_insp;
+        self.ime_text_box = ime_tb;
+        _ = ime_tb_insp.release();
 
-        log.info("Surface grid created via XamlReader.Load: SwapChainPanel (col 0) + ScrollBar (col 1)", .{});
+        log.info("Surface grid created via XamlReader.Load: SwapChainPanel + ScrollBar + hidden IME TextBox", .{});
     }
 
     // Register Loaded handler to defer SetSwapChain until the panel is ready.
@@ -321,6 +373,56 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         self.lost_focus_token = ui_element.AddLostFocus(lost_focus.comPtr()) catch 0;
     }
 
+    if (self.ime_text_box) |ime_tb| {
+        if (ime_tb.queryInterface(com.IUIElement)) |ime_ue| {
+            defer ime_ue.release();
+            const XamlDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+
+            const ime_key_down = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxPreviewKeyDown, &com.IID_KeyEventHandler);
+            defer ime_key_down.release();
+            self.ime_preview_key_down_token = ime_ue.AddPreviewKeyDown(ime_key_down.comPtr()) catch 0;
+
+            const ime_char_recv = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxCharacterReceived, &com.IID_CharacterReceivedHandler);
+            defer ime_char_recv.release();
+            self.ime_character_received_token = ime_ue.AddCharacterReceived(ime_char_recv.comPtr()) catch 0;
+
+            const ime_got_focus = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxGotFocus, &com.IID_RoutedEventHandler);
+            defer ime_got_focus.release();
+            self.ime_got_focus_token = ime_ue.AddGotFocus(ime_got_focus.comPtr()) catch 0;
+
+            const ime_lost_focus = try XamlDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxLostFocus, &com.IID_RoutedEventHandler);
+            defer ime_lost_focus.release();
+            self.ime_lost_focus_token = ime_ue.AddLostFocus(ime_lost_focus.comPtr()) catch 0;
+        } else |_| {}
+
+        const TextChangedDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const ime_text_changed = try TextChangedDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxTextChanged, &com.IID_TextChangedEventHandler);
+        defer ime_text_changed.release();
+        self.ime_text_changed_token = ime_tb.AddTextChanged(ime_text_changed.comPtr()) catch 0;
+
+        const CompositionDelegate = delegate_runtime.TypedDelegate(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const comp_start = try CompositionDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxCompositionStarted, &com.IID_TextCompositionStartedHandler);
+        defer comp_start.release();
+        self.ime_text_comp_start_token = ime_tb.AddTextCompositionStarted(comp_start.comPtr()) catch |err| blk: {
+            log.warn("ime AddTextCompositionStarted failed: {}", .{err});
+            break :blk 0;
+        };
+
+        const comp_change = try CompositionDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxCompositionChanged, &com.IID_TextCompositionChangedHandler);
+        defer comp_change.release();
+        self.ime_text_comp_change_token = ime_tb.AddTextCompositionChanged(comp_change.comPtr()) catch |err| blk: {
+            log.warn("ime AddTextCompositionChanged failed: {}", .{err});
+            break :blk 0;
+        };
+
+        const comp_end = try CompositionDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxCompositionEnded, &com.IID_TextCompositionEndedHandler);
+        defer comp_end.release();
+        self.ime_text_comp_end_token = ime_tb.AddTextCompositionEnded(comp_end.comPtr()) catch |err| blk: {
+            log.warn("ime AddTextCompositionEnded failed: {}", .{err});
+            break :blk 0;
+        };
+    }
+
     // NOTE: SwapChainPanel is set as TabViewItem content by App.newTab(),
     // not here. We only create the panel and query the native interface.
 
@@ -392,6 +494,27 @@ pub fn deinit(self: *Surface) void {
         native.release();
         self.swap_chain_panel_native = null;
     }
+    if (self.ime_text_box) |ime_tb| {
+        if (ime_tb.queryInterface(com.IUIElement)) |ime_ue| {
+            defer ime_ue.release();
+            if (self.ime_preview_key_down_token != 0) { ime_ue.RemovePreviewKeyDown(self.ime_preview_key_down_token) catch {}; }
+            if (self.ime_character_received_token != 0) { ime_ue.RemoveCharacterReceived(self.ime_character_received_token) catch {}; }
+            if (self.ime_got_focus_token != 0) { ime_ue.RemoveGotFocus(self.ime_got_focus_token) catch {}; }
+            if (self.ime_lost_focus_token != 0) { ime_ue.RemoveLostFocus(self.ime_lost_focus_token) catch {}; }
+        } else |_| {}
+        if (self.ime_text_changed_token != 0) { ime_tb.RemoveTextChanged(self.ime_text_changed_token) catch {}; }
+        if (self.ime_text_comp_start_token != 0) { ime_tb.RemoveTextCompositionStarted(self.ime_text_comp_start_token) catch {}; }
+        if (self.ime_text_comp_change_token != 0) { ime_tb.RemoveTextCompositionChanged(self.ime_text_comp_change_token) catch {}; }
+        if (self.ime_text_comp_end_token != 0) { ime_tb.RemoveTextCompositionEnded(self.ime_text_comp_end_token) catch {}; }
+        self.ime_preview_key_down_token = 0;
+        self.ime_character_received_token = 0;
+        self.ime_text_changed_token = 0;
+        self.ime_got_focus_token = 0;
+        self.ime_lost_focus_token = 0;
+        self.ime_text_comp_start_token = 0;
+        self.ime_text_comp_change_token = 0;
+        self.ime_text_comp_end_token = 0;
+    }
     // Release scrollbar and surface grid.
     if (self.scroll_bar_insp) |sb| {
         if (self.scroll_bar_value_changed_token != 0) {
@@ -409,6 +532,12 @@ pub fn deinit(self: *Surface) void {
         _ = sg.release();
         self.surface_grid = null;
     }
+    if (self.ime_text_box) |ime_tb| {
+        ime_tb.release();
+        self.ime_text_box = null;
+    }
+    self.ime_text_box_last_text.deinit(self.app.core_app.alloc);
+    self.ime_text_box_sent_text.deinit(self.app.core_app.alloc);
     if (self.swap_chain_panel) |panel| {
         _ = panel.release();
         self.swap_chain_panel = null;
@@ -855,6 +984,7 @@ pub fn handleScroll(self: *Surface, xoffset: f64, yoffset: f64) void {
 // --- XAML event callbacks ---
 
 fn onXamlPointerPressed(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    App.fileLog("onXamlPointerPressed: core_initialized={}", .{self.core_initialized});
     if (!self.core_initialized) return;
     const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const point = ea.getCurrentPoint(null) catch return;
@@ -874,7 +1004,7 @@ fn onXamlPointerPressed(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
     if (self.swap_chain_panel) |panel| {
         if (panel.queryInterface(com.IUIElement)) |ue| {
             defer ue.release();
-            _ = ue.focus(1) catch {}; // FocusState.Programmatic = 1
+            _ = ue.focus(com.FocusState.Pointer) catch {};
         } else |_| {}
     }
     self.handleMouseButton(button, .press);
@@ -922,8 +1052,20 @@ fn onXamlPointerWheelChanged(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) 
     const props = point.Properties() catch return;
     defer props.release();
     const delta = props.MouseWheelDelta() catch return;
-    const offset = @as(f64, @floatFromInt(delta)) / 120.0;
     const is_horizontal = props.IsHorizontalMouseWheel() catch false;
+
+    // Ctrl+Wheel = font size change (Windows Terminal behavior).
+    if (!is_horizontal and key.getModifiers().ctrl) {
+        if (delta > 0) {
+            _ = self.core_surface.performBindingAction(.{ .increase_font_size = 1 }) catch {};
+        } else if (delta < 0) {
+            _ = self.core_surface.performBindingAction(.{ .decrease_font_size = 1 }) catch {};
+        }
+        ea.SetHandled(true) catch {};
+        return;
+    }
+
+    const offset = @as(f64, @floatFromInt(delta)) / 120.0;
     if (is_horizontal) {
         self.handleScroll(offset, 0);
     } else {
@@ -936,8 +1078,10 @@ fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
     if (!self.core_initialized) return;
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const vk = ea.Key() catch return;
+    App.fileLog("xaml_surface: PreviewKeyDown vk=0x{x}", .{@as(u32, @bitCast(vk))});
     if (vk == 0xE5) {
         // VK_PROCESSKEY — IME is active. Switch focus to input_hwnd for IME.
+        App.fileLog("PreviewKeyDown: VK_PROCESSKEY -> focusInputOverlay", .{});
         input_runtime.focusInputOverlay(self.app);
         return; // Don't mark handled — let IME process.
     }
@@ -970,10 +1114,97 @@ fn onXamlCharacterReceived(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) vo
     if (!self.core_initialized) return;
     const ea: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const ch = ea.Character() catch return;
+    App.fileLog("xaml_surface: CharacterReceived ch=0x{x}", .{ch});
     const app_ref = self.app;
     self.handleCharEvent(ch);
     if (!isSurfaceAlive(app_ref, self)) return;
     ea.SetHandled(true) catch {};
+}
+
+fn onImeTextBoxPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    if (!self.core_initialized) return;
+    const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
+    const vk = ea.Key() catch return;
+    App.fileLog("ime_text_box: PreviewKeyDown vk=0x{x}", .{@as(u32, @bitCast(vk))});
+    if (@as(u32, @bitCast(vk)) == 0xF4) {
+        App.fileLog("ime_text_box: VK_IME_OFF -> focusKeyboardTarget", .{});
+        input_runtime.focusKeyboardTarget(self.app);
+        ea.SetHandled(true) catch {};
+    }
+}
+
+fn onImeTextBoxCharacterReceived(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    if (!self.core_initialized) return;
+    if (self.app.keyboard_focus_target != .input_overlay) return;
+    const ea: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
+    const ch = ea.Character() catch return;
+    App.fileLog("ime_text_box: CharacterReceived ch=0x{x}", .{ch});
+    const app_ref = self.app;
+    self.handleCharEvent(ch);
+    if (!isSurfaceAlive(app_ref, self)) return;
+    ea.SetHandled(true) catch {};
+}
+
+fn onImeTextBoxTextChanged(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
+    if (!self.core_initialized) return;
+    if (self.app.keyboard_focus_target != .input_overlay) return;
+    if (self.ime_text_box_internal_update) return;
+    const ime_tb = self.ime_text_box orelse return;
+    const text_h = ime_tb.Text() catch return;
+    defer if (text_h) |h| winrt.deleteHString(@ptrCast(h));
+    const utf16 = winrt.hstringSliceRaw(text_h);
+    const prev = self.ime_text_box_last_text.items;
+    const sent = self.ime_text_box_sent_text.items;
+    if (utf16.len == 0) {
+        self.ime_text_box_last_text.clearRetainingCapacity();
+        if (!self.ime_text_box_composing) self.ime_text_box_sent_text.clearRetainingCapacity();
+        return;
+    }
+
+    const append_only = commonPrefixLen(u16, prev, utf16) == prev.len and utf16.len > prev.len;
+    App.fileLog(
+        "ime_text_box: TextChanged utf16_len={} prev_len={} sent_len={} composing={} append_only={} append_len={}",
+        .{
+            utf16.len,
+            prev.len,
+            sent.len,
+            self.ime_text_box_composing,
+            append_only,
+            if (append_only) utf16.len - prev.len else 0,
+        },
+    );
+
+    self.setImeTextBoxSnapshot(utf16);
+    if (self.ime_text_box_composing) return;
+    self.flushImeTextBoxCommittedDelta(utf16);
+}
+
+fn onImeTextBoxCompositionStarted(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    if (!self.core_initialized) return;
+    const ea: *com.ITextCompositionStartedEventArgs = @ptrCast(@alignCast(args orelse return));
+    const start = ea.StartIndex() catch -1;
+    const len = ea.Length() catch -1;
+    self.ime_text_box_composing = true;
+    App.fileLog("ime_text_box: CompositionStarted start={} len={}", .{ start, len });
+}
+
+fn onImeTextBoxCompositionChanged(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    if (!self.core_initialized) return;
+    const ea: *com.ITextCompositionChangedEventArgs = @ptrCast(@alignCast(args orelse return));
+    const start = ea.StartIndex() catch -1;
+    const len = ea.Length() catch -1;
+    self.ime_text_box_composing = true;
+    App.fileLog("ime_text_box: CompositionChanged start={} len={}", .{ start, len });
+}
+
+fn onImeTextBoxCompositionEnded(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    if (!self.core_initialized) return;
+    const ea: *com.ITextCompositionEndedEventArgs = @ptrCast(@alignCast(args orelse return));
+    const start = ea.StartIndex() catch -1;
+    const len = ea.Length() catch -1;
+    self.ime_text_box_composing = false;
+    App.fileLog("ime_text_box: CompositionEnded start={} len={}", .{ start, len });
+    self.flushImeTextBoxCommittedText();
 }
 
 fn onXamlGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
@@ -988,6 +1219,10 @@ fn onXamlGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
 
 fn onXamlLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
+    if (self.app.keyboard_focus_target == .input_overlay) {
+        App.fileLog("SwapChainPanel LostFocus ignored: IME text box now owns focus", .{});
+        return;
+    }
     if (!self.has_focus) return; // deduplicate
     self.has_focus = false;
     log.info("XAML LostFocus on SwapChainPanel surface=0x{x}", .{@intFromPtr(self)});
@@ -996,14 +1231,210 @@ fn onXamlLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     };
 }
 
+fn onImeTextBoxGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
+    if (!self.core_initialized) return;
+    App.fileLog("ime_text_box: GotFocus", .{});
+    self.logImeTextBoxState("ime_text_box: GotFocus");
+    if (self.has_focus) return;
+    self.has_focus = true;
+    self.core_surface.focusCallback(true) catch |err| {
+        log.warn("ime_text_box focusCallback(true) error: {}", .{err});
+    };
+}
+
+fn onImeTextBoxLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
+    if (!self.core_initialized) return;
+    App.fileLog("ime_text_box: LostFocus keyboard_focus_target={s}", .{@tagName(self.app.keyboard_focus_target)});
+    if (self.app.keyboard_focus_target != .input_overlay) return;
+    if (!self.has_focus) return;
+    self.has_focus = false;
+    self.core_surface.focusCallback(false) catch |err| {
+        log.warn("ime_text_box focusCallback(false) error: {}", .{err});
+    };
+}
+
 /// Request XAML focus on the SwapChainPanel (called from ime.zig after IME ends).
 pub fn focusSwapChainPanel(self: *Surface) void {
     if (self.swap_chain_panel) |panel| {
         if (panel.queryInterface(com.IUIElement)) |ue| {
             defer ue.release();
-            _ = ue.focus(1) catch {}; // FocusState.Programmatic = 1
-        } else |_| {}
+            const result = ue.focus(com.FocusState.Programmatic);
+            if (result) |ok| {
+                App.fileLog("focusSwapChainPanel: focus() returned {}", .{ok});
+            } else |err| {
+                App.fileLog("focusSwapChainPanel: focus() FAILED: {}", .{@intFromError(err)});
+            }
+        } else |err| {
+            App.fileLog("focusSwapChainPanel: QI IUIElement FAILED: {}", .{@intFromError(err)});
+        }
+    } else {
+        App.fileLog("focusSwapChainPanel: no swap_chain_panel!", .{});
     }
+}
+
+pub fn focusImeTextBox(self: *Surface) bool {
+    const ime_tb = self.ime_text_box orelse {
+        App.fileLog("focusImeTextBox: no ime_text_box", .{});
+        return false;
+    };
+    self.clearImeTextBoxText();
+    self.positionImeTextBox();
+    self.logImeTextBoxState("focusImeTextBox: before focus");
+    if (ime_tb.queryInterface(com.IUIElement)) |ime_ue| {
+        defer ime_ue.release();
+        const result = ime_ue.focus(com.FocusState.Programmatic);
+        if (result) |ok| {
+            App.fileLog("focusImeTextBox: focus() returned {}", .{ok});
+            self.logImeTextBoxState("focusImeTextBox: after focus");
+            return ok;
+        } else |err| {
+            App.fileLog("focusImeTextBox: focus() FAILED: {}", .{@intFromError(err)});
+        }
+    } else |err| {
+        App.fileLog("focusImeTextBox: QI IUIElement FAILED: {}", .{@intFromError(err)});
+    }
+    return false;
+}
+
+pub fn clearImeTextBoxText(self: *Surface) void {
+    const ime_tb = self.ime_text_box orelse return;
+    const empty = winrt.hstring("") catch return;
+    defer winrt.deleteHString(empty);
+    self.ime_text_box_internal_update = true;
+    defer self.ime_text_box_internal_update = false;
+    if (ime_tb.SetText(empty)) |_| {
+        self.ime_text_box_last_text.clearRetainingCapacity();
+        self.ime_text_box_sent_text.clearRetainingCapacity();
+        self.ime_text_box_composing = false;
+    } else |err| {
+        App.fileLog("clearImeTextBoxText: SetText FAILED: {}", .{@intFromError(err)});
+    }
+    ime_tb.Select(0, 0) catch |err| {
+        App.fileLog("clearImeTextBoxText: Select FAILED: {}", .{@intFromError(err)});
+    };
+}
+
+fn positionImeTextBox(self: *Surface) void {
+    if (!self.core_initialized) return;
+    const ime_tb = self.ime_text_box orelse return;
+    const ime_pos = self.core_surface.imePoint();
+    const scale_x: f64 = if (self.content_scale.x > 0) @as(f64, @floatCast(self.content_scale.x)) else 1.0;
+    const scale_y: f64 = if (self.content_scale.y > 0) @as(f64, @floatCast(self.content_scale.y)) else 1.0;
+    const margin = com.Thickness{
+        .Left = @as(f64, @floatCast(ime_pos.x)) / scale_x,
+        .Top = @as(f64, @floatCast(ime_pos.y)) / scale_y,
+        .Right = 0,
+        .Bottom = 0,
+    };
+    if (ime_tb.queryInterface(com.IFrameworkElement)) |ime_fe| {
+        defer ime_fe.release();
+        ime_fe.SetMargin(margin) catch {};
+    } else |_| {}
+}
+
+fn setImeTextBoxSnapshot(self: *Surface, utf16: []const u16) void {
+    self.ime_text_box_last_text.resize(self.app.core_app.alloc, utf16.len) catch {
+        App.fileLog("ime_text_box: snapshot resize failed len={}", .{utf16.len});
+        return;
+    };
+    std.mem.copyForwards(u16, self.ime_text_box_last_text.items, utf16);
+}
+
+fn setImeTextBoxSentSnapshot(self: *Surface, utf16: []const u16) void {
+    self.ime_text_box_sent_text.resize(self.app.core_app.alloc, utf16.len) catch {
+        App.fileLog("ime_text_box: sent snapshot resize failed len={}", .{utf16.len});
+        return;
+    };
+    std.mem.copyForwards(u16, self.ime_text_box_sent_text.items, utf16);
+}
+
+fn flushImeTextBoxCommittedText(self: *Surface) void {
+    const ime_tb = self.ime_text_box orelse return;
+    const text_h = ime_tb.Text() catch return;
+    defer if (text_h) |h| winrt.deleteHString(@ptrCast(h));
+    self.flushImeTextBoxCommittedDelta(winrt.hstringSliceRaw(text_h));
+}
+
+fn flushImeTextBoxCommittedDelta(self: *Surface, utf16: []const u16) void {
+    const sent = self.ime_text_box_sent_text.items;
+    const append_only = commonPrefixLen(u16, sent, utf16) == sent.len and utf16.len > sent.len;
+    App.fileLog(
+        "ime_text_box: FlushCommitted utf16_len={} sent_len={} append_only={} append_len={}",
+        .{ utf16.len, sent.len, append_only, if (append_only) utf16.len - sent.len else 0 },
+    );
+    if (!append_only) {
+        self.setImeTextBoxSentSnapshot(utf16);
+        return;
+    }
+
+    const app_ref = self.app;
+    for (utf16[sent.len..]) |code_unit| {
+        self.handleCharEvent(code_unit);
+        if (!isSurfaceAlive(app_ref, self)) return;
+    }
+    self.setImeTextBoxSentSnapshot(utf16);
+}
+
+fn commonPrefixLen(comptime T: type, a: []const T, b: []const T) usize {
+    const max_len = @min(a.len, b.len);
+    var i: usize = 0;
+    while (i < max_len and a[i] == b[i]) : (i += 1) {}
+    return i;
+}
+
+fn hwndValue(hwnd: ?os.HWND) usize {
+    return if (hwnd) |h| @intFromPtr(h) else 0;
+}
+
+fn logImeTextBoxState(self: *Surface, comptime prefix: []const u8) void {
+    const ime_tb = self.ime_text_box orelse return;
+    var opacity: f64 = -1;
+    var is_hit_test_visible = false;
+    var visibility: i32 = -1;
+    var is_tab_stop = false;
+    var focus_state: i32 = -1;
+    var is_enabled = false;
+    var allow_focus_on_interaction = false;
+    var actual_width: f64 = -1;
+    var actual_height: f64 = -1;
+
+    if (ime_tb.queryInterface(com.IUIElement)) |ime_ue| {
+        defer ime_ue.release();
+        opacity = ime_ue.Opacity() catch -1;
+        is_hit_test_visible = ime_ue.IsHitTestVisible() catch false;
+        visibility = ime_ue.Visibility() catch -1;
+        is_tab_stop = ime_ue.IsTabStop() catch false;
+        focus_state = ime_ue.FocusState() catch -1;
+    } else |_| {}
+
+    if (ime_tb.queryInterface(com.IControl)) |ime_ctrl| {
+        defer ime_ctrl.release();
+        is_enabled = ime_ctrl.IsEnabled() catch false;
+    } else |_| {}
+
+    if (ime_tb.queryInterface(com.IFrameworkElement)) |ime_fe| {
+        defer ime_fe.release();
+        allow_focus_on_interaction = ime_fe.AllowFocusOnInteraction() catch false;
+        actual_width = ime_fe.ActualWidth() catch -1;
+        actual_height = ime_fe.ActualHeight() catch -1;
+    } else |_| {}
+
+    App.fileLog(
+        prefix ++ " state: win32_focus=0x{x} child_hwnd=0x{x} opacity={d:.2} visible={} hit_test={} tab_stop={} enabled={} allow_focus_on_interaction={} focus_state={} actual={d:.2}x{d:.2}",
+        .{
+            hwndValue(os.GetFocus()),
+            hwndValue(self.app.child_hwnd),
+            opacity,
+            visibility,
+            is_hit_test_visible,
+            is_tab_stop,
+            is_enabled,
+            allow_focus_on_interaction,
+            focus_state,
+            actual_width,
+            actual_height,
+        },
+    );
 }
 
 /// Bind a DXGI swap chain to the SwapChainPanel.
@@ -1180,10 +1611,12 @@ pub fn updateScrollbarUi(self: *Surface, total: usize, offset: usize, len: usize
     const width = fe.ActualWidth() catch -1.0;
     const height = fe.ActualHeight() catch -1.0;
     const visibility = ue.Visibility() catch -1;
-    log.debug(
-        "scrollbar ui sync: orientation={} viewport={d:.2} actual={d:.2}x{d:.2} visibility={} max={d:.2} value={d:.2} len={d:.2}",
-        .{ orientation, viewport, width, height, visibility, maximum, offset_f, len_f },
-    );
+    if (comptime log_hot_path) {
+        log.debug(
+            "scrollbar ui sync: orientation={} viewport={d:.2} actual={d:.2}x{d:.2} visibility={} max={d:.2} value={d:.2} len={d:.2}",
+            .{ orientation, viewport, width, height, visibility, maximum, offset_f, len_f },
+        );
+    }
 }
 
 /// RangeBase.ValueChanged event callback (fires on user drag and programmatic changes).
@@ -1194,7 +1627,9 @@ fn onScrollBarValueChanged(self: *Surface, _: ?*anyopaque, args_raw: ?*anyopaque
     const new_value = args.NewValue() catch return;
     const row: usize = @intFromFloat(@max(0.0, @round(new_value)));
 
-    log.debug("onScrollBarValueChanged: new_value={d:.2} row={}", .{ new_value, row });
+    if (comptime log_hot_path) {
+        log.debug("onScrollBarValueChanged: new_value={d:.2} row={}", .{ new_value, row });
+    }
 
     _ = self.core_surface.performBindingAction(.{ .scroll_to_row = row }) catch |err| {
         log.warn("scrollbar scroll_to_row failed: {}", .{err});
@@ -1229,12 +1664,35 @@ fn onLoaded(self: *Surface, _: *anyopaque, _: *anyopaque) void {
 }
 
 /// SizeChanged event callback. Triggered when the SwapChainPanel's layout size changes.
-/// This gives us the actual panel dimensions (accounting for TabView header, etc.).
+/// This is the XAML-driven resize path (matching Windows Terminal's architecture):
+///   WM_SIZE → RootGrid Width/Height → XAML layout → SwapChainPanel SizeChanged → sizeCallback
+/// The core terminal size is derived from XAML layout, NOT from WM_SIZE directly.
 fn onSizeChanged(self: *Surface, _: *anyopaque, _: *anyopaque) void {
-    log.info(
-        "SwapChainPanel.SizeChanged event fired surface=0x{x} size={}x{} pending_swap_chain={} last_swap_chain={}",
-        .{ @intFromPtr(self), self.size.width, self.size.height, self.pending_swap_chain != null, self.last_swap_chain != null },
-    );
+    // Get actual panel dimensions from XAML layout (in DIPs).
+    const panel = self.swap_chain_panel orelse return;
+    const fe = panel.queryInterface(com.IFrameworkElement) catch return;
+    defer fe.release();
+    const dip_width = fe.ActualWidth() catch return;
+    const dip_height = fe.ActualHeight() catch return;
+
+    if (dip_width <= 0 or dip_height <= 0) return;
+
+    // Convert DIPs → pixels using current DPI scale.
+    const scale: f64 = @floatCast(self.content_scale.x);
+    const px_width: u32 = @intFromFloat(dip_width * scale);
+    const px_height: u32 = @intFromFloat(dip_height * scale);
+
+    log.info("onSizeChanged: dip={d:.1}x{d:.1} px={}x{}", .{ dip_width, dip_height, px_width, px_height });
+
+    if (px_width > 0 and px_height > 0) {
+        self.size = .{ .width = px_width, .height = px_height };
+        if (self.core_initialized) {
+            self.core_surface.sizeCallback(self.size) catch |err| {
+                log.warn("onSizeChanged sizeCallback error: {}", .{err});
+            };
+        }
+    }
+
     maybeBindPendingSwapChain(self, "onSizeChanged");
     maybeBindPendingSwapChainHandle(self, "onSizeChanged");
 }

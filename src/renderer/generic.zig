@@ -35,6 +35,10 @@ const vsync_mod = @import("vsync.zig");
 
 const log = std.log.scoped(.generic_renderer);
 
+/// Set to true to enable verbose per-frame debug logs (sync output skip, etc.).
+/// Disabled by default to reduce Debug build overhead.
+const log_hot_path = false;
+
 /// Create a renderer type with the provided graphics API wrapper.
 ///
 /// The graphics API wrapper must provide the interface outlined below.
@@ -1102,7 +1106,9 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
                 // If we're in a synchronized output state, we pause all rendering.
                 if (state.terminal.modes.get(.synchronized_output)) {
-                    log.debug("synchronized output started, skipping render", .{});
+                    if (comptime log_hot_path) {
+                        log.debug("synchronized output started, skipping render", .{});
+                    }
                     return;
                 }
 
