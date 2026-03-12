@@ -27,9 +27,25 @@ pub fn subclassProc(
 ) callconv(.winapi) os.LRESULT {
     const app: *App = @ptrFromInt(ref_data);
 
-    // Let DWM handle caption button rendering and hit-testing first.
-    // DwmDefWindowProc returns TRUE (nonzero) if it handled the message
-    // (e.g. for caption buttons on WM_NCHITTEST, WM_NCLBUTTONDOWN, etc.).
+    // For WM_NCHITTEST: run our custom hit-test FIRST so that XAML interactive
+    // areas (e.g. TabView "+" button) return HTCLIENT before DWM can claim them
+    // as invisible caption buttons (HTCLOSE/HTMAXBUTTON/HTMINBUTTON).
+    // For all other messages, let DWM handle caption button rendering first.
+    if (msg == os.WM_NCHITTEST) {
+        const hit = titleBarHitTest(hwnd, lparam);
+        if (hit == os.HTCLIENT) {
+            // XAML interactive area — skip DWM so the click reaches XAML controls.
+            return os.HTCLIENT;
+        }
+        // For non-client areas (caption, resize borders), let DWM handle
+        // frame rendering (e.g. caption button hover/press visuals).
+        var dwm_result: os.LRESULT = 0;
+        if (os.DwmDefWindowProc(hwnd, msg, wparam, lparam, &dwm_result) != 0) {
+            return dwm_result;
+        }
+        return hit;
+    }
+
     var dwm_result: os.LRESULT = 0;
     if (os.DwmDefWindowProc(hwnd, msg, wparam, lparam, &dwm_result) != 0) {
         return dwm_result;
@@ -49,7 +65,6 @@ pub fn subclassProc(
                 return ret;
             }
         },
-        os.WM_NCHITTEST => return titleBarHitTest(hwnd, lparam),
         os.WM_CLOSE => {
             App.fileLog("WM_CLOSE received on HWND=0x{x}", .{@intFromPtr(hwnd)});
             app.requestCloseWindow();
