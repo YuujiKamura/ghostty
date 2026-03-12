@@ -2096,8 +2096,8 @@ pub const IXamlMetadataProvider = extern struct {
     pub fn GetXamlType(self: *@This(), p0: ?*anyopaque) !*IXamlType { return self.getXamlType(p0); }
     pub fn getXamlType_1(self: *@This(), p0: anytype) !*IXamlType { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetXamlType_2(self, @ptrCast(p0), &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
     pub fn GetXamlType_2(self: *@This(), p0: anytype) !*IXamlType { return self.getXamlType_1(p0); }
-    pub fn getXmlnsDefinitions(self: *@This()) !struct { count: u32, definitions: ?*anyopaque } { var out0: u32 = 0; var out1: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetXmlnsDefinitions(self, &out0, &out1)); return .{ .count = out0, .definitions = out1 }; }
-    pub fn GetXmlnsDefinitions(self: *@This()) !struct { count: u32, definitions: ?*anyopaque } { return self.getXmlnsDefinitions(); }
+    pub fn getXmlnsDefinitions(self: *@This()) !struct { count: u32, items: ?*anyopaque } { var out0: u32 = 0; var out1: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetXmlnsDefinitions(self, &out0, &out1)); return .{ .count = out0, .items = out1 }; }
+    pub fn GetXmlnsDefinitions(self: *@This()) !struct { count: u32, items: ?*anyopaque } { return self.getXmlnsDefinitions(); }
 };
 
 pub const IXamlType = extern struct {
@@ -2496,7 +2496,7 @@ pub const IVectorView = extern struct {
         GetAt: *const fn (*anyopaque, u32, *?*anyopaque) callconv(.winapi) HRESULT,
         Size: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
         IndexOf: *const fn (*anyopaque, ?*anyopaque, *u32, *bool) callconv(.winapi) HRESULT,
-        GetMany: *const fn (*anyopaque, u32, ?*anyopaque, *u32) callconv(.winapi) HRESULT,
+        GetMany: *const fn (*anyopaque, u32, u32, ?*anyopaque, *u32) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
@@ -2505,8 +2505,8 @@ pub const IVectorView = extern struct {
     pub fn Size(self: *@This()) !u32 { var out: u32 = 0; try hrCheck(self.lpVtbl.Size(self, &out)); return out; }
     pub fn indexOf(self: *@This(), p0: ?*anyopaque) !struct { index: u32, value: bool } { var out0: u32 = 0; var out1: bool = false; try hrCheck(self.lpVtbl.IndexOf(self, p0, &out0, &out1)); return .{ .index = out0, .value = out1 }; }
     pub fn IndexOf(self: *@This(), p0: ?*anyopaque) !struct { index: u32, value: bool } { return self.indexOf(p0); }
-    pub fn getMany(self: *@This(), p0: u32, p1: ?*anyopaque) !u32 { var out0: u32 = 0; try hrCheck(self.lpVtbl.GetMany(self, p0, p1, &out0)); return out0; }
-    pub fn GetMany(self: *@This(), p0: u32, p1: ?*anyopaque) !u32 { return self.getMany(p0, p1); }
+    pub fn getMany(self: *@This(), p0: u32, p1: u32, p2: ?*anyopaque) !u32 { var out0: u32 = 0; try hrCheck(self.lpVtbl.GetMany(self, p0, p1, p2, &out0)); return out0; }
+    pub fn GetMany(self: *@This(), p0: u32, p1: u32, p2: ?*anyopaque) !u32 { return self.getMany(p0, p1, p2); }
 };
 
 pub const FlyoutBase = extern struct {
@@ -2780,8 +2780,8 @@ pub const IVector = extern struct {
         Append: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
         RemoveAtEnd: *const fn (*anyopaque) callconv(.winapi) HRESULT,
         Clear: *const fn (*anyopaque) callconv(.winapi) HRESULT,
-        GetMany: *const fn (*anyopaque, u32, ?*anyopaque, *u32) callconv(.winapi) HRESULT,
-        ReplaceAll: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        GetMany: *const fn (*anyopaque, u32, u32, ?*anyopaque, *u32) callconv(.winapi) HRESULT,
+        ReplaceAll: *const fn (*anyopaque, u32, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
@@ -2804,10 +2804,10 @@ pub const IVector = extern struct {
     pub fn RemoveAtEnd(self: *@This()) !void { try self.removeAtEnd(); }
     pub fn clear(self: *@This()) !void { try hrCheck(self.lpVtbl.Clear(self)); }
     pub fn Clear(self: *@This()) !void { try self.clear(); }
-    pub fn getMany(self: *@This(), p0: u32, p1: ?*anyopaque) !u32 { var out0: u32 = 0; try hrCheck(self.lpVtbl.GetMany(self, p0, p1, &out0)); return out0; }
-    pub fn GetMany(self: *@This(), p0: u32, p1: ?*anyopaque) !u32 { return self.getMany(p0, p1); }
-    pub fn replaceAll(self: *@This(), items: ?*anyopaque) !void { try hrCheck(self.lpVtbl.ReplaceAll(self, items)); }
-    pub fn ReplaceAll(self: *@This(), items: ?*anyopaque) !void { try self.replaceAll(items); }
+    pub fn getMany(self: *@This(), p0: u32, p1: u32, p2: ?*anyopaque) !u32 { var out0: u32 = 0; try hrCheck(self.lpVtbl.GetMany(self, p0, p1, p2, &out0)); return out0; }
+    pub fn GetMany(self: *@This(), p0: u32, p1: u32, p2: ?*anyopaque) !u32 { return self.getMany(p0, p1, p2); }
+    pub fn replaceAll(self: *@This(), items_len: u32, items: ?*anyopaque) !void { try hrCheck(self.lpVtbl.ReplaceAll(self, items_len, items)); }
+    pub fn ReplaceAll(self: *@This(), items_len: u32, items: ?*anyopaque) !void { try self.replaceAll(items_len, items); }
 };
 
 pub const DependencyObject = extern struct {
@@ -11838,7 +11838,7 @@ pub const IIterator = extern struct {
         Current: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
         HasCurrent: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
         MoveNext: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
-        GetMany: *const fn (*anyopaque, ?*anyopaque, *u32) callconv(.winapi) HRESULT,
+        GetMany: *const fn (*anyopaque, u32, ?*anyopaque, *u32) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
@@ -11846,8 +11846,8 @@ pub const IIterator = extern struct {
     pub fn HasCurrent(self: *@This()) !bool { var out: bool = false; try hrCheck(self.lpVtbl.HasCurrent(self, &out)); return out; }
     pub fn moveNext(self: *@This()) !bool { var out0: bool = false; try hrCheck(self.lpVtbl.MoveNext(self, &out0)); return out0; }
     pub fn MoveNext(self: *@This()) !bool { return self.moveNext(); }
-    pub fn getMany(self: *@This(), p0: ?*anyopaque) !u32 { var out0: u32 = 0; try hrCheck(self.lpVtbl.GetMany(self, p0, &out0)); return out0; }
-    pub fn GetMany(self: *@This(), p0: ?*anyopaque) !u32 { return self.getMany(p0); }
+    pub fn getMany(self: *@This(), p0: u32, p1: ?*anyopaque) !u32 { var out0: u32 = 0; try hrCheck(self.lpVtbl.GetMany(self, p0, p1, &out0)); return out0; }
+    pub fn GetMany(self: *@This(), p0: u32, p1: ?*anyopaque) !u32 { return self.getMany(p0, p1); }
 };
 
 pub const PointerDeviceType = struct {
@@ -12559,25 +12559,25 @@ pub const IContentCoordinateConverter = extern struct {
         GetRuntimeClassName: VtblPlaceholder,
         GetTrustLevel: VtblPlaceholder,
         ConvertLocalToScreen: *const fn (*anyopaque, Point, *?*anyopaque) callconv(.winapi) HRESULT,
-        ConvertLocalToScreen_1: *const fn (*anyopaque, ?*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
-        ConvertLocalToScreen_2: *const fn (*anyopaque, ?*anyopaque, i32, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
+        ConvertLocalToScreen_1: *const fn (*anyopaque, u32, ?*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
+        ConvertLocalToScreen_2: *const fn (*anyopaque, u32, ?*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
         ConvertLocalToScreen_3: *const fn (*anyopaque, Rect, *?*anyopaque) callconv(.winapi) HRESULT,
         ConvertScreenToLocal: *const fn (*anyopaque, ?*anyopaque, *Point) callconv(.winapi) HRESULT,
-        ConvertScreenToLocal_1: *const fn (*anyopaque, ?*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
+        ConvertScreenToLocal_1: *const fn (*anyopaque, u32, ?*anyopaque, *u32, *?*anyopaque) callconv(.winapi) HRESULT,
         ConvertScreenToLocal_2: *const fn (*anyopaque, ?*anyopaque, *Rect) callconv(.winapi) HRESULT,
     };
     pub fn release(self: *@This()) void { comRelease(self); }
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn convertLocalToScreen(self: *@This(), p0: Point) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.ConvertLocalToScreen(self, p0, &out0)); return out0; }
     pub fn ConvertLocalToScreen(self: *@This(), p0: Point) !?*anyopaque { return self.convertLocalToScreen(p0); }
-    pub fn convertLocalToScreen_1(self: *@This(), p0: ?*anyopaque) !struct { count: u32, definitions: ?*anyopaque } { var out0: u32 = 0; var out1: ?*anyopaque = null; try hrCheck(self.lpVtbl.ConvertLocalToScreen_1(self, p0, &out0, &out1)); return .{ .count = out0, .definitions = out1 }; }
-    pub fn ConvertLocalToScreen_1(self: *@This(), p0: ?*anyopaque) !struct { count: u32, definitions: ?*anyopaque } { return self.convertLocalToScreen_1(p0); }
-    pub fn ConvertLocalToScreen_2(self: *@This(), p0: ?*anyopaque, p1: i32) !struct { count: u32, definitions: ?*anyopaque } { return self.convertLocalToScreen_1(p0, p1); }
+    pub fn convertLocalToScreen_1(self: *@This(), p0: u32, p1: ?*anyopaque) !struct { count: u32, items: ?*anyopaque } { var out0: u32 = 0; var out1: ?*anyopaque = null; try hrCheck(self.lpVtbl.ConvertLocalToScreen_1(self, p0, p1, &out0, &out1)); return .{ .count = out0, .items = out1 }; }
+    pub fn ConvertLocalToScreen_1(self: *@This(), p0: u32, p1: ?*anyopaque) !struct { count: u32, items: ?*anyopaque } { return self.convertLocalToScreen_1(p0, p1); }
+    pub fn ConvertLocalToScreen_2(self: *@This(), p0: u32, p1: ?*anyopaque) !struct { roundingMode: u32, count: ?*anyopaque } { return self.convertLocalToScreen_1(p0, p1); }
     pub fn ConvertLocalToScreen_3(self: *@This(), p0: Rect) !?*anyopaque { return self.convertLocalToScreen_1(p0); }
     pub fn convertScreenToLocal(self: *@This(), p0: ?*anyopaque) !Point { var out0: Point = undefined; try hrCheck(self.lpVtbl.ConvertScreenToLocal(self, p0, &out0)); return out0; }
     pub fn ConvertScreenToLocal(self: *@This(), p0: ?*anyopaque) !Point { return self.convertScreenToLocal(p0); }
-    pub fn convertScreenToLocal_1(self: *@This(), p0: ?*anyopaque) !struct { count: u32, definitions: ?*anyopaque } { var out0: u32 = 0; var out1: ?*anyopaque = null; try hrCheck(self.lpVtbl.ConvertScreenToLocal_1(self, p0, &out0, &out1)); return .{ .count = out0, .definitions = out1 }; }
-    pub fn ConvertScreenToLocal_1(self: *@This(), p0: ?*anyopaque) !struct { count: u32, definitions: ?*anyopaque } { return self.convertScreenToLocal_1(p0); }
+    pub fn convertScreenToLocal_1(self: *@This(), p0: u32, p1: ?*anyopaque) !struct { count: u32, items: ?*anyopaque } { var out0: u32 = 0; var out1: ?*anyopaque = null; try hrCheck(self.lpVtbl.ConvertScreenToLocal_1(self, p0, p1, &out0, &out1)); return .{ .count = out0, .items = out1 }; }
+    pub fn ConvertScreenToLocal_1(self: *@This(), p0: u32, p1: ?*anyopaque) !struct { count: u32, items: ?*anyopaque } { return self.convertScreenToLocal_1(p0, p1); }
     pub fn ConvertScreenToLocal_2(self: *@This(), p0: ?*anyopaque) !Rect { return self.convertScreenToLocal_1(p0); }
 };
 
@@ -15896,7 +15896,7 @@ pub const ITouchHitTestingEventArgs = extern struct {
         Point: *const fn (*anyopaque, *Point) callconv(.winapi) HRESULT,
         BoundingBox: *const fn (*anyopaque, *Rect) callconv(.winapi) HRESULT,
         EvaluateProximity: *const fn (*anyopaque, Rect, *?*anyopaque) callconv(.winapi) HRESULT,
-        EvaluateProximity_1: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        EvaluateProximity_1: *const fn (*anyopaque, u32, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_ICoreWindowEventArgs = true; // requires ICoreWindowEventArgs
     pub fn release(self: *@This()) void { comRelease(self); }
@@ -15908,8 +15908,8 @@ pub const ITouchHitTestingEventArgs = extern struct {
     pub fn BoundingBox(self: *@This()) !Rect { var out: Rect = undefined; try hrCheck(self.lpVtbl.BoundingBox(self, &out)); return out; }
     pub fn evaluateProximity(self: *@This(), p0: Rect) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.EvaluateProximity(self, p0, &out0)); return out0; }
     pub fn EvaluateProximity(self: *@This(), p0: Rect) !?*anyopaque { return self.evaluateProximity(p0); }
-    pub fn evaluateProximity_1(self: *@This(), p0: ?*anyopaque) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.EvaluateProximity_1(self, p0, &out0)); return out0; }
-    pub fn EvaluateProximity_1(self: *@This(), p0: ?*anyopaque) !?*anyopaque { return self.evaluateProximity_1(p0); }
+    pub fn evaluateProximity_1(self: *@This(), p0: u32, p1: ?*anyopaque) !?*anyopaque { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.EvaluateProximity_1(self, p0, p1, &out0)); return out0; }
+    pub fn EvaluateProximity_1(self: *@This(), p0: u32, p1: ?*anyopaque) !?*anyopaque { return self.evaluateProximity_1(p0, p1); }
 };
 
 pub const VisibilityChangedEventArgs = extern struct {
@@ -25577,10 +25577,10 @@ pub const IContentIslandStatics = extern struct {
     pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
     pub fn create(self: *@This(), p0: ?*anyopaque) !*IContentIsland { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.Create(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
     pub fn Create(self: *@This(), p0: ?*anyopaque) !*IContentIsland { return self.create(p0); }
-    pub fn findAllForCompositor(self: *@This(), p0: ?*anyopaque) !struct { count: u32, definitions: ?*anyopaque } { var out0: u32 = 0; var out1: ?*anyopaque = null; try hrCheck(self.lpVtbl.FindAllForCompositor(self, p0, &out0, &out1)); return .{ .count = out0, .definitions = out1 }; }
-    pub fn FindAllForCompositor(self: *@This(), p0: ?*anyopaque) !struct { count: u32, definitions: ?*anyopaque } { return self.findAllForCompositor(p0); }
-    pub fn findAllForCurrentThread(self: *@This()) !struct { count: u32, definitions: ?*anyopaque } { var out0: u32 = 0; var out1: ?*anyopaque = null; try hrCheck(self.lpVtbl.FindAllForCurrentThread(self, &out0, &out1)); return .{ .count = out0, .definitions = out1 }; }
-    pub fn FindAllForCurrentThread(self: *@This()) !struct { count: u32, definitions: ?*anyopaque } { return self.findAllForCurrentThread(); }
+    pub fn findAllForCompositor(self: *@This(), p0: ?*anyopaque) !struct { count: u32, items: ?*anyopaque } { var out0: u32 = 0; var out1: ?*anyopaque = null; try hrCheck(self.lpVtbl.FindAllForCompositor(self, p0, &out0, &out1)); return .{ .count = out0, .items = out1 }; }
+    pub fn FindAllForCompositor(self: *@This(), p0: ?*anyopaque) !struct { count: u32, items: ?*anyopaque } { return self.findAllForCompositor(p0); }
+    pub fn findAllForCurrentThread(self: *@This()) !struct { count: u32, items: ?*anyopaque } { var out0: u32 = 0; var out1: ?*anyopaque = null; try hrCheck(self.lpVtbl.FindAllForCurrentThread(self, &out0, &out1)); return .{ .count = out0, .items = out1 }; }
+    pub fn FindAllForCurrentThread(self: *@This()) !struct { count: u32, items: ?*anyopaque } { return self.findAllForCurrentThread(); }
     pub fn getByVisual(self: *@This(), p0: ?*anyopaque) !*IContentIsland { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetByVisual(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
     pub fn GetByVisual(self: *@This(), p0: ?*anyopaque) !*IContentIsland { return self.getByVisual(p0); }
     pub fn getFromId(self: *@This(), p0: u64) !*IContentIsland { var out0: ?*anyopaque = null; try hrCheck(self.lpVtbl.GetFromId(self, p0, &out0)); return @ptrCast(@alignCast(out0 orelse return error.WinRTFailed)); }
