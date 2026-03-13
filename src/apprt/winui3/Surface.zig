@@ -1084,9 +1084,13 @@ fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
     const vk = ea.Key() catch return;
     App.fileLog("xaml_surface: PreviewKeyDown vk=0x{x}", .{@as(u32, @bitCast(vk))});
     if (vk == 0xE5) {
-        // VK_PROCESSKEY — IME is active. Switch focus to input_hwnd for IME.
-        App.fileLog("PreviewKeyDown: VK_PROCESSKEY -> focusInputOverlay", .{});
-        input_runtime.focusInputOverlay(self.app);
+        // VK_PROCESSKEY — IME is active. Focus the XAML ime_text_box which
+        // handles IME composition via TSF (TextCompositionStarted/Changed/Ended).
+        // The old path focused input_hwnd which never receives physical keyboard
+        // messages because XAML's message loop intercepts them.
+        App.fileLog("PreviewKeyDown: VK_PROCESSKEY -> focusImeTextBox", .{});
+        self.app.keyboard_focus_target = .input_overlay;
+        _ = self.focusImeTextBox();
         return; // Don't mark handled — let IME process.
     }
     // Save app pointer before handleKeyEvent — a keybinding (e.g. close_tab)
