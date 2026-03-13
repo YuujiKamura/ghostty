@@ -56,10 +56,16 @@ pub const WM_MOUSEWHEEL: UINT = 0x020A;
 pub const WM_MOUSEHWHEEL: UINT = 0x020E;
 pub const WM_ENTERSIZEMOVE: UINT = 0x0231;
 pub const WM_EXITSIZEMOVE: UINT = 0x0232;
+pub const WM_NCCREATE: UINT = 0x0081;
 pub const WM_NCCALCSIZE: UINT = 0x0083;
 pub const WM_NCHITTEST: UINT = 0x0084;
 pub const WM_NCLBUTTONDOWN: UINT = 0x00A1;
+pub const WM_NCLBUTTONUP: UINT = 0x00A2;
 pub const WM_NCLBUTTONDBLCLK: UINT = 0x00A3;
+pub const WM_NCMOUSEMOVE: UINT = 0x00A0;
+pub const WM_NCRBUTTONDOWN: UINT = 0x00A4;
+pub const WM_NCRBUTTONUP: UINT = 0x00A5;
+pub const WM_NCRBUTTONDBLCLK: UINT = 0x00A6;
 pub const WM_SETCURSOR: UINT = 0x0020;
 pub const WM_ACTIVATE: UINT = 0x0006;
 pub const WM_DPICHANGED: UINT = 0x02E0;
@@ -87,6 +93,7 @@ pub const CW_USEDEFAULT: c_int = @bitCast(@as(c_uint, 0x80000000));
 
 // --- Class styles ---
 pub const CS_OWNDC: UINT = 0x0020;
+pub const CS_DBLCLKS: UINT = 0x0008;
 pub const CS_HREDRAW: UINT = 0x0002;
 pub const CS_VREDRAW: UINT = 0x0001;
 
@@ -107,6 +114,7 @@ pub const IDC_HAND: LPCWSTR = @ptrFromInt(32649);
 pub const IDC_APPSTARTING: LPCWSTR = @ptrFromInt(32650);
 pub const IDC_HELP: LPCWSTR = @ptrFromInt(32651);
 pub const COLOR_WINDOW: c_int = 5;
+pub const BLACK_BRUSH: c_int = 4;
 pub const SW_HIDE: c_int = 0;
 pub const SW_SHOWNORMAL: c_int = 1;
 pub const SW_SHOWMINIMIZED: c_int = 2;
@@ -142,6 +150,7 @@ pub const SWP_NOMOVE: UINT = 0x0002;
 pub const SWP_NOZORDER: UINT = 0x0004;
 pub const SWP_NOACTIVATE: UINT = 0x0010;
 pub const SWP_SHOWWINDOW: UINT = 0x0040;
+pub const SWP_HIDEWINDOW: UINT = 0x0080;
 pub const SWP_FRAMECHANGED: UINT = 0x0020;
 
 // --- Pixel format ---
@@ -264,6 +273,7 @@ pub extern "user32" fn GetSystemMetricsForDpi(nIndex: c_int, dpi: UINT) callconv
 
 // System metrics indices
 pub const SM_CXPADDEDBORDER: c_int = 92;
+pub const SM_CXSIZEFRAME: c_int = 32;
 pub const SM_CYSIZEFRAME: c_int = 33;
 pub extern "user32" fn BeginPaint(hWnd: HWND, lpPaint: *PAINTSTRUCT) callconv(.winapi) ?HDC;
 pub extern "user32" fn EndPaint(hWnd: HWND, lpPaint: *const PAINTSTRUCT) callconv(.winapi) BOOL;
@@ -281,6 +291,7 @@ pub extern "user32" fn SetWindowTextW(hWnd: HWND, lpString: LPCWSTR) callconv(.w
 pub extern "user32" fn GetWindowTextW(hWnd: HWND, lpString: [*]u16, nMaxCount: c_int) callconv(.winapi) c_int;
 pub extern "user32" fn GetWindowTextLengthW(hWnd: HWND) callconv(.winapi) c_int;
 pub extern "user32" fn GetDpiForWindow(hWnd: HWND) callconv(.winapi) UINT;
+pub extern "user32" fn AdjustWindowRectExForDpi(lpRect: *RECT, dwStyle: DWORD, bMenu: BOOL, dwExStyle: DWORD, dpi: UINT) callconv(.winapi) BOOL;
 pub extern "user32" fn GetKeyState(nVirtKey: c_int) callconv(.winapi) c_short;
 pub extern "user32" fn OpenClipboard(hWndNewOwner: ?HWND) callconv(.winapi) BOOL;
 pub extern "user32" fn CloseClipboard() callconv(.winapi) BOOL;
@@ -361,6 +372,7 @@ pub extern "kernel32" fn GlobalFree(hMem: LPVOID) callconv(.winapi) LPVOID;
 pub extern "gdi32" fn ChoosePixelFormat(hdc: HDC, ppfd: *const PIXELFORMATDESCRIPTOR) callconv(.winapi) c_int;
 pub extern "gdi32" fn SetPixelFormat(hdc: HDC, format: c_int, ppfd: *const PIXELFORMATDESCRIPTOR) callconv(.winapi) BOOL;
 pub extern "gdi32" fn SwapBuffers(hdc: HDC) callconv(.winapi) BOOL;
+pub extern "gdi32" fn GetStockObject(i: c_int) callconv(.winapi) ?HANDLE;
 
 // GetDC/ReleaseDC are exported from user32.dll (not gdi32)
 pub extern "user32" fn GetDC(hWnd: ?HWND) callconv(.winapi) ?HDC;
@@ -499,11 +511,13 @@ pub const DWMWA_CAPTION_COLOR: DWORD = 35;
 
 // --- Fullscreen support ---
 pub const GWL_STYLE: c_int = -16;
+pub const GWL_EXSTYLE: c_int = -20;
 pub const WS_CAPTION: DWORD = 0x00C00000;
 pub const WS_THICKFRAME: DWORD = 0x00040000;
 pub const SWP_NOOWNERZORDER: UINT = 0x0200;
 pub const MONITOR_DEFAULTTONEAREST: DWORD = 0x00000002;
 pub const HWND_TOP: ?HWND = null;
+pub const HWND_BOTTOM: ?HWND = @ptrFromInt(1);
 
 pub const WINDOWPLACEMENT = extern struct {
     length: UINT = @sizeOf(WINDOWPLACEMENT),
