@@ -18,6 +18,7 @@ pub const gtk = @import("apprt/gtk.zig");
 pub const none = @import("apprt/none.zig");
 pub const win32 = @import("apprt/win32.zig");
 pub const winui3 = @import("apprt/winui3.zig");
+pub const winui3_islands = @import("apprt/winui3_islands.zig");
 pub const browser = @import("apprt/browser.zig");
 pub const embedded = @import("apprt/embedded.zig");
 pub const surface = @import("apprt/surface.zig");
@@ -47,6 +48,7 @@ pub const runtime = switch (build_config.artifact) {
         .gtk => gtk,
         .win32 => win32,
         .winui3 => winui3,
+        .winui3_islands => winui3_islands,
     },
     .lib => embedded,
     .wasm_module => browser,

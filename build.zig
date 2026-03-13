@@ -180,7 +180,7 @@ pub fn build(b: *std.Build) !void {
         }
     }
 
-    if (config.target.result.os.tag == .windows and config.app_runtime == .winui3) {
+    if (config.target.result.os.tag == .windows and (config.app_runtime == .winui3 or config.app_runtime == .winui3_islands)) {
         // Stage the Windows App SDK bootstrap DLL next to the exe so LoadLibraryW finds it.
         {
             const src: std.Build.LazyPath = .{ .cwd_relative = b.pathFromRoot(

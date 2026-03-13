@@ -92,3 +92,11 @@ pub const IPropertyValue = native.IPropertyValue;
 pub const IPropertyValueStatics = native.IPropertyValueStatics;
 pub const ISwapChainPanelNative = native.ISwapChainPanelNative;
 pub const IWindowNative = native.IWindowNative;
+
+// --- XAML Islands interfaces (hand-written, IIDs from WinMD via win-zig-bindgen) ---
+pub const WindowId = native.WindowId;
+pub const ContentSizePolicy = native.ContentSizePolicy;
+pub const IDesktopWindowXamlSource = native.IDesktopWindowXamlSource;
+pub const IDesktopWindowXamlSourceFactory = native.IDesktopWindowXamlSourceFactory;
+pub const IDesktopChildSiteBridge = native.IDesktopChildSiteBridge;
+pub const IClosable = native.IClosable;

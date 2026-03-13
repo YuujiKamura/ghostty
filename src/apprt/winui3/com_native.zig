@@ -271,5 +271,151 @@ pub const IWindowNative = extern struct {
     pub fn getWindowHandle(self: *@This()) !*anyopaque { var h: ?*anyopaque = null; try hrCheck(self.lpVtbl.getWindowHandle(self, &h)); return h orelse error.WinRTFailed; }
 };
 
+/// Microsoft.UI.WindowId — a simple value type wrapping a u64.
+pub const WindowId = extern struct {
+    Value: u64,
+};
+
+/// Microsoft.UI.Content.ContentSizePolicy enum.
+pub const ContentSizePolicy = struct {
+    pub const None: i32 = 0;
+    pub const ResizeContentToParentWindow: i32 = 1;
+    pub const ResizeParentWindowToContent: i32 = 2;
+};
+
+/// Microsoft.UI.Xaml.Hosting.IDesktopWindowXamlSource
+/// WinUI3 XAML Islands host — embeds XAML content in a Win32 HWND.
+/// IIDs verified via win-zig-bindgen from Microsoft.UI.Xaml.winmd (Windows App SDK 1.6).
+pub const IDesktopWindowXamlSource = extern struct {
+    pub const IID = GUID{ .data1 = 0x553af92c, .data2 = 0x1381, .data3 = 0x51d6, .data4 = .{ 0xbe, 0xe0, 0xf3, 0x4b, 0xeb, 0x04, 0x2e, 0xa8 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        // IUnknown (slots 0-2)
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        // IInspectable (slots 3-5)
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        // IDesktopWindowXamlSource (slots 6-17)
+        Content: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetContent: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        HasFocus: *const fn (*anyopaque, *bool) callconv(.winapi) HRESULT,
+        SystemBackdrop: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetSystemBackdrop: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        SiteBridge: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        TakeFocusRequested: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveTakeFocusRequested: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        GotFocus: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveGotFocus: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        NavigateFocus: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        Initialize: *const fn (*anyopaque, WindowId) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn getContent(self: *@This()) !*anyopaque {
+        var out: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.Content(@ptrCast(self), &out));
+        return out orelse error.WinRTFailed;
+    }
+    pub fn setContent(self: *@This(), value: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.SetContent(@ptrCast(self), value));
+    }
+    pub fn getSiteBridge(self: *@This()) !*IDesktopChildSiteBridge {
+        var out: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.SiteBridge(@ptrCast(self), &out));
+        return @ptrCast(@alignCast(out orelse return error.WinRTFailed));
+    }
+    pub fn initialize(self: *@This(), parentWindowId: WindowId) !void {
+        try hrCheck(self.lpVtbl.Initialize(@ptrCast(self), parentWindowId));
+    }
+    pub fn close(self: *@This()) !void {
+        // Close is on IClosable; QI for it.
+        const closable = try self.queryInterface(IClosable);
+        defer closable.release();
+        try closable.close();
+    }
+};
+
+/// Microsoft.UI.Xaml.Hosting.IDesktopWindowXamlSourceFactory
+/// Activation factory for DesktopWindowXamlSource.
+pub const IDesktopWindowXamlSourceFactory = extern struct {
+    pub const IID = GUID{ .data1 = 0x7d2db617, .data2 = 0x14e7, .data3 = 0x5d49, .data4 = .{ 0xae, 0xec, 0xae, 0x10, 0x88, 0x7e, 0x59, 0x5d } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CreateInstance: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn createInstance(self: *@This()) !*IDesktopWindowXamlSource {
+        var inner: ?*anyopaque = null;
+        var instance: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.CreateInstance(@ptrCast(self), null, &inner, &instance));
+        // Release inner if non-null (non-aggregated creation).
+        if (inner) |i| {
+            const unk: *IUnknown = @ptrCast(@alignCast(i));
+            _ = unk.lpVtbl.Release(@ptrCast(unk));
+        }
+        return @ptrCast(@alignCast(instance orelse return error.WinRTFailed));
+    }
+};
+
+/// Microsoft.UI.Content.IDesktopChildSiteBridge
+/// Provides resize policy control for XAML Islands child site.
+/// IID verified via win-zig-bindgen from Microsoft.UI.winmd (Windows App SDK 1.6).
+pub const IDesktopChildSiteBridge = extern struct {
+    pub const IID = GUID{ .data1 = 0xb2f2ff7b, .data2 = 0x1825, .data3 = 0x51b0, .data4 = .{ 0xb8, 0x0b, 0x75, 0x99, 0x88, 0x9c, 0x56, 0x9f } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        // IUnknown (slots 0-2)
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        // IInspectable (slots 3-5)
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        // IDesktopChildSiteBridge (slots 6-8)
+        ResizePolicy: *const fn (*anyopaque, *i32) callconv(.winapi) HRESULT,
+        SetResizePolicy: *const fn (*anyopaque, i32) callconv(.winapi) HRESULT,
+        SiteView: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn getResizePolicy(self: *@This()) !i32 {
+        var out: i32 = 0;
+        try hrCheck(self.lpVtbl.ResizePolicy(@ptrCast(self), &out));
+        return out;
+    }
+    pub fn setResizePolicy(self: *@This(), value: i32) !void {
+        try hrCheck(self.lpVtbl.SetResizePolicy(@ptrCast(self), value));
+    }
+};
+
+/// Windows.Foundation.IClosable (same IID for UWP and WinUI3).
+pub const IClosable = extern struct {
+    pub const IID = GUID{ .data1 = 0x30d5a829, .data2 = 0x7fa4, .data3 = 0x4026, .data4 = .{ 0x83, 0xbb, 0xd7, 0x5b, 0xae, 0x4e, 0xa9, 0x9e } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Close: *const fn (*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn close(self: *@This()) !void { try hrCheck(self.lpVtbl.Close(@ptrCast(self))); }
+};
+
 // CharacterReceived and TextComposition delegate IIDs are now auto-generated
 // in com_generated.zig via TypedEventHandler pinterface IID computation.

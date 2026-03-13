@@ -26,6 +26,7 @@ pub const ATOM = u16;
 pub const BYTE = u8;
 pub const LPVOID = ?*anyopaque;
 pub const LPCWSTR = [*:0]align(1) const u16;
+pub const WNDPROC = *const fn (HWND, UINT, WPARAM, LPARAM) callconv(.winapi) LRESULT;
 
 // --- Window messages ---
 pub const WM_CREATE: UINT = 0x0001;
@@ -46,6 +47,7 @@ pub const WM_COMMAND: UINT = 0x0111;
 pub const WM_MOUSEMOVE: UINT = 0x0200;
 pub const WM_LBUTTONDOWN: UINT = 0x0201;
 pub const WM_LBUTTONUP: UINT = 0x0202;
+pub const WM_LBUTTONDBLCLK: UINT = 0x0203;
 pub const WM_RBUTTONDOWN: UINT = 0x0204;
 pub const WM_RBUTTONUP: UINT = 0x0205;
 pub const WM_MBUTTONDOWN: UINT = 0x0207;
@@ -56,6 +58,9 @@ pub const WM_ENTERSIZEMOVE: UINT = 0x0231;
 pub const WM_EXITSIZEMOVE: UINT = 0x0232;
 pub const WM_NCCALCSIZE: UINT = 0x0083;
 pub const WM_NCHITTEST: UINT = 0x0084;
+pub const WM_NCLBUTTONDOWN: UINT = 0x00A1;
+pub const WM_NCLBUTTONDBLCLK: UINT = 0x00A3;
+pub const WM_SETCURSOR: UINT = 0x0020;
 pub const WM_ACTIVATE: UINT = 0x0006;
 pub const WM_DPICHANGED: UINT = 0x02E0;
 pub const WM_USER: UINT = 0x0400;
@@ -77,6 +82,7 @@ pub const WM_APP_CONTROL_ACTION: UINT = WM_USER + 5;
 pub const WS_OVERLAPPEDWINDOW: DWORD = 0x00CF0000;
 pub const WS_VISIBLE: DWORD = 0x10000000;
 pub const WS_EX_LAYERED: DWORD = 0x00080000;
+pub const WS_EX_NOREDIRECTIONBITMAP: DWORD = 0x00200000;
 pub const CW_USEDEFAULT: c_int = @bitCast(@as(c_uint, 0x80000000));
 
 // --- Class styles ---
@@ -115,6 +121,7 @@ pub const SC_CLOSE: usize = 0xF060;
 pub const SC_MINIMIZE: usize = 0xF020;
 pub const SC_MAXIMIZE: usize = 0xF030;
 pub const SC_RESTORE: usize = 0xF120;
+pub const SC_MOVE: usize = 0xF010;
 pub const MF_STRING: UINT = 0x0000;
 pub const MF_SEPARATOR: UINT = 0x0800;
 pub const TPM_RIGHTBUTTON: UINT = 0x0002;
@@ -134,6 +141,7 @@ pub const SWP_NOSIZE: UINT = 0x0001;
 pub const SWP_NOMOVE: UINT = 0x0002;
 pub const SWP_NOZORDER: UINT = 0x0004;
 pub const SWP_NOACTIVATE: UINT = 0x0010;
+pub const SWP_SHOWWINDOW: UINT = 0x0040;
 pub const SWP_FRAMECHANGED: UINT = 0x0020;
 
 // --- Pixel format ---
@@ -251,6 +259,12 @@ pub extern "user32" fn DefWindowProcW(hWnd: HWND, Msg: UINT, wParam: WPARAM, lPa
 pub extern "user32" fn LoadCursorW(hInstance: ?HINSTANCE, lpCursorName: LPCWSTR) callconv(.winapi) ?HCURSOR;
 pub extern "user32" fn SetCursor(hCursor: ?HCURSOR) callconv(.winapi) ?HCURSOR;
 pub extern "user32" fn GetClientRect(hWnd: HWND, lpRect: *RECT) callconv(.winapi) BOOL;
+pub extern "user32" fn GetWindowRect(hWnd: HWND, lpRect: *RECT) callconv(.winapi) BOOL;
+pub extern "user32" fn GetSystemMetricsForDpi(nIndex: c_int, dpi: UINT) callconv(.winapi) c_int;
+
+// System metrics indices
+pub const SM_CXPADDEDBORDER: c_int = 92;
+pub const SM_CYSIZEFRAME: c_int = 33;
 pub extern "user32" fn BeginPaint(hWnd: HWND, lpPaint: *PAINTSTRUCT) callconv(.winapi) ?HDC;
 pub extern "user32" fn EndPaint(hWnd: HWND, lpPaint: *const PAINTSTRUCT) callconv(.winapi) BOOL;
 pub extern "user32" fn SetWindowLongPtrW(hWnd: HWND, nIndex: c_int, dwNewLong: usize) callconv(.winapi) usize;
@@ -280,7 +294,11 @@ pub extern "user32" fn GetWindow(hWnd: HWND, uCmd: UINT) callconv(.winapi) ?HWND
 pub extern "user32" fn GetAncestor(hWnd: HWND, gaFlags: UINT) callconv(.winapi) ?HWND;
 pub const GW_CHILD: UINT = 5;
 pub const GW_HWNDNEXT: UINT = 2;
+pub const GA_PARENT: UINT = 1;
 pub const GA_ROOT: UINT = 2;
+pub extern "user32" fn SendMessageW(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.winapi) LRESULT;
+pub extern "user32" fn SetLayeredWindowAttributes(hWnd: HWND, crKey: DWORD, bAlpha: u8, dwFlags: DWORD) callconv(.winapi) BOOL;
+pub const LWA_ALPHA: DWORD = 0x00000002;
 pub extern "user32" fn UnregisterClassW(lpClassName: LPCWSTR, hInstance: ?HINSTANCE) callconv(.winapi) BOOL;
 pub extern "user32" fn SetWindowPos(
     hWnd: HWND,
@@ -306,6 +324,7 @@ pub extern "user32" fn GetKeyboardLayout(idThread: DWORD) callconv(.winapi) usiz
 
 // --- kernel32 extern declarations ---
 pub extern "kernel32" fn GetLastError() callconv(.winapi) DWORD;
+pub extern "kernel32" fn SetLastError(dwErrCode: DWORD) callconv(.winapi) void;
 pub extern "kernel32" fn ExitProcess(uExitCode: UINT) callconv(.winapi) noreturn;
 pub extern "kernel32" fn GetModuleHandleW(lpModuleName: ?LPCWSTR) callconv(.winapi) ?HINSTANCE;
 pub extern "kernel32" fn GetCurrentThreadId() callconv(.winapi) DWORD;
@@ -405,6 +424,25 @@ pub const WM_IME_NOTIFY: UINT = 0x0282;
 pub extern "imm32" fn ImmSetOpenStatus(hIMC: HIMC, fOpen: BOOL) callconv(.winapi) BOOL;
 pub extern "imm32" fn ImmGetOpenStatus(hIMC: HIMC) callconv(.winapi) BOOL;
 
+// --- CREATESTRUCTW (passed via WM_CREATE lparam) ---
+pub const CREATESTRUCTW = extern struct {
+    lpCreateParams: ?*anyopaque,
+    hInstance: HINSTANCE,
+    hMenu: ?HMENU,
+    hwndParent: ?HWND,
+    cy: c_int,
+    cx: c_int,
+    y: c_int,
+    x: c_int,
+    style: LONG,
+    lpszName: ?LPCWSTR,
+    lpszClass: ?LPCWSTR,
+    dwExStyle: DWORD,
+};
+
+// --- WS_CLIPCHILDREN ---
+pub const WS_CLIPCHILDREN: DWORD = 0x02000000;
+
 // --- NCCALCSIZE_PARAMS ---
 pub const NCCALCSIZE_PARAMS = extern struct {
     rgrc: [3]RECT,
@@ -412,6 +450,7 @@ pub const NCCALCSIZE_PARAMS = extern struct {
 };
 
 // --- WM_NCHITTEST return values ---
+pub const HTTRANSPARENT: c_int = -1;
 pub const HTCLIENT: c_int = 1;
 pub const HTCAPTION: c_int = 2;
 pub const HTSYSMENU: c_int = 3;

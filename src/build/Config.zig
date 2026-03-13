@@ -144,7 +144,7 @@ pub fn init(b: *std.Build, appVersion: []const u8) !Config {
         RendererBackend,
         "renderer",
         "The app runtime to use. Not all values supported on all platforms.",
-    ) orelse if (config.app_runtime == .winui3) .d3d11 else RendererBackend.default(target.result, wasm_target);
+    ) orelse if (config.app_runtime == .winui3 or config.app_runtime == .winui3_islands) .d3d11 else RendererBackend.default(target.result, wasm_target);
 
     //---------------------------------------------------------------
     // Feature Flags

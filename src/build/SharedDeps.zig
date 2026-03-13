@@ -542,7 +542,7 @@ pub fn add(
         if (self.config.flatpak) step.linkSystemLibrary2("gtk4", dynamic_link_opts);
 
         switch (self.config.app_runtime) {
-            .none, .win32, .winui3 => {},
+            .none, .win32, .winui3, .winui3_islands => {},
             .gtk => try self.addGtkNg(step),
         }
     }

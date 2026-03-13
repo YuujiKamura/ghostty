@@ -18,6 +18,10 @@ pub const Runtime = enum {
     /// Provides tabbed UI, Mica backdrop, and modern Windows styling.
     winui3,
 
+    /// WinUI 3 with XAML Islands. Uses CreateWindowEx + DesktopWindowXamlSource
+    /// for custom titlebar support (Windows Terminal architecture).
+    winui3_islands,
+
     pub fn default(target: std.Target) Runtime {
         return switch (target.os.tag) {
             // The Linux and FreeBSD default is GTK because it is a full
