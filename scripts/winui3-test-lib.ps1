@@ -576,8 +576,10 @@ function Clear-OldLogs {
     )
 
     if (-not (Test-Path $TmpDir)) { return }
-    $logs = Get-ChildItem -Path $TmpDir -Filter "ghostty-stderr-*.log" |
-            Sort-Object -Property LastWriteTime -Descending
+    $logs = @(
+        Get-ChildItem -Path $TmpDir -Filter "ghostty-stderr-*.log" |
+        Sort-Object -Property LastWriteTime -Descending
+    )
     if ($logs.Count -gt $KeepCount) {
         $logs | Select-Object -Skip $KeepCount | Remove-Item -Force -ErrorAction SilentlyContinue
     }
