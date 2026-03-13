@@ -108,7 +108,7 @@ const ExitIntent = enum {
 
 pub const KeyboardFocusTarget = enum {
     xaml_surface,
-    input_overlay,
+    ime_text_box,
 };
 
 const TypedHandler = gen.TypedEventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void);
@@ -136,13 +136,13 @@ root_hwnd: ?os.HWND = null,
 /// The child HWND created by WinUI3 for the content area (DesktopChildSiteBridge).
 child_hwnd: ?os.HWND = null,
 
-/// Our own input HWND — a transparent child window that receives keyboard focus
-/// and all IME messages, bypassing WinUI3's TSF layer entirely.
+/// Our own input HWND — kept as a transparent child window for fallback/native
+/// behaviors, but no longer the default keyboard text owner.
 input_hwnd: ?os.HWND = null,
 
-/// Desired keyboard focus owner. Normal typing stays on the XAML surface; IME
-/// composition temporarily switches to the dedicated input overlay HWND.
-keyboard_focus_target: KeyboardFocusTarget = .xaml_surface,
+/// Desired keyboard focus owner. WinUI3 text/IME input should stay on the
+/// hidden XAML TextBox so TSF owns the composition lifecycle.
+keyboard_focus_target: KeyboardFocusTarget = .ime_text_box,
 ime_composing: bool = false,
 ime_last_had_result: bool = false,
 
@@ -159,7 +159,6 @@ tab_view: ?*com.ITabView = null,
 /// Windows Terminal sets _rootGrid.Width/Height on every resize; without this,
 /// XAML layout doesn't track the actual window size correctly.
 root_grid: ?*winrt.IInspectable = null,
-
 
 /// The content grid (Row 1 of RootGrid) where SwapChainPanel is placed.
 /// In Issue #28 architecture, SwapChainPanel lives here, NOT in TabViewItem.Content.
@@ -929,8 +928,14 @@ fn fullCleanup(self: *App) void {
     if (self.add_tab_handler) |h| h.release();
     if (self.selection_changed_handler) |h| h.release();
 
-    if (self.root_grid) |rg| { _ = rg.release(); self.root_grid = null; }
-    if (self.tab_content_grid) |tcg| { _ = tcg.release(); self.tab_content_grid = null; }
+    if (self.root_grid) |rg| {
+        _ = rg.release();
+        self.root_grid = null;
+    }
+    if (self.tab_content_grid) |tcg| {
+        _ = tcg.release();
+        self.tab_content_grid = null;
+    }
     if (self.tab_view) |tv| tv.release();
     if (self.window) |window| window.release();
     if (self.xaml_app) |xa| xa.release();

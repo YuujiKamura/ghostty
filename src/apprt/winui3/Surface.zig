@@ -74,6 +74,7 @@ character_received_token: i64 = 0,
 got_focus_token: i64 = 0,
 lost_focus_token: i64 = 0,
 ime_preview_key_down_token: i64 = 0,
+ime_preview_key_up_token: i64 = 0,
 ime_character_received_token: i64 = 0,
 ime_text_changed_token: i64 = 0,
 ime_got_focus_token: i64 = 0,
@@ -98,7 +99,6 @@ last_swap_chain_handle: ?usize = null,
 
 /// The IInspectable of the TabViewItem this surface belongs to (for title updates).
 tab_view_item_inspectable: ?*winrt.IInspectable = null,
-
 
 /// Current title of the surface, allocated dynamically.
 title: ?[:0]u8 = null,
@@ -387,6 +387,10 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
             defer ime_key_down.release();
             self.ime_preview_key_down_token = ime_ue.AddPreviewKeyDown(ime_key_down.comPtr()) catch 0;
 
+            const ime_key_up = try ImeKeyDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxPreviewKeyUp, &com.IID_KeyEventHandler);
+            defer ime_key_up.release();
+            self.ime_preview_key_up_token = ime_ue.AddPreviewKeyUp(ime_key_up.comPtr()) catch 0;
+
             const ime_char_recv = try ImeCharRecvDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxCharacterReceived, &com.IID_CharacterReceivedHandler);
             defer ime_char_recv.release();
             self.ime_character_received_token = ime_ue.AddCharacterReceived(ime_char_recv.comPtr()) catch 0;
@@ -485,15 +489,33 @@ pub fn deinit(self: *Surface) void {
             // Unregister XAML input event handlers.
             if (panel.queryInterface(com.IUIElement)) |ue| {
                 defer ue.release();
-                if (self.pointer_pressed_token != 0) { ue.RemovePointerPressed(self.pointer_pressed_token) catch {}; }
-                if (self.pointer_moved_token != 0) { ue.RemovePointerMoved(self.pointer_moved_token) catch {}; }
-                if (self.pointer_released_token != 0) { ue.RemovePointerReleased(self.pointer_released_token) catch {}; }
-                if (self.pointer_wheel_changed_token != 0) { ue.RemovePointerWheelChanged(self.pointer_wheel_changed_token) catch {}; }
-                if (self.preview_key_down_token != 0) { ue.RemovePreviewKeyDown(self.preview_key_down_token) catch {}; }
-                if (self.preview_key_up_token != 0) { ue.RemovePreviewKeyUp(self.preview_key_up_token) catch {}; }
-                if (self.character_received_token != 0) { ue.RemoveCharacterReceived(self.character_received_token) catch {}; }
-                if (self.got_focus_token != 0) { ue.RemoveGotFocus(self.got_focus_token) catch {}; }
-                if (self.lost_focus_token != 0) { ue.RemoveLostFocus(self.lost_focus_token) catch {}; }
+                if (self.pointer_pressed_token != 0) {
+                    ue.RemovePointerPressed(self.pointer_pressed_token) catch {};
+                }
+                if (self.pointer_moved_token != 0) {
+                    ue.RemovePointerMoved(self.pointer_moved_token) catch {};
+                }
+                if (self.pointer_released_token != 0) {
+                    ue.RemovePointerReleased(self.pointer_released_token) catch {};
+                }
+                if (self.pointer_wheel_changed_token != 0) {
+                    ue.RemovePointerWheelChanged(self.pointer_wheel_changed_token) catch {};
+                }
+                if (self.preview_key_down_token != 0) {
+                    ue.RemovePreviewKeyDown(self.preview_key_down_token) catch {};
+                }
+                if (self.preview_key_up_token != 0) {
+                    ue.RemovePreviewKeyUp(self.preview_key_up_token) catch {};
+                }
+                if (self.character_received_token != 0) {
+                    ue.RemoveCharacterReceived(self.character_received_token) catch {};
+                }
+                if (self.got_focus_token != 0) {
+                    ue.RemoveGotFocus(self.got_focus_token) catch {};
+                }
+                if (self.lost_focus_token != 0) {
+                    ue.RemoveLostFocus(self.lost_focus_token) catch {};
+                }
             } else |_| {}
         }
         native.release();
@@ -502,16 +524,36 @@ pub fn deinit(self: *Surface) void {
     if (self.ime_text_box) |ime_tb| {
         if (ime_tb.queryInterface(com.IUIElement)) |ime_ue| {
             defer ime_ue.release();
-            if (self.ime_preview_key_down_token != 0) { ime_ue.RemovePreviewKeyDown(self.ime_preview_key_down_token) catch {}; }
-            if (self.ime_character_received_token != 0) { ime_ue.RemoveCharacterReceived(self.ime_character_received_token) catch {}; }
-            if (self.ime_got_focus_token != 0) { ime_ue.RemoveGotFocus(self.ime_got_focus_token) catch {}; }
-            if (self.ime_lost_focus_token != 0) { ime_ue.RemoveLostFocus(self.ime_lost_focus_token) catch {}; }
+            if (self.ime_preview_key_down_token != 0) {
+                ime_ue.RemovePreviewKeyDown(self.ime_preview_key_down_token) catch {};
+            }
+            if (self.ime_preview_key_up_token != 0) {
+                ime_ue.RemovePreviewKeyUp(self.ime_preview_key_up_token) catch {};
+            }
+            if (self.ime_character_received_token != 0) {
+                ime_ue.RemoveCharacterReceived(self.ime_character_received_token) catch {};
+            }
+            if (self.ime_got_focus_token != 0) {
+                ime_ue.RemoveGotFocus(self.ime_got_focus_token) catch {};
+            }
+            if (self.ime_lost_focus_token != 0) {
+                ime_ue.RemoveLostFocus(self.ime_lost_focus_token) catch {};
+            }
         } else |_| {}
-        if (self.ime_text_changed_token != 0) { ime_tb.RemoveTextChanged(self.ime_text_changed_token) catch {}; }
-        if (self.ime_text_comp_start_token != 0) { ime_tb.RemoveTextCompositionStarted(self.ime_text_comp_start_token) catch {}; }
-        if (self.ime_text_comp_change_token != 0) { ime_tb.RemoveTextCompositionChanged(self.ime_text_comp_change_token) catch {}; }
-        if (self.ime_text_comp_end_token != 0) { ime_tb.RemoveTextCompositionEnded(self.ime_text_comp_end_token) catch {}; }
+        if (self.ime_text_changed_token != 0) {
+            ime_tb.RemoveTextChanged(self.ime_text_changed_token) catch {};
+        }
+        if (self.ime_text_comp_start_token != 0) {
+            ime_tb.RemoveTextCompositionStarted(self.ime_text_comp_start_token) catch {};
+        }
+        if (self.ime_text_comp_change_token != 0) {
+            ime_tb.RemoveTextCompositionChanged(self.ime_text_comp_change_token) catch {};
+        }
+        if (self.ime_text_comp_end_token != 0) {
+            ime_tb.RemoveTextCompositionEnded(self.ime_text_comp_end_token) catch {};
+        }
         self.ime_preview_key_down_token = 0;
+        self.ime_preview_key_up_token = 0;
         self.ime_character_received_token = 0;
         self.ime_text_changed_token = 0;
         self.ime_got_focus_token = 0;
@@ -1005,9 +1047,8 @@ fn onXamlPointerPressed(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
         5 => .middle, // MiddleButtonPressed
         else => return,
     };
-    // Keyboard/IME input is handled solely by input_hwnd (Win32 focus).
-    // Do NOT call UIElement.focus() — it triggers a SETFOCUS/KILLFOCUS loop
-    // between the XAML island and input_hwnd, preventing IME from working.
+    // Keep the hidden ime_text_box as the single WinUI3 text owner so TSF
+    // handles both normal text and IME composition on one path.
     if (!self.app.resizing) {
         input_runtime.focusKeyboardTarget(self.app);
     }
@@ -1089,7 +1130,7 @@ fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
         // The old path focused input_hwnd which never receives physical keyboard
         // messages because XAML's message loop intercepts them.
         App.fileLog("PreviewKeyDown: VK_PROCESSKEY -> focusImeTextBox", .{});
-        self.app.keyboard_focus_target = .input_overlay;
+        self.app.keyboard_focus_target = .ime_text_box;
         _ = self.focusImeTextBox();
         return; // Don't mark handled — let IME process.
     }
@@ -1133,29 +1174,41 @@ fn onImeTextBoxPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque)
     if (!self.core_initialized) return;
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const vk = ea.Key() catch return;
-    App.fileLog("ime_text_box: PreviewKeyDown vk=0x{x} focus_target={s}", .{ @as(u32, @bitCast(vk)), @tagName(self.app.keyboard_focus_target) });
-    if (@as(u32, @bitCast(vk)) == 0xF4) {
-        App.fileLog("ime_text_box: VK_IME_OFF -> focusKeyboardTarget", .{});
-        input_runtime.focusKeyboardTarget(self.app);
-        ea.SetHandled(true) catch {};
+    const vk_u32 = @as(u32, @bitCast(vk));
+    App.fileLog("ime_text_box: PreviewKeyDown vk=0x{x} focus_target={s}", .{ vk_u32, @tagName(self.app.keyboard_focus_target) });
+    if (isImePassthroughVirtualKey(vk_u32)) return;
+    const app_ref = self.app;
+    self.handleKeyEvent(@intCast(vk_u32), true);
+    if (!isSurfaceAlive(app_ref, self)) return;
+    switch (self.pending_keydown) {
+        .pending => {},
+        else => ea.SetHandled(true) catch {},
     }
 }
 
-fn onImeTextBoxCharacterReceived(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+fn onImeTextBoxPreviewKeyUp(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
     if (!self.core_initialized) return;
-    if (self.app.keyboard_focus_target != .input_overlay) return;
-    const ea: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
-    const ch = ea.Character() catch return;
-    App.fileLog("ime_text_box: CharacterReceived ch=0x{x}", .{ch});
+    const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
+    const vk = ea.Key() catch return;
+    const vk_u32 = @as(u32, @bitCast(vk));
+    if (isImePassthroughVirtualKey(vk_u32)) return;
     const app_ref = self.app;
-    self.handleCharEvent(ch);
+    self.handleKeyEvent(@intCast(vk_u32), false);
     if (!isSurfaceAlive(app_ref, self)) return;
     ea.SetHandled(true) catch {};
 }
 
+fn onImeTextBoxCharacterReceived(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+    if (!self.core_initialized) return;
+    if (self.app.keyboard_focus_target != .ime_text_box) return;
+    const ea: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
+    const ch = ea.Character() catch return;
+    App.fileLog("ime_text_box: CharacterReceived ch=0x{x} (deferred to TextChanged)", .{ch});
+}
+
 fn onImeTextBoxTextChanged(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
-    if (self.app.keyboard_focus_target != .input_overlay) return;
+    if (self.app.keyboard_focus_target != .ime_text_box) return;
     if (self.ime_text_box_internal_update) return;
     const ime_tb = self.ime_text_box orelse return;
     const text_h = ime_tb.Text() catch return;
@@ -1227,7 +1280,7 @@ fn onXamlGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
 
 fn onXamlLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
-    if (self.app.keyboard_focus_target == .input_overlay) {
+    if (self.app.keyboard_focus_target == .ime_text_box) {
         App.fileLog("SwapChainPanel LostFocus ignored: IME text box now owns focus", .{});
         return;
     }
@@ -1253,7 +1306,7 @@ fn onImeTextBoxGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
 fn onImeTextBoxLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
     App.fileLog("ime_text_box: LostFocus keyboard_focus_target={s}", .{@tagName(self.app.keyboard_focus_target)});
-    if (self.app.keyboard_focus_target != .input_overlay) return;
+    if (self.app.keyboard_focus_target != .ime_text_box) return;
     if (!self.has_focus) return;
     self.has_focus = false;
     self.core_surface.focusCallback(false) catch |err| {
@@ -1388,6 +1441,16 @@ fn commonPrefixLen(comptime T: type, a: []const T, b: []const T) usize {
     var i: usize = 0;
     while (i < max_len and a[i] == b[i]) : (i += 1) {}
     return i;
+}
+
+fn isImePassthroughVirtualKey(vk: u32) bool {
+    return switch (vk) {
+        0xE5, // VK_PROCESSKEY
+        0xF3, // IME toggle reported by WinUI3 on Japanese layout in Phase 6
+        0xF4, // IME off reported by WinUI3 on Japanese layout in Phase 6
+        => true,
+        else => false,
+    };
 }
 
 fn hwndValue(hwnd: ?os.HWND) usize {
@@ -1595,7 +1658,6 @@ pub fn updateScrollbarUi(self: *Surface, total: usize, offset: usize, len: usize
     range_base.SetLargeChange(len_f) catch {};
     range_base.SetSmallChange(1.0) catch {};
 
-
     const isb = sb.queryInterface(com.IScrollBar) catch |err| {
         log.warn("scrollbar ui sync: IScrollBar QI failed: {}", .{err});
         return;
@@ -1669,6 +1731,11 @@ fn onLoaded(self: *Surface, _: *anyopaque, _: *anyopaque) void {
     maybeBindPendingSwapChainHandle(self, "onLoaded");
     // In TabView mode, enforce that the active tab item still points to this panel.
     self.app.ensureVisibleSurfaceAttached(self);
+    if (self.app.activeSurface()) |active_surface| {
+        if (active_surface == self) {
+            input_runtime.focusKeyboardTarget(self.app);
+        }
+    }
 }
 
 /// SizeChanged event callback. Triggered when the SwapChainPanel's layout size changes.

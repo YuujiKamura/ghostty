@@ -82,15 +82,10 @@ pub fn subclassProc(
         os.WM_EXITSIZEMOVE => return handleExitSizeMove(app, hwnd),
         os.WM_TIMER => return handleTimer(app, hwnd, msg, wparam, lparam),
         os.WM_SIZE => return handleSize(app, hwnd, msg, wparam, lparam),
-        // Keyboard input is handled by input_hwnd (inputWndProc).
-        // If keys arrive here (e.g. before input_hwnd gets focus), forward them.
+        // Keyboard/text input is owned by the hidden XAML TextBox. Do not
+        // forward raw WM_KEY* traffic into input_hwnd or we duplicate input.
         os.WM_KEYDOWN, os.WM_SYSKEYDOWN, os.WM_KEYUP, os.WM_SYSKEYUP, os.WM_CHAR => {
-            if (app.input_hwnd) |input_hwnd| {
-                _ = os.PostMessageW(input_hwnd, msg, wparam, lparam);
-                return 0;
-            }
-            // Fallback if input_hwnd doesn't exist yet.
-            return handleKeyInputFallback(app, hwnd, msg, wparam, lparam);
+            return os.DefSubclassProc(hwnd, msg, wparam, lparam);
         },
         os.WM_PAINT => return handlePaint(hwnd, msg, wparam, lparam),
         os.WM_ERASEBKGND => return 1,
@@ -106,11 +101,10 @@ pub fn subclassProc(
         os.WM_IME_COMPOSITION => return ime.handleIMEComposition(app, hwnd, msg, wparam, lparam),
         os.WM_IME_ENDCOMPOSITION => return ime.handleIMEEndComposition(app, hwnd, msg, wparam, lparam),
         os.WM_SETFOCUS => {
-            // Always redirect keyboard focus to input_hwnd.
-            log.info("subclassProc: WM_SETFOCUS on HWND=0x{x} -> redirecting to input_hwnd", .{
+            log.info("subclassProc: WM_SETFOCUS on HWND=0x{x} -> restoring ime_text_box focus", .{
                 @intFromPtr(hwnd),
             });
-            input_runtime.ensureInputFocus(app);
+            input_runtime.focusKeyboardTarget(app);
             return 0;
         },
         else => {},
@@ -186,7 +180,6 @@ fn handleSize(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam:
     }
     return os.DefSubclassProc(hwnd, msg, wparam, lparam);
 }
-
 
 /// Convert pixel dimensions to DIPs and set RootGrid Width/Height.
 /// Mirrors Windows Terminal's OnSize: `_rootGrid.Width(size.Width); _rootGrid.Height(size.Height);`
@@ -486,7 +479,6 @@ fn titleBarHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
     // Below the titlebar: normal client area.
     return os.HTCLIENT;
 }
-
 
 // ---------------------------------------------------------------
 // Vectored Exception Handler — capture STATUS_STOWED_EXCEPTION details

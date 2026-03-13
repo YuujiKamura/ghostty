@@ -1,9 +1,8 @@
-/// Dedicated input HWND — bypasses WinUI3's TSF input stack.
+/// Dedicated input HWND — retained as a native fallback window.
 ///
-/// This is the SOLE keyboard focus target. All keyboard and IME input flows
-/// through here, mimicking the Win32 apprt's direct-HWND approach.
-/// WM_KEYDOWN/WM_CHAR are forwarded to Surface.handleKeyEvent/handleCharEvent.
-/// IME composition (WM_IME_*) is handled via ime.zig.
+/// WinUI3 text/IME now flows through the hidden XAML TextBox so TSF owns the
+/// composition lifecycle. This HWND remains available for fallback/native
+/// handling if focus escapes the XAML path.
 const builtin = @import("builtin");
 const std = @import("std");
 const os = @import("os.zig");
@@ -19,9 +18,7 @@ const INPUT_CLASS_NAME = std.unicode.utf8ToUtf16LeStringLiteral("GhosttyInputOve
 /// Whether the input window class has been registered.
 var input_class_registered: bool = false;
 
-/// Create a transparent child HWND for keyboard/IME input.
-/// This HWND is a standard Win32 window (not part of WinUI3's XAML tree)
-/// so it receives IME messages via the legacy IMM32 path without TSF interference.
+/// Create a transparent child HWND for fallback/native input handling.
 pub fn createInputWindow(parent: os.HWND, app_ptr: usize) ?os.HWND {
     // Register the window class once.
     if (!input_class_registered) {
@@ -68,10 +65,9 @@ pub fn createInputWindow(parent: os.HWND, app_ptr: usize) ?os.HWND {
     return null;
 }
 
-/// Window procedure for the dedicated input HWND.
-/// Handles ALL keyboard input and IME messages.
-/// Keyboard events are forwarded to Surface for Ghostty key processing.
-/// IME events are handled via ime.zig for composition/preedit.
+/// Window procedure for the fallback input HWND.
+/// Keyboard/IME handling here is defensive only; the normal path is the hidden
+/// XAML TextBox.
 pub fn inputWndProc(
     hwnd: os.HWND,
     msg: os.UINT,
@@ -89,7 +85,7 @@ pub fn inputWndProc(
             if (app.activeSurface()) |surface| {
                 if (vk == 0xE5) {
                     App.fileLog("inputWndProc: VK_PROCESSKEY -> focusImeTextBox", .{});
-                    app.keyboard_focus_target = .input_overlay;
+                    app.keyboard_focus_target = .ime_text_box;
                     _ = surface.focusImeTextBox();
                     return os.DefWindowProcW(hwnd, msg, wparam, lparam);
                 }
@@ -138,7 +134,7 @@ pub fn inputWndProc(
         },
         os.WM_ERASEBKGND => return 1,
         os.WM_SETFOCUS => {
-            log.info("inputWndProc: WM_SETFOCUS on input HWND=0x{x}", .{@intFromPtr(hwnd)});
+            log.info("inputWndProc: WM_SETFOCUS on fallback input HWND=0x{x}", .{@intFromPtr(hwnd)});
             // Force IME open on focus to prevent raw input state
             const himc = os.ImmGetContext(hwnd);
             if (himc != null) {
@@ -155,7 +151,7 @@ pub fn inputWndProc(
             return 0;
         },
         os.WM_KILLFOCUS => {
-            log.info("inputWndProc: WM_KILLFOCUS on input HWND=0x{x}", .{@intFromPtr(hwnd)});
+            log.info("inputWndProc: WM_KILLFOCUS on fallback input HWND=0x{x}", .{@intFromPtr(hwnd)});
             if (app.ime_composing) {
                 log.info("inputWndProc: WM_KILLFOCUS while ime_composing — clearing preedit", .{});
                 app.ime_composing = false;

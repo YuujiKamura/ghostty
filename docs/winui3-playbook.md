@@ -59,10 +59,10 @@ Owned primarily by:
 
 Current rules:
 
-- normal keyboard input belongs to XAML `SwapChainPanel`
-- IME composition uses `input_hwnd`
-- `input_hwnd` is not the default keyboard owner
-- focus must return to the XAML surface after IME activity
+- the hidden XAML `ime_text_box` is the authoritative keyboard/text/IME owner
+- normal printable text and IME composition both stay on the WinUI3/TSF path
+- `input_hwnd` exists only as a fallback/native companion window
+- restoring focus means returning to `ime_text_box`, not splitting ownership again
 
 Evidence:
 
@@ -149,14 +149,15 @@ Evidence:
 - [winui3-scrollbar-smoke.ps1](C:\Users\yuuji\ghostty-win\scripts\winui3-scrollbar-smoke.ps1)
 - [ghostty #57](https://github.com/YuujiKamura/ghostty/issues/57)
 
-### Input routing is intentionally split
+### Input routing is intentionally unified
 
 This repo uses:
 
-- XAML events for normal keyboard input
-- `input_hwnd` for IME handling
+- `ime_text_box` PreviewKey/TextChanged/composition events for keyboard text input
+- WinUI3/TSF for IME lifecycle
+- `input_hwnd` only for fallback/native behavior when XAML focus escapes
 
-That split is acceptable only if focus ownership is explicit and reversible.
+That single-owner rule is required to avoid duplicate input and broken IME toggling.
 
 ## Known Failure Patterns
 
@@ -164,8 +165,9 @@ That split is acceptable only if focus ownership is explicit and reversible.
 
 Likely causes:
 
-- `input_hwnd` stole focus in the normal input path
-- XAML surface no longer owns keyboard focus
+- the hidden `ime_text_box` is no longer the active text owner
+- IME toggle keys were handled before TSF could process them
+- focus fell back to `input_hwnd` and never returned to the XAML text path
 
 Check:
 

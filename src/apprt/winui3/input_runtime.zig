@@ -17,48 +17,41 @@ pub fn setupNativeInputWindows(self: anytype, subclass_proc: os.SUBCLASSPROC) vo
         App.fileLog("step 9: WARNING no child HWND found", .{});
     }
 
-    // Create our input overlay HWND — the sole keyboard focus target.
+    // Create our input overlay HWND as a fallback/native companion window.
     self.input_hwnd = input_overlay.createInputWindow(self.hwnd.?, @intFromPtr(self));
     if (self.input_hwnd) |input_hwnd| {
-        // Enable IME on our input HWND.
+        // Keep IME enabled on the fallback HWND for legacy/native paths, but do
+        // not make it the default text owner.
         _ = os.ImmAssociateContextEx(input_hwnd, null, os.IACE_DEFAULT);
-        // input_hwnd is always the keyboard target.
-        self.keyboard_focus_target = .input_overlay;
-        // Set initial focus to input_hwnd.
-        _ = os.SetFocus(input_hwnd);
-        App.fileLog("step 9 OK: input HWND=0x{x} created, IME enabled, focus set", .{@intFromPtr(input_hwnd)});
+        self.keyboard_focus_target = .ime_text_box;
+        App.fileLog("step 9 OK: input HWND=0x{x} created (fallback only); text owner=ime_text_box", .{@intFromPtr(input_hwnd)});
     } else {
         App.fileLog("step 9: WARNING input_hwnd creation FAILED", .{});
     }
 }
 
-/// Ensure keyboard focus is on input_hwnd.
+fn focusImeTextOwner(self: anytype) bool {
+    self.keyboard_focus_target = .ime_text_box;
+    if (self.activeSurface()) |surface| {
+        return surface.focusImeTextBox();
+    }
+    return false;
+}
+
+/// Restore focus to the WinUI3 text owner.
 /// Called on WM_SETFOCUS, pointer clicks, and any other focus-restoring event.
 pub fn ensureInputFocus(self: anytype) void {
-    if (self.input_hwnd) |h| {
-        _ = os.SetFocus(h);
-        // Re-establish IME context on focus restore
-        _ = os.ImmAssociateContextEx(h, null, os.IACE_DEFAULT);
-        const himc = os.ImmGetContext(h);
-        if (himc != null) {
-            _ = os.ImmSetOpenStatus(himc.?, 1);
-            _ = os.ImmReleaseContext(h, himc.?);
-        }
-    }
+    _ = focusImeTextOwner(self);
 }
 
 pub fn focusInputOverlay(self: anytype) void {
-    self.keyboard_focus_target = .input_overlay;
-    ensureInputFocus(self);
+    _ = focusImeTextOwner(self);
 }
 
 pub fn focusKeyboardTarget(self: anytype) void {
-    // keyboard_focus_target stays .input_overlay — input_hwnd handles everything.
-    self.keyboard_focus_target = .input_overlay;
-    ensureInputFocus(self);
+    _ = focusImeTextOwner(self);
 }
 
 pub fn restoreDesiredKeyboardTarget(self: anytype) void {
-    // Always restore to input_hwnd.
-    ensureInputFocus(self);
+    _ = focusImeTextOwner(self);
 }
