@@ -164,6 +164,26 @@ public static class Win32 {
         return SendInput(4, inputs, cbSize);
     }
 
+    public static uint SendKeyChord(ushort[] modifiers, ushort key) {
+        int modifierCount = modifiers == null ? 0 : modifiers.Length;
+        INPUT[] inputs = new INPUT[(modifierCount * 2) + 2];
+        int cbSize = Marshal.SizeOf(typeof(INPUT));
+        int pos = 0;
+
+        for (int i = 0; i < modifierCount; i++) {
+            inputs[pos++] = MakeKeyInput(modifiers[i], 0);
+        }
+
+        inputs[pos++] = MakeKeyInput(key, 0);
+        inputs[pos++] = MakeKeyInput(key, KEYEVENTF_KEYUP);
+
+        for (int i = modifierCount - 1; i >= 0; i--) {
+            inputs[pos++] = MakeKeyInput(modifiers[i], KEYEVENTF_KEYUP);
+        }
+
+        return SendInput((uint)pos, inputs, cbSize);
+    }
+
     private static INPUT MakeKeyInput(ushort vk, uint flags) {
         INPUT inp = new INPUT();
         inp.type = INPUT.INPUT_KEYBOARD;
@@ -398,6 +418,20 @@ function Send-KeyCombo {
     )
 
     $sent = [Win32]::SendKeyCombo($Modifier, $Key)
+    if ($sent -eq 0) {
+        throw "SendInput returned 0 -- no events injected (is the window focused?)"
+    }
+    return $sent
+}
+
+function Send-KeyChord {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][UInt16[]]$Modifiers,
+        [Parameter(Mandatory)][UInt16]$Key
+    )
+
+    $sent = [Win32]::SendKeyChord($Modifiers, $Key)
     if ($sent -eq 0) {
         throw "SendInput returned 0 -- no events injected (is the window focused?)"
     }

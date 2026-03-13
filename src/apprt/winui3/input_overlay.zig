@@ -86,10 +86,14 @@ pub fn inputWndProc(
         os.WM_KEYDOWN, os.WM_SYSKEYDOWN => {
             const wp_val: usize = @bitCast(wparam);
             const vk = @as(u16, @truncate(wp_val));
-            // Forward physical key presses to Surface for Ghostty key handling.
-            // VK_PROCESSKEY (0xE5) means IME is processing — handleKeyEvent
-            // treats unmapped VKs correctly (resets pending_keydown to .none).
             if (app.activeSurface()) |surface| {
+                if (vk == 0xE5) {
+                    App.fileLog("inputWndProc: VK_PROCESSKEY -> focusImeTextBox", .{});
+                    app.keyboard_focus_target = .input_overlay;
+                    _ = surface.focusImeTextBox();
+                    return os.DefWindowProcW(hwnd, msg, wparam, lparam);
+                }
+                // Forward physical key presses to Surface for Ghostty key handling.
                 surface.handleKeyEvent(vk, true);
             }
             // Always pass to DefWindowProcW so IME gets to process the key.

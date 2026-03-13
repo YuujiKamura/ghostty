@@ -1297,6 +1297,7 @@ pub fn switchToTab(self: *App, idx: usize) void {
         surface_binding.attachSurfaceToTabItem(self, prev_idx, idx) catch |err| {
             log.warn("switchToTab: attachSurfaceToTabItem({}) failed: {}", .{ idx, err });
         };
+        self.syncWindowTitleToActiveSurface();
         input_runtime.focusKeyboardTarget(self);
     }
 }
@@ -1605,43 +1606,34 @@ fn logDiagnosticSnapshot(self: *App) void {
     fileLog("=== END DIAGNOSTIC ===", .{});
 }
 
-fn setTitle(self: *App, title: [:0]const u8) void {
-    log.info("setTitle: \"{s}\"", .{title});
+fn setWindowTitle(self: *App, title: [:0]const u8) void {
     const h = winrt.hstringRuntime(self.core_app.alloc, title) catch |err| {
-        log.warn("setTitle: hstringRuntime failed: {}", .{err});
+        log.warn("setWindowTitle: hstringRuntime failed: {}", .{err});
         return;
     };
     defer winrt.deleteHString(h);
 
-    // Update window title bar.
     if (self.window) |window| {
-        log.info("setTitle: putTitle...", .{});
+        log.info("setWindowTitle: putTitle...", .{});
         window.SetTitle(h) catch {};
-        log.info("setTitle: putTitle done", .{});
+        log.info("setWindowTitle: putTitle done", .{});
     }
+}
 
-    // Update active tab header.
+pub fn syncWindowTitleToActiveSurface(self: *App) void {
+    const title = if (self.activeSurface()) |surface|
+        (surface.getTitle() orelse "Ghostty")
+    else
+        "Ghostty";
+    self.setWindowTitle(title);
+}
+
+fn setTitle(self: *App, title: [:0]const u8) void {
+    log.info("setTitle: \"{s}\"", .{title});
+    self.setWindowTitle(title);
+
     if (self.activeSurface()) |surface| {
-        if (surface.tab_view_item_inspectable) |tvi_insp| {
-            log.info("setTitle: QI for ITabViewItem...", .{});
-            const tvi = tvi_insp.queryInterface(com.ITabViewItem) catch |err| {
-                log.warn("setTitle: QI ITabViewItem failed: {}", .{err});
-                return;
-            };
-            var tvi_guard = winrt.ComRef(com.ITabViewItem).init(tvi);
-            defer tvi_guard.deinit();
-            // Box the string as IInspectable for the Header property.
-            log.info("setTitle: boxString...", .{});
-            const boxed = self.boxString(h) catch |err| {
-                log.warn("setTitle: boxString failed: {}", .{err});
-                return;
-            };
-            var boxed_guard = winrt.ComRef(winrt.IInspectable).init(boxed);
-            defer boxed_guard.deinit();
-            log.info("setTitle: putHeader...", .{});
-            tvi_guard.get().SetHeader(boxed_guard.get()) catch {};
-            log.info("setTitle: putHeader done", .{});
-        }
+        surface.setTabTitle(title);
     }
     log.info("setTitle: completed", .{});
 }

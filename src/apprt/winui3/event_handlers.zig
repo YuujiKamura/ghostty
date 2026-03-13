@@ -77,6 +77,7 @@ pub fn onSelectionChanged(self: anytype, sender_obj: ?*anyopaque, args_obj: ?*an
                 log.warn("onSelectionChanged: attachSurfaceToTabItem({}) failed: {}", .{ new_idx, err });
             };
             surface_binding.auditActiveTabBinding(self);
+            self.syncWindowTitleToActiveSurface();
             // Notify new surface it gained focus.
             self.surfaces.items[new_idx].has_focus = true;
             self.surfaces.items[new_idx].core_surface.focusCallback(true) catch {};

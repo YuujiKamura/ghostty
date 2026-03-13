@@ -769,7 +769,7 @@ pub fn setTabTitle(self: *Surface, title: [:0]const u8) void {
                     defer winrt.deleteHString(hstr);
                     const util = @import("util.zig");
                     if (util.boxString(hstr)) |boxed| {
-                        defer boxed.release();
+                        defer _ = boxed.release();
                         _ = tvi.SetHeader(boxed) catch |err| {
                             log.warn("setTabTitle: putHeader failed: {}", .{err});
                         };

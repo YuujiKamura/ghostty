@@ -18,10 +18,12 @@ $artifacts = $null
 $focusOk = $false
 $aliveAfterClose = $false
 $failure = $null
-$ctrlTOk = $false
-$ctrlWOk = $false
-$ctrlTError = ""
-$ctrlWError = ""
+$ctrlShiftTOk = $false
+$ctrlShiftWOk = $false
+$ctrlShiftTError = ""
+$ctrlShiftWError = ""
+$newTabMarker = "PHASE6_SHORTCUT_NEW_TAB_OK"
+$closeTabMarker = "PHASE6_SHORTCUT_CLOSE_TAB_OK"
 
 try {
     $session = Start-Phase6Session -RepoRoot $repoRoot -ExePath $exeResolved -OutDir $outAbs -Env (New-Phase6Env)
@@ -29,33 +31,35 @@ try {
 
     $focusOk = Ensure-Phase6Foreground -Session $session -TimeoutMs 6000
     if (-not $focusOk) {
-        throw "ghostty window did not reach foreground before Ctrl+T"
+        throw "ghostty window did not reach foreground before Ctrl+Shift+T"
     }
 
-    Send-KeyCombo -Modifier 0x11 -Key 0x54 | Out-Null
+    Send-KeyChord -Modifiers @(0x11, 0x10) -Key 0x54 | Out-Null
     try {
         Wait-Phase6TabCount -Control $session.Control -Expected 2 -TimeoutMs 12000 | Out-Null
         Wait-Phase6ActiveTab -Control $session.Control -Expected 1 -TimeoutMs 12000 | Out-Null
-        Wait-Phase6PromptReady -Control $session.Control -TimeoutMs 12000 | Out-Null
-        $ctrlTOk = $true
+        Invoke-Phase6ShellCommand -Control $session.Control -Command ("echo {0}" -f $newTabMarker) | Out-Null
+        Wait-Phase6TailContains -Control $session.Control -Text $newTabMarker -TimeoutMs 12000 | Out-Null
+        $ctrlShiftTOk = $true
     } catch {
-        $ctrlTError = $_.Exception.Message
+        $ctrlShiftTError = $_.Exception.Message
     }
 
-    if ($ctrlTOk) {
+    if ($ctrlShiftTOk) {
         $focusOk = Ensure-Phase6Foreground -Session $session -TimeoutMs 6000
         if (-not $focusOk) {
-            throw "ghostty window did not reach foreground before Ctrl+W"
+            throw "ghostty window did not reach foreground before Ctrl+Shift+W"
         }
 
-        Send-KeyCombo -Modifier 0x11 -Key 0x57 | Out-Null
+        Send-KeyChord -Modifiers @(0x11, 0x10) -Key 0x57 | Out-Null
         try {
             Wait-Phase6TabCount -Control $session.Control -Expected 1 -TimeoutMs 12000 | Out-Null
             Wait-Phase6ActiveTab -Control $session.Control -Expected 0 -TimeoutMs 12000 | Out-Null
-            Wait-Phase6PromptReady -Control $session.Control -TimeoutMs 12000 | Out-Null
-            $ctrlWOk = $true
+            Invoke-Phase6ShellCommand -Control $session.Control -Command ("echo {0}" -f $closeTabMarker) | Out-Null
+            Wait-Phase6TailContains -Control $session.Control -Text $closeTabMarker -TimeoutMs 12000 | Out-Null
+            $ctrlShiftWOk = $true
         } catch {
-            $ctrlWError = $_.Exception.Message
+            $ctrlShiftWError = $_.Exception.Message
         }
     }
 
@@ -68,10 +72,10 @@ try {
     }
 }
 
-$pass = ($failure -eq $null) -and $focusOk -and $aliveAfterClose -and $ctrlTOk -and $ctrlWOk -and ($artifacts.ExitCode -eq 0)
-$detail = "error=$failure focus=$focusOk ctrl_t=$ctrlTOk ctrl_t_error=$ctrlTError ctrl_w=$ctrlWOk ctrl_w_error=$ctrlWError alive_after_ctrlw=$aliveAfterClose exit=$(Format-ExitCode $artifacts.ExitCode)"
+$pass = ($failure -eq $null) -and $focusOk -and $aliveAfterClose -and $ctrlShiftTOk -and $ctrlShiftWOk -and ($artifacts.ExitCode -eq 0)
+$detail = "error=$failure focus=$focusOk ctrl_shift_t=$ctrlShiftTOk ctrl_shift_t_error=$ctrlShiftTError ctrl_shift_w=$ctrlShiftWOk ctrl_shift_w_error=$ctrlShiftWError alive_after_ctrl_shift_w=$aliveAfterClose exit=$(Format-ExitCode $artifacts.ExitCode)"
 
-Write-TestResult -Id "P6-SHORTCUTS" -Name "Phase 6 Ctrl+T / Ctrl+W tab shortcuts" -Passed $pass -Detail $detail
+Write-TestResult -Id "P6-SHORTCUTS" -Name "Phase 6 Ctrl+Shift+T / Ctrl+Shift+W tab shortcuts" -Passed $pass -Detail $detail
 Write-Host ("  Debug log : {0}" -f $artifacts.DebugLog)
 Write-Host ("  Stderr log: {0}" -f $artifacts.StderrLog)
 

@@ -47,10 +47,9 @@ pub fn ensureInputFocus(self: anytype) void {
     }
 }
 
-/// Deprecated: IME now uses XAML ime_text_box instead of input_hwnd.
-/// Kept as no-op for API compatibility.
 pub fn focusInputOverlay(self: anytype) void {
-    _ = self;
+    self.keyboard_focus_target = .input_overlay;
+    ensureInputFocus(self);
 }
 
 pub fn focusKeyboardTarget(self: anytype) void {
