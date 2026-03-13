@@ -836,7 +836,7 @@ inline fn surfaceMailbox(self: *Surface) Mailbox {
 ///
 /// We centralize all our logic into this spot so we can intercept
 /// messages for example in readonly mode.
-fn queueIo(
+pub fn queueIo(
     self: *Surface,
     msg: termio.Message,
     mutex: termio.Termio.MutexState,

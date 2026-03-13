@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$SessionName,
 
-    [ValidateSet('PING', 'MSG', 'STATE', 'TAIL', 'INPUT', 'LIST_TABS', 'NEW_TAB', 'CLOSE_TAB', 'SWITCH_TAB', 'FOCUS')]
+    [ValidateSet('PING', 'MSG', 'STATE', 'TAIL', 'INPUT', 'RAW_INPUT', 'LIST_TABS', 'NEW_TAB', 'CLOSE_TAB', 'SWITCH_TAB', 'FOCUS')]
     [string]$Type = 'PING',
 
     [string]$From = 'owner',
@@ -14,32 +14,27 @@ param(
     [int]$TabIndex = -1
 )
 
+# ============================================================================
+# MINGW / Git Bash path expansion issue
+# ============================================================================
+# When calling this script from Git Bash (MINGW), arguments starting with "/"
+# get expanded to Windows paths (e.g., "/approve" becomes
+# "C:/Program Files/Git/approve"). Callers from bash must either:
+#   1. Set MSYS_NO_PATHCONV=1 environment variable
+#   2. Use "pwsh.exe -Command" instead of "-File" with bash
+#   3. Call from PowerShell directly (no issue)
+# ============================================================================
+
 $ErrorActionPreference = 'Stop'
+. "$PSScriptRoot\control-plane-session-lib.ps1"
 
 $root = Join-Path $env:LOCALAPPDATA 'ghostty\control-plane\winui3\sessions'
 if (-not (Test-Path $root)) {
     throw "Session registry not found: $root"
 }
 
-$sessionFile = $null
-foreach ($file in Get-ChildItem -LiteralPath $root -Filter '*.session' -File) {
-    $map = @{}
-    foreach ($line in Get-Content -LiteralPath $file.FullName) {
-        if ($line -match '^(?<k>[^=]+)=(?<v>.*)$') {
-            $map[$Matches.k] = $Matches.v
-        }
-    }
-    if ($map.session_name -eq $SessionName -or $map.safe_session_name -eq $SessionName -or $map.pipe_name -eq $SessionName) {
-        $sessionFile = [pscustomobject]@{
-            File = $file.FullName
-            PipeName = $map.pipe_name
-            Session = $map.session_name
-        }
-        break
-    }
-}
-
-if (-not $sessionFile) {
+$sessionEntry = Find-ControlPlaneSessionEntry -Root $root -SessionName $SessionName
+if (-not $sessionEntry) {
     throw "Session not found: $SessionName"
 }
 
@@ -53,6 +48,11 @@ $message = if ($Type -eq 'PING') {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
     $encoded = [Convert]::ToBase64String($bytes)
     "INPUT|$From|$encoded"
+} elseif ($Type -eq 'RAW_INPUT') {
+    # Bypass paste encoder - writes directly to PTY stdin as keyboard input
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
+    $encoded = [Convert]::ToBase64String($bytes)
+    "RAW_INPUT|$From|$encoded"
 } elseif ($Type -eq 'LIST_TABS') {
     'LIST_TABS'
 } elseif ($Type -eq 'NEW_TAB') {
@@ -67,7 +67,7 @@ $message = if ($Type -eq 'PING') {
     "MSG|$From|$Text"
 }
 
-$client = [System.IO.Pipes.NamedPipeClientStream]::new('.', $sessionFile.PipeName, [System.IO.Pipes.PipeDirection]::InOut)
+$client = [System.IO.Pipes.NamedPipeClientStream]::new('.', $sessionEntry.PipeName, [System.IO.Pipes.PipeDirection]::InOut)
 try {
     $client.Connect(3000)
     $writer = [System.IO.StreamWriter]::new($client)

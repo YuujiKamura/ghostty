@@ -1,5 +1,6 @@
 const std = @import("std");
 const os = @import("os.zig");
+const termio = @import("../../termio.zig");
 
 const windows = std.os.windows;
 const kernel32 = windows.kernel32;
@@ -45,6 +46,7 @@ pub const ControlPlane = struct {
     const PendingInput = struct {
         from: []u8,
         text: []u8,
+        raw: bool = false,
     };
 
     allocator: Allocator,
@@ -397,13 +399,39 @@ pub const ControlPlane = struct {
                 return std.fmt.allocPrint(self.allocator, "ERR|{s}|invalid-base64\n", .{self.session_name});
             };
 
-            try self.enqueueInput(from, decoded);
+            try self.enqueueInput(from, decoded, false);
             const ts = std.time.milliTimestamp();
             const line = try std.fmt.allocPrint(self.allocator, "{d}|INPUT_ENQUEUED|{s}|{d}\n", .{ ts, from, decoded.len });
             defer self.allocator.free(line);
             self.appendLog(line);
             _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0);
             return std.fmt.allocPrint(self.allocator, "ACK|{s}|{d}\n", .{ self.session_name, self.pid });
+        }
+
+        // RAW_INPUT: bypass paste encoder, write directly to PTY stdin.
+        // This makes \r arrive as a key press (Enter) rather than pasted text.
+        // Required for TUI apps (Claude Code) that treat pasted \r as newline.
+        if (std.mem.startsWith(u8, request, "RAW_INPUT|")) {
+            const payload = request[10..];
+            const sep = std.mem.indexOfScalar(u8, payload, '|');
+            const from = if (sep) |idx| payload[0..idx] else "unknown";
+            const encoded = if (sep) |idx| payload[idx + 1 ..] else "";
+            const decoded_len = std.base64.standard.Decoder.calcSizeForSlice(encoded) catch {
+                return std.fmt.allocPrint(self.allocator, "ERR|{s}|invalid-base64\n", .{self.session_name});
+            };
+            const decoded = try self.allocator.alloc(u8, decoded_len);
+            defer self.allocator.free(decoded);
+            _ = std.base64.standard.Decoder.decode(decoded, encoded) catch {
+                return std.fmt.allocPrint(self.allocator, "ERR|{s}|invalid-base64\n", .{self.session_name});
+            };
+
+            try self.enqueueInput(from, decoded, true);
+            const ts = std.time.milliTimestamp();
+            const line = try std.fmt.allocPrint(self.allocator, "{d}|RAW_INPUT_ENQUEUED|{s}|{d}\n", .{ ts, from, decoded.len });
+            defer self.allocator.free(line);
+            self.appendLog(line);
+            _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0);
+            return std.fmt.allocPrint(self.allocator, "ACK|{s}|RAW|{d}\n", .{ self.session_name, self.pid });
         }
 
         if (std.mem.eql(u8, request, "LIST_TABS")) {
@@ -451,7 +479,7 @@ pub const ControlPlane = struct {
         return std.fmt.allocPrint(self.allocator, "ERR|{s}|unknown-request\n", .{self.session_name});
     }
 
-    fn enqueueInput(self: *ControlPlane, from: []const u8, text: []const u8) !void {
+    fn enqueueInput(self: *ControlPlane, from: []const u8, text: []const u8, raw: bool) !void {
         const owned_from = try self.allocator.dupe(u8, from);
         errdefer self.allocator.free(owned_from);
         const owned_text = try self.allocator.dupe(u8, text);
@@ -462,6 +490,7 @@ pub const ControlPlane = struct {
         try self.pending_inputs.append(self.allocator, .{
             .from = owned_from,
             .text = owned_text,
+            .raw = raw,
         });
     }
 
@@ -477,20 +506,43 @@ pub const ControlPlane = struct {
             defer self.allocator.free(entry.text);
 
             const ts = std.time.milliTimestamp();
-            surface.textCallback(entry.text) catch |err| {
-                const line = std.fmt.allocPrint(self.allocator, "{d}|INPUT_FAILED|{s}|{d}|{s}\n", .{ ts, entry.from, entry.text.len, @errorName(err) }) catch null;
+
+            if (entry.raw) {
+                // RAW_INPUT: write directly to PTY stdin, bypassing paste encoder.
+                // This makes bytes arrive as keyboard input, not pasted text.
+                const msg = termio.Message.writeReq(self.allocator, entry.text) catch |err| {
+                    const line = std.fmt.allocPrint(self.allocator, "{d}|RAW_INPUT_FAILED|{s}|{d}|{s}\n", .{ ts, entry.from, entry.text.len, @errorName(err) }) catch null;
+                    if (line) |owned| {
+                        defer self.allocator.free(owned);
+                        self.appendLog(owned);
+                    }
+                    log.warn("failed to create raw write message: {}", .{err});
+                    continue;
+                };
+                surface.queueIo(msg, .unlocked);
+
+                const line = std.fmt.allocPrint(self.allocator, "{d}|RAW_INPUT_APPLIED|{s}|{d}\n", .{ ts, entry.from, entry.text.len }) catch null;
                 if (line) |owned| {
                     defer self.allocator.free(owned);
                     self.appendLog(owned);
                 }
-                log.warn("failed to apply control-plane input: {}", .{err});
-                continue;
-            };
+            } else {
+                // INPUT: go through paste encoder (textCallback -> completeClipboardPaste)
+                surface.textCallback(entry.text) catch |err| {
+                    const line = std.fmt.allocPrint(self.allocator, "{d}|INPUT_FAILED|{s}|{d}|{s}\n", .{ ts, entry.from, entry.text.len, @errorName(err) }) catch null;
+                    if (line) |owned| {
+                        defer self.allocator.free(owned);
+                        self.appendLog(owned);
+                    }
+                    log.warn("failed to apply control-plane input: {}", .{err});
+                    continue;
+                };
 
-            const line = std.fmt.allocPrint(self.allocator, "{d}|INPUT_APPLIED|{s}|{d}\n", .{ ts, entry.from, entry.text.len }) catch null;
-            if (line) |owned| {
-                defer self.allocator.free(owned);
-                self.appendLog(owned);
+                const line = std.fmt.allocPrint(self.allocator, "{d}|INPUT_APPLIED|{s}|{d}\n", .{ ts, entry.from, entry.text.len }) catch null;
+                if (line) |owned| {
+                    defer self.allocator.free(owned);
+                    self.appendLog(owned);
+                }
             }
         }
     }
