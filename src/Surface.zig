@@ -1178,6 +1178,12 @@ fn selectionScrollTick(self: *Surface) !void {
     // Scroll the viewport as required
     t.scrollViewport(.{ .delta = delta });
 
+    // Notify scrollbar immediately for user-initiated scrolls (WT-style callback).
+    {
+        const scrollbar = t.screens.active.pages.scrollbar();
+        self.updateScrollbar(scrollbar);
+    }
+
     // Next, trigger our drag behavior
     const pin = t.screens.active.pages.pin(.{
         .viewport = .{
@@ -2795,7 +2801,13 @@ pub fn keyCallback(
             try self.setSelection(null);
         }
 
-        if (self.config.scroll_to_bottom.keystroke) self.io.terminal.scrollViewport(.bottom);
+        if (self.config.scroll_to_bottom.keystroke) {
+            self.io.terminal.scrollViewport(.bottom);
+
+            // Notify scrollbar immediately for user-initiated scrolls (WT-style callback).
+            const scrollbar = self.io.terminal.screens.active.pages.scrollbar();
+            self.updateScrollbar(scrollbar);
+        }
 
         try self.queueRender();
     }
@@ -3549,6 +3561,12 @@ pub fn scrollCallback(
             // rendering. We have to switch signs here because our delta
             // is negative down but our viewport is positive down.
             self.io.terminal.scrollViewport(.{ .delta = y.delta * -1 });
+
+            // Notify scrollbar immediately for user-initiated scrolls (WT-style callback).
+            {
+                const scrollbar = self.io.terminal.screens.active.pages.scrollbar();
+                self.updateScrollbar(scrollbar);
+            }
         }
     }
 
