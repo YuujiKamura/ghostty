@@ -39,8 +39,18 @@ pub fn subclassProc(
         const lp_dbg: usize = @bitCast(lparam);
         const cx_dbg = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp_dbg)))));
         const cy_dbg = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp_dbg >> 16)))));
-        App.fileLog("uid=3 LBUTTONDOWN at ({},{}) inTitlebar={}", .{ cx_dbg, cy_dbg, @intFromBool(in_titlebar) });
+        const has_tabview = app.tab_view != null;
+        App.fileLog("uid=3 LBUTTONDOWN at ({},{}) inTitlebar={} hasTabView={}", .{ cx_dbg, cy_dbg, @intFromBool(in_titlebar), @intFromBool(has_tabview) });
         if (in_titlebar) {
+            // When TabView is active, the entire titlebar row contains interactive
+            // XAML controls (tab items, close buttons, add-tab button). Don't
+            // intercept clicks — let them pass through to XAML so tab buttons work.
+            // Dragging is still available via the top resize border (WM_NCHITTEST
+            // uid=0 returns HTTOP/HTCAPTION).
+            if (has_tabview) {
+                App.fileLog("uid=3 LBUTTONDOWN: TabView active, passing to XAML", .{});
+                return os.DefSubclassProc(hwnd, msg, wparam, lparam);
+            }
             if (msg == os.WM_LBUTTONDBLCLK) {
                 // Double-click: toggle maximize/restore.
                 const sc = if (os.IsZoomed(parent_hwnd) != 0) os.SC_RESTORE else os.SC_MAXIMIZE;

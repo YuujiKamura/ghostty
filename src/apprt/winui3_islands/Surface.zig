@@ -1178,13 +1178,23 @@ fn onImeTextBoxPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque)
     const vk = ea.Key() catch return;
     const vk_u32 = @as(u32, @bitCast(vk));
     App.fileLog("ime_text_box: PreviewKeyDown vk=0x{x} focus_target={s}", .{ vk_u32, @tagName(self.app.keyboard_focus_target) });
+    // Let IME passthrough keys (e.g. VK_PROCESSKEY, IME toggle) be handled
+    // by the TextBox so IME composition works correctly.
     if (isImePassthroughVirtualKey(vk_u32)) return;
+    // ime_text_box is NOT inside SwapChainPanel's visual tree, so
+    // SwapChainPanel's PreviewKeyDown does NOT fire for these keys.
     const app_ref = self.app;
     self.handleKeyEvent(@intCast(vk_u32), true);
     if (!isSurfaceAlive(app_ref, self)) return;
+    // Text keys (a-z, 0-9, etc.): handleKeyEvent sets pending_keydown = .pending
+    // and defers to CharacterReceived/TextChanged. Do NOT SetHandled — let the
+    // TextBox process the character so TextChanged fires and sends it to PTY.
+    // Non-text keys (Enter, Tab, arrows, F-keys): handleKeyEvent calls
+    // keyCallback immediately. SetHandled to prevent TextBox from consuming
+    // them (e.g. Enter as newline, Tab as indent).
     switch (self.pending_keydown) {
-        .pending => {},
-        else => ea.SetHandled(true) catch {},
+        .pending => {}, // Text key — let TextBox handle it for CharacterReceived/TextChanged
+        else => ea.SetHandled(true) catch {}, // Non-text key — block TextBox
     }
 }
 

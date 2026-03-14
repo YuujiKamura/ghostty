@@ -78,6 +78,9 @@ public class Win32 {
     [DllImport("user32.dll")]
     public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern short VkKeyScanW(char ch);
+
     [DllImport("user32.dll")]
     public static extern bool SetCursorPos(int x, int y);
 
@@ -569,7 +572,7 @@ function Send-KeyPress {
     #>
     [CmdletBinding()]
     param(
-        [ushort]$VirtualKey = 0,
+        [uint16]$VirtualKey = 0,
         [char]$Char = [char]0
     )
 
@@ -584,15 +587,38 @@ function Send-KeyPress {
         $up.ki.wVk   = $VirtualKey
         $up.ki.dwFlags = [Win32]::KEYEVENTF_KEYUP
     } elseif ($Char -ne [char]0) {
-        $down.ki.wScan = [ushort]$Char
-        $down.ki.dwFlags = [Win32]::KEYEVENTF_UNICODE
-        $up.ki.wScan   = [ushort]$Char
-        $up.ki.dwFlags  = [Win32]::KEYEVENTF_UNICODE -bor [Win32]::KEYEVENTF_KEYUP
+        # Use VkKeyScanW to get the VK code — XAML needs real VK, not UNICODE scan.
+        $vks = [Win32]::VkKeyScanW($Char)
+        $vk = [uint16]($vks -band 0xFF)
+        $modState = ($vks -shr 8) -band 0xFF
+        # Handle Shift modifier if needed
+        if ($modState -band 1) {
+            $shiftDown = New-Object INPUT
+            $shiftDown.Type = [Win32]::INPUT_KEYBOARD
+            $shiftDown.ki.wVk = 0x10  # VK_SHIFT
+            [Win32]::SendInput(1, @($shiftDown), [System.Runtime.InteropServices.Marshal]::SizeOf([type][INPUT])) | Out-Null
+        }
+        $down.ki.wVk = $vk
+        $up.ki.wVk   = $vk
+        $up.ki.dwFlags = [Win32]::KEYEVENTF_KEYUP
     } else {
         throw "Send-KeyPress: specify -VirtualKey or -Char"
     }
 
     [Win32]::SendInput(2, @($down, $up), [System.Runtime.InteropServices.Marshal]::SizeOf([type][INPUT])) | Out-Null
+
+    # Release Shift if we pressed it for -Char mode
+    if ($Char -ne [char]0 -and $VirtualKey -eq 0) {
+        $vks2 = [Win32]::VkKeyScanW($Char)
+        $modState2 = ($vks2 -shr 8) -band 0xFF
+        if ($modState2 -band 1) {
+            $shiftUp = New-Object INPUT
+            $shiftUp.Type = [Win32]::INPUT_KEYBOARD
+            $shiftUp.ki.wVk = 0x10
+            $shiftUp.ki.dwFlags = [Win32]::KEYEVENTF_KEYUP
+            [Win32]::SendInput(1, @($shiftUp), [System.Runtime.InteropServices.Marshal]::SizeOf([type][INPUT])) | Out-Null
+        }
+    }
 }
 
 # ============================================================

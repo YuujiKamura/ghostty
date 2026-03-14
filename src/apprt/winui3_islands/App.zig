@@ -783,6 +783,12 @@ pub fn onWindowClose(self: *App) void {
     self.close_event_seen = true;
     self.setExitIntent(.window_closed);
 
+    // Hide the window immediately so it doesn't linger as a transparent
+    // rectangle while cleanup (fullCleanup / nci.close / DestroyWindow) runs.
+    if (self.hwnd) |hwnd| {
+        _ = os.ShowWindow(hwnd, os.SW_HIDE);
+    }
+
     // Tear down drag bar and input windows immediately.
     if (self.nci_window) |nci| {
         nci.destroyDragBarWindow();
