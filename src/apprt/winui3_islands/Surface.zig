@@ -873,9 +873,13 @@ pub fn handleKeyEvent(self: *Surface, vk: u16, pressed: bool) void {
     // unified (.key + .utf8) event, matching the GTK backend pattern.
     if (pressed) {
         const binding_mods = mods.binding();
+        // Control characters (Enter, Tab, Backspace, Escape) have non-zero
+        // unshifted codepoints but must NOT be deferred as text keys —
+        // they need immediate keyCallback processing.
+        const is_control_char = unshifted != 0 and unshifted < 0x20;
         const is_text_key = !ghostty_key.modifier() and
             !binding_mods.ctrl and !binding_mods.alt and !binding_mods.super and
-            unshifted != 0;
+            unshifted != 0 and !is_control_char;
 
         if (is_text_key) {
             self.pending_keydown = .{ .pending = .{
