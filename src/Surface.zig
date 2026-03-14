@@ -168,6 +168,9 @@ search: ?Search = null,
 /// Used to rate limit BEL handling.
 last_bell_time: ?std.time.Instant = null,
 
+/// Used to rate limit scrollbar update notifications.
+last_scrollbar_notify: ?std.time.Instant = null,
+
 /// The effect of an input event. This can be used by callers to take
 /// the appropriate action after an input event. For example, key
 /// input can be forwarded to the OS for further processing if it
@@ -1667,6 +1670,12 @@ fn updateRendererHealth(self: *Surface, health: rendererpkg.Health) void {
 
 /// Called when the scrollbar state changes.
 fn updateScrollbar(self: *Surface, scrollbar: terminal.Scrollbar) void {
+    const now = std.time.Instant.now() catch unreachable;
+    if (self.last_scrollbar_notify) |last| {
+        if (now.since(last) < 16 * std.time.ns_per_ms) return;
+    }
+    self.last_scrollbar_notify = now;
+
     _ = self.rt_app.performAction(
         .{ .surface = self },
         .scrollbar,
