@@ -1,4 +1,4 @@
-param([IntPtr]$Hwnd)
+param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
 # Test 9: IME — GhosttyInputOverlay の存在とスタイルを確認
 # Note: ImmGetContext is per-thread and returns NULL cross-process.

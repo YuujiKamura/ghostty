@@ -1,4 +1,4 @@
-param([IntPtr]$Hwnd)
+param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
 # Test 10: DPI — GetDpiForWindow と drag bar 寸法の整合を確認
 # WT方式: AdjustWindowRectExForDpi で -frame.top を算出

@@ -772,6 +772,218 @@ function Get-BitmapSampleDiffCount {
 }
 
 # ============================================================
+# UI Automation (UIA) helpers
+# ============================================================
+Add-Type -AssemblyName UIAutomationClient  -ErrorAction SilentlyContinue
+Add-Type -AssemblyName UIAutomationTypes   -ErrorAction SilentlyContinue
+
+function Find-GhosttyUIAElement {
+    <#
+    .SYNOPSIS
+        Find the Ghostty main window as a UIA AutomationElement by PID.
+    .PARAMETER ProcessId
+        Target process ID.
+    .PARAMETER TimeoutMs
+        How long to wait for the element to appear.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][int]$ProcessId,
+        [int]$TimeoutMs = $script:DEFAULT_TIMEOUT_MS
+    )
+
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $pidCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $ProcessId)
+
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMs)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $elem = $root.FindFirst(
+            [System.Windows.Automation.TreeScope]::Children, $pidCond)
+        if ($elem -ne $null) { return $elem }
+        Start-Sleep -Milliseconds $script:POLL_INTERVAL_MS
+    }
+    throw "UIA: Timed out finding AutomationElement for PID $ProcessId (${TimeoutMs}ms)"
+}
+
+function Find-UIAChild {
+    <#
+    .SYNOPSIS
+        Find a single descendant element by ControlType and/or Name.
+    .PARAMETER Element
+        Parent AutomationElement to search from.
+    .PARAMETER ControlType
+        UIA ControlType (e.g. [System.Windows.Automation.ControlType]::Button).
+    .PARAMETER Name
+        UIA Name property to match.
+    .PARAMETER AutomationId
+        UIA AutomationId property to match.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Element,
+        [System.Windows.Automation.ControlType]$ControlType,
+        [string]$Name,
+        [string]$AutomationId
+    )
+
+    $conditions = @()
+    if ($ControlType) {
+        $conditions += New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty, $ControlType)
+    }
+    if ($Name) {
+        $conditions += New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::NameProperty, $Name)
+    }
+    if ($AutomationId) {
+        $conditions += New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::AutomationIdProperty, $AutomationId)
+    }
+
+    if ($conditions.Count -eq 0) {
+        throw "Find-UIAChild: specify at least one of -ControlType, -Name, -AutomationId"
+    }
+
+    $cond = if ($conditions.Count -eq 1) {
+        $conditions[0]
+    } else {
+        New-Object System.Windows.Automation.AndCondition($conditions)
+    }
+
+    return $Element.FindFirst(
+        [System.Windows.Automation.TreeScope]::Descendants, $cond)
+}
+
+function Find-UIAChildren {
+    <#
+    .SYNOPSIS
+        Find all descendant elements by ControlType and/or Name.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Element,
+        [System.Windows.Automation.ControlType]$ControlType,
+        [string]$Name
+    )
+
+    $conditions = @()
+    if ($ControlType) {
+        $conditions += New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty, $ControlType)
+    }
+    if ($Name) {
+        $conditions += New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::NameProperty, $Name)
+    }
+
+    if ($conditions.Count -eq 0) {
+        $cond = [System.Windows.Automation.Condition]::TrueCondition
+    } elseif ($conditions.Count -eq 1) {
+        $cond = $conditions[0]
+    } else {
+        $cond = New-Object System.Windows.Automation.AndCondition($conditions)
+    }
+
+    return $Element.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants, $cond)
+}
+
+function Invoke-UIAButton {
+    <#
+    .SYNOPSIS
+        Invoke a button element via UIA InvokePattern.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Button
+    )
+
+    $pattern = $null
+    if ($Button.TryGetCurrentPattern(
+        [System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) {
+        $pattern.Invoke()
+    } else {
+        throw "UIA: Element '$($Button.Current.Name)' does not support InvokePattern"
+    }
+}
+
+function Get-UIAWindowPattern {
+    <#
+    .SYNOPSIS
+        Get the WindowPattern from an AutomationElement.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Element
+    )
+
+    $pattern = $null
+    if ($Element.TryGetCurrentPattern(
+        [System.Windows.Automation.WindowPattern]::Pattern, [ref]$pattern)) {
+        return $pattern
+    }
+    throw "UIA: Element does not support WindowPattern"
+}
+
+function Get-UIATransformPattern {
+    <#
+    .SYNOPSIS
+        Get the TransformPattern from an AutomationElement.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Element
+    )
+
+    $pattern = $null
+    if ($Element.TryGetCurrentPattern(
+        [System.Windows.Automation.TransformPattern]::Pattern, [ref]$pattern)) {
+        return $pattern
+    }
+    throw "UIA: Element does not support TransformPattern"
+}
+
+function Dump-UIATree {
+    <#
+    .SYNOPSIS
+        Debug helper: print the UIA tree from an element.
+    .PARAMETER Element
+        Root AutomationElement to dump from.
+    .PARAMETER MaxDepth
+        Maximum depth to traverse.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Element,
+        [int]$MaxDepth = 5,
+        [int]$Indent = 0
+    )
+
+    $prefix = "  " * $Indent
+    $ct = $Element.Current.ControlType.ProgrammaticName
+    $name = $Element.Current.Name
+    $aid = $Element.Current.AutomationId
+    $cls = $Element.Current.ClassName
+    $rect = $Element.Current.BoundingRectangle
+    $rectStr = "{0},{1} {2}x{3}" -f [int]$rect.X, [int]$rect.Y, [int]$rect.Width, [int]$rect.Height
+    Write-Host "${prefix}[$ct] Name='$name' AId='$aid' Class='$cls' Rect=$rectStr" -ForegroundColor DarkGray
+
+    if ($Indent -ge $MaxDepth) {
+        Write-Host "${prefix}  ... (max depth)" -ForegroundColor DarkYellow
+        return
+    }
+
+    $children = $Element.FindAll(
+        [System.Windows.Automation.TreeScope]::Children,
+        [System.Windows.Automation.Condition]::TrueCondition)
+
+    foreach ($child in $children) {
+        Dump-UIATree -Element $child -MaxDepth $MaxDepth -Indent ($Indent + 1)
+    }
+}
+
+# ============================================================
 # Exports
 # ============================================================
 Export-ModuleMember -Function @(
@@ -793,4 +1005,11 @@ Export-ModuleMember -Function @(
     'Get-BitmapSampleSignature'
     'Get-BitmapUniqueColorCount'
     'Get-BitmapSampleDiffCount'
+    'Find-GhosttyUIAElement'
+    'Find-UIAChild'
+    'Find-UIAChildren'
+    'Invoke-UIAButton'
+    'Get-UIAWindowPattern'
+    'Get-UIATransformPattern'
+    'Dump-UIATree'
 )
