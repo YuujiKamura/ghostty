@@ -8,6 +8,7 @@ const Allocator = std.mem.Allocator;
 
 const log = std.log.scoped(.winui3_control_plane);
 
+
 extern "kernel32" fn ConnectNamedPipe(
     hNamedPipe: windows.HANDLE,
     lpOverlapped: ?*windows.OVERLAPPED,
@@ -56,6 +57,8 @@ pub const ControlPlane = struct {
     thread: ?std.Thread = null,
     pending_inputs_lock: std.Thread.Mutex = .{},
     pending_inputs: std.ArrayListUnmanaged(PendingInput) = .{},
+    log_lock: std.Thread.Mutex = .{},
+    log_file: ?std.fs.File = null,
     session_name: []u8,
     safe_session_name: []u8,
     pipe_name: []u8,
@@ -148,6 +151,15 @@ pub const ControlPlane = struct {
 
         try self.ensureDirectories();
         try self.writeSessionFile();
+
+        // Open log file once and keep the handle for the lifetime of the control plane.
+        self.log_file = std.fs.openFileAbsolute(self.log_file_path, .{ .mode = .read_write }) catch blk: {
+            break :blk std.fs.createFileAbsolute(self.log_file_path, .{ .truncate = false, .read = true }) catch |err| blk2: {
+                log.warn("failed to open log file at startup: {}", .{err});
+                break :blk2 null;
+            };
+        };
+
         self.thread = try std.Thread.spawn(.{}, threadMain, .{self});
         log.info("control plane started session={s} pipe={s}", .{ self.session_name, self.pipe_name });
         return self;
@@ -160,6 +172,8 @@ pub const ControlPlane = struct {
             thread.join();
         }
         self.clearPendingInputs();
+        if (self.log_file) |f| f.close();
+        self.log_file = null;
         std.fs.deleteFileAbsolute(self.session_file_path) catch |err| switch (err) {
             error.FileNotFound => {},
             else => log.warn("failed to remove session file: {}", .{err}),
@@ -202,13 +216,10 @@ pub const ControlPlane = struct {
     }
 
     fn appendLog(self: *ControlPlane, line: []const u8) void {
-        var file = std.fs.openFileAbsolute(self.log_file_path, .{ .mode = .read_write }) catch blk: {
-            break :blk std.fs.createFileAbsolute(self.log_file_path, .{ .truncate = false, .read = true }) catch |err| {
-                log.warn("failed to open log file: {}", .{err});
-                return;
-            };
-        };
-        defer file.close();
+        self.log_lock.lock();
+        defer self.log_lock.unlock();
+
+        const file = self.log_file orelse return;
         file.seekFromEnd(0) catch |err| {
             log.warn("failed to seek log file: {}", .{err});
             return;
@@ -248,17 +259,22 @@ pub const ControlPlane = struct {
         }
     }
 
+    /// Pipe buffer size: 64 KB to support large TAIL/LIST_TABS responses.
+    const pipe_buffer_size = 64 * 1024;
+
     fn createServerPipe(self: *ControlPlane) !windows.HANDLE {
         const pipe_w = try std.unicode.utf8ToUtf16LeAllocZ(self.allocator, self.pipe_path);
         defer self.allocator.free(pipe_w);
 
+        // TODO: Add SECURITY_ATTRIBUTES to restrict pipe access to current user.
+        // Currently uses default ACL (same user + SYSTEM).
         const handle = kernel32.CreateNamedPipeW(
             pipe_w.ptr,
             windows.PIPE_ACCESS_DUPLEX,
             windows.PIPE_TYPE_MESSAGE | windows.PIPE_READMODE_MESSAGE | windows.PIPE_WAIT,
             1,
-            4096,
-            4096,
+            pipe_buffer_size,
+            pipe_buffer_size,
             0,
             null,
         );
@@ -298,7 +314,7 @@ pub const ControlPlane = struct {
     }
 
     fn handleClient(self: *ControlPlane, pipe: windows.HANDLE) void {
-        var buffer: [4096]u8 = undefined;
+        var buffer: [pipe_buffer_size]u8 = undefined;
         const size = windows.ReadFile(pipe, buffer[0..], null) catch |err| {
             if (err != error.BrokenPipe and !self.stop.load(.seq_cst)) {
                 log.warn("pipe read failed: {}", .{err});
@@ -310,15 +326,26 @@ pub const ControlPlane = struct {
         const request = std.mem.trimRight(u8, buffer[0..size], "\r\n");
         const response = self.buildResponse(request) catch |err| {
             log.warn("failed to build response: {}", .{err});
+            // Send error response so the client doesn't hang waiting.
+            const err_resp = std.fmt.allocPrint(self.allocator, "ERR|{s}|internal-error|{s}\n", .{ self.session_name, @errorName(err) }) catch return;
+            defer self.allocator.free(err_resp);
+            _ = windows.WriteFile(pipe, err_resp, null) catch {};
+            _ = kernel32.FlushFileBuffers(pipe);
             return;
         };
         defer self.allocator.free(response);
 
-        _ = windows.WriteFile(pipe, response, null) catch |err| {
-            if (err != error.BrokenPipe and !self.stop.load(.seq_cst)) {
-                log.warn("pipe write failed: {}", .{err});
-            }
-        };
+        // Write full response, handling large payloads that exceed a single WriteFile.
+        var written: usize = 0;
+        while (written < response.len) {
+            const n = windows.WriteFile(pipe, response[written..], null) catch |err| {
+                if (err != error.BrokenPipe and !self.stop.load(.seq_cst)) {
+                    log.warn("pipe write failed: {}", .{err});
+                }
+                return;
+            };
+            written += n;
+        }
         _ = kernel32.FlushFileBuffers(pipe);
     }
 
@@ -385,53 +412,37 @@ pub const ControlPlane = struct {
             return std.fmt.allocPrint(self.allocator, "ACK|{s}|{d}\n", .{ self.session_name, self.pid });
         }
 
-        if (std.mem.startsWith(u8, request, "INPUT|")) {
-            const payload = request[6..];
+        // INPUT and RAW_INPUT share base64 decoding logic.
+        // INPUT goes through paste encoder; RAW_INPUT writes directly to PTY stdin.
+        const is_raw = std.mem.startsWith(u8, request, "RAW_INPUT|");
+        const is_input = std.mem.startsWith(u8, request, "INPUT|");
+        if (is_input or is_raw) {
+            const prefix_len: usize = if (is_raw) 10 else 6;
+            const payload = request[prefix_len..];
             const sep = std.mem.indexOfScalar(u8, payload, '|');
             const from = if (sep) |idx| payload[0..idx] else "unknown";
             const encoded = if (sep) |idx| payload[idx + 1 ..] else "";
-            const decoded_len = std.base64.standard.Decoder.calcSizeForSlice(encoded) catch {
-                return std.fmt.allocPrint(self.allocator, "ERR|{s}|invalid-base64\n", .{self.session_name});
-            };
-            const decoded = try self.allocator.alloc(u8, decoded_len);
-            defer self.allocator.free(decoded);
-            _ = std.base64.standard.Decoder.decode(decoded, encoded) catch {
-                return std.fmt.allocPrint(self.allocator, "ERR|{s}|invalid-base64\n", .{self.session_name});
-            };
 
-            try self.enqueueInput(from, decoded, false);
+            const decoded = decodeBase64(self.allocator, encoded) catch |err| {
+                const reason = switch (err) {
+                    error.InvalidBase64 => "invalid-base64",
+                    error.OutOfMemory => "out-of-memory",
+                };
+                return std.fmt.allocPrint(self.allocator, "ERR|{s}|{s}\n", .{ self.session_name, reason });
+            };
+            defer self.allocator.free(decoded);
+
+            try self.enqueueInput(from, decoded, is_raw);
             const ts = std.time.milliTimestamp();
-            const line = try std.fmt.allocPrint(self.allocator, "{d}|INPUT_ENQUEUED|{s}|{d}\n", .{ ts, from, decoded.len });
+            const tag = if (is_raw) "RAW_INPUT_ENQUEUED" else "INPUT_ENQUEUED";
+            const line = try std.fmt.allocPrint(self.allocator, "{d}|{s}|{s}|{d}\n", .{ ts, tag, from, decoded.len });
             defer self.allocator.free(line);
             self.appendLog(line);
             _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0);
-            return std.fmt.allocPrint(self.allocator, "ACK|{s}|{d}\n", .{ self.session_name, self.pid });
-        }
-
-        // RAW_INPUT: bypass paste encoder, write directly to PTY stdin.
-        // This makes \r arrive as a key press (Enter) rather than pasted text.
-        // Required for TUI apps (Claude Code) that treat pasted \r as newline.
-        if (std.mem.startsWith(u8, request, "RAW_INPUT|")) {
-            const payload = request[10..];
-            const sep = std.mem.indexOfScalar(u8, payload, '|');
-            const from = if (sep) |idx| payload[0..idx] else "unknown";
-            const encoded = if (sep) |idx| payload[idx + 1 ..] else "";
-            const decoded_len = std.base64.standard.Decoder.calcSizeForSlice(encoded) catch {
-                return std.fmt.allocPrint(self.allocator, "ERR|{s}|invalid-base64\n", .{self.session_name});
-            };
-            const decoded = try self.allocator.alloc(u8, decoded_len);
-            defer self.allocator.free(decoded);
-            _ = std.base64.standard.Decoder.decode(decoded, encoded) catch {
-                return std.fmt.allocPrint(self.allocator, "ERR|{s}|invalid-base64\n", .{self.session_name});
-            };
-
-            try self.enqueueInput(from, decoded, true);
-            const ts = std.time.milliTimestamp();
-            const line = try std.fmt.allocPrint(self.allocator, "{d}|RAW_INPUT_ENQUEUED|{s}|{d}\n", .{ ts, from, decoded.len });
-            defer self.allocator.free(line);
-            self.appendLog(line);
-            _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0);
-            return std.fmt.allocPrint(self.allocator, "ACK|{s}|RAW|{d}\n", .{ self.session_name, self.pid });
+            return if (is_raw)
+                std.fmt.allocPrint(self.allocator, "ACK|{s}|RAW|{d}\n", .{ self.session_name, self.pid })
+            else
+                std.fmt.allocPrint(self.allocator, "ACK|{s}|{d}\n", .{ self.session_name, self.pid });
         }
 
         if (std.mem.eql(u8, request, "LIST_TABS")) {
@@ -618,6 +629,22 @@ pub const ControlPlane = struct {
         return false;
     }
 };
+
+const Base64Error = error{
+    InvalidBase64,
+    OutOfMemory,
+};
+
+fn decodeBase64(allocator: Allocator, encoded: []const u8) Base64Error![]u8 {
+    const decoded_len = std.base64.standard.Decoder.calcSizeForSlice(encoded) catch
+        return error.InvalidBase64;
+    const buf = allocator.alloc(u8, decoded_len) catch
+        return error.OutOfMemory;
+    errdefer allocator.free(buf);
+    _ = std.base64.standard.Decoder.decode(buf, encoded) catch
+        return error.InvalidBase64;
+    return buf;
+}
 
 fn parseTailCount(request: []const u8) usize {
     if (std.mem.eql(u8, request, "TAIL")) return 20;

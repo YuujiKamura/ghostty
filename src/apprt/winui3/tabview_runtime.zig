@@ -138,12 +138,10 @@ pub fn createRoot(
 
     log.info("initXaml step 7.5 OK: RootGrid set as Window content (TabView Row 0, TabContent Row 1)", .{});
 
-    // 7. SetTitleBar(tabView) — makes the TabView act as the custom title bar.
-    // Disabled until ExtendsContentIntoTitleBar is re-enabled.
-    // window.setTitleBar(tv_inspectable) catch |err| {
-    //     log.warn("initXaml step 7.5: SetTitleBar(TabView) failed: {}", .{err});
-    // };
-    log.info("initXaml step 7.5: SetTitleBar SKIPPED (pending TabView template fix)", .{});
+    // SetTitleBar is NOT used — drag-bar child window handles titlebar dragging
+    // instead (Windows Terminal NonClientIslandWindow pattern). See drag_bar.zig.
+    // SetTitleBar requires ExtendsContentIntoTitleBar which causes UI thread freeze
+    // (Issue #42).
 
     return tv;
 }

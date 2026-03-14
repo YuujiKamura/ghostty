@@ -146,8 +146,8 @@ pub fn createRoot(
 
     log.info("initXaml step 7.5 OK: RootGrid set as XamlSource content (TabView Row 0, TabContent Row 1)", .{});
 
-    // SetTitleBar is NOT used — drag-bar child window handles titlebar dragging
-    // instead (Windows Terminal NonClientIslandWindow pattern). See drag_bar.zig.
+    // SetTitleBar is NOT used — NonClientIslandWindow owns the drag-bar child
+    // input sink directly, matching Windows Terminal's structure.
 
     return tv;
 }

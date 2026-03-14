@@ -34,7 +34,6 @@ const tab_index = @import("../winui3/tab_index.zig");
 const tab_manager = @import("tab_manager.zig");
 const input_runtime = @import("../winui3/input_runtime.zig");
 const caption_buttons_mod = @import("../winui3/caption_buttons.zig");
-const drag_bar = @import("drag_bar.zig");
 const xaml_helpers = @import("../winui3/xaml_helpers.zig");
 const surface_binding = @import("surface_binding.zig");
 const event_handlers = @import("../winui3/event_handlers.zig");
@@ -134,7 +133,7 @@ xaml_app: ?*com.IApplication = null,
 xaml_controls_resources: ?*winrt.IInspectable = null,
 
 /// NonClientIslandWindow — owns the HWND and DesktopWindowXamlSource.
-nci_window: ?NonClientIslandWindow = null,
+nci_window: ?*NonClientIslandWindow = null,
 
 /// The native HWND (alias for nci_window.island.hwnd).
 hwnd: ?os.HWND = null,
@@ -142,10 +141,6 @@ hwnd: ?os.HWND = null,
 /// Our own input HWND — kept as a transparent child window for fallback/native
 /// behaviors, but no longer the default keyboard text owner.
 input_hwnd: ?os.HWND = null,
-
-/// Transparent drag-bar child HWND that covers the titlebar region for
-/// custom window dragging (Windows Terminal NonClientIslandWindow style).
-drag_bar_hwnd: ?os.HWND = null,
 
 /// Desired keyboard focus owner. WinUI3 text/IME input should stay on the
 /// hidden XAML TextBox so TSF owns the composition lifecycle.
@@ -219,6 +214,9 @@ pub fn init(
     os.attachDebugConsole();
     fileLog("App.init: after attachDebugConsole", .{});
 
+    // WT: BufferedPaintInit() — required once before BeginBufferedPaint in WM_PAINT.
+    _ = os.BufferedPaintInit();
+
     // Install a Vectored Exception Handler to capture details of
     // STATUS_STOWED_EXCEPTION before the process terminates.
     _ = os.AddVectoredExceptionHandler(1, &stowedExceptionHandler);
@@ -287,8 +285,10 @@ pub fn initXaml(self: *App) !void {
     self.setStartupStage(.application_ready);
 
     // Step 1: Create NonClientIslandWindow (CreateWindowEx + DWM frame).
-    fileLog("initXaml step 1: NonClientIslandWindow.create...", .{});
-    var nci = try NonClientIslandWindow.create(self);
+    fileLog("initXaml step 1: NonClientIslandWindow.init...", .{});
+    const nci = try self.core_app.alloc.create(NonClientIslandWindow);
+    errdefer self.core_app.alloc.destroy(nci);
+    try nci.init(self);
     fileLog("initXaml step 1 OK: HWND=0x{x}", .{@intFromPtr(nci.island.hwnd)});
 
     // Step 2: Initialize DesktopWindowXamlSource with our window's WindowId.
@@ -296,17 +296,18 @@ pub fn initXaml(self: *App) !void {
     try nci.island.initialize();
     fileLog("initXaml step 2 OK: DesktopWindowXamlSource initialized", .{});
 
-    // Step 3: Create drag bar child window.
-    nci.drag_bar_hwnd = drag_bar.createDragBar(nci.island.hwnd);
+    // Step 3: Create drag bar AFTER DXWS initialization.
+    // WS_EX_LAYERED on child windows fails (err=183) if called before
+    // the WinUI3 runtime is initialized. Deferring to after step 2.
+    nci.createDragBarIfNeeded();
     if (nci.drag_bar_hwnd) |db| {
         fileLog("initXaml step 3: drag_bar_hwnd=0x{x}", .{@intFromPtr(db)});
     } else {
-        fileLog("initXaml step 3: drag_bar creation failed", .{});
+        fileLog("initXaml step 3: drag_bar creation FAILED", .{});
     }
 
     self.nci_window = nci;
     self.hwnd = nci.island.hwnd;
-    self.drag_bar_hwnd = nci.drag_bar_hwnd;
     self.setStartupStage(.window_ready);
 
     // Step 4: Load XamlControlsResources (themes).
@@ -783,9 +784,8 @@ pub fn onWindowClose(self: *App) void {
     self.setExitIntent(.window_closed);
 
     // Tear down drag bar and input windows immediately.
-    if (self.drag_bar_hwnd) |db| {
-        _ = os.DestroyWindow(db);
-        self.drag_bar_hwnd = null;
+    if (self.nci_window) |nci| {
+        nci.destroyDragBarWindow();
     }
     if (self.input_hwnd) |input_hwnd| {
         _ = os.DestroyWindow(input_hwnd);
@@ -846,8 +846,9 @@ fn fullCleanup(self: *App) void {
     if (self.tab_view) |tv| tv.release();
 
     // 5. Close the XAML Islands source and destroy the window.
-    if (self.nci_window) |*nci| {
-        nci.island.close();
+    if (self.nci_window) |nci| {
+        nci.close();
+        alloc.destroy(nci);
         self.nci_window = null;
     }
 
@@ -855,7 +856,6 @@ fn fullCleanup(self: *App) void {
     if (self.xaml_controls_resources) |xcr| _ = xcr.release();
     self.app_outer.deinit();
 
-    if (self.drag_bar_hwnd) |h| _ = os.DestroyWindow(h);
     if (self.input_hwnd) |h| _ = os.DestroyWindow(h);
 
     // Release DispatcherQueueController last — it owns the message loop infrastructure.
@@ -863,6 +863,9 @@ fn fullCleanup(self: *App) void {
         _ = dqc.release();
         self.dq_controller = null;
     }
+
+    // BufferedPaint cleanup (paired with BufferedPaintInit in init).
+    _ = os.BufferedPaintUnInit();
 
     log.info("Cleanup complete.", .{});
 }
@@ -1458,10 +1461,46 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
             self.onWindowClose();
             return 0;
         },
+        os.WM_APP_BIND_SWAP_CHAIN => {
+            // Complete swap chain binding on the UI thread.
+            const surface: *Surface = @ptrFromInt(@as(usize, @bitCast(lparam)));
+            const swap_chain: *anyopaque = @ptrFromInt(@as(usize, @bitCast(wparam)));
+            var alive = false;
+            for (self.surfaces.items) |s| {
+                if (s == surface) {
+                    alive = true;
+                    break;
+                }
+            }
+            if (!alive) {
+                fileLog("handleBindSwapChain: drop stale surface ptr=0x{x}", .{@intFromPtr(surface)});
+                return 0;
+            }
+            surface.completeBindSwapChain(swap_chain);
+            return 0;
+        },
+        os.WM_APP_BIND_SWAP_CHAIN_HANDLE => {
+            // Complete handle-based swap chain binding on the UI thread.
+            const surface: *Surface = @ptrFromInt(@as(usize, @bitCast(lparam)));
+            const swap_chain_handle: usize = @as(usize, @bitCast(wparam));
+            var alive = false;
+            for (self.surfaces.items) |s| {
+                if (s == surface) {
+                    alive = true;
+                    break;
+                }
+            }
+            if (!alive) {
+                fileLog("handleBindSwapChainHandle: drop stale surface ptr=0x{x}", .{@intFromPtr(surface)});
+                return 0;
+            }
+            surface.completeBindSwapChainHandle(swap_chain_handle);
+            return 0;
+        },
         os.WM_DPICHANGED => {
-            // DPI change: update DWM frame margins.
-            if (self.nci_window) |*nci| {
-                nci.updateFrameMargins();
+            // DPI change: full DWM re-init (frame + SWP_FRAMECHANGED + attributes).
+            if (self.nci_window) |nci| {
+                nci.initFrameMargins();
             }
             // Apply the recommended window rect.
             const rect_ptr: ?*const os.RECT = @ptrFromInt(@as(usize, @bitCast(lparam)));
@@ -1513,25 +1552,32 @@ fn handleSize(self: *App, _: os.HWND, _: os.WPARAM, lparam: os.LPARAM) os.LRESUL
     const width: u32 = @intCast(lp & 0xFFFF);
     const height: u32 = @intCast((lp >> 16) & 0xFFFF);
 
-    // Update NonClientIslandWindow island position (titlebar offset).
-    if (self.nci_window) |*nci| {
+    // Update DWM frame margins on every resize (WT: _UpdateFrameMargins in OnSize).
+    if (self.nci_window) |nci| {
+        nci.updateFrameMargins();
+    }
+
+    // WT: OnSize → _UpdateIslandPosition (which also calls _ResizeDragBarWindow).
+    if (self.nci_window) |nci| {
         nci.updateIslandPosition(@intCast(width), @intCast(height));
     }
 
-    // Resize drag bar to match new width.
-    if (self.drag_bar_hwnd) |db| {
-        if (self.hwnd) |hwnd| {
-            drag_bar.resizeDragBar(db, hwnd, @intCast(width));
-        }
-    }
-
     // Update RootGrid explicit dimensions (Windows Terminal pattern).
+    // WT: GetLogicalSize() — convert physical pixels to DIPs.
+    // Size must match the island (height - top_offset), not the full client area.
     if (self.root_grid) |rg| {
         const fe = rg.queryInterface(com.IFrameworkElement) catch null;
         if (fe) |framework| {
             defer framework.release();
-            framework.SetWidth(@floatFromInt(width)) catch {};
-            framework.SetHeight(@floatFromInt(height)) catch {};
+            const dpi = os.GetDpiForWindow(self.hwnd.?);
+            const scale: f64 = @as(f64, @floatFromInt(dpi)) / 96.0;
+            const top_offset: u32 = if (self.nci_window) |nci|
+                @intCast(@max(0, NonClientIslandWindow.getTopBorderHeight(nci.island.hwnd)))
+            else
+                0;
+            const island_height = if (height > top_offset) height - top_offset else 0;
+            framework.SetWidth(@floatCast(@as(f64, @floatFromInt(width)) / scale)) catch {};
+            framework.SetHeight(@floatCast(@as(f64, @floatFromInt(island_height)) / scale)) catch {};
         }
     }
 
@@ -1552,10 +1598,19 @@ fn applySizeChange(self: *App, width: u32, height: u32) void {
     }
 }
 
-/// Stowed exception handler for debugging — captures exception details before crash.
+/// VEH for debugging — log only non-stowed exceptions (real crashes).
+/// WinUI3/XAML runtime throws and catches stowed exceptions (0xC000027B)
+/// internally as normal operation — logging those is just noise.
 pub fn stowedExceptionHandler(exception_info: *os.EXCEPTION_POINTERS) callconv(.winapi) c_long {
-    _ = exception_info;
-    fileLog("!!! STOWED EXCEPTION CAUGHT !!!", .{});
+    const rec = exception_info.ExceptionRecord orelse return 0;
+    const code = rec.ExceptionCode;
+    // Stowed exceptions are WinRT internal — ignore.
+    if (code == os.STATUS_STOWED_EXCEPTION) return 0;
+    // C++ exceptions (used by WinRT/COM internally).
+    if (code == 0xE06D7363) return 0;
+    // MS_VC_EXCEPTION: SetThreadName via RaiseException (debugger thread naming).
+    if (code == 0x406D1388) return 0;
+    fileLog("!!! EXCEPTION code=0x{X:0>8} addr={?} !!!", .{ code, rec.ExceptionAddress });
     return 0; // EXCEPTION_CONTINUE_SEARCH
 }
 

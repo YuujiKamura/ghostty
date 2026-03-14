@@ -11,6 +11,10 @@ pub fn activateAndLoadResources(self: anytype, window: *com.IWindow) !void {
     try window.activate();
     log.info("initXaml step 7 OK: Window activated!", .{});
 
+    // Titlebar: DWM frame extension only (ExtendsContentIntoTitleBar is not used —
+    // it causes UI thread freeze on mouse hover, see Issue #42).
+    // DWM frame is extended below via DwmExtendFrameIntoClientArea.
+
     // FORCE visibility via Win32 ShowWindow
     if (self.hwnd) |h| {
         _ = os.ShowWindow(h, os.SW_SHOWNORMAL);
@@ -65,11 +69,6 @@ pub fn activateAndLoadResources(self: anytype, window: *com.IWindow) !void {
         var fe_guard = winrt.ComRef(com.IFrameworkElement).init(fe);
         defer fe_guard.deinit();
     } else |_| {}
-
-    // Step 7.1: ExtendsContentIntoTitleBar — PERMANENTLY DISABLED.
-    // Causes UI thread freeze on mouse hover regardless of WM_NCHITTEST handling
-    // (Issue #42, 6 attempts all failed). Caption buttons will be XAML-drawn instead.
-    log.info("initXaml step 7.1: ExtendsContentIntoTitleBar = DISABLED (Issue #42)", .{});
 
     // Step 7.2: load XamlControlsResources after window activation.
     // Putting resources too early in startup can yield 0x8000ffff in unpackaged runs.

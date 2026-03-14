@@ -1124,13 +1124,14 @@ fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
     if (!self.core_initialized) return;
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const vk = ea.Key() catch return;
-    App.fileLog("xaml_surface: PreviewKeyDown vk=0x{x}", .{@as(u32, @bitCast(vk))});
-    if (vk == 0xE5) {
-        // VK_PROCESSKEY — IME is active. Focus the XAML ime_text_box which
-        // handles IME composition via TSF (TextCompositionStarted/Changed/Ended).
-        // The old path focused input_hwnd which never receives physical keyboard
-        // messages because XAML's message loop intercepts them.
-        App.fileLog("PreviewKeyDown: VK_PROCESSKEY -> focusImeTextBox", .{});
+    const vk_u32 = @as(u32, @bitCast(vk));
+    App.fileLog("xaml_surface: PreviewKeyDown vk=0x{x}", .{vk_u32});
+    if (isImePassthroughVirtualKey(vk_u32)) {
+        // IME toggle/mode key or VK_PROCESSKEY — focus the XAML ime_text_box
+        // which handles IME composition via TSF. The TextBox has an IME context
+        // associated with it; the SwapChainPanel does not, so IME toggle keys
+        // must be forwarded to the TextBox to actually activate/deactivate IME.
+        App.fileLog("PreviewKeyDown: IME key 0x{x} -> focusImeTextBox", .{vk_u32});
         self.app.keyboard_focus_target = .ime_text_box;
         _ = self.focusImeTextBox();
         return; // Don't mark handled — let IME process.
@@ -1271,12 +1272,20 @@ fn onImeTextBoxCompositionEnded(self: *Surface, _: ?*anyopaque, args: ?*anyopaqu
 
 fn onXamlGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
-    if (self.has_focus) return; // deduplicate
-    self.has_focus = true;
-    log.info("XAML GotFocus on SwapChainPanel surface=0x{x}", .{@intFromPtr(self)});
-    self.core_surface.focusCallback(true) catch |err| {
-        log.warn("focusCallback(true) error: {}", .{err});
-    };
+    if (!self.has_focus) {
+        self.has_focus = true;
+        log.info("XAML GotFocus on SwapChainPanel surface=0x{x}", .{@intFromPtr(self)});
+        self.core_surface.focusCallback(true) catch |err| {
+            log.warn("focusCallback(true) error: {}", .{err});
+        };
+    }
+    // Always redirect XAML focus from SwapChainPanel to the hidden IME TextBox.
+    // The TextBox has a TSF/IME context; without this, IME toggle keys
+    // (Hankaku/Zenkaku, Alt+`, etc.) have no IME context to act on and are
+    // silently swallowed.
+    if (self.app.keyboard_focus_target == .ime_text_box) {
+        _ = self.focusImeTextBox();
+    }
 }
 
 fn onXamlLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
@@ -1446,6 +1455,16 @@ fn commonPrefixLen(comptime T: type, a: []const T, b: []const T) usize {
 
 fn isImePassthroughVirtualKey(vk: u32) bool {
     return switch (vk) {
+        0x15, // VK_KANA / VK_HANGUL — IME Kana/Hangul mode toggle
+        0x16, // VK_IME_ON
+        0x17, // VK_JUNJA — IME Junja mode
+        0x18, // VK_FINAL — IME Final mode
+        0x19, // VK_HANJA / VK_KANJI — IME Hanja/Kanji mode (半角/全角 key)
+        0x1A, // VK_IME_OFF
+        0x1C, // VK_CONVERT (変換)
+        0x1D, // VK_NONCONVERT (無変換)
+        0x1E, // VK_ACCEPT
+        0x1F, // VK_MODECHANGE
         0xE5, // VK_PROCESSKEY
         0xF3, // IME toggle reported by WinUI3 on Japanese layout in Phase 6
         0xF4, // IME off reported by WinUI3 on Japanese layout in Phase 6

@@ -4,6 +4,7 @@ const App = @import("App.zig");
 const Surface = @import("Surface.zig");
 const ime = @import("ime.zig");
 const input_runtime = @import("input_runtime.zig");
+const drag_bar = @import("drag_bar.zig");
 
 const log = std.log.scoped(.winui3_wndproc);
 
@@ -22,30 +23,81 @@ pub fn subclassProc(
     msg: os.UINT,
     wparam: os.WPARAM,
     lparam: os.LPARAM,
-    _: usize,
+    uid: usize,
     ref_data: usize,
 ) callconv(.winapi) os.LRESULT {
     const app: *App = @ptrFromInt(ref_data);
 
-    // For WM_NCHITTEST: run our custom hit-test FIRST so that XAML interactive
-    // areas (e.g. TabView "+" button) return HTCLIENT before DWM can claim them
-    // as invisible caption buttons (HTCLOSE/HTMAXBUTTON/HTMINBUTTON).
-    // For all other messages, let DWM handle caption button rendering first.
-    if (msg == os.WM_NCHITTEST) {
-        const hit = titleBarHitTest(hwnd, lparam);
-        if (hit == os.HTCLIENT) {
-            // XAML interactive area — skip DWM so the click reaches XAML controls.
-            return os.HTCLIENT;
+    // ---- Titlebar drag via WM_LBUTTONDOWN (uid=3: XAML island child) ----
+    // WinUI3's DesktopChildSiteBridge processes mouse input via InputPointerSource,
+    // bypassing standard WM_NCHITTEST dispatch. So HTTRANSPARENT has no effect on
+    // real mouse input. Instead, intercept WM_LBUTTONDOWN on the XAML island and
+    // initiate drag via SC_MOVE when the click is in the titlebar region.
+    if (uid == 3 and (msg == os.WM_LBUTTONDOWN or msg == os.WM_LBUTTONDBLCLK)) {
+        const parent_hwnd = app.hwnd orelse return os.DefSubclassProc(hwnd, msg, wparam, lparam);
+        const in_titlebar = isInTitlebarRegion(parent_hwnd, lparam);
+        const lp_dbg: usize = @bitCast(lparam);
+        const cx_dbg = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp_dbg)))));
+        const cy_dbg = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp_dbg >> 16)))));
+        App.fileLog("uid=3 LBUTTONDOWN at ({},{}) inTitlebar={}", .{ cx_dbg, cy_dbg, @intFromBool(in_titlebar) });
+        if (in_titlebar) {
+            if (msg == os.WM_LBUTTONDBLCLK) {
+                // Double-click: toggle maximize/restore.
+                const sc = if (os.IsZoomed(parent_hwnd) != 0) os.SC_RESTORE else os.SC_MAXIMIZE;
+                _ = os.SendMessageW(parent_hwnd, os.WM_SYSCOMMAND, @bitCast(@as(isize, @intCast(sc))), 0);
+            } else {
+                // Single click: start drag via SC_MOVE (0x0002 = mouse-initiated).
+                _ = os.ReleaseCapture();
+                _ = os.SendMessageW(parent_hwnd, os.WM_SYSCOMMAND, @bitCast(@as(isize, @intCast(os.SC_MOVE | 2))), 0);
+            }
+            return 0;
         }
-        // For non-client areas (caption, resize borders), let DWM handle
-        // frame rendering (e.g. caption button hover/press visuals).
-        var dwm_result: os.LRESULT = 0;
-        if (os.DwmDefWindowProc(hwnd, msg, wparam, lparam, &dwm_result) != 0) {
-            return dwm_result;
-        }
-        return hit;
     }
 
+    // ---- WM_NCHITTEST (parent uid=0): resize borders + titlebar ----
+    if (msg == os.WM_NCHITTEST and uid == 0) {
+        var wrect: os.RECT = .{};
+        _ = os.GetWindowRect(hwnd, &wrect);
+        const lp: usize = @bitCast(lparam);
+        const mouse_x = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp)))));
+        const mouse_y = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp >> 16)))));
+
+        const dpi = os.GetDpiForWindow(hwnd);
+        const resize_h = os.GetSystemMetricsForDpi(os.SM_CXPADDEDBORDER, dpi) +
+            os.GetSystemMetricsForDpi(os.SM_CYSIZEFRAME, dpi);
+
+        // Top resize border
+        if (mouse_y < wrect.top + resize_h) {
+            if (mouse_x < wrect.left + resize_h) return os.HTTOPLEFT;
+            if (mouse_x >= wrect.right - resize_h) return os.HTTOPRIGHT;
+            return os.HTTOP;
+        }
+        // Bottom resize border
+        if (mouse_y >= wrect.bottom - resize_h) {
+            if (mouse_x < wrect.left + resize_h) return os.HTBOTTOMLEFT;
+            if (mouse_x >= wrect.right - resize_h) return os.HTBOTTOMRIGHT;
+            return os.HTBOTTOM;
+        }
+        // Left/right resize borders
+        if (mouse_x < wrect.left + resize_h) return os.HTLEFT;
+        if (mouse_x >= wrect.right - resize_h) return os.HTRIGHT;
+
+        // Titlebar (for cursor + system menu)
+        const scale: f32 = @as(f32, @floatFromInt(dpi)) / 96.0;
+        const titlebar_h: c_int = @intFromFloat(40.0 * scale);
+        if (mouse_y < wrect.top + titlebar_h) {
+            return os.HTCAPTION;
+        }
+
+        return os.DefSubclassProc(hwnd, msg, wparam, lparam);
+    }
+
+    // Other uid WM_NCHITTEST: passthrough.
+    if (msg == os.WM_NCHITTEST and uid != 0) {
+        return os.DefSubclassProc(hwnd, msg, wparam, lparam);
+    }
+
+    // For other messages, let DWM handle caption button rendering.
     var dwm_result: os.LRESULT = 0;
     if (os.DwmDefWindowProc(hwnd, msg, wparam, lparam, &dwm_result) != 0) {
         return dwm_result;
@@ -177,6 +229,10 @@ fn handleSize(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam:
     // Keep input HWND as a tiny focus target; never cover the render surface.
     if (app.input_hwnd) |input_hwnd| {
         _ = os.MoveWindow(input_hwnd, 0, 0, 1, 1, 0);
+    }
+    // Resize drag bar to cover the titlebar area.
+    if (app.drag_bar_hwnd) |db| {
+        drag_bar.resizeDragBar(db, hwnd, @intCast(width));
     }
     return os.DefSubclassProc(hwnd, msg, wparam, lparam);
 }
@@ -314,6 +370,10 @@ fn handleDpiChanged(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, l
             rect.bottom - rect.top,
             os.SWP_NOZORDER | os.SWP_NOACTIVATE,
         );
+        // Resize drag bar for new DPI.
+        if (app.drag_bar_hwnd) |db| {
+            drag_bar.resizeDragBar(db, hwnd, rect.right - rect.left);
+        }
     }
     return os.DefSubclassProc(hwnd, msg, wparam, lparam);
 }
@@ -409,75 +469,30 @@ fn handleControlAction(app: *App, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESU
     return 0;
 }
 
-// ---------------------------------------------------------------
-// DWM title bar hit-testing (Windows Terminal style)
-// ---------------------------------------------------------------
-
-/// DWM titlebar height in pixels at 96 DPI.
-const TITLEBAR_HEIGHT_96DPI: c_int = 40;
-/// Resize border width at 96 DPI.
-const RESIZE_BORDER_96DPI: c_int = 6;
-/// Caption button width at 96 DPI (Min/Max/Close each ~46px).
-const CAPTION_BUTTON_WIDTH_96DPI: c_int = 46;
-
-fn titleBarHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
-    // Extract screen coordinates from lparam (sign-extended for multi-monitor).
+/// Check if lparam (client-relative coordinates of the XAML island child) falls
+/// within the titlebar region of the parent window.
+fn isInTitlebarRegion(parent_hwnd: os.HWND, lparam: os.LPARAM) bool {
+    // WM_LBUTTONDOWN lparam: client-relative x,y of the receiving window.
+    // The XAML island child is positioned inside the parent, so its client (0,0)
+    // maps to the parent's client origin. Use GetWindowRect for screen coords.
     const lp: usize = @bitCast(lparam);
-    const pt = os.POINT{
-        .x = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp))))),
-        .y = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp >> 16))))),
-    };
+    const client_y = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp >> 16)))));
+    const client_x = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp)))));
 
-    var rect: os.RECT = .{};
-    _ = os.GetClientRect(hwnd, &rect);
-
-    // Convert client rect to screen coords for comparison.
-    var client_top_left = os.POINT{ .x = rect.left, .y = rect.top };
-    var client_bottom_right = os.POINT{ .x = rect.right, .y = rect.bottom };
-    _ = os.ClientToScreen(hwnd, &client_top_left);
-    _ = os.ClientToScreen(hwnd, &client_bottom_right);
-
-    // DPI-scale the titlebar height and resize border.
-    const dpi = os.GetDpiForWindow(hwnd);
+    // The XAML island's client (0,0) ≈ parent's client (0,0).
+    // Parent's client area starts at window top (because WM_NCCALCSIZE restores top).
+    // So client_y directly corresponds to distance from window top.
+    const dpi = os.GetDpiForWindow(parent_hwnd);
     const scale: f32 = @as(f32, @floatFromInt(dpi)) / 96.0;
-    const titlebar_h: c_int = @intFromFloat(@as(f32, @floatFromInt(TITLEBAR_HEIGHT_96DPI)) * scale);
-    const resize_border: c_int = @intFromFloat(@as(f32, @floatFromInt(RESIZE_BORDER_96DPI)) * scale);
-    const button_w: c_int = @intFromFloat(@as(f32, @floatFromInt(CAPTION_BUTTON_WIDTH_96DPI)) * scale);
+    const titlebar_h: c_int = @intFromFloat(40.0 * scale);
+    const button_zone: c_int = @intFromFloat(138.0 * scale);
 
-    // Bottom resize border.
-    if (pt.y >= client_bottom_right.y - resize_border) {
-        if (pt.x < client_top_left.x + resize_border) return os.HTBOTTOMLEFT;
-        if (pt.x >= client_bottom_right.x - resize_border) return os.HTBOTTOMRIGHT;
-        return os.HTBOTTOM;
-    }
+    // Get parent window width to exclude caption button area.
+    var wrect: os.RECT = .{};
+    _ = os.GetWindowRect(parent_hwnd, &wrect);
+    const win_width = wrect.right - wrect.left;
 
-    // Top resize border (above the titlebar content area).
-    if (pt.y >= client_top_left.y and pt.y < client_top_left.y + resize_border) {
-        if (pt.x < client_top_left.x + resize_border) return os.HTTOPLEFT;
-        if (pt.x >= client_bottom_right.x - resize_border) return os.HTTOPRIGHT;
-        return os.HTTOP;
-    }
-
-    // Left resize border.
-    if (pt.x < client_top_left.x + resize_border) return os.HTLEFT;
-
-    // Right resize border.
-    if (pt.x >= client_bottom_right.x - resize_border) return os.HTRIGHT;
-
-    // Titlebar region: between top resize border and titlebar bottom.
-    if (pt.y >= client_top_left.y + resize_border and pt.y < client_top_left.y + titlebar_h) {
-        // Caption buttons area (right side): let Win32 child windows handle clicks.
-        // Return HTCLIENT so mouse messages reach the caption button child windows.
-        const buttons_left = client_bottom_right.x - button_w * 3;
-        if (pt.x >= buttons_left) {
-            return os.HTCLIENT;
-        }
-        // Everything else in the titlebar is draggable caption.
-        return os.HTCAPTION;
-    }
-
-    // Below the titlebar: normal client area.
-    return os.HTCLIENT;
+    return client_y < titlebar_h and client_x < win_width - button_zone;
 }
 
 // ---------------------------------------------------------------

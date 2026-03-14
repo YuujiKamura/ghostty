@@ -126,25 +126,17 @@ pub fn initialize(self: *IslandWindow) !void {
     };
     defer site_bridge.release();
 
-    // Try setting ResizePolicy = ResizeContentToParentWindow.
-    // If the API is available, the island auto-sizes to match the parent.
-    site_bridge.setResizePolicy(com.ContentSizePolicy.ResizeContentToParentWindow) catch |err| {
-        log.warn("setResizePolicy failed: {} — falling back to manual sizing", .{err});
-
-        // Fallback: get the SiteBridge's HWND for manual SetWindowPos in onSize().
-        // The interop HWND is obtained via the site bridge's WindowId property.
-        // For now, find it as the first child of our HWND.
-        self.interop_hwnd = os.GetWindow(self.hwnd, os.GW_CHILD);
-        if (self.interop_hwnd) |ih| {
-            log.info("Manual sizing: interop_hwnd=0x{x}", .{@intFromPtr(ih)});
-        } else {
-            log.warn("Manual sizing: no child HWND found", .{});
-        }
-        return;
-    };
-
-    self.auto_resize = true;
-    log.info("ResizePolicy=ResizeContentToParentWindow set successfully", .{});
+    // NonClientIslandWindow needs manual island positioning so the XAML
+    // content is offset below the DWM titlebar. ResizeContentToParentWindow
+    // would make the island cover the entire parent (including caption buttons).
+    // Always use manual sizing via the SiteBridge child HWND.
+    self.interop_hwnd = os.GetWindow(self.hwnd, os.GW_CHILD);
+    if (self.interop_hwnd) |ih| {
+        log.info("Manual island sizing: interop_hwnd=0x{x}", .{@intFromPtr(ih)});
+    } else {
+        log.warn("Manual island sizing: no child HWND found", .{});
+    }
+    self.auto_resize = false;
 }
 
 /// WT: IslandWindow::SetContent()

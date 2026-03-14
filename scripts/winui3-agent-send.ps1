@@ -69,6 +69,20 @@ function Send-Input {
     }
 }
 
+function Send-RawInput {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SessionName,
+        [Parameter(Mandatory = $true)]
+        [string]$RawText
+    )
+    & pwsh -NoLogo -NoProfile -File $controlSendScript `
+        -SessionName $SessionName -Type RAW_INPUT -From 'agent-send' -Text $RawText 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "RAW_INPUT failed for session '$SessionName'"
+    }
+}
+
 function Get-SessionState {
     param(
         [Parameter(Mandatory = $true)]
@@ -128,8 +142,8 @@ function Wait-SessionReady {
                 }
             }
             'gemini' {
-                # gemini shows ">" or ">>>" prompt
-                if ($tail -match '>{1,3}\s*$') { $ready = $true }
+                # gemini shows "> Type your message" or ">" prompt
+                if ($tail -match 'Type your message' -or $tail -match '>{1,3}\s*$') { $ready = $true }
             }
             default {
                 # Generic: look for a prompt indicator in STATE
@@ -279,40 +293,46 @@ function Invoke-SendClaude {
         return "sent one-shot prompt to claude ($($Prompt.Length) chars)"
     }
 
-    # Interactive mode: send text only (NO \r — it becomes newline in multiline input)
-    # Submit mechanism is TBD for interactive mode.
+    # Interactive TUI mode: paste text via INPUT, submit via RAW_INPUT Enter
     Send-Input -SessionName $SessionName -RawText $Prompt
-    return "placed text in claude input ($($Prompt.Length) chars, no submit — use -OneShot for reliable execution)"
+    Start-Sleep -Milliseconds 200
+    Send-RawInput -SessionName $SessionName -RawText "`r"
+    return "sent prompt to claude TUI ($($Prompt.Length) chars)"
 }
 
 function Invoke-SendGemini {
     param(
         [string]$SessionName,
-        [string]$Prompt
+        [string]$Prompt,
+        [switch]$OneShotMode
     )
 
-    # For long prompts or those with special chars, write to a temp file
-    # and use powershell to pipe it (avoids cmd.exe escaping issues).
-    # Ghostty's default shell is cmd.exe on Windows.
-    if ($Prompt.Length -gt 4000 -or $Prompt -match '[\$`"\\!&|<>^%]') {
-        $tmpFile = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "agent-send-$([guid]::NewGuid().ToString('N').Substring(0,8)).txt")
-        try {
-            [System.IO.File]::WriteAllText($tmpFile, $Prompt, [System.Text.Encoding]::UTF8)
-            $winPath = $tmpFile -replace '/', '\'
-            $cmd = "powershell -NoProfile -Command `"Get-Content -Raw '$winPath' | gemini -o text; Remove-Item '$winPath' -Force`"`r"
-            Send-Input -SessionName $SessionName -RawText $cmd
-        } catch {
-            if (Test-Path $tmpFile) { Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue }
-            throw "failed to write temp file for gemini: $_"
+    if ($OneShotMode) {
+        # Non-interactive: run gemini as a one-shot command on cmd.exe shell
+        if ($Prompt.Length -gt 4000 -or $Prompt -match '[\$`"\\!&|<>^%]') {
+            $tmpFile = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "agent-send-$([guid]::NewGuid().ToString('N').Substring(0,8)).txt")
+            try {
+                [System.IO.File]::WriteAllText($tmpFile, $Prompt, [System.Text.Encoding]::UTF8)
+                $winPath = $tmpFile -replace '/', '\'
+                $cmd = "powershell -NoProfile -Command `"Get-Content -Raw '$winPath' | gemini -o text; Remove-Item '$winPath' -Force`"`r"
+                Send-Input -SessionName $SessionName -RawText $cmd
+            } catch {
+                if (Test-Path $tmpFile) { Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue }
+                throw "failed to write temp file for gemini: $_"
+            }
+            return "sent one-shot prompt to gemini via tempfile ($($Prompt.Length) chars)"
         }
-        return "sent prompt to gemini via tempfile ($($Prompt.Length) chars)"
+        $escaped = $Prompt -replace '"', '\"'
+        $cmd = "echo `"$escaped`" | gemini -o text`r"
+        Send-Input -SessionName $SessionName -RawText $cmd
+        return "sent one-shot prompt to gemini ($($Prompt.Length) chars)"
     }
 
-    # Simple prompt: escape for cmd.exe double-quote context
-    $escaped = $Prompt -replace '"', '\"'
-    $cmd = "echo `"$escaped`" | gemini -o text`r"
-    Send-Input -SessionName $SessionName -RawText $cmd
-    return "sent one-shot prompt to gemini ($($Prompt.Length) chars)"
+    # Interactive TUI mode: paste text via INPUT, submit via RAW_INPUT Enter
+    Send-Input -SessionName $SessionName -RawText $Prompt
+    Start-Sleep -Milliseconds 200
+    Send-RawInput -SessionName $SessionName -RawText "`r"
+    return "sent prompt to gemini TUI ($($Prompt.Length) chars)"
 }
 
 # ---------------------------------------------------------------------------
@@ -406,7 +426,7 @@ try {
             switch ($Agent) {
                 'codex'  { $detail = Invoke-SendCodex  -SessionName $Session -Prompt $Text }
                 'claude' { $detail = Invoke-SendClaude -SessionName $Session -Prompt $Text -OneShotMode:$OneShot }
-                'gemini' { $detail = Invoke-SendGemini -SessionName $Session -Prompt $Text }
+                'gemini' { $detail = Invoke-SendGemini -SessionName $Session -Prompt $Text -OneShotMode:$OneShot }
             }
         }
 

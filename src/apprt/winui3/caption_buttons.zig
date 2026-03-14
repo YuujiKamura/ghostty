@@ -47,7 +47,7 @@ const CAPTION_XAML =
     \\  </Border>
     \\  <Border x:Name="CloseButton"
     \\          Width="46" Height="40"
-    \\          Background="#C42B1C">
+    \\          Background="Transparent">
     \\    <TextBlock Text="&#xE8BB;"
     \\               FontFamily="Segoe MDL2 Assets" FontSize="10"
     \\               Foreground="White"

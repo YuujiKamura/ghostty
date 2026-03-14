@@ -30,6 +30,9 @@ drag_bar_hwnd: ?os.HWND = null,
 /// WT: _isMaximized
 is_maximized: bool = false,
 
+/// Cached cyTopHeight to avoid redundant DwmExtendFrameIntoClientArea calls.
+cached_top_height: c_int = -1,
+
 /// WT: topBorderVisibleHeight = 1
 const TOP_BORDER_VISIBLE_HEIGHT: c_int = 1;
 
@@ -51,12 +54,19 @@ pub fn init(self: *NonClientIslandWindow, app_ptr: *anyopaque) !void {
         .drag_bar_hwnd = null,
     };
 
-    // WT: MakeWindow() creates drag bar immediately after top-level HWND,
-    // with size 0,0,0,0 and WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP.
-    self.drag_bar_hwnd = self.createDragBarWindow();
+    // Drag bar creation is DEFERRED to createDragBarIfNeeded(), called
+    // after DXWS initialization (island.initialize()). WS_EX_LAYERED on
+    // child windows may require the WinUI3 runtime to be initialized first.
 
     // Apply initial DWM settings before the window is shown.
-    self.updateFrameMargins();
+    self.initFrameMargins();
+}
+
+/// Create the drag bar window if not already created.
+/// Must be called AFTER island.initialize() so the WinUI3 runtime is active.
+pub fn createDragBarIfNeeded(self: *NonClientIslandWindow) void {
+    if (self.drag_bar_hwnd != null) return;
+    self.drag_bar_hwnd = self.createDragBarWindow();
 }
 
 /// WT: NonClientIslandWindow::Close()
@@ -82,30 +92,12 @@ pub fn destroyDragBarWindow(self: *NonClientIslandWindow) void {
 
 /// WT uses AdjustWindowRectExForDpi to compute -frame.top as the margin.
 /// We approximate with the same system metrics.
-pub fn updateFrameMargins(self: *NonClientIslandWindow) void {
+/// Called once at init and on DPI change. Sets up DWM frame, triggers
+/// WM_NCCALCSIZE, and configures dark mode + caption color.
+pub fn initFrameMargins(self: *NonClientIslandWindow) void {
+    self.updateFrameMargins();
+
     const hwnd = self.island.hwnd;
-    const dpi = os.GetDpiForWindow(hwnd);
-
-    // WT: AdjustWindowRectExForDpi(&frame, style, FALSE, 0, dpi)
-    // then margins.cyTopHeight = -frame.top
-    // frame.top is negative, so -frame.top is positive.
-    var frame: os.RECT = .{};
-    const style = os.GetWindowLongPtrW(hwnd, os.GWL_STYLE);
-    _ = os.AdjustWindowRectExForDpi(&frame, @truncate(@as(usize, @bitCast(style))), 0, 0, dpi);
-    const top_height: c_int = -frame.top;
-
-    const margins = os.MARGINS{
-        .cxLeftWidth = 0,
-        .cxRightWidth = 0,
-        .cyTopHeight = top_height,
-        .cyBottomHeight = 0,
-    };
-    const hr = os.DwmExtendFrameIntoClientArea(hwnd, &margins);
-    if (hr >= 0) {
-        fileLog("DwmExtendFrameIntoClientArea OK (cyTopHeight={} dpi={})", .{ top_height, dpi });
-    } else {
-        fileLog("DwmExtendFrameIntoClientArea failed: hr=0x{x}", .{@as(u32, @bitCast(hr))});
-    }
 
     // Force WM_NCCALCSIZE so the system titlebar is removed immediately.
     _ = os.SetWindowPos(
@@ -125,6 +117,36 @@ pub fn updateFrameMargins(self: *NonClientIslandWindow) void {
     // Black caption color to match terminal background.
     const caption_color: u32 = 0x00000000; // COLORREF: 0x00BBGGRR
     _ = os.DwmSetWindowAttribute(hwnd, os.DWMWA_CAPTION_COLOR, @ptrCast(&caption_color), @sizeOf(u32));
+}
+
+/// Called on every resize. Only updates DwmExtendFrameIntoClientArea when
+/// the margin value actually changes (maximize/restore or DPI change).
+/// Redundant calls kill DWM caption buttons.
+pub fn updateFrameMargins(self: *NonClientIslandWindow) void {
+    const hwnd = self.island.hwnd;
+    const dpi = os.GetDpiForWindow(hwnd);
+
+    var frame: os.RECT = .{};
+    const style = os.GetWindowLongPtrW(hwnd, os.GWL_STYLE);
+    _ = os.AdjustWindowRectExForDpi(&frame, @truncate(@as(usize, @bitCast(style))), 0, 0, dpi);
+    const top_height: c_int = -frame.top;
+
+    // Skip if margins haven't changed.
+    if (top_height == self.cached_top_height) return;
+    self.cached_top_height = top_height;
+
+    const margins = os.MARGINS{
+        .cxLeftWidth = 0,
+        .cxRightWidth = 0,
+        .cyTopHeight = top_height,
+        .cyBottomHeight = 0,
+    };
+    const hr = os.DwmExtendFrameIntoClientArea(hwnd, &margins);
+    if (hr >= 0) {
+        fileLog("DwmExtendFrameIntoClientArea OK (cyTopHeight={} dpi={})", .{ top_height, dpi });
+    } else {
+        fileLog("DwmExtendFrameIntoClientArea failed: hr=0x{x}", .{@as(u32, @bitCast(hr))});
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -210,7 +232,7 @@ pub fn updateIslandPosition(self: *NonClientIslandWindow, width: c_int, height: 
     );
 
     // Resize drag bar to match new width.
-    fileLog("updateIslandPosition: width={} height={} top_offset={}", .{ width, height, top_offset });
+    fileLog("updateIslandPosition: width={} height={} top_offset={} interop=0x{x}", .{ width, height, top_offset, @intFromPtr(ih) });
     self.resizeDragBarWindow(width);
 }
 
@@ -238,7 +260,7 @@ pub fn resizeDragBarWindow(self: *NonClientIslandWindow, width_px: c_int) void {
     });
 
     if (width_px > 0 and titlebar_h > 0) {
-        // WT: SetWindowPos(HWND_TOP, rect.left, rect.top + _GetTopBorderHeight(), ...)
+        // WT: SetWindowPos(HWND_TOP) — child window, client coordinates relative to parent.
         _ = os.SetWindowPos(
             drag_bar_hwnd,
             os.HWND_TOP,
@@ -246,14 +268,15 @@ pub fn resizeDragBarWindow(self: *NonClientIslandWindow, width_px: c_int) void {
             top_offset,
             width_px,
             titlebar_h,
-            os.SWP_NOACTIVATE | os.SWP_SHOWWINDOW,
+            os.SWP_NOACTIVATE | os.SWP_SHOWWINDOW | os.SWP_NOSENDCHANGING,
         );
-        // WT calls SetLayeredWindowAttributes(drag_bar, 0, 255, LWA_ALPHA) here,
-        // but WS_EX_LAYERED is not available on child windows in this environment.
-        // The drag bar is transparent by virtue of having no paint handler.
+
+        // WT: SetLayeredWindowAttributes(alpha=255, LWA_ALPHA)
+        // Makes the layered window opaque for input (hit testing).
+        // WS_EX_NOREDIRECTIONBITMAP keeps it visually transparent (DWM composites through).
+        _ = os.SetLayeredWindowAttributes(drag_bar_hwnd, 0, 255, os.LWA_ALPHA);
     } else {
-        // WT: hide when titlebar not visible
-        _ = os.SetWindowPos(drag_bar_hwnd, os.HWND_BOTTOM, 0, 0, 0, 0, os.SWP_HIDEWINDOW | os.SWP_NOMOVE | os.SWP_NOSIZE);
+        _ = os.SetWindowPos(drag_bar_hwnd, os.HWND_BOTTOM, 0, 0, 0, 0, os.SWP_HIDEWINDOW | os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOSENDCHANGING);
     }
 }
 
@@ -263,7 +286,7 @@ pub fn resizeDragBarWindow(self: *NonClientIslandWindow, width_px: c_int) void {
 
 /// WT: _GetTopBorderHeight — returns topBorderVisibleHeight (1) normally,
 /// 0 when maximized or fullscreen.
-fn getTopBorderHeight(hwnd: os.HWND) c_int {
+pub fn getTopBorderHeight(hwnd: os.HWND) c_int {
     if (os.IsZoomed(hwnd) != 0) return 0;
     return TOP_BORDER_VISIBLE_HEIGHT;
 }
@@ -312,19 +335,10 @@ fn createDragBarWindow(self: *NonClientIslandWindow) ?os.HWND {
         drag_bar_class_registered = true;
     }
 
-    // WT uses WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP here.
-    // However, WS_EX_LAYERED cannot be set on child windows (WS_CHILD)
-    // on Windows 11 Build 26200+ — CreateWindowExW returns NULL with err=0,
-    // and SetWindowLongPtrW post-creation also silently fails.
-    // (Verified with minimal repro: test-layered-child.c)
-    //
-    // The drag bar works without WS_EX_LAYERED because:
-    // - It has no paint handler (DefWindowProc draws nothing meaningful)
-    // - The parent has WS_EX_NOREDIRECTIONBITMAP, so DWM composition
-    //   handles transparency without per-window layered attributes
-    // - Its sole purpose is as an HWND_TOP input sink for WM_NCHITTEST
+    // WT: CreateWindowExW(WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP, ..., WS_CHILD, ...)
+    // Requires supportedOS GUID in app manifest for Windows 8+ (WS_EX_LAYERED on child).
     const hwnd = os.CreateWindowExW(
-        0,
+        os.WS_EX_LAYERED | os.WS_EX_NOREDIRECTIONBITMAP,
         DRAG_BAR_CLASS_NAME,
         EMPTY_WINDOW_NAME,
         os.WS_CHILD,
@@ -333,12 +347,12 @@ fn createDragBarWindow(self: *NonClientIslandWindow) ?os.HWND {
         null,
         hinstance,
         @ptrCast(self),
-    );
-    if (hwnd) |h| {
-        fileLog("createDragBarWindow: OK hwnd=0x{x}", .{@intFromPtr(h)});
-    } else {
-        fileLog("createDragBarWindow: CreateWindowExW FAILED err={}", .{os.GetLastError()});
-    }
+    ) orelse {
+        fileLog("createDragBarWindow: FAILED err={} — check supportedOS in manifest", .{os.GetLastError()});
+        return null;
+    };
+    fileLog("createDragBarWindow: OK hwnd=0x{x} (LAYERED|NOREDIR child)", .{@intFromPtr(hwnd)});
+
     return hwnd;
 }
 
@@ -436,7 +450,7 @@ fn dragBarNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
         .y = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp >> 16))))),
     };
 
-    const parent = os.GetParent(hwnd) orelse return os.HTCAPTION;
+    const parent = os.GetAncestor(hwnd, os.GA_PARENT) orelse return os.HTCAPTION;
     var parent_rect: os.RECT = .{};
     _ = os.GetWindowRect(parent, &parent_rect);
 
@@ -482,10 +496,15 @@ fn nonclientWndProc(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.L
         return os.DefWindowProcW(hwnd, msg, wparam, lparam);
     }
 
-    // WT: Let DWM handle caption button rendering first.
-    var dwm_result: os.LRESULT = 0;
-    if (os.DwmDefWindowProc(hwnd, msg, wparam, lparam, &dwm_result) != 0) {
-        return dwm_result;
+    // DwmDefWindowProc handles DWM caption button rendering/hit-testing.
+    // We use XAML caption buttons (via caption_buttons.zig) instead, so
+    // skip DwmDefWindowProc for WM_NCHITTEST to prevent DWM from drawing
+    // its own buttons that conflict with the DXWS visual layer.
+    if (msg != os.WM_NCHITTEST) {
+        var dwm_result: os.LRESULT = 0;
+        if (os.DwmDefWindowProc(hwnd, msg, wparam, lparam, &dwm_result) != 0) {
+            return dwm_result;
+        }
     }
 
     // WT: NonClientIslandWindow::MessageHandler
@@ -494,18 +513,41 @@ fn nonclientWndProc(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.L
         os.WM_NCHITTEST => return onNcHitTest(hwnd, lparam),
 
         os.WM_PAINT => {
-            // WT: _OnPaint — fill top border with black, rest with background.
-            // Simplified: just validate the paint region.
+            // WT: _OnPaint — paint titlebar with alpha=255 so DWM can
+            // composite caption buttons on top of the glass frame.
             var ps: os.PAINTSTRUCT = .{};
             const hdc = os.BeginPaint(hwnd, &ps);
             if (hdc) |dc| {
-                // Fill top border area with black (1px in normal mode).
                 const top_h = getTopBorderHeight(hwnd);
+
+                // 1) Top border: 1px black (same as WT).
                 if (ps.rcPaint.top < top_h) {
                     var rc_top = ps.rcPaint;
                     rc_top.bottom = top_h;
                     if (os.GetStockObject(os.BLACK_BRUSH)) |brush| {
                         _ = os.FillRect(dc, &rc_top, brush);
+                    }
+                }
+
+                // 2) Rest of titlebar: BufferedPaint with alpha=255.
+                // Without this, DWM caption buttons disappear on resize.
+                if (ps.rcPaint.bottom > top_h) {
+                    var rc_rest = ps.rcPaint;
+                    rc_rest.top = top_h;
+
+                    var params = os.BP_PAINTPARAMS{
+                        .dwFlags = os.BPPF_NOCLIP | os.BPPF_ERASE,
+                    };
+                    var opaque_dc: ?os.HDC = null;
+                    const buf = os.BeginBufferedPaint(dc, &rc_rest, os.BPBF_TOPDOWNDIB, &params, &opaque_dc);
+                    if (buf) |bp| {
+                        if (opaque_dc) |odc| {
+                            if (os.GetStockObject(os.BLACK_BRUSH)) |brush| {
+                                _ = os.FillRect(odc, &rc_rest, brush);
+                            }
+                        }
+                        _ = os.BufferedPaintSetAlpha(bp, null, 255);
+                        _ = os.EndBufferedPaint(bp, 1);
                     }
                 }
             }

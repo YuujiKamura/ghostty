@@ -87,8 +87,10 @@ pub const WM_APP_CONTROL_ACTION: UINT = WM_USER + 5;
 // --- Window styles ---
 pub const WS_OVERLAPPEDWINDOW: DWORD = 0x00CF0000;
 pub const WS_VISIBLE: DWORD = 0x10000000;
+pub const WS_CHILD: DWORD = 0x40000000;
 pub const WS_EX_LAYERED: DWORD = 0x00080000;
 pub const WS_EX_NOREDIRECTIONBITMAP: DWORD = 0x00200000;
+pub const WS_EX_TRANSPARENT: DWORD = 0x00000020;
 pub const CW_USEDEFAULT: c_int = @bitCast(@as(c_uint, 0x80000000));
 
 // --- Class styles ---
@@ -152,6 +154,7 @@ pub const SWP_NOACTIVATE: UINT = 0x0010;
 pub const SWP_SHOWWINDOW: UINT = 0x0040;
 pub const SWP_HIDEWINDOW: UINT = 0x0080;
 pub const SWP_FRAMECHANGED: UINT = 0x0020;
+pub const SWP_NOSENDCHANGING: UINT = 0x0400;
 
 // --- Pixel format ---
 pub const PFD_DRAW_TO_WINDOW: DWORD = 0x00000004;
@@ -415,8 +418,6 @@ pub extern "imm32" fn ImmAssociateContextEx(hWnd: HWND, hIMC: HIMC, dwFlags: DWO
 pub const IACE_DEFAULT: DWORD = 0x0010;
 
 // --- Window styles (for input overlay HWND) ---
-pub const WS_CHILD: DWORD = 0x40000000;
-pub const WS_EX_TRANSPARENT: DWORD = 0x00000020;
 pub const WS_EX_NOACTIVATE: DWORD = 0x08000000;
 
 // --- SetFocus / SetParent ---
@@ -508,6 +509,36 @@ pub extern "dwmapi" fn DwmSetWindowAttribute(
 
 pub const DWMWA_USE_IMMERSIVE_DARK_MODE: DWORD = 20;
 pub const DWMWA_CAPTION_COLOR: DWORD = 35;
+
+// --- Buffered Paint (uxtheme) — required for DWM caption button rendering ---
+pub const BP_PAINTPARAMS = extern struct {
+    cbSize: DWORD = @sizeOf(BP_PAINTPARAMS),
+    dwFlags: DWORD = 0,
+    prcExclude: ?*const RECT = null,
+    pBlendFunction: ?*const anyopaque = null,
+};
+pub const BPPF_ERASE: DWORD = 0x0001;
+pub const BPPF_NOCLIP: DWORD = 0x0002;
+pub const BPBF_TOPDOWNDIB: c_int = 2;
+
+pub extern "uxtheme" fn BufferedPaintInit() callconv(.winapi) c_long;
+pub extern "uxtheme" fn BufferedPaintUnInit() callconv(.winapi) c_long;
+pub extern "uxtheme" fn BeginBufferedPaint(
+    hdcTarget: HDC,
+    prcTarget: *const RECT,
+    dwFormat: c_int,
+    pPaintParams: *const BP_PAINTPARAMS,
+    phdcPaint: *?HDC,
+) callconv(.winapi) ?*anyopaque; // HPAINTBUFFER
+pub extern "uxtheme" fn EndBufferedPaint(
+    hBufferedPaint: *anyopaque,
+    fUpdateTarget: BOOL,
+) callconv(.winapi) c_long;
+pub extern "uxtheme" fn BufferedPaintSetAlpha(
+    hBufferedPaint: *anyopaque,
+    prc: ?*const RECT,
+    alpha: u8,
+) callconv(.winapi) c_long;
 
 // --- Fullscreen support ---
 pub const GWL_STYLE: c_int = -16;

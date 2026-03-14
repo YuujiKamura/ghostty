@@ -1,31 +1,21 @@
 param()
 
 $ErrorActionPreference = 'Stop'
+. "$PSScriptRoot\control-plane-session-lib.ps1"
 
 $root = Join-Path $env:LOCALAPPDATA 'ghostty\control-plane\win32\sessions'
-if (-not (Test-Path $root)) {
-    Write-Host 'No Win32 control-plane sessions found.'
-    exit 0
-}
-
-$sessions = foreach ($file in Get-ChildItem -LiteralPath $root -Filter '*.session' -File | Sort-Object LastWriteTimeUtc -Descending) {
-    $map = @{}
-    foreach ($line in Get-Content -LiteralPath $file.FullName) {
-        if ($line -match '^(?<k>[^=]+)=(?<v>.*)$') {
-            $map[$Matches.k] = $Matches.v
-        }
-    }
+$sessions = foreach ($entry in Get-ControlPlaneSessionEntries -Root $root) {
     [pscustomobject]@{
-        Session = $map.session_name
-        Pid = $map.pid
-        Hwnd = $map.hwnd
-        Pipe = $map.pipe_name
+        Session = $entry.Session
+        Pid = $entry.Pid
+        Hwnd = $entry.Hwnd
+        Pipe = $entry.PipeName
         Title = ''
         Prompt = ''
         Selection = ''
         Pwd = ''
-        Log = $map.log_file
-        File = $file.FullName
+        Log = $entry.Log
+        File = $entry.File
     }
 }
 

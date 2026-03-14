@@ -30,6 +30,7 @@ const tab_manager = @import("tab_manager.zig");
 const input_runtime = @import("input_runtime.zig");
 const window_runtime = @import("window_runtime.zig");
 const caption_buttons_mod = @import("caption_buttons.zig");
+const drag_bar = @import("drag_bar.zig");
 const xaml_helpers = @import("xaml_helpers.zig");
 const surface_binding = @import("surface_binding.zig");
 const event_handlers = @import("event_handlers.zig");
@@ -139,6 +140,13 @@ child_hwnd: ?os.HWND = null,
 /// Our own input HWND — kept as a transparent child window for fallback/native
 /// behaviors, but no longer the default keyboard text owner.
 input_hwnd: ?os.HWND = null,
+
+/// Transparent drag-bar child HWND that covers the titlebar region for
+/// custom window dragging (Windows Terminal NonClientIslandWindow style).
+drag_bar_hwnd: ?os.HWND = null,
+
+/// XAML island child HWND (DesktopChildSiteBridge) — subclassed for titlebar passthrough.
+xaml_island_hwnd: ?os.HWND = null,
 
 /// Desired keyboard focus owner. WinUI3 text/IME input should stay on the
 /// hidden XAML TextBox so TSF owns the composition lifecycle.
@@ -299,6 +307,35 @@ pub fn initXaml(self: *App) !void {
     }
 
     self.setupNativeInputWindows();
+
+    // Subclass the XAML island child window (DesktopChildSiteBridge) so it
+    // returns HTTRANSPARENT in the titlebar region, allowing WM_NCHITTEST to
+    // fall through to the parent which returns HTCAPTION for dragging.
+    // GW_CHILD returns the first child (often GhosttyInputOverlay, 1x1).
+    // The DesktopChildSiteBridge is typically the last child — iterate with GW_HWNDNEXT.
+    if (self.hwnd) |hwnd| {
+        var found: ?os.HWND = null;
+        var child = os.GetWindow(hwnd, os.GW_CHILD);
+        while (child) |ch| {
+            // Pick the largest child — the XAML island covers the whole window.
+            var cr: os.RECT = .{};
+            _ = os.GetWindowRect(ch, &cr);
+            const w = cr.right - cr.left;
+            const h = cr.bottom - cr.top;
+            if (w > 100 and h > 100) {
+                found = ch;
+            }
+            child = os.GetWindow(ch, os.GW_HWNDNEXT);
+        }
+        if (found) |xi| {
+            fileLog("initXaml: subclassing XAML island HWND=0x{x} for titlebar passthrough", .{@intFromPtr(xi)});
+            _ = os.SetWindowSubclass(xi, &subclassProc, 3, @intFromPtr(self));
+            self.xaml_island_hwnd = xi;
+        } else {
+            fileLog("initXaml: no large child window found for XAML island subclass", .{});
+        }
+    }
+
     input_runtime.focusKeyboardTarget(self);
     self.startup_bootstrapped = true;
     self.setStartupStage(.content_ready);
@@ -804,6 +841,14 @@ fn onWindowClosed(self: *App, _: ?*anyopaque, _: ?*anyopaque) void {
 
     // Tear down window hooks immediately on close event to avoid re-entrancy
     // with WinUI/XAML shutdown internals.
+    if (self.drag_bar_hwnd) |db| {
+        _ = os.DestroyWindow(db);
+        self.drag_bar_hwnd = null;
+    }
+    if (self.xaml_island_hwnd) |xi| {
+        _ = os.RemoveWindowSubclass(xi, &subclassProc, 3);
+        self.xaml_island_hwnd = null;
+    }
     if (self.input_hwnd) |input_hwnd| {
         _ = os.DestroyWindow(input_hwnd);
         self.input_hwnd = null;
@@ -897,6 +942,10 @@ fn fullCleanup(self: *App) void {
     }
 
     // 1. Remove subclasses first.
+    if (self.xaml_island_hwnd) |xi| {
+        _ = os.RemoveWindowSubclass(xi, &subclassProc, 3);
+        self.xaml_island_hwnd = null;
+    }
     if (self.child_hwnd) |child_hwnd| {
         _ = os.RemoveWindowSubclass(child_hwnd, &subclassProc, 2);
         self.child_hwnd = null;
@@ -942,6 +991,7 @@ fn fullCleanup(self: *App) void {
     if (self.xaml_controls_resources) |xcr| _ = xcr.release();
     self.app_outer.deinit();
 
+    if (self.drag_bar_hwnd) |h| _ = os.DestroyWindow(h);
     if (self.input_hwnd) |h| _ = os.DestroyWindow(h);
 
     // Release DispatcherQueueController last — it owns the message loop infrastructure.
