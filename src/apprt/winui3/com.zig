@@ -65,6 +65,8 @@ pub const IRangeBase = gen.IRangeBase;
 pub const IScrollBar = gen.IScrollBar;
 pub const IScrollEventArgs = gen.IScrollEventArgs;
 pub const IXamlReaderStatics = gen.IXamlReaderStatics;
+pub const IUriRuntimeClass = gen.IUriRuntimeClass;
+pub const IUriRuntimeClassFactory = gen.IUriRuntimeClassFactory;
 
 // --- XAML Input event args (from generated) ---
 pub const Point = gen.Point;
