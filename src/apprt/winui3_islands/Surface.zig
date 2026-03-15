@@ -196,34 +196,44 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     // Set SwapChainPanel background to black.
     self.app.setControlBackground(panel, .{ .A = 255, .R = 0, .G = 0, .B = 0 });
 
-    // Create inner surface grid via XamlReader.Load():
-    // Layout is defined in XAML, event hookup remains in Zig.
+    // Create inner surface grid via LoadComponent + Surface.xbf:
+    // Layout is defined in compiled XAML (xbf), event hookup remains in Zig.
     {
-        const xaml_str =
-            \\<Grid xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>
-            \\  <Grid.ColumnDefinitions>
-            \\    <ColumnDefinition Width='*'/>
-            \\    <ColumnDefinition Width='17'/>
-            \\  </Grid.ColumnDefinitions>
-            \\  <ScrollBar Grid.Column='1' Orientation='Vertical'
-            \\             Width='17' MinWidth='17' MaxWidth='17'
-            \\             HorizontalAlignment='Stretch' VerticalAlignment='Stretch'
-            \\             IndicatorMode='MouseIndicator' IsTabStop='False'
-            \\             Minimum='0' Maximum='0' Value='0'
-            \\             SmallChange='1' LargeChange='10'
-            \\             ViewportSize='10'/>
-            \\</Grid>
-        ;
-        const xaml_hstr = try winrt.hstring(xaml_str);
-        defer winrt.deleteHString(xaml_hstr);
-
-        // Load XAML string into runtime object tree.
-        const reader_class = try winrt.hstring("Microsoft.UI.Xaml.Markup.XamlReader");
-        defer winrt.deleteHString(reader_class);
-        const reader = try winrt.getActivationFactory(com.IXamlReaderStatics, reader_class);
-        defer reader.release();
-        const grid_insp: *winrt.IInspectable = @ptrCast(@alignCast(try reader.load(xaml_hstr)));
+        const grid_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Grid");
+        defer winrt.deleteHString(grid_class);
+        const grid_insp = try winrt.activateInstance(grid_class);
         errdefer _ = grid_insp.release();
+
+        // Load Surface.xbf into the Grid via LoadComponent.
+        {
+            const app_class = try winrt.hstring("Microsoft.UI.Xaml.Application");
+            defer winrt.deleteHString(app_class);
+            const app_statics = try winrt.getActivationFactory(com.IApplicationStatics, app_class);
+            defer app_statics.release();
+
+            const uri_class = try winrt.hstring("Windows.Foundation.Uri");
+            defer winrt.deleteHString(uri_class);
+            const uri_factory = try winrt.getActivationFactory(com.IUriRuntimeClassFactory, uri_class);
+            defer uri_factory.release();
+
+            const uri_str = try winrt.hstring("ms-appx:///Surface.xbf");
+            defer winrt.deleteHString(uri_str);
+            const uri = try uri_factory.createUri(uri_str);
+            defer uri.release();
+
+            try app_statics.loadComponent(@ptrCast(grid_insp), @ptrCast(uri));
+            log.info("Surface.xbf loaded into Grid via LoadComponent", .{});
+        }
+
+        // Find ScrollBar by name from the loaded XAML tree.
+        const root_fe = try grid_insp.queryInterface(com.IFrameworkElement);
+        defer root_fe.release();
+
+        const sb_name = try winrt.hstring("ScrollBar");
+        defer winrt.deleteHString(sb_name);
+        const sb_insp_raw = try root_fe.FindName(sb_name);
+        const sb_insp: *winrt.IInspectable = @ptrCast(sb_insp_raw);
+        errdefer _ = sb_insp.release();
 
         // Insert SwapChainPanel at position 0 in the Grid's children.
         const grid_panel = try grid_insp.queryInterface(com.IPanel);
@@ -232,11 +242,6 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         const grid_children: *com.IVector = @ptrCast(@alignCast(grid_children_raw));
         defer grid_children.release();
         try grid_children.insertAt(0, @ptrCast(panel));
-
-        // Retrieve ScrollBar (now at index 1 after insert) for event hookup.
-        const sb_raw = try grid_children.getAt(1);
-        const sb_insp: *winrt.IInspectable = @ptrCast(@alignCast(sb_raw));
-        errdefer _ = sb_insp.release();
 
         // Register ValueChanged event on RangeBase (more reliable than Scroll event).
         // Windows Terminal also uses ValueChanged for scrollbar interaction.
@@ -291,7 +296,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         self.ime_text_box = ime_tb;
         _ = ime_tb_insp.release();
 
-        log.info("Surface grid created via XamlReader.Load: SwapChainPanel + ScrollBar + hidden IME TextBox", .{});
+        log.info("Surface grid created via LoadComponent (Surface.xbf): SwapChainPanel + ScrollBar + hidden IME TextBox", .{});
     }
 
     // Register Loaded handler to defer SetSwapChain until the panel is ready.
