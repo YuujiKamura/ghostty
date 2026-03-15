@@ -67,6 +67,10 @@ pub fn fileLog(comptime fmt: []const u8, args: anytype) void {
 
 /// Timer ID for live resize preview.
 const RESIZE_TIMER_ID: usize = 1;
+const TAB_CLOSE_POLL_INTERVAL_MS: u32 = 500;
+const CLOSE_TAB_POLL_TIMER_ID: usize = 997;
+const CLOSE_TAB_TIMER_ID: usize = 998;
+const CLOSE_TIMER_ID: usize = 999;
 const CONTEXT_MENU_NEW_TAB: usize = 1001;
 const CONTEXT_MENU_CLOSE_TAB: usize = 1002;
 const CONTEXT_MENU_PASTE: usize = 1003;
@@ -156,6 +160,7 @@ active_surface_idx: usize = 0,
 
 /// The TabView control that manages tabs.
 tab_view: ?*com.ITabView = null,
+last_polled_tab_items_size: ?u32 = null,
 
 /// The root grid (XamlSource.Content) — must be explicitly sized on WM_SIZE.
 /// Windows Terminal sets _rootGrid.Width/Height on every resize; without this,
@@ -310,6 +315,11 @@ pub fn initXaml(self: *App) !void {
     self.hwnd = nci.island.hwnd;
     self.setStartupStage(.window_ready);
 
+    // Step 3.5: Enable XAML debug diagnostics.
+    if (self.xaml_app) |xa| {
+        self.enableDebugSettings(xa);
+    }
+
     // Step 4: Load XamlControlsResources (themes).
     if (self.xaml_app) |xa| {
         self.loadXamlResources(xa);
@@ -461,6 +471,11 @@ fn createWindowContent(self: *App) !void {
 }
 
 fn scheduleDebugActions(self: *App) !void {
+    if (self.tab_view != null and self.hwnd != null) {
+        self.last_polled_tab_items_size = try self.currentTabItemsSize();
+        _ = os.SetTimer(self.hwnd.?, CLOSE_TAB_POLL_TIMER_ID, TAB_CLOSE_POLL_INTERVAL_MS, null);
+    }
+
     if (self.debug_cfg.new_tab_on_init) {
         log.info("initXaml step 10: new_tab_on_init triggered", .{});
         self.newTab() catch |err| log.warn("new_tab_on_init failed: {}", .{err});
@@ -477,13 +492,11 @@ fn scheduleDebugActions(self: *App) !void {
 
     if (self.debug_cfg.close_after_ms) |ms| {
         log.info("initXaml step 10: close_after_ms={}ms scheduled", .{ms});
-        const CLOSE_TIMER_ID: usize = 999;
         _ = os.SetTimer(self.hwnd.?, CLOSE_TIMER_ID, ms, null);
     }
 
     if (self.debug_cfg.close_tab_after_ms) |ms| {
         log.info("initXaml step 10: close_tab_after_ms={}ms scheduled", .{ms});
-        const CLOSE_TAB_TIMER_ID: usize = 998;
         _ = os.SetTimer(self.hwnd.?, CLOSE_TAB_TIMER_ID, ms, null);
     }
 }
@@ -620,7 +633,12 @@ fn registerTabViewHandlers(self: *App, tab_view: ?*com.ITabView) !void {
         const alloc = self.core_app.alloc;
         if (self.debug_cfg.enable_handler_close) {
             self.tab_close_handler = try TypedHandler.createWithIid(alloc, self, &onTabCloseRequested, &com.IID_TypedEventHandler_TabCloseRequested);
+            fileLog(
+                "registerTabViewHandlers: AddTabCloseRequested start tab_view=0x{x} handler=0x{x}",
+                .{ @intFromPtr(tab_view.?), @intFromPtr(self.tab_close_handler.?) },
+            );
             self.tab_close_token = try tab_view.?.AddTabCloseRequested(self.tab_close_handler.?.comPtr());
+            fileLog("registerTabViewHandlers: AddTabCloseRequested success token={}", .{self.tab_close_token.?});
             log.info("initXaml step 7.5: TabCloseRequested handler registered", .{});
         }
         if (self.debug_cfg.enable_handler_addtab) {
@@ -650,6 +668,32 @@ fn unregisterTabViewHandlers(self: *App, tab_view: *com.ITabView) void {
     self.tab_close_token = null;
     self.add_tab_token = null;
     self.selection_changed_token = null;
+}
+
+fn currentTabItemsSize(self: *App) !u32 {
+    const tv = self.tab_view orelse return 0;
+    const items_vec: *com.IVector = @ptrCast(@alignCast(try tv.TabItems()));
+    var items_guard = winrt.ComRef(com.IVector).init(items_vec);
+    defer items_guard.deinit();
+    return try items_guard.get().getSize();
+}
+
+fn pollTabCloseState(self: *App) void {
+    const current_size = self.currentTabItemsSize() catch |err| {
+        fileLog("pollTabCloseState: currentTabItemsSize failed err={}", .{@intFromError(err)});
+        return;
+    };
+    const previous_size = self.last_polled_tab_items_size orelse current_size;
+    self.last_polled_tab_items_size = current_size;
+
+    if (current_size < previous_size and current_size < self.surfaces.items.len) {
+        fileLog(
+            "pollTabCloseState: size decreased prev={} current={} surfaces={}, closing active tab",
+            .{ previous_size, current_size, self.surfaces.items.len },
+        );
+        self.closeActiveTab();
+        self.last_polled_tab_items_size = self.currentTabItemsSize() catch current_size;
+    }
 }
 
 /// Islands-specific parity validation (simplified — no IWindow.Content check).
@@ -1347,6 +1391,23 @@ pub fn loadXamlResources(self: *App, xa: *com.IApplication) void {
     xaml_helpers.loadXamlResources(self, xa);
 }
 
+fn enableDebugSettings(_: *App, xa: *com.IApplication) void {
+    const ds = xa.DebugSettings() catch |err| {
+        fileLog("DebugSettings: failed to get: {}", .{@intFromError(err)});
+        return;
+    };
+    ds.SetIsBindingTracingEnabled(true) catch {};
+    fileLog("DebugSettings: BindingTracing enabled", .{});
+
+    // IDebugSettings2: resource reference tracing
+    if (ds.queryInterface(com.IDebugSettings2)) |ds2| {
+        ds2.SetIsXamlResourceReferenceTracingEnabled(true) catch {};
+        fileLog("DebugSettings: XamlResourceReferenceTracing enabled", .{});
+    } else |_| {
+        fileLog("DebugSettings: IDebugSettings2 not available", .{});
+    }
+}
+
 /// Counter for periodic diagnostic snapshots (every N ticks).
 var diagnostic_tick_count: u32 = 0;
 const diagnostic_interval: u32 = 500; // ~every 500 ticks
@@ -1441,6 +1502,10 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
             self.drainMailbox();
             return 0;
         },
+        os.WM_APP_CLOSE_TAB => {
+            self.closeActiveTab();
+            return 0;
+        },
         os.WM_TIMER => {
             return self.handleTimer(hwnd, wparam);
         },
@@ -1523,6 +1588,37 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
             }
             return 0;
         },
+        os.WM_APP_CONTROL_INPUT => {
+            // Drain pending control plane inputs to the active surface PTY.
+            if (self.control_plane) |cp| {
+                if (self.activeSurface()) |surface| {
+                    cp.drainPendingInputs(&surface.core_surface);
+                }
+            }
+            return 0;
+        },
+        os.WM_APP_CONTROL_ACTION => {
+            // Execute a tab/window action from the control plane.
+            const action: ControlPlane.Action = @enumFromInt(@as(usize, @bitCast(wparam)));
+            const param: usize = @bitCast(lparam);
+            switch (action) {
+                .new_tab => self.newTab() catch |err| {
+                    log.warn("control_plane new_tab failed: {}", .{err});
+                },
+                .close_tab => self.closeActiveTab(),
+                .switch_tab => {
+                    if (self.tab_view) |tv| {
+                        tv.SetSelectedIndex(@intCast(param)) catch {};
+                    }
+                },
+                .focus_window => {
+                    if (self.hwnd) |h| {
+                        _ = os.SetForegroundWindow(h);
+                    }
+                },
+            }
+            return 0;
+        },
         else => return null,
     }
 }
@@ -1537,15 +1633,19 @@ fn handleTimer(self: *App, hwnd: os.HWND, wparam: os.WPARAM) os.LRESULT {
             }
             return 0;
         },
-        999 => {
+        CLOSE_TAB_POLL_TIMER_ID => {
+            self.pollTabCloseState();
+            return 0;
+        },
+        CLOSE_TIMER_ID => {
             // Auto-close timer.
-            _ = os.KillTimer(hwnd, 999);
+            _ = os.KillTimer(hwnd, CLOSE_TIMER_ID);
             self.requestCloseWindow();
             return 0;
         },
-        998 => {
+        CLOSE_TAB_TIMER_ID => {
             // Close-tab timer.
-            _ = os.KillTimer(hwnd, 998);
+            _ = os.KillTimer(hwnd, CLOSE_TAB_TIMER_ID);
             self.closeActiveTab();
             return 0;
         },
