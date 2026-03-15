@@ -123,6 +123,7 @@ pub const KeyboardFocusTarget = enum {
 
 const TypedHandler = gen.TypedEventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void);
 const SelectionHandler = gen.SelectionChangedEventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void);
+const ResourceManagerRequestedHandler = gen.TypedEventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void);
 
 /// The core application.
 core_app: *CoreApp,
@@ -195,10 +196,11 @@ saved_placement: os.WINDOWPLACEMENT = .{},
 tab_close_handler: ?*TypedHandler = null,
 add_tab_handler: ?*TypedHandler = null,
 selection_changed_handler: ?*SelectionHandler = null,
+resource_manager_requested_handler: ?*ResourceManagerRequestedHandler = null,
 tab_close_token: ?i64 = null,
 add_tab_token: ?i64 = null,
 selection_changed_token: ?i64 = null,
-
+resource_manager_requested_token: ?i64 = null,
 /// Optional side-channel control plane for session-aware automation.
 control_plane: ?*ControlPlane = null,
 
@@ -449,6 +451,35 @@ fn createAggregatedApplication(self: *App) !void {
     self.app_outer.inner = @ptrCast(@alignCast(result.inner));
 
     self.xaml_app = result.instance.queryInterface(com.IApplication) catch null;
+    if (self.xaml_app) |xa| {
+        self.resource_manager_requested_handler = ResourceManagerRequestedHandler.createWithIid(
+            self.core_app.alloc,
+            self,
+            &onResourceManagerRequested,
+            &com.IID_TypedEventHandler_ResourceManagerRequested,
+        ) catch |err| blk: {
+            log.warn("failed to create ResourceManagerRequested handler: {}", .{err});
+            break :blk null;
+        };
+        if (self.resource_manager_requested_handler) |h| {
+            // IApplication2 has ResourceManagerRequested event
+            const xa2 = xa.queryInterface(gen.IApplication2) catch |err| blk: {
+                log.warn("failed to QI IApplication2: {}", .{err});
+                break :blk null;
+            };
+            if (xa2) |app2| {
+                self.resource_manager_requested_token = app2.AddResourceManagerRequested(h.comPtr()) catch |err| blk2: {
+                    log.warn("failed to register ResourceManagerRequested handler: {}", .{err});
+                    break :blk2 null;
+                };
+            } else {
+                self.resource_manager_requested_token = null;
+            }
+            log.info("initXaml step 0: ResourceManagerRequested handler registered token={}", .{
+                self.resource_manager_requested_token orelse -1,
+            });
+        }
+    }
     log.info("initXaml step 0 OK: Application created with IXamlMetadataProvider", .{});
 }
 
@@ -879,11 +910,19 @@ fn fullCleanup(self: *App) void {
 
     // 3. Unregister WinRT events.
     if (self.tab_view) |tv| self.unregisterTabViewHandlers(tv);
+    if (self.xaml_app) |xa| {
+        if (self.resource_manager_requested_token) |tok| {
+            if (xa.queryInterface(gen.IApplication2)) |app2| {
+                app2.RemoveResourceManagerRequested(tok) catch {};
+            } else |_| {}
+        }
+    }
 
     // 4. Release COM objects properly.
     if (self.tab_close_handler) |h| h.release();
     if (self.add_tab_handler) |h| h.release();
     if (self.selection_changed_handler) |h| h.release();
+    if (self.resource_manager_requested_handler) |h| h.release();
 
     if (self.root_grid) |rg| {
         _ = rg.release();
@@ -1205,6 +1244,49 @@ fn onTabCloseRequested(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void 
 
 fn onAddTabButtonClick(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
     event_handlers.onAddTabButtonClick(self, sender, args);
+}
+
+fn onResourceManagerRequested(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
+    _ = self;
+    _ = sender;
+    fileLog("onResourceManagerRequested: ENTRY", .{});
+    const args_insp: *winrt.IInspectable = @ptrCast(@alignCast(args orelse return));
+    const e = args_insp.queryInterface(gen.IResourceManagerRequestedEventArgs) catch |err| {
+        fileLog("onResourceManagerRequested: QI IResourceManagerRequestedEventArgs failed: {}", .{@intFromError(err)});
+        return;
+    };
+    defer e.release();
+
+    const res_manager_class = winrt.hstring("Microsoft.Windows.ApplicationModel.Resources.ResourceManager") catch |err| {
+        fileLog("onResourceManagerRequested: hstring failed: {}", .{@intFromError(err)});
+        return;
+    };
+    defer winrt.deleteHString(res_manager_class);
+
+    var factory_guard = winrt.ComRef(gen.IResourceManagerFactory).init(winrt.getActivationFactory(gen.IResourceManagerFactory, res_manager_class) catch |err| {
+        fileLog("onResourceManagerRequested: getActivationFactory failed: {}", .{@intFromError(err)});
+        return;
+    });
+    defer factory_guard.deinit();
+
+    const pri_path = winrt.hstring("MinimalXaml.pri") catch |err| {
+        fileLog("onResourceManagerRequested: hstring(pri) failed: {}", .{@intFromError(err)});
+        return;
+    };
+    defer winrt.deleteHString(pri_path);
+
+    const resource_manager = factory_guard.get().CreateInstance(pri_path) catch |err| {
+        fileLog("onResourceManagerRequested: CreateInstance failed: {}", .{@intFromError(err)});
+        return;
+    };
+    defer resource_manager.release();
+
+    e.SetCustomResourceManager(@ptrCast(resource_manager)) catch |err| {
+        fileLog("onResourceManagerRequested: SetCustomResourceManager failed: {}", .{@intFromError(err)});
+        return;
+    };
+
+    fileLog("onResourceManagerRequested: SUCCESS - custom ResourceManager set", .{});
 }
 
 fn onSelectionChanged(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {

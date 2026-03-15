@@ -17,6 +17,7 @@ pub const IID_SizeChangedEventHandler = gen.IID_SizeChangedEventHandler;
 pub const IID_TypedEventHandler_TabCloseRequested = gen.IID_TypedEventHandler_TabCloseRequested;
 pub const IID_TypedEventHandler_AddTabButtonClick = gen.IID_TypedEventHandler_AddTabButtonClick;
 pub const IID_SelectionChangedEventHandler = gen.IID_SelectionChangedEventHandler;
+pub const IID_TypedEventHandler_ResourceManagerRequested = gen.IID_TypedEventHandler_ResourceManagerRequested;
 pub const IID_TypedEventHandler_WindowClosed = gen.IID_TypedEventHandler_Closed;
 pub const IID_KeyEventHandler = gen.KeyEventHandler.IID;
 pub const IID_PointerEventHandler = gen.PointerEventHandler.IID;

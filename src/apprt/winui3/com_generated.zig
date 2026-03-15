@@ -20725,6 +20725,23 @@ pub const IResourceManager = extern struct {
     pub fn UnloadPriFiles(self: *@This(), files: ?*anyopaque) !void { try self.unloadPriFiles(files); }
 };
 
+pub const IResourceManagerFactory = extern struct {
+    pub const IID = GUID{ .data1 = 0x11ee6370, .data2 = 0x8585, .data3 = 0x40f0, .data4 = .{ 0x9c, 0x43, 0x26, 0x5c, 0x34, 0x44, 0x3a, 0x51 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        CreateInstance: *const fn (*anyopaque, HSTRING, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn CreateInstance(self: *@This(), priPath: HSTRING) !*IResourceManager { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.CreateInstance(self, priPath, &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+};
+
 pub const IWwwFormUrlDecoderEntry = extern struct {
     pub const IID = GUID{ .data1 = 0x125e7431, .data2 = 0xf678, .data3 = 0x4e8e, .data4 = .{ 0xb6, 0x70, 0x20, 0xa9, 0xb0, 0x6c, 0x51, 0x2d } };
     lpVtbl: *const VTable,
