@@ -1,0 +1,14 @@
+<Grid
+    x:Class="ghostty.TabViewRoot"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls">
+    <Grid.RowDefinitions>
+        <RowDefinition Height="40"/>
+        <RowDefinition Height="*"/>
+    </Grid.RowDefinitions>
+    <controls:TabView x:Name="TabView" Grid.Row="0"
+                      HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      IsAddTabButtonVisible="True"/>
+    <Grid x:Name="TabContentGrid" Grid.Row="1"/>
+</Grid>

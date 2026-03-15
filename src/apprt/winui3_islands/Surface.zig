@@ -216,8 +216,8 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
             const uri_factory = try winrt.getActivationFactory(com.IUriRuntimeClassFactory, uri_class);
             defer uri_factory.release();
 
-            // Use filename only (no ms-appx:/// prefix) for unpackaged compatibility.
-            const uri_str = try winrt.hstring("Surface.xbf");
+            // Use ms-appx:/// with .xaml extension — framework resolves to .xbf internally.
+            const uri_str = try winrt.hstring("ms-appx:///Surface.xaml");
             defer winrt.deleteHString(uri_str);
             const uri = try uri_factory.createUri(uri_str);
             defer uri.release();
