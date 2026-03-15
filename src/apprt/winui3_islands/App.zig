@@ -84,6 +84,7 @@ const XamlClass = struct {
     const Border = "Microsoft.UI.Xaml.Controls.Border";
     const Grid = "Microsoft.UI.Xaml.Controls.Grid";
     const SolidColorBrush = "Microsoft.UI.Xaml.Media.SolidColorBrush";
+    const VisualTreeHelper = "Microsoft.UI.Xaml.Media.VisualTreeHelper";
     const XamlControlsResources = "Microsoft.UI.Xaml.Controls.XamlControlsResources";
     const XamlMetadataProvider = "Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider";
 };
@@ -377,6 +378,64 @@ pub fn initXaml(self: *App) !void {
     self.parity_verified = true;
     self.setStartupStage(.parity_checked);
     self.setStartupStage(.init_complete);
+
+    // Dump visual tree for debugging (Issue #105)
+    self.dumpVisualTreeRoot();
+}
+
+fn dumpVisualTreeRoot(self: *App) void {
+    const vth_class = winrt.hstring(XamlClass.VisualTreeHelper) catch return;
+    defer winrt.deleteHString(vth_class);
+    var vth_guard = winrt.ComRef(com.IVisualTreeHelperStatics).init(winrt.getActivationFactory(com.IVisualTreeHelperStatics, vth_class) catch |err| {
+        log.warn("dumpVisualTreeRoot: getActivationFactory failed: {}", .{err});
+        return;
+    });
+    defer vth_guard.deinit();
+    const vth = vth_guard.get();
+
+    // The root of the visual tree in XAML Islands is the content of the DesktopWindowXamlSource.
+    const xaml_source = self.nci_window.?.island.xaml_source orelse return;
+    const root_raw = xaml_source.getContent() catch return;
+    const root_insp: *winrt.IInspectable = @ptrCast(@alignCast(root_raw));
+    defer _ = root_insp.release();
+    log.info("--- VISUAL TREE DUMP START ---", .{});
+    self.dumpVisualTree(vth, root_insp, 0);
+    log.info("--- VISUAL TREE DUMP END ---", .{});
+}
+
+fn dumpVisualTree(_: *App, vth: *com.IVisualTreeHelperStatics, element: ?*winrt.IInspectable, depth: usize) void {
+    dumpVisualTreeImpl(vth, element, depth);
+}
+
+fn dumpVisualTreeImpl(vth: *com.IVisualTreeHelperStatics, element: ?*winrt.IInspectable, depth: usize) void {
+    const elem = element orelse return;
+
+    // Get runtime class name
+    var name_hstr: ?winrt.HSTRING = null;
+    const hr = elem.lpVtbl.GetRuntimeClassName(elem, &name_hstr);
+    if (hr == 0) {
+        if (name_hstr) |hs| {
+            defer winrt.deleteHString(hs);
+            const slice16 = winrt.hstringSliceRaw(hs);
+            var utf8_buf: [256]u8 = undefined;
+            const n = std.unicode.utf16LeToUtf8(&utf8_buf, slice16) catch 0;
+            const name = if (n > 0) utf8_buf[0..n] else "Unknown";
+            fileLog("VT[{d}] {s}", .{ depth, name });
+        } else {
+            fileLog("VT[{d}] <null-name>", .{depth});
+        }
+    } else {
+        fileLog("VT[{d}] <no-name>", .{depth});
+    }
+
+    const count = vth.getChildrenCount(elem) catch 0;
+    var i: i32 = 0;
+    while (i < count) : (i += 1) {
+        if (vth.getChild(elem, i)) |child| {
+            defer _ = child.release();
+            dumpVisualTreeImpl(vth, @ptrCast(child), depth + 1);
+        } else |_| {}
+    }
 }
 
 fn setStartupStage(self: *App, stage: StartupStage) void {

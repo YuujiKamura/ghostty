@@ -31885,3 +31885,50 @@ pub const StorageLibraryChangeType = struct {
     pub const ChangeTrackingLost: i32 = 9;
 };
 
+pub const IVisualTreeHelperStatics = extern struct {
+    pub const IID = GUID{ .data1 = 0x5aece43c, .data2 = 0x7651, .data3 = 0x5bb5, .data4 = .{ 0x85, 0x5c, 0x21, 0x98, 0x49, 0x6e, 0x45, 0x5e } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        FindElementsInHostCoordinates: *const fn (*anyopaque, Point, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        FindElementsInHostCoordinates_2: *const fn (*anyopaque, Rect, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        FindElementsInHostCoordinates_3: *const fn (*anyopaque, Point, ?*anyopaque, bool, *?*anyopaque) callconv(.winapi) HRESULT,
+        FindElementsInHostCoordinates_4: *const fn (*anyopaque, Rect, ?*anyopaque, bool, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetChild: *const fn (*anyopaque, ?*anyopaque, i32, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetChildrenCount: *const fn (*anyopaque, ?*anyopaque, *i32) callconv(.winapi) HRESULT,
+        GetParent: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        DisconnectChildrenRecursive: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        GetOpenPopups: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        GetOpenPopupsForXamlRoot: *const fn (*anyopaque, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+    };
+
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+
+    pub fn getChildrenCount(self: *@This(), element: ?*anyopaque) !i32 {
+        var out: i32 = 0;
+        try hrCheck(self.lpVtbl.GetChildrenCount(self, element, &out));
+        return out;
+    }
+    pub fn GetChildrenCount(self: *@This(), element: ?*anyopaque) !i32 { return self.getChildrenCount(element); }
+
+    pub fn getChild(self: *@This(), element: ?*anyopaque, index: i32) !*IDependencyObject {
+        var out: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.GetChild(self, element, index, &out));
+        return @ptrCast(@alignCast(out orelse return error.WinRTFailed));
+    }
+    pub fn GetChild(self: *@This(), element: ?*anyopaque, index: i32) !*IDependencyObject { return self.getChild(element, index); }
+
+    pub fn getParent(self: *@This(), element: ?*anyopaque) !*IDependencyObject {
+        var out: ?*anyopaque = null;
+        try hrCheck(self.lpVtbl.GetParent(self, element, &out));
+        return @ptrCast(@alignCast(out orelse return error.WinRTFailed));
+    }
+    pub fn GetParent(self: *@This(), element: ?*anyopaque) !*IDependencyObject { return self.getParent(element); }
+};
+
