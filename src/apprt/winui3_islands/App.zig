@@ -1336,29 +1336,14 @@ fn onResourceManagerRequested(self: *App, sender: ?*anyopaque, args: ?*anyopaque
     };
     defer winrt.deleteHString(res_manager_class);
 
-    // Try standard activation first, fallback to DllGetActivationFactory for unpackaged
-    const factory = winrt.getActivationFactory(gen.IResourceManagerFactory, res_manager_class) catch blk: {
-        fileLog("onResourceManagerRequested: getActivationFactory failed, trying DllGetActivationFactory", .{});
-        const factory_fb = getResourceManagerFactoryDirect(res_manager_class) catch |err2| {
-            fileLog("onResourceManagerRequested: DllGetActivationFactory also failed: {}", .{@intFromError(err2)});
-            return;
-        };
-        break :blk factory_fb;
-    };
-    var factory_guard = winrt.ComRef(gen.IResourceManagerFactory).init(factory);
-    defer factory_guard.deinit();
-
-    const pri_path = winrt.hstring("MinimalXaml.pri") catch |err| {
-        fileLog("onResourceManagerRequested: hstring(pri) failed: {}", .{@intFromError(err)});
+    // Fallback: DllGetActivationFactory → IActivationFactory.ActivateInstance (default ctor)
+    // This creates a ResourceManager that auto-discovers resources.pri in the exe directory
+    fileLog("onResourceManagerRequested: trying DllGetActivationFactory+ActivateInstance", .{});
+    const resource_manager = activateResourceManagerDirect(res_manager_class) catch |err2| {
+        fileLog("onResourceManagerRequested: direct activation failed: {}", .{@intFromError(err2)});
         return;
     };
-    defer winrt.deleteHString(pri_path);
-
-    const resource_manager = factory_guard.get().CreateInstance(pri_path) catch |err| {
-        fileLog("onResourceManagerRequested: CreateInstance failed: {}", .{@intFromError(err)});
-        return;
-    };
-    defer resource_manager.release();
+    defer _ = resource_manager.release();
 
     e.SetCustomResourceManager(@ptrCast(resource_manager)) catch |err| {
         fileLog("onResourceManagerRequested: SetCustomResourceManager failed: {}", .{@intFromError(err)});
@@ -1368,6 +1353,56 @@ fn onResourceManagerRequested(self: *App, sender: ?*anyopaque, args: ?*anyopaque
     fileLog("onResourceManagerRequested: SUCCESS - custom ResourceManager set", .{});
 }
 
+fn activateResourceManagerDirect(class_name: winrt.HSTRING) !*winrt.IInspectable {
+    const dll_name_z = [_:0]u16{ 'M', 'i', 'c', 'r', 'o', 's', 'o', 'f', 't', '.', 'W', 'i', 'n', 'd', 'o', 'w', 's', '.', 'A', 'p', 'p', 'l', 'i', 'c', 'a', 't', 'i', 'o', 'n', 'M', 'o', 'd', 'e', 'l', '.', 'R', 'e', 's', 'o', 'u', 'r', 'c', 'e', 's', '.', 'd', 'l', 'l' };
+    const module = std.os.windows.kernel32.LoadLibraryW(&dll_name_z) orelse {
+        fileLog("activateResourceManagerDirect: LoadLibrary failed", .{});
+        return error.WinRTFailed;
+    };
+
+    const DllGetActivationFactoryFn = *const fn (winrt.HSTRING, *?*anyopaque) callconv(.winapi) i32;
+    const get_factory_fn: DllGetActivationFactoryFn = @ptrCast(std.os.windows.kernel32.GetProcAddress(
+        module,
+        "DllGetActivationFactory",
+    ) orelse {
+        fileLog("activateResourceManagerDirect: GetProcAddress failed", .{});
+        return error.WinRTFailed;
+    });
+
+    var act_factory: ?*anyopaque = null;
+    const hr1 = get_factory_fn(class_name, &act_factory);
+    if (hr1 < 0 or act_factory == null) {
+        fileLog("activateResourceManagerDirect: DllGetActivationFactory failed: 0x{x}", .{@as(u32, @bitCast(hr1))});
+        return error.WinRTFailed;
+    }
+    fileLog("activateResourceManagerDirect: DllGetActivationFactory OK", .{});
+
+    // IActivationFactory vtable: slots 0-5 = IInspectable, slot 6 = ActivateInstance
+    const IActivationFactoryVTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const winrt.GUID, *?*anyopaque) callconv(.winapi) i32,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: *const fn (*anyopaque, *u32, *?*anyopaque) callconv(.winapi) i32,
+        GetRuntimeClassName: *const fn (*anyopaque, *?winrt.HSTRING) callconv(.winapi) i32,
+        GetTrustLevel: *const fn (*anyopaque, *i32) callconv(.winapi) i32,
+        ActivateInstance: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) i32,
+    };
+    const act_vtbl: *const *const IActivationFactoryVTable = @ptrCast(@alignCast(act_factory.?));
+
+    var instance: ?*anyopaque = null;
+    const hr2 = act_vtbl.*.ActivateInstance(act_factory.?, &instance);
+    // Release the factory
+    _ = act_vtbl.*.Release(act_factory.?);
+
+    if (hr2 < 0 or instance == null) {
+        fileLog("activateResourceManagerDirect: ActivateInstance failed: 0x{x}", .{@as(u32, @bitCast(hr2))});
+        return error.WinRTFailed;
+    }
+    fileLog("activateResourceManagerDirect: SUCCESS", .{});
+    return @ptrCast(@alignCast(instance.?));
+}
+
+// Keep old function for reference but unused
 fn getResourceManagerFactoryDirect(class_name: winrt.HSTRING) !*gen.IResourceManagerFactory {
     const dll_name_z = [_:0]u16{ 'M', 'i', 'c', 'r', 'o', 's', 'o', 'f', 't', '.', 'W', 'i', 'n', 'd', 'o', 'w', 's', '.', 'A', 'p', 'p', 'l', 'i', 'c', 'a', 't', 'i', 'o', 'n', 'M', 'o', 'd', 'e', 'l', '.', 'R', 'e', 's', 'o', 'u', 'r', 'c', 'e', 's', '.', 'd', 'l', 'l' };
     const module = std.os.windows.kernel32.LoadLibraryW(&dll_name_z) orelse {
@@ -1384,14 +1419,24 @@ fn getResourceManagerFactoryDirect(class_name: winrt.HSTRING) !*gen.IResourceMan
         return error.WinRTFailed;
     });
 
-    var factory: ?*anyopaque = null;
-    const hr = get_factory_fn(class_name, &factory);
-    if (hr < 0 or factory == null) {
+    // DllGetActivationFactory returns IActivationFactory, not IResourceManagerFactory
+    var act_factory: ?*anyopaque = null;
+    const hr = get_factory_fn(class_name, &act_factory);
+    if (hr < 0 or act_factory == null) {
         fileLog("getResourceManagerFactoryDirect: DllGetActivationFactory failed: 0x{x}", .{@as(u32, @bitCast(hr))});
         return error.WinRTFailed;
     }
+    fileLog("getResourceManagerFactoryDirect: DllGetActivationFactory OK", .{});
+
+    // QI for IResourceManagerFactory
+    const act: *winrt.IInspectable = @ptrCast(@alignCast(act_factory.?));
+    defer _ = act.release();
+    const rm_factory = act.queryInterface(gen.IResourceManagerFactory) catch |err| {
+        fileLog("getResourceManagerFactoryDirect: QI IResourceManagerFactory failed: {}", .{@intFromError(err)});
+        return error.WinRTFailed;
+    };
     fileLog("getResourceManagerFactoryDirect: SUCCESS", .{});
-    return @ptrCast(@alignCast(factory.?));
+    return rm_factory;
 }
 
 fn onSelectionChanged(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
