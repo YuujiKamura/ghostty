@@ -196,7 +196,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     // Set SwapChainPanel background to black.
     self.app.setControlBackground(panel, .{ .A = 255, .R = 0, .G = 0, .B = 0 });
 
-    // Create inner surface grid via LoadComponent + Surface.xbf:
+    // Create inner surface grid via LoadComponent + SurfaceRoot.xbf:
     // Layout is defined in compiled XAML (xbf), event hookup remains in Zig.
     {
         const grid_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Grid");
@@ -204,7 +204,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         const grid_insp = try winrt.activateInstance(grid_class);
         errdefer _ = grid_insp.release();
 
-        // Load Surface.xbf into the Grid via LoadComponent.
+        // Load SurfaceRoot.xbf into the Grid via LoadComponent.
         {
             const app_class = try winrt.hstring("Microsoft.UI.Xaml.Application");
             defer winrt.deleteHString(app_class);
@@ -216,7 +216,8 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
             const uri_factory = try winrt.getActivationFactory(com.IUriRuntimeClassFactory, uri_class);
             defer uri_factory.release();
 
-            const uri_str = try winrt.hstring("ms-appx:///Surface.xbf");
+            // Use filename only (no ms-appx:/// prefix) for unpackaged compatibility.
+            const uri_str = try winrt.hstring("Surface.xbf");
             defer winrt.deleteHString(uri_str);
             const uri = try uri_factory.createUri(uri_str);
             defer uri.release();
@@ -296,7 +297,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         self.ime_text_box = ime_tb;
         _ = ime_tb_insp.release();
 
-        log.info("Surface grid created via LoadComponent (Surface.xbf): SwapChainPanel + ScrollBar + hidden IME TextBox", .{});
+        log.info("Surface grid created via LoadComponent (SurfaceRoot.xbf): SwapChainPanel + ScrollBar + hidden IME TextBox", .{});
     }
 
     // Register Loaded handler to defer SetSwapChain until the panel is ready.

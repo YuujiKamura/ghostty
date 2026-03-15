@@ -22,10 +22,9 @@ const log = std.log.scoped(.winui3_islands);
 pub fn createRoot(
     self: anytype,
     xaml_source: *com.IDesktopWindowXamlSource,
-    comptime tabview_class_name: [:0]const u8, // Kept for API compat; LoadComponent uses XBF
-
+    comptime tabview_class_name: [:0]const u8,
 ) !?*com.ITabView {
-    _ = tabview_class_name; // XBF-based LoadComponent supersedes class name
+    _ = tabview_class_name;
     if (!self.debug_cfg.enable_tabview) {
         log.info("initXaml step 7.5: SKIPPED (GHOSTTY_WINUI3_ENABLE_TABVIEW=false)", .{});
         return null;
@@ -51,7 +50,8 @@ pub fn createRoot(
         const uri_factory = try winrt.getActivationFactory(com.IUriRuntimeClassFactory, uri_class);
         defer uri_factory.release();
 
-        const uri_str = try winrt.hstring("ms-appx:///TabViewRoot.xbf");
+        // Use filename only (no ms-appx:/// prefix) for unpackaged compatibility.
+        const uri_str = try winrt.hstring("TabViewRoot.xbf");
         defer winrt.deleteHString(uri_str);
         const uri = try uri_factory.createUri(uri_str);
         defer uri.release();
@@ -87,7 +87,7 @@ pub fn createRoot(
 
     log.info("initXaml step 7.5: Found TabView and TabContentGrid via FindName", .{});
 
-    // 6. Set RootGrid as XamlSource content (XAML Islands: setContent instead of Window.SetContent).
+    // 4. Set RootGrid as XamlSource content (XAML Islands: setContent instead of Window.SetContent).
     xaml_source.setContent(@ptrCast(root_grid_insp)) catch |err| {
         log.err("RootGrid setContent failed ({}), fail-fast because tabview is enabled", .{err});
         _ = tv.release();

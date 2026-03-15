@@ -1343,7 +1343,8 @@ fn onResourceManagerRequested(self: *App, sender: ?*anyopaque, args: ?*anyopaque
         fileLog("onResourceManagerRequested: direct activation failed: {}", .{@intFromError(err2)});
         return;
     };
-    defer _ = resource_manager.release();
+    // DO NOT release resource_manager here — XAML framework takes ownership
+    // and will use it throughout the app lifetime.
 
     e.SetCustomResourceManager(@ptrCast(resource_manager)) catch |err| {
         fileLog("onResourceManagerRequested: SetCustomResourceManager failed: {}", .{@intFromError(err)});
