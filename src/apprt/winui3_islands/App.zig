@@ -379,8 +379,10 @@ pub fn initXaml(self: *App) !void {
     self.setStartupStage(.parity_checked);
     self.setStartupStage(.init_complete);
 
-    // Dump visual tree for debugging (Issue #105)
-    self.dumpVisualTreeRoot();
+    // Dump visual tree after layout pass (needs message pump running).
+    // Use SetTimer with 500ms delay so XAML has time to measure+arrange.
+    const WM_TIMER_DUMP_VT: usize = 9999;
+    _ = os.SetTimer(self.hwnd.?, WM_TIMER_DUMP_VT, 500, null);
 }
 
 fn dumpVisualTreeRoot(self: *App) void {
@@ -428,12 +430,24 @@ fn dumpVisualTreeImpl(vth: *com.IVisualTreeHelperStatics, element: ?*winrt.IInsp
         fileLog("VT[{d}] <no-name>", .{depth});
     }
 
-    const count = vth.getChildrenCount(elem) catch 0;
+    // QI for IDependencyObject — VisualTreeHelper methods require IDependencyObject, not IInspectable.
+    const dep_obj = elem.queryInterface(com.IDependencyObject) catch {
+        fileLog("VT[{d}] QI IDependencyObject failed", .{depth});
+        return;
+    };
+    defer dep_obj.release();
+
+    const count = vth.getChildrenCount(dep_obj) catch |err| blk: {
+        fileLog("VT[{d}] getChildrenCount FAILED: {}", .{ depth, @intFromError(err) });
+        break :blk @as(i32, 0);
+    };
+    fileLog("VT[{d}] children={d}", .{ depth, count });
     var i: i32 = 0;
     while (i < count) : (i += 1) {
-        if (vth.getChild(elem, i)) |child| {
-            defer _ = child.release();
-            dumpVisualTreeImpl(vth, @ptrCast(child), depth + 1);
+        if (vth.getChild(dep_obj, i)) |child| {
+            defer child.release();
+            const child_insp: *winrt.IInspectable = @ptrCast(@alignCast(child));
+            dumpVisualTreeImpl(vth, child_insp, depth + 1);
         } else |_| {}
     }
 }
@@ -1788,6 +1802,12 @@ fn handleTimer(self: *App, hwnd: os.HWND, wparam: os.WPARAM) os.LRESULT {
             // Close-tab timer.
             _ = os.KillTimer(hwnd, CLOSE_TAB_TIMER_ID);
             self.closeActiveTab();
+            return 0;
+        },
+        9999 => {
+            // One-shot visual tree dump after layout.
+            _ = os.KillTimer(self.hwnd.?, 9999);
+            self.dumpVisualTreeRoot();
             return 0;
         },
         else => return 0,
