@@ -129,6 +129,10 @@ pub const ControlPlane = struct {
         const log_file_path = try std.fs.path.join(allocator, &.{ logs_dir, log_file_name });
         errdefer allocator.free(log_file_path);
 
+        // All allocations are moved into `self` below. The individual errdefers
+        // above remain valid because the stack variables alias the same memory.
+        // Do NOT add `errdefer self.freeOwned()` here — the individual errdefers
+        // already cover every field and adding freeOwned would cause double-free.
         self.* = .{
             .allocator = allocator,
             .hwnd = hwnd,
@@ -147,7 +151,9 @@ pub const ControlPlane = struct {
             .capture_tail_fn = capture_tail_fn,
             .capture_tab_list_fn = capture_tab_list_fn,
         };
-        errdefer self.freeOwned();
+        // No errdefer self.freeOwned() here — instead we handle cleanup
+        // in the error paths below manually, because the individual errdefers
+        // above already cover the same allocations (double-free risk).
 
         try self.ensureDirectories();
         try self.writeSessionFile();

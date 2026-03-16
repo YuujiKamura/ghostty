@@ -837,6 +837,7 @@ pub fn setTabTitle(self: *Surface, title: [:0]const u8) void {
 
 pub fn updateSize(self: *Surface, width: u32, height: u32) void {
     if (width == 0 or height == 0) return;
+    App.fileLog("Surface.updateSize: {}x{} -> {}x{}", .{ self.size.width, self.size.height, width, height });
     self.size = .{ .width = width, .height = height };
     if (self.core_initialized) {
         self.core_surface.sizeCallback(self.size) catch |err| {
@@ -1609,6 +1610,7 @@ pub fn completeBindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
         log.err("ISwapChainPanelNative::SetSwapChain failed: {}", .{err});
         return;
     };
+    App.fileLog("Swap chain bound to SwapChainPanel (UI thread)", .{});
     log.info("Swap chain bound to SwapChainPanel (UI thread)", .{});
 }
 
@@ -1675,6 +1677,7 @@ fn maybeBindPendingSwapChainHandle(self: *Surface, caller: []const u8) void {
 
 /// Called from App.performAction(.scrollbar) on the UI thread.
 pub fn updateScrollbarUi(self: *Surface, total: usize, offset: usize, len: usize) void {
+    App.fileLog("updateScrollbarUi: total={} offset={} len={}", .{ total, offset, len });
     const sb = self.scroll_bar_insp orelse return;
     self.is_internal_scroll_update = true;
     defer {
@@ -1759,9 +1762,21 @@ fn onLoaded(self: *Surface, _: *anyopaque, _: *anyopaque) void {
         return;
     }
 
-    log.info(
-        "SwapChainPanel.Loaded event fired surface=0x{x} size={}x{} pending_swap_chain={} last_swap_chain={}",
-        .{ @intFromPtr(self), self.size.width, self.size.height, self.pending_swap_chain != null, self.last_swap_chain != null },
+    // Query actual XAML layout size of SwapChainPanel.
+    var actual_w: f64 = 0;
+    var actual_h: f64 = 0;
+    if (self.swap_chain_panel) |panel| {
+        const fe = panel.queryInterface(com.IFrameworkElement) catch null;
+        if (fe) |f| {
+            defer f.release();
+            actual_w = f.ActualWidth() catch 0;
+            actual_h = f.ActualHeight() catch 0;
+        }
+    }
+    const scale: f64 = @floatCast(self.content_scale.x);
+    App.fileLog(
+        "SwapChainPanel.Loaded: surface_size={}x{} actual_dip={d:.1}x{d:.1} actual_px={d:.0}x{d:.0} scale={d:.2}",
+        .{ self.size.width, self.size.height, actual_w, actual_h, actual_w * scale, actual_h * scale, scale },
     );
     self.loaded = true;
 
@@ -1792,19 +1807,25 @@ fn onSizeChanged(self: *Surface, _: *anyopaque, _: *anyopaque) void {
 
     if (dip_width <= 0 or dip_height <= 0) return;
 
-    // Convert DIPs → pixels using current DPI scale.
-    const scale: f64 = @floatCast(self.content_scale.x);
-    const px_width: u32 = @intFromFloat(dip_width * scale);
-    const px_height: u32 = @intFromFloat(dip_height * scale);
+    // Use DIP dimensions for swap chain size.
+    // STRETCH scaling maps swap chain pixels to panel DIPs 1:1.
+    // Physical pixel rendering would overflow because STRETCH treats
+    // the swap chain buffer as logical (DIP) units.
+    const dip_w: u32 = @intFromFloat(dip_width);
+    const dip_h: u32 = @intFromFloat(dip_height);
 
-    log.info("onSizeChanged: dip={d:.1}x{d:.1} px={}x{}", .{ dip_width, dip_height, px_width, px_height });
+    App.fileLog("onSizeChanged: dip={d:.1}x{d:.1} -> {}x{}", .{ dip_width, dip_height, dip_w, dip_h });
 
-    if (px_width > 0 and px_height > 0) {
-        self.size = .{ .width = px_width, .height = px_height };
+    if (dip_w > 0 and dip_h > 0) {
+        self.size = .{ .width = dip_w, .height = dip_h };
         if (self.core_initialized) {
+            App.fileLog("onSizeChanged: calling sizeCallback {}x{}", .{ dip_w, dip_h });
             self.core_surface.sizeCallback(self.size) catch |err| {
+                App.fileLog("onSizeChanged: sizeCallback FAILED: {}", .{err});
                 log.warn("onSizeChanged sizeCallback error: {}", .{err});
             };
+        } else {
+            App.fileLog("onSizeChanged: core NOT initialized, skip sizeCallback", .{});
         }
     }
 

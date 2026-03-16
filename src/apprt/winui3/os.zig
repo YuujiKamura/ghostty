@@ -83,6 +83,8 @@ pub const WM_APP_CONTROL_INPUT: UINT = WM_USER + 4;
 /// Control plane: execute a tab/window action on the UI thread.
 /// wparam encodes the action type, lparam encodes a parameter (e.g. tab index).
 pub const WM_APP_CONTROL_ACTION: UINT = WM_USER + 5;
+/// Posted to close the currently active tab.
+pub const WM_APP_CLOSE_TAB: UINT = WM_USER + 6;
 
 // --- Window styles ---
 pub const WS_OVERLAPPEDWINDOW: DWORD = 0x00CF0000;

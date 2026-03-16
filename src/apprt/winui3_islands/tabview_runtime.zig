@@ -13,6 +13,8 @@ const com = @import("../winui3/com.zig");
 const winrt = @import("../winui3/winrt.zig");
 
 const log = std.log.scoped(.winui3_islands);
+const App = @import("App.zig");
+const fileLog = App.fileLog;
 
 /// Creates the RootGrid layout with TabView in Row 0 and TabContent Grid in Row 1.
 /// Returns the ITabView pointer (owned by caller) or null if TabView is disabled.
@@ -26,11 +28,11 @@ pub fn createRoot(
 ) !?*com.ITabView {
     _ = tabview_class_name;
     if (!self.debug_cfg.enable_tabview) {
-        log.info("initXaml step 7.5: SKIPPED (GHOSTTY_WINUI3_ENABLE_TABVIEW=false)", .{});
+        fileLog("initXaml step 7.5: SKIPPED (GHOSTTY_WINUI3_ENABLE_TABVIEW=false)", .{});
         return null;
     }
 
-    log.info("initXaml step 7.5: Creating RootGrid + TabView from TabViewRoot.xbf (Issue #28 architecture)...", .{});
+    fileLog("initXaml step 7.5: Creating RootGrid + TabView from TabViewRoot.xbf (Issue #28 architecture)...", .{});
 
     // 1. Create the RootGrid. XAML tree takes ownership via setContent.
     const root_grid_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Grid");
@@ -58,7 +60,7 @@ pub fn createRoot(
         defer uri.release();
 
         try app_statics.loadComponent(@ptrCast(root_grid_insp), @ptrCast(uri));
-        log.info("initXaml step 7.5: TabViewRoot.xbf loaded into RootGrid", .{});
+        fileLog("initXaml step 7.5: TabViewRoot.xbf loaded into RootGrid", .{});
     }
 
     // Set black background on the RootGrid.
@@ -86,11 +88,11 @@ pub fn createRoot(
     // Store the tab_content_grid on the App for later use.
     self.tab_content_grid = tab_content_winrt;
 
-    log.info("initXaml step 7.5: Found TabView and TabContentGrid via FindName", .{});
+    fileLog("initXaml step 7.5: Found TabView and TabContentGrid via FindName", .{});
 
     // 4. Set RootGrid as XamlSource content (XAML Islands: setContent instead of Window.SetContent).
     xaml_source.setContent(@ptrCast(root_grid_insp)) catch |err| {
-        log.err("RootGrid setContent failed ({}), fail-fast because tabview is enabled", .{err});
+        fileLog("RootGrid setContent failed ({}), fail-fast because tabview is enabled", .{err});
         _ = tv.release();
         return err;
     };
@@ -99,7 +101,7 @@ pub fn createRoot(
     _ = root_grid_insp.addRef();
     self.root_grid = root_grid_insp;
 
-    log.info("initXaml step 7.5 OK: RootGrid set as XamlSource content (TabView Row 0, TabContent Row 1)", .{});
+    fileLog("initXaml step 7.5 OK: RootGrid set as XamlSource content (TabView Row 0, TabContent Row 1)", .{});
 
     // SetTitleBar is NOT used — NonClientIslandWindow owns the drag-bar child
     // input sink directly, matching Windows Terminal's structure.

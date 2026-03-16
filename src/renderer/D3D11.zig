@@ -192,7 +192,9 @@ pub fn threadEnter(self: *D3D11, surface: *apprt.Surface) !void {
     self.use_composition = use_composition;
 
     if (comptime use_composition) {
-        // Composition swap chain for WinUI 3 SwapChainPanel
+        // Composition swap chain for WinUI 3 SwapChainPanel.
+        // SCALING_STRETCH + SetMatrixTransform(96/dpi) to undo XAML's auto-DPI-scaling.
+        // PREMULTIPLIED is required for composition swap chains with STRETCH scaling.
         const sc_desc = com.DXGI_SWAP_CHAIN_DESC1{
             .Width = self.surface_width,
             .Height = self.surface_height,
@@ -201,7 +203,6 @@ pub fn threadEnter(self: *D3D11, surface: *apprt.Surface) !void {
             .SwapEffect = .FLIP_DISCARD,
             .Scaling = .STRETCH,
             .AlphaMode = .PREMULTIPLIED,
-            // Composition swap chains should not rely on tearing flags.
             .Flags = 0,
         };
         self.swap_chain = self.factory.?.createSwapChainForComposition(
@@ -260,6 +261,7 @@ pub fn drawFrameStart(self: *D3D11) void {
     if (self.surface) |s| {
         const size = s.getSize() catch return;
         if (size.width != self.surface_width or size.height != self.surface_height) {
+            log.info("D3D11 resize: surface={}x{} swapchain={}x{}", .{ size.width, size.height, self.surface_width, self.surface_height });
             self.resizeSwapChain(size.width, size.height);
         }
     }

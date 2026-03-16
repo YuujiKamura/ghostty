@@ -403,6 +403,23 @@ fn dumpVisualTreeRoot(self: *App) void {
     log.info("--- VISUAL TREE DUMP START ---", .{});
     self.dumpVisualTree(vth, root_insp, 0);
     log.info("--- VISUAL TREE DUMP END ---", .{});
+    // Dump surface vs panel size comparison.
+    for (self.surfaces.items) |surface| {
+        const ssize = surface.getSize() catch continue;
+        var panel_w: f64 = 0;
+        var panel_h: f64 = 0;
+        if (surface.swap_chain_panel) |panel| {
+            if (panel.queryInterface(com.IFrameworkElement)) |fe| {
+                defer fe.release();
+                panel_w = fe.ActualWidth() catch 0;
+                panel_h = fe.ActualHeight() catch 0;
+            } else |_| {}
+        }
+        const sc = @as(f64, @floatCast(surface.content_scale.x));
+        fileLog("SIZE COMPARE: surface={}x{} panel_dip={d:.1}x{d:.1} panel_px={d:.0}x{d:.0} scale={d:.2}", .{
+            ssize.width, ssize.height, panel_w, panel_h, panel_w * sc, panel_h * sc, sc,
+        });
+    }
 }
 
 fn dumpVisualTree(_: *App, vth: *com.IVisualTreeHelperStatics, element: ?*winrt.IInspectable, depth: usize) void {
@@ -422,7 +439,15 @@ fn dumpVisualTreeImpl(vth: *com.IVisualTreeHelperStatics, element: ?*winrt.IInsp
             var utf8_buf: [256]u8 = undefined;
             const n = std.unicode.utf16LeToUtf8(&utf8_buf, slice16) catch 0;
             const name = if (n > 0) utf8_buf[0..n] else "Unknown";
-            fileLog("VT[{d}] {s}", .{ depth, name });
+            // Get ActualWidth/ActualHeight via IFrameworkElement
+            var aw: f64 = -1;
+            var ah: f64 = -1;
+            if (elem.queryInterface(com.IFrameworkElement)) |fe| {
+                defer fe.release();
+                aw = fe.ActualWidth() catch -1;
+                ah = fe.ActualHeight() catch -1;
+            } else |_| {}
+            fileLog("VT[{d}] {s} actual={d:.1}x{d:.1}", .{ depth, name, aw, ah });
         } else {
             fileLog("VT[{d}] <null-name>", .{depth});
         }
@@ -653,11 +678,14 @@ fn createInitialSurfaceContent(self: *App, tab_view: ?*com.ITabView) !void {
     if (self.hwnd) |hwnd| {
         var rect: os.RECT = .{};
         _ = os.GetClientRect(hwnd, &rect);
-        const w: u32 = @intCast(@max(1, rect.right - rect.left));
-        const h: u32 = @intCast(@max(1, rect.bottom - rect.top));
+        // Convert physical pixels to DIPs for STRETCH swap chain.
+        const dpi_init = os.GetDpiForWindow(hwnd);
+        const sc_init: f64 = @as(f64, @floatFromInt(dpi_init)) / 96.0;
+        const w: u32 = @intFromFloat(@as(f64, @floatFromInt(rect.right - rect.left)) / sc_init);
+        const h: u32 = @intFromFloat(@as(f64, @floatFromInt(rect.bottom - rect.top)) / sc_init);
         if (w > 0 and h > 0) {
             surface.updateSize(w, h);
-            log.info("initXaml step 8: synced surface size to {}x{}", .{ w, h });
+            log.info("initXaml step 8: synced surface size to {}x{} (DIP)", .{ w, h });
         }
     }
 
@@ -1892,7 +1920,7 @@ fn handleTimer(self: *App, hwnd: os.HWND, wparam: os.WPARAM) os.LRESULT {
     }
 }
 
-fn handleSize(self: *App, _: os.HWND, _: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
+fn handleSize(self: *App, hwnd: os.HWND, _: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
     const lp: usize = @bitCast(lparam);
     const width: u32 = @intCast(lp & 0xFFFF);
     const height: u32 = @intCast((lp >> 16) & 0xFFFF);
@@ -1914,7 +1942,7 @@ fn handleSize(self: *App, _: os.HWND, _: os.WPARAM, lparam: os.LPARAM) os.LRESUL
         const fe = rg.queryInterface(com.IFrameworkElement) catch null;
         if (fe) |framework| {
             defer framework.release();
-            const dpi = os.GetDpiForWindow(self.hwnd.?);
+            const dpi = os.GetDpiForWindow(hwnd);
             const scale: f64 = @as(f64, @floatFromInt(dpi)) / 96.0;
             const top_offset: u32 = if (self.nci_window) |nci|
                 @intCast(@max(0, NonClientIslandWindow.getTopBorderHeight(nci.island.hwnd)))
@@ -1926,11 +1954,12 @@ fn handleSize(self: *App, _: os.HWND, _: os.WPARAM, lparam: os.LPARAM) os.LRESUL
         }
     }
 
-    if (self.resizing) {
-        self.pending_size = .{ .width = width, .height = height };
-    } else {
-        self.applySizeChange(width, height);
-    }
+    // Do NOT call applySizeChange here — let XAML layout (onSizeChanged)
+    // provide the correct SwapChainPanel size. handleSize only updates
+    // RootGrid dimensions; the XAML layout cascade then fires SizeChanged
+    // on the SwapChainPanel with the actual content area size.
+    // Calling applySizeChange here would use a stale/incorrect height
+    // (missing TabView strip, or self.tab_view not yet initialized).
 
     return 0;
 }

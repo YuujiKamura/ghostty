@@ -201,6 +201,15 @@ pub const DXGI_SAMPLE_DESC = extern struct {
     Quality: UINT = 0,
 };
 
+pub const DXGI_MATRIX_3X2_F = extern struct {
+    _11: FLOAT = 1.0,
+    _12: FLOAT = 0.0,
+    _21: FLOAT = 0.0,
+    _22: FLOAT = 1.0,
+    _31: FLOAT = 0.0,
+    _32: FLOAT = 0.0,
+};
+
 pub const DXGI_SWAP_CHAIN_DESC1 = extern struct {
     Width: UINT = 0,
     Height: UINT = 0,
@@ -777,6 +786,15 @@ pub const IDXGISwapChain1 = extern struct {
         GetBackgroundColor: VtblPlaceholder, // 26
         SetRotation: VtblPlaceholder, // 27
         GetRotation: VtblPlaceholder, // 28
+
+        // IDXGISwapChain2 (slots 29-33)
+        SetSourceSize: VtblPlaceholder, // 29
+        GetSourceSize: VtblPlaceholder, // 30
+        SetMaximumFrameLatency: VtblPlaceholder, // 31
+        GetMaximumFrameLatency: VtblPlaceholder, // 32
+        GetFrameLatencyWaitableObject: VtblPlaceholder, // 33
+        SetMatrixTransform: *const fn (*anyopaque, *const DXGI_MATRIX_3X2_F) callconv(.winapi) HRESULT, // 34
+        GetMatrixTransform: VtblPlaceholder, // 35
     };
 
     pub fn release(self: *IDXGISwapChain1) void {
@@ -801,6 +819,11 @@ pub const IDXGISwapChain1 = extern struct {
         var result: ?*anyopaque = null;
         try hrCheck(self.lpVtbl.QueryInterface(@ptrCast(self), &T.IID, &result));
         return @ptrCast(@alignCast(result orelse return error.D3D11Failed));
+    }
+
+    /// Set inverse-DPI-scale transform so physical pixels map correctly to DIP-sized SwapChainPanel.
+    pub fn setMatrixTransform(self: *IDXGISwapChain1, matrix: *const DXGI_MATRIX_3X2_F) D3D11Error!void {
+        try hrCheck(self.lpVtbl.SetMatrixTransform(@ptrCast(self), matrix));
     }
 };
 
