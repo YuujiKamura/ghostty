@@ -85,6 +85,8 @@ pub const WM_APP_CONTROL_INPUT: UINT = WM_USER + 4;
 pub const WM_APP_CONTROL_ACTION: UINT = WM_USER + 5;
 /// Posted to close the currently active tab.
 pub const WM_APP_CLOSE_TAB: UINT = WM_USER + 6;
+/// Control plane: inject text into IME TextBox on the UI thread (simulates committed IME input).
+pub const WM_APP_IME_INJECT: UINT = WM_USER + 7;
 
 // --- Window styles ---
 pub const WS_OVERLAPPEDWINDOW: DWORD = 0x00CF0000;

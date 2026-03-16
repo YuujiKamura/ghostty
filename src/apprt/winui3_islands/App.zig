@@ -1858,6 +1858,39 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
             }
             return 0;
         },
+        os.WM_APP_IME_INJECT => {
+            // Drain pending IME inject texts and set on the active surface's IME TextBox.
+            // This simulates committed IME input: TextBox.Text is set, which triggers
+            // TextChanged -> flushImeTextBoxCommittedDelta -> characters sent to PTY.
+            if (self.control_plane) |cp| {
+                if (self.activeSurface()) |surface| {
+                    if (cp.drainPendingImeInjects()) |utf8_text| {
+                        defer cp.allocator.free(utf8_text);
+                        // Use hstringRuntime to convert runtime UTF-8 to HSTRING
+                        const hstr = winrt.hstringRuntime(cp.allocator, utf8_text) catch {
+                            log.warn("IME_INJECT: failed to create HSTRING", .{});
+                            return 0;
+                        };
+                        defer winrt.deleteHString(hstr);
+                        // Clear TextBox and delta tracking state first, so the
+                        // sent.len==0 path in flushImeTextBoxCommittedDelta fires
+                        // and sends all injected characters correctly.
+                        surface.clearImeTextBoxText();
+                        // Set TextBox.Text (do NOT set internal_update = true, so TextChanged fires)
+                        if (surface.ime_text_box) |ime_tb| {
+                            ime_tb.SetText(hstr) catch |err| {
+                                log.warn("IME_INJECT: SetText failed: {}", .{err});
+                                return 0;
+                            };
+                            log.info("IME_INJECT: set TextBox.Text len={}", .{utf8_text.len});
+                        } else {
+                            log.warn("IME_INJECT: no IME TextBox available", .{});
+                        }
+                    }
+                }
+            }
+            return 0;
+        },
         os.WM_APP_CONTROL_ACTION => {
             // Execute a tab/window action from the control plane.
             const action: ControlPlane.Action = @enumFromInt(@as(usize, @bitCast(wparam)));

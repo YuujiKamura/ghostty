@@ -57,6 +57,8 @@ pub const ControlPlane = struct {
     thread: ?std.Thread = null,
     pending_inputs_lock: std.Thread.Mutex = .{},
     pending_inputs: std.ArrayListUnmanaged(PendingInput) = .{},
+    pending_ime_injects_lock: std.Thread.Mutex = .{},
+    pending_ime_injects: std.ArrayListUnmanaged([]u8) = .{},
     log_lock: std.Thread.Mutex = .{},
     log_file: ?std.fs.File = null,
     session_name: []u8,
@@ -245,6 +247,14 @@ pub const ControlPlane = struct {
         }
         self.pending_inputs.deinit(self.allocator);
         self.pending_inputs = .{};
+
+        self.pending_ime_injects_lock.lock();
+        defer self.pending_ime_injects_lock.unlock();
+        for (self.pending_ime_injects.items) |text| {
+            self.allocator.free(text);
+        }
+        self.pending_ime_injects.deinit(self.allocator);
+        self.pending_ime_injects = .{};
     }
 
     fn wakeServer(self: *ControlPlane) void {
@@ -418,6 +428,39 @@ pub const ControlPlane = struct {
             return std.fmt.allocPrint(self.allocator, "ACK|{s}|{d}\n", .{ self.session_name, self.pid });
         }
 
+        if (std.mem.startsWith(u8, request, "IME_INJECT|")) {
+            const payload = request[11..]; // skip "IME_INJECT|"
+            const sep = std.mem.indexOfScalar(u8, payload, '|');
+            const from = if (sep) |idx| payload[0..idx] else "unknown";
+            const encoded = if (sep) |idx| payload[idx + 1 ..] else "";
+
+            const decoded = decodeBase64(self.allocator, encoded) catch |err| {
+                const reason = switch (err) {
+                    error.InvalidBase64 => "invalid-base64",
+                    error.OutOfMemory => "out-of-memory",
+                };
+                return std.fmt.allocPrint(self.allocator, "ERR|{s}|{s}\n", .{ self.session_name, reason });
+            };
+
+            {
+                self.pending_ime_injects_lock.lock();
+                defer self.pending_ime_injects_lock.unlock();
+                self.pending_ime_injects.append(self.allocator, decoded) catch {
+                    self.allocator.free(decoded);
+                    return std.fmt.allocPrint(self.allocator, "ERR|{s}|out-of-memory\n", .{self.session_name});
+                };
+            }
+
+            const ts = std.time.milliTimestamp();
+            const line = std.fmt.allocPrint(self.allocator, "{d}|IME_INJECT_ENQUEUED|{s}|{d}\n", .{ ts, from, decoded.len }) catch null;
+            if (line) |owned| {
+                defer self.allocator.free(owned);
+                self.appendLog(owned);
+            }
+            _ = os.PostMessageW(self.hwnd, os.WM_APP_IME_INJECT, 0, 0);
+            return std.fmt.allocPrint(self.allocator, "ACK|{s}|IME_INJECT|{d}\n", .{ self.session_name, self.pid });
+        }
+
         // INPUT and RAW_INPUT share base64 decoding logic.
         // INPUT goes through paste encoder; RAW_INPUT writes directly to PTY stdin.
         const is_raw = std.mem.startsWith(u8, request, "RAW_INPUT|");
@@ -562,6 +605,37 @@ pub const ControlPlane = struct {
                 }
             }
         }
+    }
+
+    pub fn drainPendingImeInjects(self: *ControlPlane) ?[]u8 {
+        self.pending_ime_injects_lock.lock();
+        var pending = self.pending_ime_injects;
+        self.pending_ime_injects = .{};
+        self.pending_ime_injects_lock.unlock();
+
+        if (pending.items.len == 0) {
+            pending.deinit(self.allocator);
+            return null;
+        }
+
+        // Concatenate all pending texts with no separator (caller will set on TextBox).
+        var total_len: usize = 0;
+        for (pending.items) |text| {
+            total_len += text.len;
+        }
+        const result = self.allocator.alloc(u8, total_len) catch {
+            for (pending.items) |text| self.allocator.free(text);
+            pending.deinit(self.allocator);
+            return null;
+        };
+        var offset: usize = 0;
+        for (pending.items) |text| {
+            @memcpy(result[offset..][0..text.len], text);
+            offset += text.len;
+            self.allocator.free(text);
+        }
+        pending.deinit(self.allocator);
+        return result;
     }
 
     fn getWindowTitle(self: *ControlPlane) ![]u8 {

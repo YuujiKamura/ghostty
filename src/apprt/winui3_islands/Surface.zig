@@ -1389,15 +1389,26 @@ pub fn focusImeTextBox(self: *Surface) bool {
 }
 
 pub fn clearImeTextBoxText(self: *Surface) void {
-    const ime_tb = self.ime_text_box orelse return;
-    const empty = winrt.hstring("") catch return;
-    defer winrt.deleteHString(empty);
+    const ime_tb = self.ime_text_box orelse {
+        App.fileLog("clearImeTextBoxText: no ime_text_box", .{});
+        return;
+    };
+    // WinRT: null HSTRING == empty string. winrt.hstring("") may fail
+    // because WindowsCreateString with length 0 returns null HSTRING,
+    // which our wrapper rejects. Pass null directly.
+    const empty: ?*anyopaque = null;
+    const prev_sent = self.ime_text_box_sent_text.items.len;
+    const prev_last = self.ime_text_box_last_text.items.len;
     self.ime_text_box_internal_update = true;
     defer self.ime_text_box_internal_update = false;
     if (ime_tb.SetText(empty)) |_| {
         self.ime_text_box_last_text.clearRetainingCapacity();
         self.ime_text_box_sent_text.clearRetainingCapacity();
         self.ime_text_box_composing = false;
+        App.fileLog("clearImeTextBoxText: cleared sent={}->{} last={}->{}", .{
+            prev_sent, self.ime_text_box_sent_text.items.len,
+            prev_last, self.ime_text_box_last_text.items.len,
+        });
     } else |err| {
         App.fileLog("clearImeTextBoxText: SetText FAILED: {}", .{@intFromError(err)});
     }
@@ -1449,6 +1460,23 @@ fn flushImeTextBoxCommittedText(self: *Surface) void {
 
 fn flushImeTextBoxCommittedDelta(self: *Surface, utf16: []const u16) void {
     const sent = self.ime_text_box_sent_text.items;
+
+    // When sent is empty, treat all of utf16 as new committed text.
+    // This fixes IME first-character loss: composing=false means TextChanged
+    // delivers the full committed string at once, but append_only would fail
+    // because commonPrefixLen(empty, text) == 0 != sent.len when sent is empty
+    // and utf16 has content that doesn't start from a previous prefix.
+    if (sent.len == 0 and utf16.len > 0) {
+        App.fileLog("ime_text_box: FlushCommitted sent=0 -> sending all {} chars", .{utf16.len});
+        const app_ref = self.app;
+        for (utf16) |code_unit| {
+            self.handleCharEvent(code_unit);
+            if (!isSurfaceAlive(app_ref, self)) return;
+        }
+        self.setImeTextBoxSentSnapshot(utf16);
+        return;
+    }
+
     const append_only = commonPrefixLen(u16, sent, utf16) == sent.len and utf16.len > sent.len;
     App.fileLog(
         "ime_text_box: FlushCommitted utf16_len={} sent_len={} append_only={} append_len={}",
