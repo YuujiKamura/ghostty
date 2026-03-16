@@ -1279,6 +1279,31 @@ fn onImeTextBoxCompositionChanged(self: *Surface, _: ?*anyopaque, args: ?*anyopa
     const len = ea.Length() catch -1;
     self.ime_text_box_composing = true;
     App.fileLog("ime_text_box: CompositionChanged start={} len={}", .{ start, len });
+
+    // Extract composition text from TextBox and show as preedit
+    if (start >= 0 and len > 0) {
+        const ime_tb = self.ime_text_box orelse return;
+        const text_h = ime_tb.Text() catch return;
+        defer if (text_h) |h| winrt.deleteHString(@ptrCast(h));
+        const utf16 = winrt.hstringSliceRaw(text_h);
+        const ustart: usize = @intCast(start);
+        const ulen: usize = @intCast(len);
+        if (ustart + ulen <= utf16.len) {
+            const comp_utf16 = utf16[ustart..ustart + ulen];
+            // Convert UTF-16 to UTF-8 for preeditCallback
+            var utf8_buf: [256]u8 = undefined;
+            var utf8_len: usize = 0;
+            for (comp_utf16) |cu| {
+                if (utf8_len + 4 > utf8_buf.len) break;
+                const cp: u21 = cu;
+                const seq_len = std.unicode.utf8Encode(cp, utf8_buf[utf8_len..]) catch break;
+                utf8_len += seq_len;
+            }
+            if (utf8_len > 0) {
+                self.core_surface.preeditCallback(utf8_buf[0..utf8_len]) catch {};
+            }
+        }
+    }
 }
 
 fn onImeTextBoxCompositionEnded(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
@@ -1288,6 +1313,8 @@ fn onImeTextBoxCompositionEnded(self: *Surface, _: ?*anyopaque, args: ?*anyopaqu
     const len = ea.Length() catch -1;
     self.ime_text_box_composing = false;
     App.fileLog("ime_text_box: CompositionEnded start={} len={}", .{ start, len });
+    // Clear preedit display
+    self.core_surface.preeditCallback(null) catch {};
     self.flushImeTextBoxCommittedText();
 }
 
@@ -1306,6 +1333,12 @@ fn onXamlGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     // silently swallowed.
     if (self.app.keyboard_focus_target == .ime_text_box) {
         _ = self.focusImeTextBox();
+    }
+
+    // TSF focus: matching Windows Terminal's _GotFocusHandler pattern.
+    // Done via XAML event (not Win32 WM_SETFOCUS) to avoid recursive message crashes.
+    if (self.app.tsf_impl) |*tsf| {
+        tsf.focus();
     }
 }
 
@@ -1343,6 +1376,12 @@ fn onImeTextBoxLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     self.core_surface.focusCallback(false) catch |err| {
         log.warn("ime_text_box focusCallback(false) error: {}", .{err});
     };
+
+    // TSF unfocus: matching Windows Terminal's _LostFocusHandler pattern.
+    // Done via XAML event (not Win32 WM_KILLFOCUS) to avoid recursive message crashes.
+    if (self.app.tsf_impl) |*tsf| {
+        tsf.unfocus();
+    }
 }
 
 /// Request XAML focus on the SwapChainPanel (called from ime.zig after IME ends).

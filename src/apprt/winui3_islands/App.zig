@@ -1894,15 +1894,10 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
         },
         os.WM_SETFOCUS => {
             input_runtime.ensureInputFocus(self);
-            if (self.tsf_impl) |*tsf| {
-                tsf.focus();
-            }
-            return 0;
-        },
-        os.WM_KILLFOCUS => {
-            if (self.tsf_impl) |*tsf| {
-                tsf.unfocus();
-            }
+            // TSF focus/unfocus is handled in Surface XAML GotFocus/LostFocus
+            // handlers (matching Windows Terminal's approach). Do NOT call
+            // tsf.focus()/unfocus() from Win32 messages — it causes recursive
+            // WM_SETFOCUS/KILLFOCUS crashes.
             return 0;
         },
         os.WM_CLOSE => {
