@@ -40,6 +40,7 @@ const event_handlers = @import("../winui3/event_handlers.zig");
 const ControlPlane = @import("../winui3/control_plane.zig").ControlPlane;
 const nonclient_island_window = @import("nonclient_island_window.zig");
 const NonClientIslandWindow = nonclient_island_window.NonClientIslandWindow;
+const Tsf = @import("tsf.zig");
 
 const log = std.log.scoped(.winui3_islands);
 
@@ -204,6 +205,9 @@ selection_changed_token: ?i64 = null,
 resource_manager_requested_token: ?i64 = null,
 /// Optional side-channel control plane for session-aware automation.
 control_plane: ?*ControlPlane = null,
+
+/// TSF (Text Services Framework) implementation for IME composition.
+tsf_impl: ?Tsf.TsfImplementation = null,
 
 /// DispatcherQueueController — must be kept alive for the lifetime of the app.
 dq_controller: ?*winrt.IInspectable = null,
@@ -651,6 +655,95 @@ fn setupNativeInputWindows(self: *App) void {
             fileLog("setupNativeInputWindows: WARNING input_hwnd creation FAILED", .{});
         }
     }
+
+    // Initialize TSF for IME composition display.
+    // Store the App pointer in thread-local so TSF callbacks can recover it.
+    tsf_app_instance = self;
+    var tsf_impl = Tsf.TsfImplementation{};
+    tsf_impl.initialize() catch |err| {
+        fileLog("TSF: initialize failed: {}", .{err});
+        return;
+    };
+    // Wire up callbacks for text output, preedit display, and cursor positioning.
+    tsf_impl._handleOutput = &tsfHandleOutput;
+    tsf_impl._handlePreedit = &tsfHandlePreedit;
+    tsf_impl._getCursorRect = &tsfGetCursorRect;
+    if (self.hwnd) |h| {
+        tsf_impl.associateFocus(h);
+    }
+    self.tsf_impl = tsf_impl;
+    fileLog("setupNativeInputWindows: TSF initialized OK", .{});
+}
+
+// ---------------------------------------------------------------
+// TSF callback infrastructure
+// ---------------------------------------------------------------
+
+/// Thread-local App pointer for TSF callbacks (TSF callbacks don't carry userdata).
+/// NOTE: This limits TSF to a single App instance per thread. Ghostty-win currently
+/// creates only one window, so this is fine. If multi-window support is added,
+/// TsfImplementation's callback signatures would need userdata parameters.
+threadlocal var tsf_app_instance: ?*App = null;
+
+/// TSF callback: finalized text — send each codepoint to the active surface's PTY.
+fn tsfHandleOutput(utf8: []const u8) void {
+    const app = tsf_app_instance orelse return;
+    const surface = app.activeSurface() orelse return;
+    fileLog("TSF tsfHandleOutput: {} bytes", .{utf8.len});
+    // Decode UTF-8 into codepoints and send each as a UTF-16 char event,
+    // which follows the same path as IME commit via handleCharEvent.
+    var i: usize = 0;
+    while (i < utf8.len) {
+        const cp_len = std.unicode.utf8ByteSequenceLength(utf8[i]) catch {
+            i += 1;
+            continue;
+        };
+        if (i + cp_len > utf8.len) break;
+        const codepoint = std.unicode.utf8Decode(utf8[i..][0..cp_len]) catch {
+            i += cp_len;
+            continue;
+        };
+        // Encode as UTF-16 and send via handleCharEvent (supports surrogate pairs).
+        if (codepoint <= 0xFFFF) {
+            surface.handleCharEvent(@intCast(codepoint));
+        } else {
+            // Surrogate pair for supplementary planes.
+            const high: u16 = @intCast(((codepoint - 0x10000) >> 10) + 0xD800);
+            const low: u16 = @intCast(((codepoint - 0x10000) & 0x3FF) + 0xDC00);
+            surface.handleCharEvent(high);
+            surface.handleCharEvent(low);
+        }
+        i += cp_len;
+    }
+}
+
+/// TSF callback: preedit text — forward to the active surface's core preedit display.
+fn tsfHandlePreedit(text: ?[]const u8) void {
+    const app = tsf_app_instance orelse return;
+    const surface = app.activeSurface() orelse return;
+    surface.core_surface.preeditCallback(text) catch |err| {
+        fileLog("TSF tsfHandlePreedit error: {}", .{err});
+    };
+}
+
+/// TSF callback: cursor screen rect — used for IME candidate window positioning.
+fn tsfGetCursorRect() os.RECT {
+    const app = tsf_app_instance orelse return os.RECT{};
+    const surface = app.activeSurface() orelse return os.RECT{};
+    const hwnd = app.hwnd orelse return os.RECT{};
+    const ime_pos = surface.core_surface.imePoint();
+    // imePoint returns pixel coordinates relative to the client area.
+    // Convert to screen coordinates for TSF.
+    var pt = os.POINT{ .x = @intFromFloat(ime_pos.x), .y = @intFromFloat(ime_pos.y) };
+    _ = os.ClientToScreen(hwnd, &pt);
+    // Use the actual cell height from imePoint for accurate positioning.
+    const cell_height: i32 = if (ime_pos.height > 0) @intFromFloat(ime_pos.height) else 20;
+    return os.RECT{
+        .left = pt.x,
+        .top = pt.y,
+        .right = pt.x + 1,
+        .bottom = pt.y + cell_height,
+    };
 }
 
 fn createTabViewRoot(self: *App, xaml_source: *com.IDesktopWindowXamlSource) !?*com.ITabView {
@@ -965,6 +1058,13 @@ pub fn onWindowClose(self: *App) void {
         _ = os.ShowWindow(hwnd, os.SW_HIDE);
     }
 
+    // Tear down TSF before the HWND is destroyed (TSF holds an HWND reference).
+    if (self.tsf_impl) |*tsf| {
+        tsf.uninitialize();
+        self.tsf_impl = null;
+    }
+    tsf_app_instance = null;
+
     // Tear down drag bar and input windows immediately.
     if (self.nci_window) |nci| {
         nci.destroyDragBarWindow();
@@ -994,7 +1094,14 @@ fn fullCleanup(self: *App) void {
     );
     const alloc = self.core_app.alloc;
 
-    // 0. Stop control plane before surfaces are destroyed.
+    // 0. Uninitialize TSF before surfaces are destroyed (callbacks reference surfaces).
+    if (self.tsf_impl) |*tsf| {
+        tsf.uninitialize();
+        self.tsf_impl = null;
+    }
+    tsf_app_instance = null;
+
+    // 0b. Stop control plane before surfaces are destroyed.
     if (self.control_plane) |cp| {
         cp.destroy();
         self.control_plane = null;
@@ -1787,6 +1894,15 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
         },
         os.WM_SETFOCUS => {
             input_runtime.ensureInputFocus(self);
+            if (self.tsf_impl) |*tsf| {
+                tsf.focus();
+            }
+            return 0;
+        },
+        os.WM_KILLFOCUS => {
+            if (self.tsf_impl) |*tsf| {
+                tsf.unfocus();
+            }
             return 0;
         },
         os.WM_CLOSE => {

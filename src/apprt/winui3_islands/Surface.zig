@@ -1502,6 +1502,91 @@ fn commonPrefixLen(comptime T: type, a: []const T, b: []const T) usize {
     return i;
 }
 
+// -----------------------------------------------------------------------
+// TSF bridge helpers — called from App.zig TSF callbacks
+// -----------------------------------------------------------------------
+
+/// Called by TSF when composition text changes (preedit display).
+/// Bridges to core Surface.preeditCallback.
+pub fn setTsfPreedit(self: *Surface, preedit_utf8: ?[]const u8) void {
+    if (!self.core_initialized) return;
+    self.core_surface.preeditCallback(preedit_utf8) catch |err| {
+        App.fileLog("TSF preedit error: {}", .{err});
+    };
+}
+
+/// Called by TSF when text is finalized (user confirmed candidate / pressed Enter).
+/// Sends each code unit to the PTY via handleCharEvent, matching the pattern
+/// used by flushImeTextBoxCommittedDelta.
+pub fn handleTsfOutput(self: *Surface, text_utf8: []const u8) void {
+    if (!self.core_initialized) return;
+    if (text_utf8.len == 0) return;
+
+    App.fileLog("TSF output: {} bytes", .{text_utf8.len});
+
+    // Convert UTF-8 to UTF-16 code units and feed each one through
+    // handleCharEvent, which already handles surrogate pairs.
+    const view = std.unicode.Utf8View.initUnchecked(text_utf8);
+    var it = view.iterator();
+    const app_ref = self.app;
+    while (it.nextCodepoint()) |cp| {
+        if (cp <= 0xFFFF) {
+            // BMP: single UTF-16 code unit
+            self.handleCharEvent(@intCast(cp));
+            if (!isSurfaceAlive(app_ref, self)) return;
+        } else {
+            // Supplementary plane: encode as surrogate pair
+            const v = cp - 0x10000;
+            const high: u16 = @intCast(0xD800 + (v >> 10));
+            const low: u16 = @intCast(0xDC00 + (v & 0x3FF));
+            self.handleCharEvent(high);
+            if (!isSurfaceAlive(app_ref, self)) return;
+            self.handleCharEvent(low);
+            if (!isSurfaceAlive(app_ref, self)) return;
+        }
+    }
+}
+
+/// Returns cursor screen-coordinate rectangle for TSF/IME candidate window placement.
+/// TSF's ITfContextOwner::GetTextExt expects screen coordinates.
+pub fn getTsfCursorRect(self: *Surface) os.RECT {
+    if (!self.core_initialized) {
+        return .{ .left = 0, .top = 0, .right = 0, .bottom = 0 };
+    }
+
+    // imePoint() returns coordinates in DIPs (already divided by content_scale),
+    // relative to the surface's top-left corner.
+    const ime_pos = self.core_surface.imePoint();
+
+    // Convert to integer pixel coordinates.
+    // imePoint divides by content_scale, so we need to multiply back to get
+    // physical pixels for ClientToScreen.
+    const scale_x: f64 = if (self.content_scale.x > 0) @as(f64, @floatCast(self.content_scale.x)) else 1.0;
+    const scale_y: f64 = if (self.content_scale.y > 0) @as(f64, @floatCast(self.content_scale.y)) else 1.0;
+
+    const left_px: i32 = @intFromFloat(ime_pos.x * scale_x);
+    const top_px: i32 = @intFromFloat(ime_pos.y * scale_y);
+    const bottom_px: i32 = @intFromFloat((ime_pos.y + ime_pos.height) * scale_y);
+
+    // Convert client coordinates to screen coordinates using the main HWND.
+    const hwnd = self.app.hwnd orelse {
+        App.fileLog("TSF getTsfCursorRect: no hwnd", .{});
+        return .{ .left = left_px, .top = top_px, .right = left_px + 1, .bottom = bottom_px };
+    };
+
+    var pt_top_left = os.POINT{ .x = left_px, .y = top_px };
+    var pt_bottom_right = os.POINT{ .x = left_px + 1, .y = bottom_px };
+    _ = os.ClientToScreen(hwnd, &pt_top_left);
+    _ = os.ClientToScreen(hwnd, &pt_bottom_right);
+
+    return .{
+        .left = pt_top_left.x,
+        .top = pt_top_left.y,
+        .right = pt_bottom_right.x,
+        .bottom = pt_bottom_right.y,
+    };
+}
+
 fn isImePassthroughVirtualKey(vk: u32) bool {
     return switch (vk) {
         0x15, // VK_KANA / VK_HANGUL — IME Kana/Hangul mode toggle
