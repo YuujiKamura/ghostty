@@ -20,7 +20,7 @@ const CoreApp = @import("../../App.zig");
 const CoreSurface = @import("../../Surface.zig");
 const configpkg = @import("../../config.zig");
 const input = @import("../../input.zig");
-const Surface = @import("Surface.zig");
+const Surface = @import("Surface.zig").Surface;
 const key = @import("../winui3/key.zig");
 const winrt = @import("../winui3/winrt.zig");
 const bootstrap = @import("../winui3/bootstrap.zig");
@@ -84,6 +84,7 @@ const TAB_CLOSE_POLL_INTERVAL_MS: u32 = 500;
 const CLOSE_TAB_POLL_TIMER_ID: usize = 997;
 const CLOSE_TAB_TIMER_ID: usize = 998;
 const CLOSE_TIMER_ID: usize = 999;
+const DUMP_VT_TIMER_ID: usize = 9999;
 const CONTEXT_MENU_NEW_TAB: usize = 1001;
 const CONTEXT_MENU_CLOSE_TAB: usize = 1002;
 const CONTEXT_MENU_PASTE: usize = 1003;
@@ -406,8 +407,7 @@ pub fn initXaml(self: *App) !void {
     // Dump visual tree after layout pass (needs message pump running).
     // Use SetTimer with 500ms delay so XAML has time to measure+arrange.
     if (comptime builtin.mode == .Debug) {
-        const WM_TIMER_DUMP_VT: usize = 9999;
-        _ = os.SetTimer(self.hwnd.?, WM_TIMER_DUMP_VT, 500, null);
+        _ = os.SetTimer(self.hwnd.?, DUMP_VT_TIMER_ID, 500, null);
     }
 }
 
@@ -679,8 +679,6 @@ fn setupNativeInputWindows(self: *App) void {
     }
 
     // Initialize TSF for IME composition display.
-    // Store the App pointer in thread-local so TSF callbacks can recover it.
-    tsf_app_instance = self;
     // CRITICAL: Initialize directly in self.tsf_impl, NOT a local variable.
     // TSF stores pointers to our inline COM objects (&self.tsf_impl._compositionSinkObj etc.)
     // during initialize(). If we init a local and copy, those pointers become dangling.
@@ -691,6 +689,7 @@ fn setupNativeInputWindows(self: *App) void {
         return;
     };
     // Wire up callbacks for text output, preedit display, and cursor positioning.
+    self.tsf_impl.?._userdata = self;
     self.tsf_impl.?._handleOutput = &tsfHandleOutput;
     self.tsf_impl.?._handlePreedit = &tsfHandlePreedit;
     self.tsf_impl.?._getCursorRect = &tsfGetCursorRect;
@@ -704,15 +703,9 @@ fn setupNativeInputWindows(self: *App) void {
 // TSF callback infrastructure
 // ---------------------------------------------------------------
 
-/// Thread-local App pointer for TSF callbacks (TSF callbacks don't carry userdata).
-/// NOTE: This limits TSF to a single App instance per thread. Ghostty-win currently
-/// creates only one window, so this is fine. If multi-window support is added,
-/// TsfImplementation's callback signatures would need userdata parameters.
-threadlocal var tsf_app_instance: ?*App = null;
-
 /// TSF callback: finalized text — send each codepoint to the active surface's PTY.
-fn tsfHandleOutput(utf8: []const u8) void {
-    const app = tsf_app_instance orelse return;
+fn tsfHandleOutput(ctx: ?*anyopaque, utf8: []const u8) void {
+    const app: *App = @ptrCast(@alignCast(ctx orelse return));
     const surface = app.activeSurface() orelse return;
     fileLog("TSF tsfHandleOutput: {} bytes, pending_keydown={s}", .{ utf8.len, @tagName(surface.pending_keydown) });
 
@@ -752,8 +745,8 @@ fn tsfHandleOutput(utf8: []const u8) void {
 }
 
 /// TSF callback: preedit text — forward to the active surface's core preedit display.
-fn tsfHandlePreedit(text: ?[]const u8) void {
-    const app = tsf_app_instance orelse return;
+fn tsfHandlePreedit(ctx: ?*anyopaque, text: ?[]const u8) void {
+    const app: *App = @ptrCast(@alignCast(ctx orelse return));
     const surface = app.activeSurface() orelse return;
     surface.core_surface.preeditCallback(text) catch |err| {
         fileLog("TSF tsfHandlePreedit error: {}", .{err});
@@ -761,8 +754,8 @@ fn tsfHandlePreedit(text: ?[]const u8) void {
 }
 
 /// TSF callback: cursor screen rect — used for IME candidate window positioning.
-fn tsfGetCursorRect() os.RECT {
-    const app = tsf_app_instance orelse return os.RECT{};
+fn tsfGetCursorRect(ctx: ?*anyopaque) os.RECT {
+    const app: *App = @ptrCast(@alignCast(ctx orelse return os.RECT{}));
     const surface = app.activeSurface() orelse return os.RECT{};
     const hwnd = app.hwnd orelse return os.RECT{};
     const ime_pos = surface.core_surface.imePoint();
@@ -1097,7 +1090,6 @@ pub fn onWindowClose(self: *App) void {
         tsf.uninitialize();
         self.tsf_impl = null;
     }
-    tsf_app_instance = null;
 
     // Tear down drag bar and input windows immediately.
     if (self.nci_window) |nci| {
@@ -1133,7 +1125,6 @@ fn fullCleanup(self: *App) void {
         tsf.uninitialize();
         self.tsf_impl = null;
     }
-    tsf_app_instance = null;
 
     // 0b. Stop control plane before surfaces are destroyed.
     if (self.control_plane) |cp| {
@@ -2069,9 +2060,9 @@ fn handleTimer(self: *App, hwnd: os.HWND, wparam: os.WPARAM) os.LRESULT {
             self.closeActiveTab();
             return 0;
         },
-        9999 => if (comptime builtin.mode == .Debug) {
+        DUMP_VT_TIMER_ID => if (comptime builtin.mode == .Debug) {
             // One-shot visual tree dump after layout.
-            _ = os.KillTimer(self.hwnd.?, 9999);
+            _ = os.KillTimer(self.hwnd.?, DUMP_VT_TIMER_ID);
             self.dumpVisualTreeRoot();
             return 0;
         } else 0,

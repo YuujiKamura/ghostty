@@ -182,12 +182,55 @@ pub fn build(b: *std.Build) !void {
 
     if (config.target.result.os.tag == .windows and (config.app_runtime == .winui3 or config.app_runtime == .winui3_islands)) {
         // Stage the Windows App SDK bootstrap DLL next to the exe so LoadLibraryW finds it.
+        const default_user_profile = std.process.getEnvVarOwned(b.allocator, "USERPROFILE") catch ".";
+        const default_bootstrap_path = std.fs.path.join(b.allocator, &.{ default_user_profile, ".nuget", "packages", "microsoft.windowsappsdk", "1.4.230822000", "runtimes", "win10-x64", "native", "Microsoft.WindowsAppRuntime.Bootstrap.dll" }) catch unreachable;
+        const bootstrap_dll_path = b.option([]const u8, "winappsdk-bootstrap-dll", "Path to Microsoft.WindowsAppRuntime.Bootstrap.dll") orelse default_bootstrap_path;
+
         {
-            const src: std.Build.LazyPath = .{ .cwd_relative = b.pathFromRoot(
-                "../.nuget/packages/microsoft.windowsappsdk/1.4.230822000/runtimes/win10-x64/native/Microsoft.WindowsAppRuntime.Bootstrap.dll",
-            ) };
+            const src: std.Build.LazyPath = .{ .cwd_relative = bootstrap_dll_path };
             const cp = b.addInstallBinFile(src, "Microsoft.WindowsAppRuntime.Bootstrap.dll");
             b.getInstallStep().dependOn(&cp.step);
+        }
+
+        // --- WinUI3 XAML Build (MSBuild) ---
+        const xaml_build_enabled = b.option(bool, "xaml", "Build XAML resources via MSBuild (default: true)") orelse true;
+        if (xaml_build_enabled) {
+            const msbuild_path = b.option([]const u8, "msbuild-path", "Path to MSBuild.exe") orelse findMsBuild(b);
+
+            if (msbuild_path) |path| {
+                const msbuild_cmd = b.addSystemCommand(&.{
+                    path,
+                    b.pathFromRoot("xaml/ghostty.csproj"),
+                    "-p:Configuration=Debug",
+                    "-p:Platform=x64",
+                    "-restore",
+                    "-nologo",
+                    "-v:minimal",
+                });
+
+                // Install XBF files
+                const xaml_out_dir = "xaml/obj/x64/Debug/net9.0-windows10.0.22621.0";
+                const xbf_files = [_][]const u8{ "Surface.xbf", "TabViewRoot.xbf" };
+                for (xbf_files) |xbf| {
+                    const install_xbf = b.addInstallBinFile(
+                        .{ .cwd_relative = b.pathFromRoot(b.fmt("{s}/{s}", .{ xaml_out_dir, xbf })) },
+                        xbf,
+                    );
+                    install_xbf.step.dependOn(&msbuild_cmd.step);
+                    b.getInstallStep().dependOn(&install_xbf.step);
+                }
+
+                // Install PRI file (renamed to resources.pri)
+                const pri_src = "xaml/bin/x64/Debug/net9.0-windows10.0.22621.0/ghostty.pri";
+                const install_pri = b.addInstallBinFile(
+                    .{ .cwd_relative = b.pathFromRoot(pri_src) },
+                    "resources.pri",
+                );
+                install_pri.step.dependOn(&msbuild_cmd.step);
+                b.getInstallStep().dependOn(&install_pri.step);
+            } else {
+                std.debug.print("WARNING: MSBuild.exe not found. XAML build will be skipped.\n", .{});
+            }
         }
 
         // Vtable manifest verification: structural check against known-good slot ordering.
@@ -384,4 +427,42 @@ pub fn build(b: *std.Build) !void {
     } else {
         try translations_step.addError("cannot update translations when i18n is disabled", .{});
     }
+}
+
+fn findMsBuild(b: *std.Build) ?[]const u8 {
+    if (std.process.getEnvVarOwned(b.allocator, "MSBUILD_PATH")) |path| return path else |_| {}
+
+    // Try vswhere.exe
+    const vswhere = "C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe";
+    var exit_code: u8 = 0;
+    const result = b.runAllowFail(&.{
+        vswhere,
+        "-latest",
+        "-requires",
+        "Microsoft.Component.MSBuild",
+        "-find",
+        "MSBuild\\**\\Bin\\MSBuild.exe",
+    }, &exit_code, .Ignore) catch |err| {
+        std.debug.print("vswhere failed: {}\n", .{err});
+        return null;
+    };
+
+    if (result.len > 0) {
+        // Trim whitespace/newline
+        return std.mem.trim(u8, result, " \t\r\n");
+    }
+
+    // Common fallback paths
+    const common_paths = [_][]const u8{
+        "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe",
+        "C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\MSBuild\\Current\\Bin\\MSBuild.exe",
+        "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\MSBuild\\Current\\Bin\\MSBuild.exe",
+    };
+
+    for (common_paths) |path| {
+        std.fs.accessAbsolute(path, .{}) catch continue;
+        return path;
+    }
+
+    return null;
 }

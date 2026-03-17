@@ -1,7 +1,7 @@
 /// Tab management for winui3_islands — local copy with correct Surface/App imports.
 const std = @import("std");
 const configpkg = @import("../../config.zig");
-const Surface = @import("Surface.zig");
+const Surface = @import("Surface.zig").Surface;
 const com = @import("../winui3/com.zig");
 const winrt = @import("../winui3/winrt.zig");
 const os = @import("../winui3/os.zig");

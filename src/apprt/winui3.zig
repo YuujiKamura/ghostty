@@ -2,7 +2,7 @@
 // This implements the apprt interface using WinUI 3 via pure Zig WinRT COM vtable calls.
 // No C/C++ code required — all WinRT interfaces are defined as Zig extern structs.
 pub const App = @import("winui3/App.zig");
-pub const Surface = @import("winui3/Surface.zig");
+pub const Surface = @import("winui3/Surface.zig").Surface;
 
 const internal_os = @import("../os/main.zig");
 pub const resourcesDir = internal_os.resourcesDir;
