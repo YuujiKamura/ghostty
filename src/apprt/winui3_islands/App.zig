@@ -48,7 +48,34 @@ const log = std.log.scoped(.winui3_islands);
 /// Temporary file logger for debugging GUI app (no stderr visible).
 pub fn fileLog(comptime fmt: []const u8, args: anytype) void {
     if (comptime builtin.mode != .Debug) return;
-    log.debug(fmt, args);
+
+    var buf: [1024]u8 = undefined;
+    const msg = std.fmt.bufPrint(&buf, fmt ++ "\n", args) catch return;
+
+    // Use dynamic path: %TEMP%\ghostty_debug.log
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const temp_path = std.process.getEnvVarOwned(allocator, "TEMP") catch return;
+    const log_path = std.fs.path.join(allocator, &.{ temp_path, "ghostty_debug.log" }) catch return;
+    const path_w = std.unicode.utf8ToUtf16LeAllocZ(allocator, log_path) catch return;
+
+    const K32 = std.os.windows.kernel32;
+    const h = K32.CreateFileW(
+        path_w.ptr,
+        0x40000000, // GENERIC_WRITE
+        1, // FILE_SHARE_READ
+        null,
+        4, // OPEN_ALWAYS
+        0x80, // FILE_ATTRIBUTE_NORMAL
+        null,
+    );
+    if (h == std.os.windows.INVALID_HANDLE_VALUE) return;
+    defer _ = std.os.windows.ntdll.NtClose(h);
+    _ = K32.SetFilePointerEx(h, @bitCast(@as(i64, 0)), null, 2); // FILE_END
+    _ = K32.WriteFile(h, msg.ptr, @intCast(msg.len), null, null);
+    _ = os.FlushFileBuffers(h);
 }
 
 /// Timer ID for live resize preview.
