@@ -11,6 +11,7 @@
 const App = @This();
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const windows = std.os.windows;
 const build_config = @import("../../build_config.zig");
@@ -46,24 +47,8 @@ const log = std.log.scoped(.winui3_islands);
 
 /// Temporary file logger for debugging GUI app (no stderr visible).
 pub fn fileLog(comptime fmt: []const u8, args: anytype) void {
-    var buf: [1024]u8 = undefined;
-    const msg = std.fmt.bufPrint(&buf, fmt ++ "\n", args) catch return;
-    const K32 = std.os.windows.kernel32;
-    const path_w = std.unicode.utf8ToUtf16LeStringLiteral("C:\\Users\\yuuji\\ghostty_debug.log");
-    const h = K32.CreateFileW(
-        path_w,
-        0x40000000, // GENERIC_WRITE
-        1, // FILE_SHARE_READ
-        null,
-        4, // OPEN_ALWAYS
-        0x80, // FILE_ATTRIBUTE_NORMAL
-        null,
-    );
-    if (h == std.os.windows.INVALID_HANDLE_VALUE) return;
-    defer _ = windows.ntdll.NtClose(h);
-    _ = K32.SetFilePointerEx(h, @bitCast(@as(i64, 0)), null, 2); // FILE_END
-    _ = K32.WriteFile(h, msg.ptr, @intCast(msg.len), null, null);
-    _ = os.FlushFileBuffers(h);
+    if (comptime builtin.mode != .Debug) return;
+    log.debug(fmt, args);
 }
 
 /// Timer ID for live resize preview.
@@ -224,7 +209,6 @@ pub fn init(
 ) !void {
     _ = opts;
 
-    os.OutputDebugStringA("MARKER-APP-INIT-ENTRY\n");
     fileLog("App.init: ENTRY (winui3_islands)", .{});
 
     // Allocate a debug console so log output is visible for GUI apps.
@@ -394,8 +378,10 @@ pub fn initXaml(self: *App) !void {
 
     // Dump visual tree after layout pass (needs message pump running).
     // Use SetTimer with 500ms delay so XAML has time to measure+arrange.
-    const WM_TIMER_DUMP_VT: usize = 9999;
-    _ = os.SetTimer(self.hwnd.?, WM_TIMER_DUMP_VT, 500, null);
+    if (comptime builtin.mode == .Debug) {
+        const WM_TIMER_DUMP_VT: usize = 9999;
+        _ = os.SetTimer(self.hwnd.?, WM_TIMER_DUMP_VT, 500, null);
+    }
 }
 
 fn dumpVisualTreeRoot(self: *App) void {
@@ -1571,43 +1557,6 @@ fn activateResourceManagerDirect(class_name: winrt.HSTRING) !*winrt.IInspectable
     return @ptrCast(@alignCast(instance.?));
 }
 
-// Keep old function for reference but unused
-fn getResourceManagerFactoryDirect(class_name: winrt.HSTRING) !*gen.IResourceManagerFactory {
-    const dll_name_z = [_:0]u16{ 'M', 'i', 'c', 'r', 'o', 's', 'o', 'f', 't', '.', 'W', 'i', 'n', 'd', 'o', 'w', 's', '.', 'A', 'p', 'p', 'l', 'i', 'c', 'a', 't', 'i', 'o', 'n', 'M', 'o', 'd', 'e', 'l', '.', 'R', 'e', 's', 'o', 'u', 'r', 'c', 'e', 's', '.', 'd', 'l', 'l' };
-    const module = std.os.windows.kernel32.LoadLibraryW(&dll_name_z) orelse {
-        fileLog("getResourceManagerFactoryDirect: LoadLibrary failed", .{});
-        return error.WinRTFailed;
-    };
-
-    const DllGetActivationFactoryFn = *const fn (winrt.HSTRING, *?*anyopaque) callconv(.winapi) i32;
-    const get_factory_fn: DllGetActivationFactoryFn = @ptrCast(std.os.windows.kernel32.GetProcAddress(
-        module,
-        "DllGetActivationFactory",
-    ) orelse {
-        fileLog("getResourceManagerFactoryDirect: GetProcAddress failed", .{});
-        return error.WinRTFailed;
-    });
-
-    // DllGetActivationFactory returns IActivationFactory, not IResourceManagerFactory
-    var act_factory: ?*anyopaque = null;
-    const hr = get_factory_fn(class_name, &act_factory);
-    if (hr < 0 or act_factory == null) {
-        fileLog("getResourceManagerFactoryDirect: DllGetActivationFactory failed: 0x{x}", .{@as(u32, @bitCast(hr))});
-        return error.WinRTFailed;
-    }
-    fileLog("getResourceManagerFactoryDirect: DllGetActivationFactory OK", .{});
-
-    // QI for IResourceManagerFactory
-    const act: *winrt.IInspectable = @ptrCast(@alignCast(act_factory.?));
-    defer _ = act.release();
-    const rm_factory = act.queryInterface(gen.IResourceManagerFactory) catch |err| {
-        fileLog("getResourceManagerFactoryDirect: QI IResourceManagerFactory failed: {}", .{@intFromError(err)});
-        return error.WinRTFailed;
-    };
-    fileLog("getResourceManagerFactoryDirect: SUCCESS", .{});
-    return rm_factory;
-}
-
 fn onSelectionChanged(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
     event_handlers.onSelectionChanged(self, sender, args);
 }
@@ -2093,12 +2042,12 @@ fn handleTimer(self: *App, hwnd: os.HWND, wparam: os.WPARAM) os.LRESULT {
             self.closeActiveTab();
             return 0;
         },
-        9999 => {
+        9999 => if (comptime builtin.mode == .Debug) {
             // One-shot visual tree dump after layout.
             _ = os.KillTimer(self.hwnd.?, 9999);
             self.dumpVisualTreeRoot();
             return 0;
-        },
+        } else 0,
         else => return 0,
     }
 }

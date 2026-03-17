@@ -1,6 +1,7 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
-pub const RuntimeDebugConfig = struct {
+pub const RuntimeDebugConfig = if (builtin.mode == .Debug) struct {
     enable_tabview: bool = true,
     use_ixaml_metadata_provider: bool = false,
     enable_xaml_resources: bool = true,
@@ -76,6 +77,30 @@ pub const RuntimeDebugConfig = struct {
             },
         );
     }
+} else struct {
+    enable_tabview: bool = true,
+    use_ixaml_metadata_provider: bool = false,
+    enable_xaml_resources: bool = true,
+    tabview_empty: bool = false,
+    tabview_item_no_content: bool = false,
+    enable_tabview_handlers: bool = true,
+    enable_handler_close: bool = true,
+    enable_handler_addtab: bool = true,
+    enable_handler_selection: bool = true,
+    probe_ime_comp_start_handler: bool = false,
+    probe_ime_comp_change_handler: bool = false,
+    probe_ime_comp_end_handler: bool = false,
+    tabview_append_item: bool = true,
+    tabview_select_first: bool = true,
+    close_after_ms: ?u32 = null,
+    close_tab_after_ms: ?u32 = null,
+    new_tab_on_init: bool = false,
+    test_resize: bool = false,
+
+    pub fn load() @This() {
+        return .{};
+    }
+    pub fn log(_: @This(), _: anytype) void {}
 };
 
 fn envInt(comptime T: type, name: [:0]const u8) ?T {

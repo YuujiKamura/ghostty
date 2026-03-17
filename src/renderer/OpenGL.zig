@@ -107,7 +107,14 @@ const PerfStats = struct {
             avg_fence_us,
         }) catch return;
 
-        const file = std.fs.createFileAbsolute("C:\\Users\\yuuji\\AppData\\Local\\Temp\\ghostty_perf.txt", .{}) catch return;
+        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer arena.deinit();
+        const allocator = arena.allocator();
+
+        const temp_path = std.process.getEnvVarOwned(allocator, "TEMP") catch ".";
+        const perf_path = std.fs.path.join(allocator, &.{ temp_path, "ghostty_perf.txt" }) catch return;
+
+        const file = std.fs.createFileAbsolute(perf_path, .{}) catch return;
         defer file.close();
         _ = file.writeAll(content) catch {};
     }

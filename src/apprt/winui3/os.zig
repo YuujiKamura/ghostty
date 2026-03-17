@@ -655,10 +655,18 @@ pub const MB_OK: UINT = 0x00000000;
 
 const CreateFileW = win32.kernel32.CreateFileW;
 pub fn attachDebugConsole() void {
-    // Redirect stderr to a log file next to the exe.
-    const name = std.unicode.utf8ToUtf16LeStringLiteral("C:\\Users\\yuuji\\ghostty-win\\debug.log");
+    // Redirect stderr to a log file in the temp directory.
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const temp_path = std.process.getEnvVarOwned(allocator, "TEMP") catch ".";
+    const log_path = std.fs.path.join(allocator, &.{ temp_path, "ghostty_debug.log" }) catch return;
+    const name = std.unicode.utf8ToUtf16LeAllocZ(allocator, log_path) catch return;
+    defer allocator.free(name);
+
     const h = CreateFileW(
-        name,
+        name.ptr,
         win32.GENERIC_WRITE,
         win32.FILE_SHARE_READ,
         null,
