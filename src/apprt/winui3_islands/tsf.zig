@@ -939,13 +939,19 @@ pub const TsfImplementation = struct {
     /// Request an edit session from TSF.
     /// Matches WT Implementation::_request().
     fn requestEditSession(self: *TsfImplementation, flags: u32) HRESULT {
-        const ctx = self._context orelse return S_FALSE;
+        const ctx = self._context orelse {
+            App.fileLog("TSF: requestEditSession — no context", .{});
+            return S_FALSE;
+        };
 
         // WT: if (session.referenceCount) return S_FALSE;
         // Don't send another request if one is still in flight (async).
         if (self._editSessionCompositionUpdate.referenceCount != 0) {
+            App.fileLog("TSF: requestEditSession — session in flight, skipping", .{});
             return S_FALSE;
         }
+
+        App.fileLog("TSF: requestEditSession flags=0x{x}", .{flags});
 
         var hr_session: HRESULT = S_OK;
         const hr = ctx.lpVtbl.RequestEditSession(
@@ -959,6 +965,7 @@ pub const TsfImplementation = struct {
             App.fileLog("TSF: RequestEditSession failed: 0x{x}", .{@as(u32, @bitCast(hr))});
             return hr;
         }
+        App.fileLog("TSF: RequestEditSession ok, hr_session=0x{x}", .{@as(u32, @bitCast(hr_session))});
         if (hr_session < 0) return hr_session;
         return S_OK;
     }
@@ -1040,6 +1047,7 @@ pub const TsfImplementation = struct {
     /// Extract finalized and active composition text from the TSF context.
     /// Called within an edit session (ec = edit cookie).
     fn doCompositionUpdate(self: *TsfImplementation, ec: u32) void {
+        App.fileLog("TSF: doCompositionUpdate ec={}", .{ec});
         const ctx = self._context orelse return;
 
         // Get full range of the document
