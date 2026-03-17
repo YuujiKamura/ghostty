@@ -99,6 +99,8 @@ pub const IPropertyValue = native.IPropertyValue;
 pub const IPropertyValueStatics = native.IPropertyValueStatics;
 pub const ISwapChainPanelNative = native.ISwapChainPanelNative;
 pub const IWindowNative = native.IWindowNative;
+pub const ISplitButton = native.ISplitButton;
+pub const IMenuFlyout = native.IMenuFlyout;
 
 // --- XAML Islands interfaces (hand-written, IIDs from WinMD via win-zig-bindgen) ---
 pub const WindowId = native.WindowId;

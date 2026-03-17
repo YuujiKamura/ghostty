@@ -17,7 +17,8 @@ const App = @import("App.zig");
 const com = @import("../winui3/com.zig");
 const winrt = @import("../winui3/winrt.zig");
 const native_interop = @import("../winui3/native_interop.zig");
-const input_runtime = @import("../winui3/input_runtime.zig");
+const input_runtime = @import("../winui3/input_runtime.zig"); // Keep this import
+const profiles = @import("profiles.zig"); // Import profiles.zig
 const key = @import("../winui3/key.zig");
 const os = @import("../winui3/os.zig");
 
@@ -152,7 +153,9 @@ const PendingKey = struct {
     unshifted_codepoint: u21,
 };
 
-pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const configpkg.Config) !void {
+pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const configpkg.Config, _profile_opt: ?profiles.Profile) !void {
+    // TODO: Use _profile_opt for per-tab profile configuration when profile switching is implemented.
+    _ = _profile_opt;
     self.* = .{
         .app = app,
         .core_surface = undefined,

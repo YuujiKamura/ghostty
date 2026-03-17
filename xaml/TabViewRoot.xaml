@@ -9,6 +9,14 @@
     </Grid.RowDefinitions>
     <controls:TabView x:Name="TabView" Grid.Row="0"
                       HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                      IsAddTabButtonVisible="True"/>
+                      IsAddTabButtonVisible="False">
+        <controls:TabView.TabStripFooter>
+            <controls:SplitButton x:Name="AddTabSplitButton">
+                <controls:SplitButton.Flyout>
+                    <controls:MenuFlyout x:Name="ProfileFlyout"/>
+                </controls:SplitButton.Flyout>
+            </controls:SplitButton>
+        </controls:TabView.TabStripFooter>
+    </controls:TabView>
     <Grid x:Name="TabContentGrid" Grid.Row="1"/>
 </Grid>

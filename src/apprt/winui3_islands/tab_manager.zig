@@ -8,6 +8,7 @@ const os = @import("../winui3/os.zig");
 const tab_index = @import("../winui3/tab_index.zig");
 const input_runtime = @import("../winui3/input_runtime.zig");
 const surface_binding = @import("surface_binding.zig");
+const profiles = @import("profiles.zig"); // Added import for profiles
 
 const log = std.log.scoped(.winui3_islands);
 
@@ -21,13 +22,22 @@ pub fn newTab(
     comptime tabview_item_class: [:0]const u8,
     initial_tab_title: []const u8,
 ) !void {
+    try newTabWithProfile(self, tabview_item_class, initial_tab_title, null);
+}
+
+pub fn newTabWithProfile(
+    self: anytype,
+    comptime tabview_item_class: [:0]const u8,
+    initial_tab_title: []const u8,
+    profile_opt: ?profiles.Profile,
+) !void {
     const alloc = self.core_app.alloc;
     var config = try configpkg.Config.load(alloc);
     defer config.deinit();
 
     var surface = try alloc.create(Surface);
     errdefer alloc.destroy(surface);
-    try surface.init(self, self.core_app, &config);
+    try surface.init(self, self.core_app, &config, profile_opt); // Pass profile_opt
     errdefer surface.deinit();
 
     try self.surfaces.append(alloc, surface);
@@ -49,9 +59,9 @@ pub fn newTab(
     defer tvi_guard.deinit();
     const tvi = tvi_guard.get();
 
-    const initial_title = try winrt.hstringRuntime(self.core_app.alloc, initial_tab_title);
-    defer winrt.deleteHString(initial_title);
-    var boxed_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(initial_title));
+    const hstring_title = try winrt.hstringRuntime(alloc, initial_tab_title); // Use alloc here
+    defer winrt.deleteHString(hstring_title);
+    var boxed_guard = winrt.ComRef(winrt.IInspectable).init(try self.boxString(hstring_title));
     defer boxed_guard.deinit();
     try tvi.SetHeader(boxed_guard.get());
     try tvi.SetIsClosable(true);
@@ -80,13 +90,13 @@ pub fn newTab(
 
     // Swap SwapChainPanel into tab_content_grid.
     self.attachSurfaceToTabItem(if (self.surfaces.items.len > 1) prev_idx else null, self.active_surface_idx) catch |err| {
-        log.warn("newTab: attachSurfaceToTabItem({}) failed: {}", .{ self.active_surface_idx, err });
+        log.warn("newTabWithProfile: attachSurfaceToTabItem({}) failed: {}", .{ self.active_surface_idx, err });
     };
 
     // Keep normal keyboard focus on the XAML surface after tab creation.
     input_runtime.focusKeyboardTarget(self);
 
-    log.info("newTab completed: idx={} total={}", .{ self.active_surface_idx, self.surfaces.items.len });
+    log.info("newTabWithProfile completed: idx={} total={}", .{ self.active_surface_idx, self.surfaces.items.len });
 }
 
 pub fn closeTab(self: anytype, idx: usize) bool {

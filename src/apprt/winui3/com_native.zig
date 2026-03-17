@@ -417,5 +417,52 @@ pub const IClosable = extern struct {
     pub fn close(self: *@This()) !void { try hrCheck(self.lpVtbl.Close(@ptrCast(self))); }
 };
 
+// --- WinUI3 Controls: ISplitButton, IMenuFlyout ---
+// IIDs extracted from Microsoft.UI.Xaml.winmd via win-zig-bindgen.
+
+pub const ISplitButton = extern struct {
+    pub const IID = GUID{ .data1 = 0xf627202d, .data2 = 0xd2d7, .data3 = 0x5ff6, .data4 = .{ 0xbb, 0x05, 0x8c, 0x48, 0xeb, 0x6b, 0x1f, 0xc6 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Flyout: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetFlyout: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        Command: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetCommand: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        CommandParameter: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetCommandParameter: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        Click: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        RemoveClick: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn SetFlyout(self: *@This(), value: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetFlyout(@ptrCast(self), value)); }
+};
+
+pub const IMenuFlyout = extern struct {
+    pub const IID = GUID{ .data1 = 0xf4c77c6c, .data2 = 0x1fa5, .data3 = 0x5d85, .data4 = .{ 0x85, 0x59, 0x5d, 0x02, 0xb7, 0xd4, 0xe5, 0xe7 } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        Items: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        MenuFlyoutPresenterStyle: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
+        SetMenuFlyoutPresenterStyle: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+        ShowAt: *const fn (*anyopaque, ?*anyopaque, Point) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn Items(self: *@This()) !*IVector { var out: ?*anyopaque = null; try hrCheck(self.lpVtbl.Items(@ptrCast(self), &out)); return @ptrCast(@alignCast(out orelse return error.WinRTFailed)); }
+};
+
 // CharacterReceived and TextComposition delegate IIDs are now auto-generated
 // in com_generated.zig via TypedEventHandler pinterface IID computation.

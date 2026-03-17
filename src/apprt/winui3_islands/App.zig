@@ -88,6 +88,8 @@ const XamlClass = struct {
     const VisualTreeHelper = "Microsoft.UI.Xaml.Media.VisualTreeHelper";
     const XamlControlsResources = "Microsoft.UI.Xaml.Controls.XamlControlsResources";
     const XamlMetadataProvider = "Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider";
+    const SplitButton = "Microsoft.UI.Xaml.Controls.SplitButton";
+    const MenuFlyout = "Microsoft.UI.Xaml.Controls.MenuFlyout";
 };
 const InitialTabTitle = "Terminal";
 
@@ -164,6 +166,8 @@ active_surface_idx: usize = 0,
 
 /// The TabView control that manages tabs.
 tab_view: ?*com.ITabView = null,
+add_tab_split_button: ?*com.ISplitButton = null,
+profile_menu_flyout: ?*com.IMenuFlyout = null,
 last_polled_tab_items_size: ?u32 = null,
 
 /// The root grid (XamlSource.Content) — must be explicitly sized on WM_SIZE.
@@ -359,7 +363,10 @@ pub fn initXaml(self: *App) !void {
     fileLog("initXaml: content_ready, entering message loop", .{});
 
     // --- Control Plane (optional, env-gated) ---
-    if (ControlPlane.isEnabled(self.core_app.alloc)) {
+    const cp_enabled = ControlPlane.isEnabled(self.core_app.alloc);
+    fileLog("control_plane: isEnabled={}", .{@intFromBool(cp_enabled)});
+    if (cp_enabled) {
+        fileLog("control_plane: hwnd={}", .{@intFromPtr(self.hwnd)});
         if (self.hwnd) |hwnd| {
             self.control_plane = ControlPlane.create(
                 self.core_app.alloc,
@@ -369,9 +376,10 @@ pub fn initXaml(self: *App) !void {
                 controlPlaneCaptureTail,
                 controlPlaneCaptureTabList,
             ) catch |err| blk: {
-                log.warn("failed to start control plane: {}", .{err});
+                fileLog("control_plane: create FAILED err={s}", .{@errorName(err)});
                 break :blk null;
             };
+            fileLog("control_plane: create OK ptr={}", .{@intFromPtr(self.control_plane)});
         }
     }
 
@@ -776,7 +784,7 @@ fn createInitialSurfaceContent(self: *App, tab_view: ?*com.ITabView) !void {
 
     var surface = try alloc.create(Surface);
     errdefer alloc.destroy(surface);
-    try surface.init(self, self.core_app, &config);
+    try surface.init(self, self.core_app, &config, null);
     errdefer surface.deinit();
 
     try self.surfaces.append(alloc, surface);

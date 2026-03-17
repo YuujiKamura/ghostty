@@ -14,6 +14,7 @@ const winrt = @import("../winui3/winrt.zig");
 
 const log = std.log.scoped(.winui3_islands);
 const App = @import("App.zig");
+const profiles = @import("profiles.zig"); // Import profiles.zig
 const fileLog = App.fileLog;
 
 /// Creates the RootGrid layout with TabView in Row 0 and TabContent Grid in Row 1.
@@ -91,6 +92,22 @@ pub fn createRoot(
 
     fileLog("initXaml step 7.5: Found TabView and TabContentGrid via FindName", .{});
 
+    // Find AddTabSplitButton
+    const spltbtn_name = try winrt.hstring("AddTabSplitButton");
+    defer winrt.deleteHString(spltbtn_name);
+    const spltbtn_inspectable = try root_fe.FindName(spltbtn_name);
+    defer _ = spltbtn_inspectable.release();
+    self.add_tab_split_button = try spltbtn_inspectable.queryInterface(com.ISplitButton);
+    log.info("initXaml step 7.5: Found AddTabSplitButton", .{});
+
+    // Find ProfileFlyout
+    const proflyout_name = try winrt.hstring("ProfileFlyout");
+    defer winrt.deleteHString(proflyout_name); // Corrected from prof_name
+    const proflyout_inspectable = try root_fe.FindName(proflyout_name);
+    defer _ = proflyout_inspectable.release();
+    self.profile_menu_flyout = try proflyout_inspectable.queryInterface(com.IMenuFlyout);
+    log.info("initXaml step 7.5: Found ProfileFlyout", .{});
+
     // 4. Set RootGrid as XamlSource content (XAML Islands: setContent instead of Window.SetContent).
     xaml_source.setContent(@ptrCast(root_grid_insp)) catch |err| {
         fileLog("RootGrid setContent failed ({}), fail-fast because tabview is enabled", .{err});
@@ -106,6 +123,9 @@ pub fn createRoot(
 
     // SetTitleBar is NOT used — NonClientIslandWindow owns the drag-bar child
     // input sink directly, matching Windows Terminal's structure.
+
+    // Explicitly hide the default AddTabButton, as we are using a custom SplitButton.
+    tv.SetIsAddTabButtonVisible(false) catch {};
 
     return tv;
 }
