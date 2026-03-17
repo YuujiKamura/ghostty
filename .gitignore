@@ -36,6 +36,22 @@ zig-out-*/
 LOCAL_APPDATA_FONTCONFIG_CACHE/
 tests/winui3_islands/LOCAL_APPDATA_FONTCONFIG_CACHE/
 
+# Legacy runtimes (kept locally, removed from tracking)
+src/apprt/win32/
+src/apprt/winui3/App.zig
+src/apprt/winui3/Surface.zig
+src/apprt/winui3/wndproc.zig
+src/apprt/winui3/com_native.zig
+src/apprt/winui3/drag_bar.zig
+src/apprt/winui3/tab_manager.zig
+src/apprt/winui3/tabview_runtime.zig
+src/apprt/winui3/surface_binding.zig
+src/apprt/winui3/com_runtime.zig
+src/apprt/winui3/marshaler_runtime.zig
+src/apprt/winui3/window_runtime.zig
+src/apprt/winui3/basal_test.zig
+src/apprt/winui3/search_overlay.zig
+
 # Temp files
 tmp/
 nul
