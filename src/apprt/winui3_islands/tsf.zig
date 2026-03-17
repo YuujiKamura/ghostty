@@ -1052,13 +1052,16 @@ pub const TsfImplementation = struct {
 
         // Get full range of the document
         var full_range_ptr: ?*anyopaque = null;
-        if (ctx.lpVtbl.GetStart(@ptrCast(ctx), ec, &full_range_ptr) < 0) return;
+        const hr_start = ctx.lpVtbl.GetStart(@ptrCast(ctx), ec, &full_range_ptr);
+        App.fileLog("TSF: GetStart hr=0x{x}", .{@as(u32, @bitCast(hr_start))});
+        if (hr_start < 0) return;
         const full_range: *tsf.ITfRange = @ptrCast(@alignCast(full_range_ptr orelse return));
         defer full_range.release();
 
         var full_range_length: i32 = 0;
         var null_halt: ?*anyopaque = null;
-        _ = full_range.lpVtbl.ShiftEnd(@ptrCast(full_range), ec, std.math.maxInt(i32), &full_range_length, &null_halt);
+        const hr_shift = full_range.lpVtbl.ShiftEnd(@ptrCast(full_range), ec, std.math.maxInt(i32), &full_range_length, &null_halt);
+        App.fileLog("TSF: ShiftEnd hr=0x{x} fullRangeLength={}", .{ @as(u32, @bitCast(hr_shift)), full_range_length });
 
         // Track GUID_PROP_COMPOSING and GUID_PROP_ATTRIBUTE properties
         var guids: [2]?*anyopaque = .{
@@ -1067,13 +1070,17 @@ pub const TsfImplementation = struct {
         };
         var no_app_props: ?*anyopaque = null;
         var props_ptr: ?*anyopaque = null;
-        if (ctx.lpVtbl.TrackProperties(@ptrCast(ctx), @ptrCast(&guids[0]), 2, @ptrCast(&no_app_props), 0, &props_ptr) < 0) return;
+        const hr_track = ctx.lpVtbl.TrackProperties(@ptrCast(ctx), @ptrCast(&guids[0]), 2, @ptrCast(&no_app_props), 0, &props_ptr);
+        App.fileLog("TSF: TrackProperties hr=0x{x}", .{@as(u32, @bitCast(hr_track))});
+        if (hr_track < 0) return;
         const props: *tsf.ITfReadOnlyProperty = @ptrCast(@alignCast(props_ptr orelse return));
         defer props.release();
 
         // Enumerate ranges
         var enum_ranges_ptr: ?*anyopaque = null;
-        if (props.lpVtbl.EnumRanges(@ptrCast(props), ec, &enum_ranges_ptr, @ptrCast(full_range)) < 0) return;
+        const hr_enum = props.lpVtbl.EnumRanges(@ptrCast(props), ec, &enum_ranges_ptr, @ptrCast(full_range));
+        App.fileLog("TSF: EnumRanges hr=0x{x}", .{@as(u32, @bitCast(hr_enum))});
+        if (hr_enum < 0) return;
         const enum_ranges: *tsf.IEnumTfRanges = @ptrCast(@alignCast(enum_ranges_ptr orelse return));
         defer enum_ranges.release();
 
@@ -1091,6 +1098,7 @@ pub const TsfImplementation = struct {
             var range_ptrs: [8]?*anyopaque = .{null} ** 8;
             var ranges_count: u32 = 0;
             next_result = enum_ranges.lpVtbl.Next(@ptrCast(enum_ranges), 8, @ptrCast(&range_ptrs[0]), &ranges_count);
+            App.fileLog("TSF: IEnumTfRanges.Next hr=0x{x} rangesCount={}", .{ @as(u32, @bitCast(next_result)), ranges_count });
 
             // Cleanup: release all returned ranges when done with this batch
             defer {
@@ -1111,7 +1119,8 @@ pub const TsfImplementation = struct {
                 // Extract GUID_PROP_COMPOSING and GUID_PROP_ATTRIBUTE from the property value
                 {
                     var variant: [24]u8 align(8) = .{0} ** 24;
-                    if (props.lpVtbl.GetValue(@ptrCast(props), ec, @ptrCast(range), @ptrCast(&variant)) >= 0) {
+                    const hr_val = props.lpVtbl.GetValue(@ptrCast(props), ec, @ptrCast(range), @ptrCast(&variant));
+                    if (hr_val >= 0) {
                         // The VARIANT's vt should be VT_UNKNOWN containing an IEnumTfPropertyValue
                         const vt: u16 = @as(*const u16, @ptrCast(@alignCast(&variant[0]))).*;
                         if (vt == VT_UNKNOWN) {
@@ -1149,6 +1158,7 @@ pub const TsfImplementation = struct {
                         // VariantClear the outer variant
                         _ = VariantClear(@ptrCast(&variant));
                     }
+                    App.fileLog("TSF: GetValue hr=0x{x} composing={}", .{ @as(u32, @bitCast(hr_val)), composing });
                 }
 
                 // Read text from range (matching WT's inner loop with 128-char buffer)
@@ -1165,9 +1175,15 @@ pub const TsfImplementation = struct {
                         buf_cap,
                         &len,
                     );
+                    App.fileLog("TSF: GetText hr=0x{x} len={}", .{ @as(u32, @bitCast(gt_hr)), len });
                     if (gt_hr < 0 or len == 0) break;
 
                     const slice = buf[0..len];
+                    {
+                        var log_buf: [512]u8 = undefined;
+                        const log_len = utf16ToUtf8(&log_buf, slice);
+                        App.fileLog("TSF: range text: '{s}'", .{log_buf[0..log_len]});
+                    }
 
                     // WT: since we can't un-finalize finalized text, only finalize text at the start
                     if (!composing and !active_composition_encountered) {
@@ -1212,6 +1228,7 @@ pub const TsfImplementation = struct {
                 @ptrCast(&sel_data),
                 &sel_count,
             );
+            App.fileLog("TSF: GetSelection hr=0x{x} count={}", .{ @as(u32, @bitCast(sel_hr)), sel_count });
 
             if (sel_hr >= 0 and sel_count == 1) {
                 // Extract the range pointer from sel_data[0..8]
@@ -1260,6 +1277,7 @@ pub const TsfImplementation = struct {
             // Compensate for finalized text that will be erased
             cursor_pos -= @intCast(finalized_len);
             cursor_pos = std.math.clamp(cursor_pos, 0, @as(i32, @intCast(active_len)));
+            App.fileLog("TSF: final cursorPos={}", .{cursor_pos});
         }
 
         // --- Erase finalized text from the TSF context ---
@@ -1277,6 +1295,8 @@ pub const TsfImplementation = struct {
             }
         }
 
+        App.fileLog("TSF: finalized_len={} active_len={}", .{ finalized_len, active_len });
+
         // --- Deliver text via callbacks ---
         // WT delivers to _provider->HandleOutput() and renderer's tsfPreview.
         // We use callbacks for both.
@@ -1287,12 +1307,14 @@ pub const TsfImplementation = struct {
             const utf8_len = utf16ToUtf8(&utf8_buf, active_buf[0..active_len]);
             if (utf8_len > 0) {
                 if (self._handlePreedit) |cb| {
+                    App.fileLog("TSF: calling handlePreedit with {} bytes", .{utf8_len});
                     cb(utf8_buf[0..utf8_len]);
                 }
             }
         } else {
             // No active composition text — clear preedit
             if (self._handlePreedit) |cb| {
+                App.fileLog("TSF: calling handlePreedit with null (clear)", .{});
                 cb(null);
             }
         }
@@ -1304,6 +1326,7 @@ pub const TsfImplementation = struct {
             if (utf8_len > 0) {
                 App.fileLog("TSF: finalized text ({} bytes UTF-8)", .{utf8_len});
                 if (self._handleOutput) |cb| {
+                    App.fileLog("TSF: calling handleOutput with {} bytes", .{utf8_len});
                     cb(utf8_buf[0..utf8_len]);
                 }
             }
