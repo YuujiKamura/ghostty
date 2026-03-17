@@ -72,11 +72,8 @@ pub fn activateAndLoadResources(self: anytype, window: *com.IWindow) !void {
 
     // Step 7.2: load XamlControlsResources after window activation.
     // Putting resources too early in startup can yield 0x8000ffff in unpackaged runs.
+    // Theme is set in TabViewRoot.xaml (RequestedTheme="Light").
     if (self.xaml_app) |xa| {
-        // ApplicationTheme: Light=0, Dark=1
-        xa.SetRequestedTheme(1) catch |err| {
-            log.warn("SetRequestedTheme(Dark) failed: {}", .{err});
-        };
         log.info("initXaml step 7.2: loading XamlControlsResources...", .{});
         self.loadXamlResources(xa);
         log.info("initXaml step 7.2 OK", .{});
@@ -87,20 +84,4 @@ pub fn activateAndLoadResources(self: anytype, window: *com.IWindow) !void {
 
 pub fn syncVisualDiagnostics(self: anytype) void {
     log.info("WinUI 3 Window created and activated (HWND=0x{x})", .{@intFromPtr(self.hwnd.?)});
-
-    // Final attempt to force black background on root content.
-    if (self.window) |win| {
-        if (win.Content() catch null) |content| {
-            var content_guard = winrt.ComRef(winrt.IInspectable).init(@as(*winrt.IInspectable, @ptrCast(content)));
-            defer content_guard.deinit();
-            // Set Dark theme on the content as well.
-            if (content.queryInterface(com.IFrameworkElement)) |fe| {
-                var fe_guard = winrt.ComRef(com.IFrameworkElement).init(fe);
-                defer fe_guard.deinit();
-                // ElementTheme: Default=0, Light=1, Dark=2
-                fe.SetRequestedTheme(2) catch {};
-            } else |_| {}
-            self.setControlBackground(@ptrCast(content), .{ .A = 255, .R = 0, .G = 0, .B = 0 });
-        }
-    }
 }

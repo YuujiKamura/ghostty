@@ -116,12 +116,12 @@ pub fn initFrameMargins(self: *NonClientIslandWindow) void {
         os.SWP_FRAMECHANGED | os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOZORDER,
     );
 
-    // Dark mode for DWM caption buttons (white icons on dark background).
+    // Dark mode for DWM caption buttons.
     const dark_mode: u32 = 1;
     _ = os.DwmSetWindowAttribute(hwnd, os.DWMWA_USE_IMMERSIVE_DARK_MODE, @ptrCast(&dark_mode), @sizeOf(u32));
 
-    // Black caption color to match terminal background.
-    const caption_color: u32 = 0x00000000; // COLORREF: 0x00BBGGRR
+    // Match XAML Dark theme background (#202020 = COLORREF 0x00202020).
+    const caption_color: u32 = 0x00202020; // COLORREF: 0x00BBGGRR
     _ = os.DwmSetWindowAttribute(hwnd, os.DWMWA_CAPTION_COLOR, @ptrCast(&caption_color), @sizeOf(u32));
 }
 

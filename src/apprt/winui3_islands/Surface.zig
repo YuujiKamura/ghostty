@@ -195,8 +195,8 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         }
     }
 
-    // Set SwapChainPanel background to black.
-    self.app.setControlBackground(panel, .{ .A = 255, .R = 0, .G = 0, .B = 0 });
+    // SwapChainPanel background matches Dark theme.
+    self.app.setControlBackground(panel, .{ .A = 255, .R = 32, .G = 32, .B = 32 });
 
     // Create inner surface grid via LoadComponent + SurfaceRoot.xbf:
     // Layout is defined in compiled XAML (xbf), event hookup remains in Zig.
