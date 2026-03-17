@@ -660,19 +660,22 @@ fn setupNativeInputWindows(self: *App) void {
     // Initialize TSF for IME composition display.
     // Store the App pointer in thread-local so TSF callbacks can recover it.
     tsf_app_instance = self;
-    var tsf_impl = Tsf.TsfImplementation{};
-    tsf_impl.initialize() catch |err| {
+    // CRITICAL: Initialize directly in self.tsf_impl, NOT a local variable.
+    // TSF stores pointers to our inline COM objects (&self.tsf_impl._compositionSinkObj etc.)
+    // during initialize(). If we init a local and copy, those pointers become dangling.
+    self.tsf_impl = Tsf.TsfImplementation{};
+    self.tsf_impl.?.initialize() catch |err| {
         fileLog("TSF: initialize failed: {}", .{err});
+        self.tsf_impl = null;
         return;
     };
     // Wire up callbacks for text output, preedit display, and cursor positioning.
-    tsf_impl._handleOutput = &tsfHandleOutput;
-    tsf_impl._handlePreedit = &tsfHandlePreedit;
-    tsf_impl._getCursorRect = &tsfGetCursorRect;
+    self.tsf_impl.?._handleOutput = &tsfHandleOutput;
+    self.tsf_impl.?._handlePreedit = &tsfHandlePreedit;
+    self.tsf_impl.?._getCursorRect = &tsfGetCursorRect;
     if (self.hwnd) |h| {
-        tsf_impl.associateFocus(h);
+        self.tsf_impl.?.associateFocus(h);
     }
-    self.tsf_impl = tsf_impl;
     fileLog("setupNativeInputWindows: TSF initialized OK", .{});
 }
 
