@@ -1034,8 +1034,8 @@ fn onXamlPointerPressed(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
     if (!self.app.resizing) {
         input_runtime.focusKeyboardTarget(self.app);
         // Ensure TSF knows we have focus.
-        if (self.app.tsf_impl) |*tsf| {
-            tsf.focus();
+        if (self.app.tsf_impl != null) {
+            // tsf.focus(); // DISABLED for crash debug
         }
     }
     self.handleMouseButton(button, .press);
@@ -1117,8 +1117,8 @@ fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
         // composition directly without needing the TextBox.
         App.fileLog("PreviewKeyDown: IME key 0x{x} -> pass to TSF (no TextBox redirect)", .{vk_u32});
         // Notify TSF that focus should be set (in case it was lost).
-        if (self.app.tsf_impl) |*tsf| {
-            tsf.focus();
+        if (self.app.tsf_impl != null) {
+            // tsf.focus(); // DISABLED for crash debug
         }
         return; // Don't mark handled — let IME process via TSF.
     }
@@ -1262,8 +1262,8 @@ fn onXamlGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
 
     // TSF focus: matching Windows Terminal's _GotFocusHandler pattern.
     // Done via XAML event (not Win32 WM_SETFOCUS) to avoid recursive message crashes.
-    if (self.app.tsf_impl) |*tsf| {
-        tsf.focus();
+    if (self.app.tsf_impl != null) {
+        // tsf.focus(); // DISABLED for crash debug
     }
 }
 
@@ -1281,8 +1281,8 @@ fn onXamlLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     };
 
     // TSF unfocus when SwapChainPanel loses focus (matching WT's _LostFocusHandler).
-    if (self.app.tsf_impl) |*tsf| {
-        tsf.unfocus();
+    if (self.app.tsf_impl != null) {
+        // tsf.unfocus(); // DISABLED for crash debug
     }
 }
 
@@ -1309,8 +1309,8 @@ fn onImeTextBoxLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
 
     // TSF unfocus: matching Windows Terminal's _LostFocusHandler pattern.
     // Done via XAML event (not Win32 WM_KILLFOCUS) to avoid recursive message crashes.
-    if (self.app.tsf_impl) |*tsf| {
-        tsf.unfocus();
+    if (self.app.tsf_impl != null) {
+        // tsf.unfocus(); // DISABLED for crash debug
     }
 }
 
