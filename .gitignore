@@ -28,3 +28,18 @@ vgcore.*
 
 tmp/procdumps/*.dmp
 tmp/bin/
+
+# Build outputs
+zig-out-*/
+
+# Local caches
+LOCAL_APPDATA_FONTCONFIG_CACHE/
+tests/winui3_islands/LOCAL_APPDATA_FONTCONFIG_CACHE/
+
+# Temp files
+tmp/
+nul
+*.pdb
+*.png
+test_resize_caption.ps1
+tmp_estimate_note.txt
