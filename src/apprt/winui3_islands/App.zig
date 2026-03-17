@@ -693,7 +693,14 @@ threadlocal var tsf_app_instance: ?*App = null;
 fn tsfHandleOutput(utf8: []const u8) void {
     const app = tsf_app_instance orelse return;
     const surface = app.activeSurface() orelse return;
-    fileLog("TSF tsfHandleOutput: {} bytes", .{utf8.len});
+    fileLog("TSF tsfHandleOutput: {} bytes, pending_keydown={s}", .{ utf8.len, @tagName(surface.pending_keydown) });
+
+    // CRITICAL: Clear pending_keydown before sending TSF output.
+    // When IME confirms with Enter, WM_KEYDOWN sets pending_keydown=.consumed.
+    // If we don't clear it, the first handleCharEvent call will see .consumed
+    // and silently drop the first character — causing "kanji missing" bug.
+    surface.pending_keydown = .none;
+
     // Decode UTF-8 into codepoints and send each as a UTF-16 char event,
     // which follows the same path as IME commit via handleCharEvent.
     var i: usize = 0;
@@ -707,6 +714,7 @@ fn tsfHandleOutput(utf8: []const u8) void {
             i += cp_len;
             continue;
         };
+        fileLog("TSF tsfHandleOutput: sending codepoint U+{X:0>4}", .{@as(u32, codepoint)});
         // Encode as UTF-16 and send via handleCharEvent (supports surrogate pairs).
         if (codepoint <= 0xFFFF) {
             surface.handleCharEvent(@intCast(codepoint));
@@ -719,6 +727,7 @@ fn tsfHandleOutput(utf8: []const u8) void {
         }
         i += cp_len;
     }
+    fileLog("TSF tsfHandleOutput: done, pending_keydown={s}", .{@tagName(surface.pending_keydown)});
 }
 
 /// TSF callback: preedit text — forward to the active surface's core preedit display.

@@ -839,8 +839,10 @@ pub fn handleKeyEvent(self: *Surface, vk: u16, pressed: bool) void {
         // any subsequent WM_CHAR (IME commit text) passes through as a
         // standalone character event.
         if (pressed) self.pending_keydown = .none;
+        App.fileLog("handleKeyEvent: unmapped vk=0x{X:0>4} pressed={} -> pending=none", .{ vk, pressed });
         return;
     };
+    App.fileLog("handleKeyEvent: vk=0x{X:0>4} pressed={} key={s}", .{ vk, pressed, @tagName(ghostty_key) });
     const mods = key.getModifiers();
     const unshifted = key.vkToUnshiftedCodepoint(vk);
 
@@ -916,11 +918,15 @@ pub fn handleCharEvent(self: *Surface, char_code: u16) void {
     switch (state) {
         // WM_KEYDOWN was already consumed (function key, keybinding, etc.)
         // -- suppress this WM_CHAR to avoid double input.
-        .consumed => return,
+        .consumed => {
+            App.fileLog("handleCharEvent: SUPPRESSED char=0x{X:0>4} (pending_keydown=consumed)", .{char_code});
+            return;
+        },
 
         // .pending or .none -- process the character below.
         .pending, .none => {},
     }
+    App.fileLog("handleCharEvent: char=0x{X:0>4} state={s}", .{ char_code, @tagName(state) });
 
     var codepoint: u21 = undefined;
 
@@ -969,9 +975,12 @@ pub fn handleCharEvent(self: *Surface, char_code: u16) void {
         .consumed => unreachable,
     };
 
-    _ = self.core_surface.keyCallback(ev) catch |err| {
+    const result = self.core_surface.keyCallback(ev) catch |err| {
         log.warn("char callback error: {}", .{err});
+        App.fileLog("handleCharEvent: keyCallback ERROR for U+{X:0>4}: {}", .{ @as(u32, codepoint), err });
+        return;
     };
+    App.fileLog("handleCharEvent: keyCallback U+{X:0>4} result={s}", .{ @as(u32, codepoint), @tagName(result) });
 }
 
 pub fn handleMouseMove(self: *Surface, x: f64, y: f64) void {
