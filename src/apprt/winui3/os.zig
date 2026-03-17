@@ -467,6 +467,7 @@ pub const NCCALCSIZE_PARAMS = extern struct {
 };
 
 // --- WM_NCHITTEST return values ---
+pub const HTNOWHERE: c_int = 0;
 pub const HTTRANSPARENT: c_int = -1;
 pub const HTCLIENT: c_int = 1;
 pub const HTCAPTION: c_int = 2;

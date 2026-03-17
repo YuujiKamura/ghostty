@@ -1349,20 +1349,24 @@ pub fn newTab(self: *App) !void {
 
 /// Close the active tab and its surface.
 pub fn closeActiveTab(self: *App) void {
+    fileLog("closeActiveTab: ENTRY active={} total={}", .{ self.active_surface_idx, self.surfaces.items.len });
     if (tab_manager.closeActiveTab(self)) {
-        log.info("closeActiveTab: no tabs remain, requesting app exit", .{});
+        fileLog("closeActiveTab: no tabs remain, requesting app exit", .{});
         self.running = false;
         if (self.xaml_app) |xa| xa.Exit() catch {};
     }
+    fileLog("closeActiveTab: EXIT total={}", .{self.surfaces.items.len});
 }
 
 /// Close a specific tab by index.
 pub fn closeTab(self: *App, idx: usize) void {
+    fileLog("closeTab: ENTRY idx={} total={}", .{ idx, self.surfaces.items.len });
     if (tab_manager.closeTab(self, idx)) {
-        log.info("closeTab: no tabs remain, requesting app exit", .{});
+        fileLog("closeTab: no tabs remain, requesting app exit", .{});
         self.running = false;
         if (self.xaml_app) |xa| xa.Exit() catch {};
     }
+    fileLog("closeTab: EXIT total={}", .{self.surfaces.items.len});
 }
 
 /// Close a surface by pointer (called from Surface.close).
@@ -1460,11 +1464,19 @@ fn controlPlaneCaptureTabList(ctx: *anyopaque, allocator: Allocator) !?[]u8 {
 // ---------------------------------------------------------------
 
 fn onTabCloseRequested(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
+    fileLog("onTabCloseRequested: ENTRY sender={} args={} tabs={}", .{
+        @intFromPtr(sender),
+        @intFromPtr(args),
+        self.surfaces.items.len,
+    });
     event_handlers.onTabCloseRequested(self, sender, args);
+    fileLog("onTabCloseRequested: EXIT tabs={}", .{self.surfaces.items.len});
 }
 
 fn onAddTabButtonClick(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
+    fileLog("onAddTabButtonClick: ENTRY tabs={}", .{self.surfaces.items.len});
     event_handlers.onAddTabButtonClick(self, sender, args);
+    fileLog("onAddTabButtonClick: EXIT tabs={}", .{self.surfaces.items.len});
 }
 
 fn onResourceManagerRequested(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
@@ -2023,7 +2035,13 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
                 .new_tab => self.newTab() catch |err| {
                     log.warn("control_plane new_tab failed: {}", .{err});
                 },
-                .close_tab => self.closeActiveTab(),
+                .close_tab => {
+                    if (param < self.surfaces.items.len) {
+                        self.closeTab(param);
+                    } else {
+                        self.closeActiveTab();
+                    }
+                },
                 .switch_tab => {
                     if (self.tab_view) |tv| {
                         tv.SetSelectedIndex(@intCast(param)) catch {};

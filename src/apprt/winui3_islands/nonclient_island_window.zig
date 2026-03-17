@@ -39,6 +39,12 @@ const TOP_BORDER_VISIBLE_HEIGHT: c_int = 1;
 /// Caption button zone width at 96 DPI (Min + Max + Close ≈ 138px).
 const CAPTION_BUTTON_ZONE_96DPI: c_int = 138;
 
+/// Extra drag space (at 96 DPI) to the left of caption buttons for window dragging.
+const DRAG_SPACE_96DPI: c_int = 100;
+
+/// Total drag zone at 96 DPI = caption buttons + extra drag space.
+const DRAG_ZONE_96DPI: c_int = CAPTION_BUTTON_ZONE_96DPI + DRAG_SPACE_96DPI;
+
 const DRAG_BAR_CLASS_NAME = std.unicode.utf8ToUtf16LeStringLiteral("GhosttyDragBar");
 const EMPTY_WINDOW_NAME = std.unicode.utf8ToUtf16LeStringLiteral("");
 
@@ -181,6 +187,7 @@ pub fn onNcCalcSize(hwnd: os.HWND, wparam: os.WPARAM, lparam: os.LPARAM) os.LRES
 
 pub fn onNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
     const lp: usize = @bitCast(lparam);
+    const mouse_x = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp)))));
     const mouse_y = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp >> 16)))));
 
     const original_ret = os.DefWindowProcW(hwnd, os.WM_NCHITTEST, 0, lparam);
@@ -194,9 +201,21 @@ pub fn onNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
     const resize_h = getResizeHandleHeight(hwnd);
     const is_on_resize_border = mouse_y < wrect.top + resize_h;
 
-    // WT: the top of the drag bar is used to resize the window
+    // WT: the top of the drag bar is used to resize the window (full width)
     if (os.IsZoomed(hwnd) == 0 and is_on_resize_border) {
         return os.HTTOP;
+    }
+
+    // The drag bar only covers the right portion of the titlebar.
+    // For the left portion (tab area), return HTCLIENT so XAML gets clicks.
+    const dpi = os.GetDpiForWindow(hwnd);
+    const scale: f32 = @as(f32, @floatFromInt(dpi)) / 96.0;
+    const drag_zone: c_int = @intFromFloat(@as(f32, @floatFromInt(DRAG_ZONE_96DPI)) * scale);
+    const drag_x = wrect.right - drag_zone;
+
+    // In the titlebar region but LEFT of drag zone → let XAML handle it
+    if (mouse_x < drag_x) {
+        return os.HTCLIENT;
     }
 
     return os.HTCAPTION;
@@ -220,10 +239,11 @@ pub fn updateIslandPosition(self: *NonClientIslandWindow, width: c_int, height: 
     const top_offset = if (original_top == 0) @as(c_int, -1) else original_top;
     const content_height = if (height > top_offset) height - top_offset else 0;
 
-    // WT: SetWindowPos(_interopWindowHandle, HWND_BOTTOM, ...)
+    // WT: position interop HWND at HWND_BOTTOM so the drag bar stays on top.
+    const z_after = os.HWND_BOTTOM;
     _ = os.SetWindowPos(
         ih,
-        os.HWND_BOTTOM,
+        z_after,
         0,
         top_offset,
         width,
@@ -260,13 +280,19 @@ pub fn resizeDragBarWindow(self: *NonClientIslandWindow, width_px: c_int) void {
     });
 
     if (width_px > 0 and titlebar_h > 0) {
-        // WT: SetWindowPos(HWND_TOP) — child window, client coordinates relative to parent.
+        // Only cover the RIGHT portion of the titlebar for dragging.
+        // Leave the left portion (tabs, + button) open for XAML clicks.
+        const scale: f32 = @as(f32, @floatFromInt(dpi)) / 96.0;
+        const drag_zone: c_int = @intFromFloat(@as(f32, @floatFromInt(DRAG_ZONE_96DPI)) * scale);
+        const drag_x = @max(0, width_px - drag_zone);
+        const drag_w = width_px - drag_x;
+
         _ = os.SetWindowPos(
             drag_bar_hwnd,
             os.HWND_TOP,
-            0,
+            drag_x,
             top_offset,
-            width_px,
+            drag_w,
             titlebar_h,
             os.SWP_NOACTIVATE | os.SWP_SHOWWINDOW | os.SWP_NOSENDCHANGING,
         );
@@ -460,8 +486,6 @@ fn dragBarNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
     const button_w = @divFloor(button_zone, 3);
 
     // WT: rightBorder = rcParent.right - nonClientFrame.right
-    // nonClientFrame.right is the right border width from GetNonClientFrame().
-    // For simplicity, use the resize handle height as the border (same metric).
     const border = os.GetSystemMetricsForDpi(os.SM_CXSIZEFRAME, dpi) +
         os.GetSystemMetricsForDpi(os.SM_CXPADDEDBORDER, dpi);
     const right_border = parent_rect.right - border;
