@@ -99,6 +99,27 @@ pub fn closeTab(self: anytype, idx: usize) bool {
     //    dispatch pending events to our delegates during the TabView operations
     //    below. The core_initialized=false guard in each callback will cause
     //    them to no-op safely.
+
+    // Remove the closed surface's panel from tab_content_grid before deinit.
+    // (Panels stay in the grid across tab switches; we must explicitly remove on close.)
+    if (self.tab_content_grid) |tab_content| {
+        const closed_panel: ?*winrt.IInspectable = surface.surface_grid orelse surface.swap_chain_panel;
+        if (closed_panel) |cp| {
+            const content_panel = tab_content.queryInterface(com.IPanel) catch null;
+            if (content_panel) |cpanel| {
+                defer cpanel.release();
+                const children_raw = cpanel.Children() catch null;
+                if (children_raw) |cr| {
+                    const children: *com.IVector = @ptrCast(@alignCast(cr));
+                    defer children.release();
+                    if (children.indexOf(@ptrCast(cp)) catch null) |child_idx| {
+                        children.removeAt(@intCast(child_idx)) catch {};
+                    }
+                }
+            }
+        }
+    }
+
     surface.deinit();
     _ = self.surfaces.orderedRemove(idx);
 

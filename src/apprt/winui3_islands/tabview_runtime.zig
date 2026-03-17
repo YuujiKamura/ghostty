@@ -63,8 +63,9 @@ pub fn createRoot(
         fileLog("initXaml step 7.5: TabViewRoot.xbf loaded into RootGrid", .{});
     }
 
-    // Set black background on the RootGrid.
-    self.setControlBackground(root_grid_insp, .{ .A = 255, .R = 0, .G = 0, .B = 0 });
+    // Set dark gray background on the RootGrid (RGB 32,32,32 matches WinUI3 dark theme;
+    // pure black makes the TabView AddButton "+" icon invisible).
+    self.setControlBackground(root_grid_insp, .{ .A = 255, .R = 32, .G = 32, .B = 32 });
 
     // 3. Find named elements in the loaded XAML.
     const root_fe = try root_grid_insp.queryInterface(com.IFrameworkElement);
@@ -83,7 +84,7 @@ pub fn createRoot(
     const tab_content_insp = try root_fe.FindName(tc_name);
     const tab_content_winrt: *winrt.IInspectable = @ptrCast(tab_content_insp);
 
-    self.setControlBackground(tab_content_winrt, .{ .A = 255, .R = 0, .G = 0, .B = 0 });
+    self.setControlBackground(tab_content_winrt, .{ .A = 255, .R = 32, .G = 32, .B = 32 });
 
     // Store the tab_content_grid on the App for later use.
     self.tab_content_grid = tab_content_winrt;
