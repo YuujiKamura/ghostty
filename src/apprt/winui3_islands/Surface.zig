@@ -80,9 +80,8 @@ ime_character_received_token: i64 = 0,
 ime_text_changed_token: i64 = 0,
 ime_got_focus_token: i64 = 0,
 ime_lost_focus_token: i64 = 0,
-ime_text_comp_start_token: i64 = 0,
-ime_text_comp_change_token: i64 = 0,
-ime_text_comp_end_token: i64 = 0,
+// TextBox composition tokens removed — TSF is now the sole IME handler.
+// ime_text_comp_start_token, ime_text_comp_change_token, ime_text_comp_end_token removed.
 
 /// The SwapChainPanel for composition rendering.
 swap_chain_panel: ?*winrt.IInspectable = null,
@@ -416,27 +415,9 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         defer ime_text_changed.release();
         self.ime_text_changed_token = ime_tb.AddTextChanged(ime_text_changed.comPtr()) catch 0;
 
-        const CompositionDelegate = gen.TypedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
-        const comp_start = try CompositionDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxCompositionStarted, &com.IID_TextCompositionStartedHandler);
-        defer comp_start.release();
-        self.ime_text_comp_start_token = ime_tb.AddTextCompositionStarted(comp_start.comPtr()) catch |err| blk: {
-            log.warn("ime AddTextCompositionStarted failed: {}", .{err});
-            break :blk 0;
-        };
-
-        const comp_change = try CompositionDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxCompositionChanged, &com.IID_TextCompositionChangedHandler);
-        defer comp_change.release();
-        self.ime_text_comp_change_token = ime_tb.AddTextCompositionChanged(comp_change.comPtr()) catch |err| blk: {
-            log.warn("ime AddTextCompositionChanged failed: {}", .{err});
-            break :blk 0;
-        };
-
-        const comp_end = try CompositionDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxCompositionEnded, &com.IID_TextCompositionEndedHandler);
-        defer comp_end.release();
-        self.ime_text_comp_end_token = ime_tb.AddTextCompositionEnded(comp_end.comPtr()) catch |err| blk: {
-            log.warn("ime AddTextCompositionEnded failed: {}", .{err});
-            break :blk 0;
-        };
+        // TextBox composition event handlers (Started/Changed/Ended) removed.
+        // TSF is now the sole IME handler — composition flows through
+        // TsfImplementation's ITfContextOwnerCompositionSink and ITfTextEditSink.
     }
 
     // NOTE: SwapChainPanel is set as TabViewItem content by App.newTab(),
@@ -550,24 +531,13 @@ pub fn deinit(self: *Surface) void {
         if (self.ime_text_changed_token != 0) {
             ime_tb.RemoveTextChanged(self.ime_text_changed_token) catch {};
         }
-        if (self.ime_text_comp_start_token != 0) {
-            ime_tb.RemoveTextCompositionStarted(self.ime_text_comp_start_token) catch {};
-        }
-        if (self.ime_text_comp_change_token != 0) {
-            ime_tb.RemoveTextCompositionChanged(self.ime_text_comp_change_token) catch {};
-        }
-        if (self.ime_text_comp_end_token != 0) {
-            ime_tb.RemoveTextCompositionEnded(self.ime_text_comp_end_token) catch {};
-        }
+        // TextBox composition tokens removed — TSF is sole IME handler.
         self.ime_preview_key_down_token = 0;
         self.ime_preview_key_up_token = 0;
         self.ime_character_received_token = 0;
         self.ime_text_changed_token = 0;
         self.ime_got_focus_token = 0;
         self.ime_lost_focus_token = 0;
-        self.ime_text_comp_start_token = 0;
-        self.ime_text_comp_change_token = 0;
-        self.ime_text_comp_end_token = 0;
     }
     // Release scrollbar and surface grid.
     if (self.scroll_bar_insp) |sb| {
@@ -1059,10 +1029,14 @@ fn onXamlPointerPressed(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
         5 => .middle, // MiddleButtonPressed
         else => return,
     };
-    // Keep the hidden ime_text_box as the single WinUI3 text owner so TSF
-    // handles both normal text and IME composition on one path.
+    // Focus the SwapChainPanel — TSF is associated with the main HWND
+    // and handles IME composition directly. No TextBox redirection needed.
     if (!self.app.resizing) {
         input_runtime.focusKeyboardTarget(self.app);
+        // Ensure TSF knows we have focus.
+        if (self.app.tsf_impl) |*tsf| {
+            tsf.focus();
+        }
     }
     self.handleMouseButton(button, .press);
     ea.SetHandled(true) catch {};
@@ -1138,14 +1112,15 @@ fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
     const vk_u32 = @as(u32, @bitCast(vk));
     App.fileLog("xaml_surface: PreviewKeyDown vk=0x{x}", .{vk_u32});
     if (isImePassthroughVirtualKey(vk_u32)) {
-        // IME toggle/mode key or VK_PROCESSKEY — focus the XAML ime_text_box
-        // which handles IME composition via TSF. The TextBox has an IME context
-        // associated with it; the SwapChainPanel does not, so IME toggle keys
-        // must be forwarded to the TextBox to actually activate/deactivate IME.
-        App.fileLog("PreviewKeyDown: IME key 0x{x} -> focusImeTextBox", .{vk_u32});
-        self.app.keyboard_focus_target = .ime_text_box;
-        _ = self.focusImeTextBox();
-        return; // Don't mark handled — let IME process.
+        // IME toggle/mode key or VK_PROCESSKEY — let TSF handle it.
+        // TSF is associated with the main HWND and will process IME
+        // composition directly without needing the TextBox.
+        App.fileLog("PreviewKeyDown: IME key 0x{x} -> pass to TSF (no TextBox redirect)", .{vk_u32});
+        // Notify TSF that focus should be set (in case it was lost).
+        if (self.app.tsf_impl) |*tsf| {
+            tsf.focus();
+        }
+        return; // Don't mark handled — let IME process via TSF.
     }
     // Save app pointer before handleKeyEvent — a keybinding (e.g. close_tab)
     // may destroy this Surface, freeing self.
@@ -1263,60 +1238,10 @@ fn onImeTextBoxTextChanged(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void 
     self.flushImeTextBoxCommittedDelta(utf16);
 }
 
-fn onImeTextBoxCompositionStarted(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
-    if (!self.core_initialized) return;
-    const ea: *com.ITextCompositionStartedEventArgs = @ptrCast(@alignCast(args orelse return));
-    const start = ea.StartIndex() catch -1;
-    const len = ea.Length() catch -1;
-    self.ime_text_box_composing = true;
-    App.fileLog("ime_text_box: CompositionStarted start={} len={}", .{ start, len });
-}
-
-fn onImeTextBoxCompositionChanged(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
-    if (!self.core_initialized) return;
-    const ea: *com.ITextCompositionChangedEventArgs = @ptrCast(@alignCast(args orelse return));
-    const start = ea.StartIndex() catch -1;
-    const len = ea.Length() catch -1;
-    self.ime_text_box_composing = true;
-    App.fileLog("ime_text_box: CompositionChanged start={} len={}", .{ start, len });
-
-    // Extract composition text from TextBox and show as preedit
-    if (start >= 0 and len > 0) {
-        const ime_tb = self.ime_text_box orelse return;
-        const text_h = ime_tb.Text() catch return;
-        defer if (text_h) |h| winrt.deleteHString(@ptrCast(h));
-        const utf16 = winrt.hstringSliceRaw(text_h);
-        const ustart: usize = @intCast(start);
-        const ulen: usize = @intCast(len);
-        if (ustart + ulen <= utf16.len) {
-            const comp_utf16 = utf16[ustart..ustart + ulen];
-            // Convert UTF-16 to UTF-8 for preeditCallback
-            var utf8_buf: [256]u8 = undefined;
-            var utf8_len: usize = 0;
-            for (comp_utf16) |cu| {
-                if (utf8_len + 4 > utf8_buf.len) break;
-                const cp: u21 = cu;
-                const seq_len = std.unicode.utf8Encode(cp, utf8_buf[utf8_len..]) catch break;
-                utf8_len += seq_len;
-            }
-            if (utf8_len > 0) {
-                self.core_surface.preeditCallback(utf8_buf[0..utf8_len]) catch {};
-            }
-        }
-    }
-}
-
-fn onImeTextBoxCompositionEnded(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
-    if (!self.core_initialized) return;
-    const ea: *com.ITextCompositionEndedEventArgs = @ptrCast(@alignCast(args orelse return));
-    const start = ea.StartIndex() catch -1;
-    const len = ea.Length() catch -1;
-    self.ime_text_box_composing = false;
-    App.fileLog("ime_text_box: CompositionEnded start={} len={}", .{ start, len });
-    // Clear preedit display
-    self.core_surface.preeditCallback(null) catch {};
-    self.flushImeTextBoxCommittedText();
-}
+// onImeTextBoxCompositionStarted, onImeTextBoxCompositionChanged, onImeTextBoxCompositionEnded
+// REMOVED — TSF is now the sole IME handler. Composition events flow through
+// TsfImplementation's ITfContextOwnerCompositionSink (OnStartComposition/OnEndComposition)
+// and ITfTextEditSink (OnEndEdit) which extracts preedit and finalized text.
 
 fn onXamlGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
@@ -1327,10 +1252,10 @@ fn onXamlGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
             log.warn("focusCallback(true) error: {}", .{err});
         };
     }
-    // Always redirect XAML focus from SwapChainPanel to the hidden IME TextBox.
-    // The TextBox has a TSF/IME context; without this, IME toggle keys
-    // (Hankaku/Zenkaku, Alt+`, etc.) have no IME context to act on and are
-    // silently swallowed.
+    // With direct TSF, focus stays on SwapChainPanel. TSF is associated with
+    // the main HWND and handles IME composition directly. No TextBox redirect needed.
+    // Legacy TextBox focus path retained only if keyboard_focus_target is explicitly
+    // set to .ime_text_box (should not happen in normal TSF flow).
     if (self.app.keyboard_focus_target == .ime_text_box) {
         _ = self.focusImeTextBox();
     }
@@ -1354,6 +1279,11 @@ fn onXamlLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     self.core_surface.focusCallback(false) catch |err| {
         log.warn("focusCallback(false) error: {}", .{err});
     };
+
+    // TSF unfocus when SwapChainPanel loses focus (matching WT's _LostFocusHandler).
+    if (self.app.tsf_impl) |*tsf| {
+        tsf.unfocus();
+    }
 }
 
 fn onImeTextBoxGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {

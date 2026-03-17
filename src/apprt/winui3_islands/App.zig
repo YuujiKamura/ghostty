@@ -149,9 +149,10 @@ hwnd: ?os.HWND = null,
 /// behaviors, but no longer the default keyboard text owner.
 input_hwnd: ?os.HWND = null,
 
-/// Desired keyboard focus owner. WinUI3 text/IME input should stay on the
-/// hidden XAML TextBox so TSF owns the composition lifecycle.
-keyboard_focus_target: KeyboardFocusTarget = .ime_text_box,
+/// Desired keyboard focus owner. With direct TSF, focus stays on the
+/// SwapChainPanel — TSF is associated with the main HWND and handles
+/// IME composition directly without needing the TextBox.
+keyboard_focus_target: KeyboardFocusTarget = .xaml_surface,
 ime_composing: bool = false,
 ime_last_had_result: bool = false,
 
@@ -649,8 +650,8 @@ fn setupNativeInputWindows(self: *App) void {
         self.input_hwnd = input_overlay.createInputWindow(hwnd, @intFromPtr(self));
         if (self.input_hwnd) |input_hwnd| {
             _ = os.ImmAssociateContextEx(input_hwnd, null, os.IACE_DEFAULT);
-            self.keyboard_focus_target = .ime_text_box;
-            fileLog("setupNativeInputWindows: input HWND=0x{x} created; text owner=ime_text_box", .{@intFromPtr(input_hwnd)});
+            // keyboard_focus_target stays .xaml_surface — TSF is the sole IME handler.
+            fileLog("setupNativeInputWindows: input HWND=0x{x} created; text owner=xaml_surface (TSF direct)", .{@intFromPtr(input_hwnd)});
         } else {
             fileLog("setupNativeInputWindows: WARNING input_hwnd creation FAILED", .{});
         }
