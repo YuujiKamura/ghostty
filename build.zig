@@ -182,10 +182,12 @@ pub fn build(b: *std.Build) !void {
 
     if (config.target.result.os.tag == .windows and (config.app_runtime == .winui3 or config.app_runtime == .winui3_islands)) {
         // Stage the Windows App SDK bootstrap DLL next to the exe so LoadLibraryW finds it.
+        const default_user_profile = std.process.getEnvVarOwned(b.allocator, "USERPROFILE") catch ".";
+        const default_bootstrap_path = std.fs.path.join(b.allocator, &.{ default_user_profile, ".nuget", "packages", "microsoft.windowsappsdk", "1.4.230822000", "runtimes", "win10-x64", "native", "Microsoft.WindowsAppRuntime.Bootstrap.dll" }) catch unreachable;
+        const bootstrap_dll_path = b.option([]const u8, "winappsdk-bootstrap-dll", "Path to Microsoft.WindowsAppRuntime.Bootstrap.dll") orelse default_bootstrap_path;
+
         {
-            const src: std.Build.LazyPath = .{ .cwd_relative = b.pathFromRoot(
-                "../.nuget/packages/microsoft.windowsappsdk/1.4.230822000/runtimes/win10-x64/native/Microsoft.WindowsAppRuntime.Bootstrap.dll",
-            ) };
+            const src: std.Build.LazyPath = .{ .cwd_relative = bootstrap_dll_path };
             const cp = b.addInstallBinFile(src, "Microsoft.WindowsAppRuntime.Bootstrap.dll");
             b.getInstallStep().dependOn(&cp.step);
         }

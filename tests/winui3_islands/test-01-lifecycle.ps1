@@ -1,6 +1,10 @@
 # test-01-lifecycle.ps1 — Startup -> shutdown lifecycle test
 # Manages its own process. Does NOT use UIA. Does NOT depend on the runner's ghostty.
 # Verifies process starts, XAML init completes via log markers, and process exits cleanly.
+#
+# NOTE: Timer-based shutdown (CLOSE_TAB_AFTER_MS) bypasses WM_CLOSE, so XAML child
+# windows (SiteBridge, drag bar) may linger briefly after process exit. This is
+# expected in the test path — normal user-initiated close via WM_CLOSE cleans up properly.
 
 $ErrorActionPreference = 'Stop'
 $testName = "test-01-lifecycle"
