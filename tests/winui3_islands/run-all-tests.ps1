@@ -54,6 +54,7 @@ if (Test-Path $lifecycleTest) {
 # Phase 2: Shared-process tests (02a through 04)
 # ============================================================
 Write-Host "`n=== Phase 2: Launching Ghostty for shared tests ===" -ForegroundColor Cyan
+$env:GHOSTTY_CONTROL_PLANE = "1"
 $proc = Start-GhosttyIslands -ExePath $ExePath
 $hwnd = [IntPtr]::Zero
 
@@ -74,6 +75,7 @@ $sharedTests = @(
     "test-02a-tabview",
     "test-02b-ime-overlay",
     "test-02c-drag-bar",
+    "test-02d-control-plane",
     "test-03-window-ops",
     "test-04-keyboard"
 )
