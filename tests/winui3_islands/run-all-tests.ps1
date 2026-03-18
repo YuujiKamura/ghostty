@@ -35,15 +35,17 @@ Write-Host "`n=== Phase 1: Lifecycle Test (standalone) ===" -ForegroundColor Cya
 $lifecycleTest = Join-Path $PSScriptRoot "test-01-lifecycle.ps1"
 if (Test-Path $lifecycleTest) {
     $name = "test-01-lifecycle"
-    Write-Host "`n--- $name ---" -ForegroundColor Cyan
     $startTime = [DateTime]::UtcNow
+    $testOutput = $null
     try {
-        & $lifecycleTest
+        $testOutput = & $lifecycleTest 6>&1
         $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
         $results += @{ Name = $name; Status = "PASS"; Time = [int]$elapsed; Error = $null }
     } catch {
         $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
         $results += @{ Name = $name; Status = "FAIL"; Time = [int]$elapsed; Error = $_.Exception.Message }
+        Write-Host "`n--- $name (FAIL) ---" -ForegroundColor Red
+        if ($testOutput) { $testOutput | ForEach-Object { Write-Host "  $_" } }
         Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
     }
 } else {
@@ -88,15 +90,19 @@ foreach ($testBaseName in $sharedTests) {
         continue
     }
 
-    Write-Host "`n--- $testBaseName ---" -ForegroundColor Cyan
     $startTime = [DateTime]::UtcNow
+    $testOutput = $null
     try {
-        & $testPath -Hwnd $hwnd -ProcessId $proc.Id
+        # Capture test output; only show on failure
+        $testOutput = & $testPath -Hwnd $hwnd -ProcessId $proc.Id 6>&1
         $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
         $results += @{ Name = $testBaseName; Status = "PASS"; Time = [int]$elapsed; Error = $null }
     } catch {
         $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
         $results += @{ Name = $testBaseName; Status = "FAIL"; Time = [int]$elapsed; Error = $_.Exception.Message }
+        # Show captured output on failure for debugging
+        Write-Host "`n--- $testBaseName (FAIL) ---" -ForegroundColor Red
+        if ($testOutput) { $testOutput | ForEach-Object { Write-Host "  $_" } }
         Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
     }
 }
