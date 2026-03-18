@@ -13,6 +13,7 @@ const apprt = @import("../apprt.zig");
 const font = @import("../font/main.zig");
 const configpkg = @import("../config.zig");
 const rendererpkg = @import("../renderer.zig");
+const terminal = @import("../terminal/main.zig");
 const shadertoy = @import("shadertoy.zig");
 const com = @import("d3d11/com.zig");
 const win32 = @import("d3d11/win32.zig");
@@ -70,6 +71,13 @@ composition_surface_handle: ?com.HANDLE = null,
 /// Performance stats.
 perf: PerfStats = .{},
 present_count: u64 = 0,
+
+/// Frame timing profiler (Issue #116)
+last_frame_ns: i128 = 0,
+frame_times_sum_ns: u64 = 0,
+frame_time_min_ns: u64 = std.math.maxInt(u64),
+frame_time_max_ns: u64 = 0,
+frame_profile_count: u32 = 0,
 
 const PerfStats = @import("perf_stats.zig").PerfStats;
 
@@ -311,6 +319,7 @@ pub fn initTarget(self: *const D3D11, width: usize, height: usize) !Target {
 
 /// Present the provided target by copying it to the swap chain back buffer.
 pub fn present(self: *D3D11, target: Target) !void {
+    @setRuntimeSafety(terminal.options.slow_runtime_safety);
     const ctx = self.context orelse return;
     const sc = self.swap_chain orelse return;
 
@@ -344,6 +353,33 @@ pub fn present(self: *D3D11, target: Target) !void {
     }
 
     self.last_target = target;
+
+    // Frame timing profiler (Issue #116)
+    {
+        const now = std.time.nanoTimestamp();
+        if (self.last_frame_ns != 0) {
+            const delta_ns: u64 = @intCast(@max(0, now - self.last_frame_ns));
+            self.frame_times_sum_ns += delta_ns;
+            self.frame_time_min_ns = @min(self.frame_time_min_ns, delta_ns);
+            self.frame_time_max_ns = @max(self.frame_time_max_ns, delta_ns);
+            self.frame_profile_count += 1;
+
+            if (self.frame_profile_count >= 120) {
+                const avg_ns = self.frame_times_sum_ns / self.frame_profile_count;
+                log.info("frame-profile: avg={d:.2}ms min={d:.2}ms max={d:.2}ms count={}", .{
+                    @as(f64, @floatFromInt(avg_ns)) / 1_000_000.0,
+                    @as(f64, @floatFromInt(self.frame_time_min_ns)) / 1_000_000.0,
+                    @as(f64, @floatFromInt(self.frame_time_max_ns)) / 1_000_000.0,
+                    self.frame_profile_count,
+                });
+                self.frame_times_sum_ns = 0;
+                self.frame_time_min_ns = std.math.maxInt(u64);
+                self.frame_time_max_ns = 0;
+                self.frame_profile_count = 0;
+            }
+        }
+        self.last_frame_ns = now;
+    }
 }
 
 /// Present the last presented target again.

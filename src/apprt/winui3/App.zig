@@ -1817,6 +1817,18 @@ pub fn loadXamlResources(self: *App, xa: *com.IApplication) void {
 }
 
 fn enableDebugSettings(_: *App, xa: *com.IApplication) void {
+    // Only enable XAML debug tracing if explicitly requested via env var.
+    // These fire on every layout pass and hurt debug build performance.
+    const enable_tracing = if (std.process.getenvW(std.unicode.utf8ToUtf16LeStringLiteral("GHOSTTY_XAML_DEBUG_TRACING"))) |val|
+        std.mem.eql(u16, val, std.unicode.utf8ToUtf16LeStringLiteral("1"))
+    else
+        false;
+
+    if (!enable_tracing) {
+        log.debug("DebugSettings: tracing disabled (set GHOSTTY_XAML_DEBUG_TRACING=1 to enable)", .{});
+        return;
+    }
+
     const ds = xa.DebugSettings() catch |err| {
         log.warn("DebugSettings: failed to get: {}", .{@intFromError(err)});
         return;

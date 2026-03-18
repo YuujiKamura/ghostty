@@ -168,6 +168,7 @@ pub const Shaper = struct {
         // Convert all our info/pos to cells and set it.
         self.cell_buf.clearRetainingCapacity();
         for (info, pos) |info_v, pos_v| {
+            @setRuntimeSafety(terminal.options.slow_runtime_safety);
             // info_v.cluster is the index into our codepoints array. We use it
             // to get the original cluster.
             const index = info_v.cluster;

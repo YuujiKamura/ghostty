@@ -2613,6 +2613,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 cells_raw[0..cells_len],
                 cells_style[0..cells_len],
             ) |x, *cell, *managed_style| {
+                @setRuntimeSafety(terminal.options.slow_runtime_safety);
                 // If this cell falls within our preedit range then we
                 // skip this because preedits are setup separately.
                 if (preedit_range) |range| preedit: {
