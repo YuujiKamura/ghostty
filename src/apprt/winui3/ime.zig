@@ -4,7 +4,7 @@
 /// WM_IME_COMPOSITION, and WM_IME_ENDCOMPOSITION messages.
 const std = @import("std");
 const os = @import("os.zig");
-const App = @import("App.zig");
+const App = @import("../winui3_islands/App.zig");
 const input_overlay = @import("input_overlay.zig");
 const input_runtime = @import("input_runtime.zig");
 

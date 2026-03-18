@@ -7,7 +7,7 @@ const builtin = @import("builtin");
 const std = @import("std");
 const os = @import("os.zig");
 const input = @import("../../input.zig");
-const App = @import("App.zig");
+const App = @import("../winui3_islands/App.zig");
 const ime = @import("ime.zig");
 
 const log = std.log.scoped(.winui3);
@@ -84,7 +84,7 @@ pub fn inputWndProc(
             const vk = @as(u16, @truncate(wp_val));
             if (app.activeSurface()) |surface| {
                 if (vk == 0xE5) {
-                    App.fileLog("inputWndProc: VK_PROCESSKEY -> focusImeTextBox", .{});
+                    log.info("inputWndProc: VK_PROCESSKEY -> focusImeTextBox", .{});
                     app.keyboard_focus_target = .ime_text_box;
                     _ = surface.focusImeTextBox();
                     return os.DefWindowProcW(hwnd, msg, wparam, lparam);

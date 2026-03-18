@@ -72,20 +72,19 @@ var ctx_close = CaptionContext{ .action = .close };
 const XamlDelegate = gen.TappedEventHandlerImpl(CaptionContext, *const fn (*CaptionContext, ?*anyopaque, ?*anyopaque) void);
 
 fn onCaptionTapped(ctx: *CaptionContext, _: ?*anyopaque, _: ?*anyopaque) void {
-    const App = @import("App.zig");
     const hwnd = g_hwnd orelse return;
     switch (ctx.action) {
         .minimize => {
-            App.fileLog("caption: minimize clicked", .{});
+            log.info("caption: minimize clicked", .{});
             _ = os.PostMessageW(hwnd, os.WM_SYSCOMMAND, os.SC_MINIMIZE, 0);
         },
         .maximize => {
             const sc = if (os.IsZoomed(hwnd) != 0) os.SC_RESTORE else os.SC_MAXIMIZE;
-            App.fileLog("caption: maximize/restore clicked (zoomed={})", .{os.IsZoomed(hwnd) != 0});
+            log.info("caption: maximize/restore clicked (zoomed={})", .{os.IsZoomed(hwnd) != 0});
             _ = os.PostMessageW(hwnd, os.WM_SYSCOMMAND, sc, 0);
         },
         .close => {
-            App.fileLog("caption: close clicked", .{});
+            log.info("caption: close clicked", .{});
             _ = os.PostMessageW(hwnd, os.WM_SYSCOMMAND, os.SC_CLOSE, 0);
         },
     }
@@ -93,79 +92,78 @@ fn onCaptionTapped(ctx: *CaptionContext, _: ?*anyopaque, _: ?*anyopaque) void {
 
 /// Creates the caption button panel and attaches it to the TabView footer.
 pub fn install(tab_view: *com.ITabView, hwnd: os.HWND) void {
-    const App = @import("App.zig");
     g_hwnd = hwnd;
 
     const reader_class = winrt.hstring("Microsoft.UI.Xaml.Markup.XamlReader") catch |err| {
-        App.fileLog("caption_buttons: hstring failed: {}", .{@intFromError(err)});
+        log.err("caption_buttons: hstring failed: {}", .{@intFromError(err)});
         return;
     };
     defer winrt.deleteHString(reader_class);
     const reader = winrt.getActivationFactory(com.IXamlReaderStatics, reader_class) catch |err| {
-        App.fileLog("caption_buttons: getActivationFactory failed: {}", .{@intFromError(err)});
+        log.err("caption_buttons: getActivationFactory failed: {}", .{@intFromError(err)});
         return;
     };
     defer reader.release();
 
     const xaml_str = winrt.hstring(CAPTION_XAML) catch |err| {
-        App.fileLog("caption_buttons: xaml hstring failed: {}", .{@intFromError(err)});
+        log.err("caption_buttons: xaml hstring failed: {}", .{@intFromError(err)});
         return;
     };
     defer winrt.deleteHString(xaml_str);
 
     const panel_insp = reader.Load(xaml_str) catch |err| {
-        App.fileLog("caption_buttons: XamlReader.Load FAILED: {}", .{@intFromError(err)});
+        log.err("caption_buttons: XamlReader.Load FAILED: {}", .{@intFromError(err)});
         return;
     };
     defer _ = panel_insp.release(); // Release local ref; TabView holds its own.
 
     // Set as TabStripFooter.
     tab_view.SetTabStripFooter(@ptrCast(panel_insp)) catch |err| {
-        App.fileLog("caption_buttons: SetTabStripFooter FAILED: {}", .{@intFromError(err)});
+        log.err("caption_buttons: SetTabStripFooter FAILED: {}", .{@intFromError(err)});
         return;
     };
 
     // Find named children and register Tapped handlers.
     const fe = panel_insp.queryInterface(com.IFrameworkElement) catch |err| {
-        App.fileLog("caption_buttons: QI IFrameworkElement failed: {}", .{@intFromError(err)});
+        log.err("caption_buttons: QI IFrameworkElement failed: {}", .{@intFromError(err)});
         return;
     };
     defer fe.release();
 
-    registerTapped(fe, "MinimizeButton", &ctx_minimize, App);
-    registerTapped(fe, "MaximizeButton", &ctx_maximize, App);
-    registerTapped(fe, "CloseButton", &ctx_close, App);
+    registerTapped(fe, "MinimizeButton", &ctx_minimize);
+    registerTapped(fe, "MaximizeButton", &ctx_maximize);
+    registerTapped(fe, "CloseButton", &ctx_close);
 
-    App.fileLog("caption_buttons: installed with click handlers", .{});
+    log.info("caption_buttons: installed with click handlers", .{});
 }
 
-fn registerTapped(fe: *com.IFrameworkElement, comptime name: [:0]const u8, ctx: *CaptionContext, comptime App: type) void {
+fn registerTapped(fe: *com.IFrameworkElement, comptime name: [:0]const u8, ctx: *CaptionContext) void {
     const name_hs = winrt.hstring(name) catch return;
     defer winrt.deleteHString(name_hs);
 
     const child_insp = fe.FindName(name_hs) catch |err| {
-        App.fileLog("caption_buttons: FindName({s}) failed: {}", .{ name, @intFromError(err) });
+        log.err("caption_buttons: FindName({s}) failed: {}", .{ name, @intFromError(err) });
         return;
     };
     defer _ = child_insp.release();
 
     const ui_elem = child_insp.queryInterface(com.IUIElement) catch |err| {
-        App.fileLog("caption_buttons: QI IUIElement for {s} failed: {}", .{ name, @intFromError(err) });
+        log.err("caption_buttons: QI IUIElement for {s} failed: {}", .{ name, @intFromError(err) });
         return;
     };
     defer ui_elem.release();
 
     const alloc = std.heap.page_allocator;
     const delegate = XamlDelegate.createWithIid(alloc, ctx, &onCaptionTapped, &com.IID_TappedEventHandler) catch |err| {
-        App.fileLog("caption_buttons: createDelegate for {s} failed: {}", .{ name, @intFromError(err) });
+        log.err("caption_buttons: createDelegate for {s} failed: {}", .{ name, @intFromError(err) });
         return;
     };
     defer delegate.release();
 
     _ = ui_elem.AddTapped(delegate.comPtr()) catch |err| {
-        App.fileLog("caption_buttons: AddTapped for {s} failed: {}", .{ name, @intFromError(err) });
+        log.err("caption_buttons: AddTapped for {s} failed: {}", .{ name, @intFromError(err) });
         return;
     };
 
-    App.fileLog("caption_buttons: {s} Tapped handler registered", .{name});
+    log.info("caption_buttons: {s} Tapped handler registered", .{name});
 }

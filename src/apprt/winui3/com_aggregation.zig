@@ -5,8 +5,6 @@
 const std = @import("std");
 const winrt = @import("winrt.zig");
 const com = @import("com.zig");
-const App = @import("App.zig");
-
 const log = std.log.scoped(.winui3);
 
 // ---------------------------------------------------------------
