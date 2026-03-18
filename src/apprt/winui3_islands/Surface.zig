@@ -3,26 +3,27 @@
 /// D3D11 SwapChainPanel rendering is window-management-agnostic.
 /// This is a copy of winui3/Surface.zig with import paths adjusted
 /// to reference shared modules from ../winui3/ and the local App.zig.
-const Surface = @This();
+pub fn Surface(comptime App: type) type {
+    return struct {
+        const Self = @This();
 
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const apprt = @import("../../apprt.zig");
-const CoreSurface = @import("../../Surface.zig");
-const CoreApp = @import("../../App.zig");
-const configpkg = @import("../../config.zig");
-const input = @import("../../input.zig");
-const terminal = @import("../../terminal/main.zig");
-const App = @import("App.zig");
-const com = @import("../winui3/com.zig");
-const winrt = @import("../winui3/winrt.zig");
-const native_interop = @import("../winui3/native_interop.zig");
-const input_runtime = @import("../winui3/input_runtime.zig"); // Keep this import
-const profiles = @import("profiles.zig"); // Import profiles.zig
-const key = @import("../winui3/key.zig");
-const os = @import("../winui3/os.zig");
+        const std = @import("std");
+        const Allocator = std.mem.Allocator;
+        const apprt = @import("../../apprt.zig");
+        const CoreSurface = @import("../../Surface.zig");
+        const CoreApp = @import("../../App.zig");
+        const configpkg = @import("../../config.zig");
+        const input = @import("../../input.zig");
+        const terminal = @import("../../terminal/main.zig");
+        const com = @import("../winui3/com.zig");
+        const winrt = @import("../winui3/winrt.zig");
+        const native_interop = @import("../winui3/native_interop.zig");
+        const input_runtime = @import("../winui3/input_runtime.zig"); // Keep this import
+        const profiles = @import("profiles.zig"); // Import profiles.zig
+        const key = @import("../winui3/key.zig");
+        const os = @import("../winui3/os.zig");
 
-const SearchOverlay = @import("search_overlay.zig").SearchOverlay;
+        const SearchOverlay = @import("../winui3/SearchOverlay_generic.zig").SearchOverlay(Self);
 
 const log = std.log.scoped(.winui3);
 
@@ -153,7 +154,7 @@ const PendingKey = struct {
     unshifted_codepoint: u21,
 };
 
-pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const configpkg.Config, _profile_opt: ?profiles.Profile) !void {
+pub fn init(self: *Self, app: *App, core_app: *CoreApp, config: *const configpkg.Config, _profile_opt: ?profiles.Profile) !void {
     // TODO: Use _profile_opt for per-tab profile configuration when profile switching is implemented.
     _ = _profile_opt;
     self.* = .{
@@ -251,7 +252,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
         const range_base = try sb_insp.queryInterface(com.IRangeBase);
         defer range_base.release();
         const gen = @import("../winui3/com_generated.zig");
-        const ValueChangedDelegate = gen.RangeBaseValueChangedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const ValueChangedDelegate = gen.RangeBaseValueChangedEventHandlerImpl(Self, *const fn (*Self, ?*anyopaque, ?*anyopaque) void);
         const vc_delegate = try ValueChangedDelegate.createWithIid(
             self.app.core_app.alloc,
             self,
@@ -306,14 +307,14 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     const framework_element = try panel.queryInterface(com.IFrameworkElement);
     defer framework_element.release();
     const gen = @import("../winui3/com_generated.zig");
-    const LoadedDelegate = gen.RoutedEventHandlerImpl(Surface, *const fn (*Surface, *anyopaque, *anyopaque) void);
+    const LoadedDelegate = gen.RoutedEventHandlerImpl(Self, *const fn (*Self, *anyopaque, *anyopaque) void);
     const loaded_delegate = try LoadedDelegate.createWithIid(self.app.core_app.alloc, self, &onLoaded, &com.IID_RoutedEventHandler);
     // Note: LoadedDelegate.createWithIid returns a ref-counted COM object.
     // We pass it to addLoaded which will AddRef it again.
     defer loaded_delegate.release();
     self.loaded_token = try framework_element.AddLoaded(loaded_delegate.comPtr());
 
-    const SizeChangedDelegate = gen.SizeChangedEventHandlerImpl(Surface, *const fn (*Surface, *anyopaque, *anyopaque) void);
+    const SizeChangedDelegate = gen.SizeChangedEventHandlerImpl(Self, *const fn (*Self, *anyopaque, *anyopaque) void);
     const size_changed_delegate = try SizeChangedDelegate.createWithIid(
         self.app.core_app.alloc,
         self,
@@ -339,10 +340,10 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
             log.warn("putIsTabStop failed: {}", .{err});
         };
 
-        const PointerDelegate = gen.PointerEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
-        const KeyDelegate = gen.KeyEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
-        const RoutedDelegate = gen.RoutedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
-        const CharRecvDelegate = gen.TypedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const PointerDelegate = gen.PointerEventHandlerImpl(Self, *const fn (*Self, ?*anyopaque, ?*anyopaque) void);
+        const KeyDelegate = gen.KeyEventHandlerImpl(Self, *const fn (*Self, ?*anyopaque, ?*anyopaque) void);
+        const RoutedDelegate = gen.RoutedEventHandlerImpl(Self, *const fn (*Self, ?*anyopaque, ?*anyopaque) void);
+        const CharRecvDelegate = gen.TypedEventHandlerImpl(Self, *const fn (*Self, ?*anyopaque, ?*anyopaque) void);
 
         // Pointer events
         const ptr_pressed = try PointerDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerPressed, &com.IID_PointerEventHandler);
@@ -388,9 +389,9 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     if (self.ime_text_box) |ime_tb| {
         if (ime_tb.queryInterface(com.IUIElement)) |ime_ue| {
             defer ime_ue.release();
-            const ImeKeyDelegate = gen.KeyEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
-            const ImeRoutedDelegate = gen.RoutedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
-            const ImeCharRecvDelegate = gen.TypedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+            const ImeKeyDelegate = gen.KeyEventHandlerImpl(Self, *const fn (*Self, ?*anyopaque, ?*anyopaque) void);
+            const ImeRoutedDelegate = gen.RoutedEventHandlerImpl(Self, *const fn (*Self, ?*anyopaque, ?*anyopaque) void);
+            const ImeCharRecvDelegate = gen.TypedEventHandlerImpl(Self, *const fn (*Self, ?*anyopaque, ?*anyopaque) void);
 
             const ime_key_down = try ImeKeyDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxPreviewKeyDown, &com.IID_KeyEventHandler);
             defer ime_key_down.release();
@@ -413,7 +414,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
             self.ime_lost_focus_token = ime_ue.AddLostFocus(ime_lost_focus.comPtr()) catch 0;
         } else |_| {}
 
-        const TextChangedDelegate = gen.TextChangedEventHandlerImpl(Surface, *const fn (*Surface, ?*anyopaque, ?*anyopaque) void);
+        const TextChangedDelegate = gen.TextChangedEventHandlerImpl(Self, *const fn (*Self, ?*anyopaque, ?*anyopaque) void);
         const ime_text_changed = try TextChangedDelegate.createWithIid(self.app.core_app.alloc, self, &onImeTextBoxTextChanged, &com.IID_TextChangedEventHandler);
         defer ime_text_changed.release();
         self.ime_text_changed_token = ime_tb.AddTextChanged(ime_text_changed.comPtr()) catch 0;
@@ -445,7 +446,7 @@ pub fn init(self: *Surface, app: *App, core_app: *CoreApp, config: *const config
     log.info("WinUI 3 surface initialized ({d}x{d})", .{ self.size.width, self.size.height });
 }
 
-pub fn deinit(self: *Surface) void {
+pub fn deinit(self: *Self) void {
     self.search_overlay.deinit();
     // Stop the renderer/IO threads FIRST by tearing down core_surface.
     // This joins the renderer thread, ensuring no further bindSwapChain
@@ -580,61 +581,61 @@ pub fn deinit(self: *Surface) void {
     }
 }
 
-pub fn core(self: *Surface) *CoreSurface {
+pub fn core(self: *Self) *CoreSurface {
     return &self.core_surface;
 }
 
-pub fn rtApp(self: *Surface) *App {
+pub fn rtApp(self: *Self) *App {
     return self.app;
 }
 
-pub fn close(self: *Surface, process_active: bool) void {
+pub fn close(self: *Self, process_active: bool) void {
     _ = process_active;
     self.app.closeSurface(self);
 }
 
-pub fn getTitle(self: *Surface) ?[:0]const u8 {
+pub fn getTitle(self: *Self) ?[:0]const u8 {
     return self.title;
 }
 
-pub fn getContentScale(self: *const Surface) !apprt.ContentScale {
+pub fn getContentScale(self: *const Self) !apprt.ContentScale {
     return self.content_scale;
 }
 
-pub fn getSize(self: *const Surface) !apprt.SurfaceSize {
+pub fn getSize(self: *const Self) !apprt.SurfaceSize {
     return self.size;
 }
 
-pub fn pwd(self: *Surface, alloc: std.mem.Allocator) !?[]const u8 {
+pub fn pwd(self: *Self, alloc: std.mem.Allocator) !?[]const u8 {
     if (!self.core_initialized) return null;
     return try self.core_surface.pwd(alloc);
 }
 
-pub fn hasSelection(self: *const Surface) bool {
+pub fn hasSelection(self: *const Self) bool {
     if (!self.core_initialized) return false;
     return self.core_surface.hasSelection();
 }
 
-pub fn cursorIsAtPrompt(self: *Surface) bool {
+pub fn cursorIsAtPrompt(self: *Self) bool {
     if (!self.core_initialized) return false;
     return self.core_surface.cursorIsAtPrompt();
 }
 
-pub fn viewportString(self: *Surface, alloc: std.mem.Allocator) ![]const u8 {
+pub fn viewportString(self: *Self, alloc: std.mem.Allocator) ![]const u8 {
     if (!self.core_initialized) return alloc.dupe(u8, "");
     return try self.core_surface.viewportString(alloc);
 }
 
-pub fn getCursorPos(self: *const Surface) !apprt.CursorPos {
+pub fn getCursorPos(self: *const Self) !apprt.CursorPos {
     return self.cursor_pos;
 }
 
-pub fn supportsSwapChainHandle(self: *const Surface) bool {
+pub fn supportsSwapChainHandle(self: *const Self) bool {
     return self.swap_chain_panel_native2 != null;
 }
 
 pub fn supportsClipboard(
-    _: *const Surface,
+    _: *const Self,
     clipboard_type: apprt.Clipboard,
 ) bool {
     return switch (clipboard_type) {
@@ -644,7 +645,7 @@ pub fn supportsClipboard(
 }
 
 pub fn clipboardRequest(
-    self: *Surface,
+    self: *Self,
     clipboard_type: apprt.Clipboard,
     state: apprt.ClipboardRequest,
 ) !bool {
@@ -695,7 +696,7 @@ pub fn clipboardRequest(
 }
 
 pub fn setClipboard(
-    self: *Surface,
+    self: *Self,
     clipboard_type: apprt.Clipboard,
     contents: []const apprt.ClipboardContent,
     confirm: bool,
@@ -753,7 +754,7 @@ pub fn setClipboard(
     _ = os.CloseClipboard();
 }
 
-pub fn defaultTermioEnv(self: *Surface) !std.process.EnvMap {
+pub fn defaultTermioEnv(self: *Self) !std.process.EnvMap {
     const alloc = self.app.core_app.alloc;
     var env = try std.process.getEnvMap(alloc);
     errdefer env.deinit();
@@ -762,12 +763,12 @@ pub fn defaultTermioEnv(self: *Surface) !std.process.EnvMap {
     return env;
 }
 
-pub fn redrawInspector(_: *Surface) void {
+pub fn redrawInspector(_: *Self) void {
     // No-op for MVP
 }
 
 /// Update the TabViewItem header with the given title.
-pub fn setTabTitle(self: *Surface, title: [:0]const u8) void {
+pub fn setTabTitle(self: *Self, title: [:0]const u8) void {
     const alloc = self.app.core_app.alloc;
     if (self.title) |old_title| alloc.free(old_title);
 
@@ -808,7 +809,7 @@ pub fn setTabTitle(self: *Surface, title: [:0]const u8) void {
 
 // --- Event handlers called from WndProc ---
 
-pub fn updateSize(self: *Surface, width: u32, height: u32) void {
+pub fn updateSize(self: *Self, width: u32, height: u32) void {
     if (width == 0 or height == 0) return;
     App.fileLog("Surface.updateSize: {}x{} -> {}x{}", .{ self.size.width, self.size.height, width, height });
     self.size = .{ .width = width, .height = height };
@@ -819,7 +820,7 @@ pub fn updateSize(self: *Surface, width: u32, height: u32) void {
     }
 }
 
-pub fn updateContentScale(self: *Surface) void {
+pub fn updateContentScale(self: *Self) void {
     if (self.app.hwnd) |hwnd| {
         const dpi = os.GetDpiForWindow(hwnd);
         if (dpi > 0) {
@@ -834,7 +835,7 @@ pub fn updateContentScale(self: *Surface) void {
     }
 }
 
-pub fn handleKeyEvent(self: *Surface, vk: u16, pressed: bool) void {
+pub fn handleKeyEvent(self: *Self, vk: u16, pressed: bool) void {
     if (!self.core_initialized) return;
 
     const ghostty_key = key.vkToKey(vk) orelse {
@@ -904,14 +905,14 @@ pub fn handleKeyEvent(self: *Surface, vk: u16, pressed: bool) void {
 /// Check if a Surface pointer is still in the app's surface list.
 /// Used to detect use-after-free when a keybinding destroys the surface
 /// during keyCallback (e.g. close_tab).
-fn isSurfaceAlive(app: *App, surface: *const Surface) bool {
+fn isSurfaceAlive(app: *App, surface: *const Self) bool {
     for (app.surfaces.items) |s| {
         if (s == surface) return true;
     }
     return false;
 }
 
-pub fn handleCharEvent(self: *Surface, char_code: u16) void {
+pub fn handleCharEvent(self: *Self, char_code: u16) void {
     if (!self.core_initialized) return;
 
     // Capture and consume the pending keydown state.
@@ -986,7 +987,7 @@ pub fn handleCharEvent(self: *Surface, char_code: u16) void {
     App.fileLog("handleCharEvent: keyCallback U+{X:0>4} result={s}", .{ @as(u32, codepoint), @tagName(result) });
 }
 
-pub fn handleMouseMove(self: *Surface, x: f64, y: f64) void {
+pub fn handleMouseMove(self: *Self, x: f64, y: f64) void {
     if (!self.core_initialized) return;
     const pos: apprt.CursorPos = .{ .x = @floatCast(x), .y = @floatCast(y) };
     self.cursor_pos = pos;
@@ -996,7 +997,7 @@ pub fn handleMouseMove(self: *Surface, x: f64, y: f64) void {
     };
 }
 
-pub fn handleMouseButton(self: *Surface, button: input.MouseButton, action: input.MouseButtonState) void {
+pub fn handleMouseButton(self: *Self, button: input.MouseButton, action: input.MouseButtonState) void {
     if (!self.core_initialized) return;
     const mods = key.getModifiers();
 
@@ -1015,7 +1016,7 @@ pub fn handleMouseButton(self: *Surface, button: input.MouseButton, action: inpu
     };
 }
 
-pub fn handleScroll(self: *Surface, xoffset: f64, yoffset: f64) void {
+pub fn handleScroll(self: *Self, xoffset: f64, yoffset: f64) void {
     if (!self.core_initialized) return;
     self.core_surface.scrollCallback(xoffset, yoffset, .{}) catch |err| {
         log.warn("scroll callback error: {}", .{err});
@@ -1024,7 +1025,7 @@ pub fn handleScroll(self: *Surface, xoffset: f64, yoffset: f64) void {
 
 // --- XAML event callbacks ---
 
-fn onXamlPointerPressed(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+fn onXamlPointerPressed(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
     App.fileLog("onXamlPointerPressed: core_initialized={}", .{self.core_initialized});
     if (!self.core_initialized) return;
     const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
@@ -1054,7 +1055,7 @@ fn onXamlPointerPressed(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
     ea.SetHandled(true) catch {};
 }
 
-fn onXamlPointerMoved(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+fn onXamlPointerMoved(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
     if (!self.core_initialized) return;
     const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const point = ea.getCurrentPoint(null) catch return;
@@ -1064,7 +1065,7 @@ fn onXamlPointerMoved(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
     ea.SetHandled(true) catch {};
 }
 
-fn onXamlPointerReleased(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+fn onXamlPointerReleased(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
     if (!self.core_initialized) return;
     const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const point = ea.getCurrentPoint(null) catch return;
@@ -1087,7 +1088,7 @@ fn onXamlPointerReleased(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void
     ea.SetHandled(true) catch {};
 }
 
-fn onXamlPointerWheelChanged(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+fn onXamlPointerWheelChanged(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
     if (!self.core_initialized) return;
     const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const point = ea.getCurrentPoint(null) catch return;
@@ -1117,7 +1118,7 @@ fn onXamlPointerWheelChanged(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) 
     ea.SetHandled(true) catch {};
 }
 
-fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+fn onXamlPreviewKeyDown(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
     if (!self.core_initialized) return;
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const vk = ea.Key() catch return;
@@ -1149,7 +1150,7 @@ fn onXamlPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void 
     }
 }
 
-fn onXamlPreviewKeyUp(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+fn onXamlPreviewKeyUp(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
     if (!self.core_initialized) return;
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const vk = ea.Key() catch return;
@@ -1159,7 +1160,7 @@ fn onXamlPreviewKeyUp(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
     ea.SetHandled(true) catch {};
 }
 
-fn onXamlCharacterReceived(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+fn onXamlCharacterReceived(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
     if (!self.core_initialized) return;
     const ea: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const ch = ea.Character() catch return;
@@ -1170,7 +1171,7 @@ fn onXamlCharacterReceived(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) vo
     ea.SetHandled(true) catch {};
 }
 
-fn onImeTextBoxPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+fn onImeTextBoxPreviewKeyDown(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
     if (!self.core_initialized) return;
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const vk = ea.Key() catch return;
@@ -1196,7 +1197,7 @@ fn onImeTextBoxPreviewKeyDown(self: *Surface, _: ?*anyopaque, args: ?*anyopaque)
     }
 }
 
-fn onImeTextBoxPreviewKeyUp(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+fn onImeTextBoxPreviewKeyUp(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
     if (!self.core_initialized) return;
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const vk = ea.Key() catch return;
@@ -1208,7 +1209,7 @@ fn onImeTextBoxPreviewKeyUp(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) v
     ea.SetHandled(true) catch {};
 }
 
-fn onImeTextBoxCharacterReceived(self: *Surface, _: ?*anyopaque, args: ?*anyopaque) void {
+fn onImeTextBoxCharacterReceived(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
     if (!self.core_initialized) return;
     if (self.app.keyboard_focus_target != .ime_text_box) return;
     const ea: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
@@ -1216,7 +1217,7 @@ fn onImeTextBoxCharacterReceived(self: *Surface, _: ?*anyopaque, args: ?*anyopaq
     App.fileLog("ime_text_box: CharacterReceived ch=0x{x} (deferred to TextChanged)", .{ch});
 }
 
-fn onImeTextBoxTextChanged(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
+fn onImeTextBoxTextChanged(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
     if (self.app.keyboard_focus_target != .ime_text_box) return;
     if (self.ime_text_box_internal_update) return;
@@ -1255,7 +1256,7 @@ fn onImeTextBoxTextChanged(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void 
 // TsfImplementation's ITfContextOwnerCompositionSink (OnStartComposition/OnEndComposition)
 // and ITfTextEditSink (OnEndEdit) which extracts preedit and finalized text.
 
-fn onXamlGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
+fn onXamlGotFocus(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
     if (!self.has_focus) {
         self.has_focus = true;
@@ -1279,7 +1280,7 @@ fn onXamlGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     }
 }
 
-fn onXamlLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
+fn onXamlLostFocus(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
     if (self.app.keyboard_focus_target == .ime_text_box) {
         App.fileLog("SwapChainPanel LostFocus ignored: IME text box now owns focus", .{});
@@ -1298,7 +1299,7 @@ fn onXamlLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     }
 }
 
-fn onImeTextBoxGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
+fn onImeTextBoxGotFocus(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
     App.fileLog("ime_text_box: GotFocus", .{});
     self.logImeTextBoxState("ime_text_box: GotFocus");
@@ -1309,7 +1310,7 @@ fn onImeTextBoxGotFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
     };
 }
 
-fn onImeTextBoxLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
+fn onImeTextBoxLostFocus(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
     App.fileLog("ime_text_box: LostFocus keyboard_focus_target={s}", .{@tagName(self.app.keyboard_focus_target)});
     if (self.app.keyboard_focus_target != .ime_text_box) return;
@@ -1327,7 +1328,7 @@ fn onImeTextBoxLostFocus(self: *Surface, _: ?*anyopaque, _: ?*anyopaque) void {
 }
 
 /// Request XAML focus on the SwapChainPanel (called from ime.zig after IME ends).
-pub fn focusSwapChainPanel(self: *Surface) void {
+pub fn focusSwapChainPanel(self: *Self) void {
     if (self.swap_chain_panel) |panel| {
         if (panel.queryInterface(com.IUIElement)) |ue| {
             defer ue.release();
@@ -1345,7 +1346,7 @@ pub fn focusSwapChainPanel(self: *Surface) void {
     }
 }
 
-pub fn focusImeTextBox(self: *Surface) bool {
+pub fn focusImeTextBox(self: *Self) bool {
     const ime_tb = self.ime_text_box orelse {
         App.fileLog("focusImeTextBox: no ime_text_box", .{});
         return false;
@@ -1369,7 +1370,7 @@ pub fn focusImeTextBox(self: *Surface) bool {
     return false;
 }
 
-pub fn clearImeTextBoxText(self: *Surface) void {
+pub fn clearImeTextBoxText(self: *Self) void {
     const ime_tb = self.ime_text_box orelse {
         App.fileLog("clearImeTextBoxText: no ime_text_box", .{});
         return;
@@ -1398,7 +1399,7 @@ pub fn clearImeTextBoxText(self: *Surface) void {
     };
 }
 
-fn positionImeTextBox(self: *Surface) void {
+fn positionImeTextBox(self: *Self) void {
     if (!self.core_initialized) return;
     const ime_tb = self.ime_text_box orelse return;
     const ime_pos = self.core_surface.imePoint();
@@ -1416,7 +1417,7 @@ fn positionImeTextBox(self: *Surface) void {
     } else |_| {}
 }
 
-fn setImeTextBoxSnapshot(self: *Surface, utf16: []const u16) void {
+fn setImeTextBoxSnapshot(self: *Self, utf16: []const u16) void {
     self.ime_text_box_last_text.resize(self.app.core_app.alloc, utf16.len) catch {
         App.fileLog("ime_text_box: snapshot resize failed len={}", .{utf16.len});
         return;
@@ -1424,7 +1425,7 @@ fn setImeTextBoxSnapshot(self: *Surface, utf16: []const u16) void {
     std.mem.copyForwards(u16, self.ime_text_box_last_text.items, utf16);
 }
 
-fn setImeTextBoxSentSnapshot(self: *Surface, utf16: []const u16) void {
+fn setImeTextBoxSentSnapshot(self: *Self, utf16: []const u16) void {
     self.ime_text_box_sent_text.resize(self.app.core_app.alloc, utf16.len) catch {
         App.fileLog("ime_text_box: sent snapshot resize failed len={}", .{utf16.len});
         return;
@@ -1432,14 +1433,14 @@ fn setImeTextBoxSentSnapshot(self: *Surface, utf16: []const u16) void {
     std.mem.copyForwards(u16, self.ime_text_box_sent_text.items, utf16);
 }
 
-fn flushImeTextBoxCommittedText(self: *Surface) void {
+fn flushImeTextBoxCommittedText(self: *Self) void {
     const ime_tb = self.ime_text_box orelse return;
     const text_h = ime_tb.Text() catch return;
     defer if (text_h) |h| winrt.deleteHString(@ptrCast(h));
     self.flushImeTextBoxCommittedDelta(winrt.hstringSliceRaw(text_h));
 }
 
-fn flushImeTextBoxCommittedDelta(self: *Surface, utf16: []const u16) void {
+fn flushImeTextBoxCommittedDelta(self: *Self, utf16: []const u16) void {
     const sent = self.ime_text_box_sent_text.items;
 
     // When sent is empty, treat all of utf16 as new committed text.
@@ -1489,7 +1490,7 @@ fn commonPrefixLen(comptime T: type, a: []const T, b: []const T) usize {
 
 /// Called by TSF when composition text changes (preedit display).
 /// Bridges to core Surface.preeditCallback.
-pub fn setTsfPreedit(self: *Surface, preedit_utf8: ?[]const u8) void {
+pub fn setTsfPreedit(self: *Self, preedit_utf8: ?[]const u8) void {
     if (!self.core_initialized) return;
     self.core_surface.preeditCallback(preedit_utf8) catch |err| {
         App.fileLog("TSF preedit error: {}", .{err});
@@ -1499,7 +1500,7 @@ pub fn setTsfPreedit(self: *Surface, preedit_utf8: ?[]const u8) void {
 /// Called by TSF when text is finalized (user confirmed candidate / pressed Enter).
 /// Sends each code unit to the PTY via handleCharEvent, matching the pattern
 /// used by flushImeTextBoxCommittedDelta.
-pub fn handleTsfOutput(self: *Surface, text_utf8: []const u8) void {
+pub fn handleTsfOutput(self: *Self, text_utf8: []const u8) void {
     if (!self.core_initialized) return;
     if (text_utf8.len == 0) return;
 
@@ -1530,7 +1531,7 @@ pub fn handleTsfOutput(self: *Surface, text_utf8: []const u8) void {
 
 /// Returns cursor screen-coordinate rectangle for TSF/IME candidate window placement.
 /// TSF's ITfContextOwner::GetTextExt expects screen coordinates.
-pub fn getTsfCursorRect(self: *Surface) os.RECT {
+pub fn getTsfCursorRect(self: *Self) os.RECT {
     if (!self.core_initialized) {
         return .{ .left = 0, .top = 0, .right = 0, .bottom = 0 };
     }
@@ -1592,7 +1593,7 @@ fn hwndValue(hwnd: ?os.HWND) usize {
     return if (hwnd) |h| @intFromPtr(h) else 0;
 }
 
-fn logImeTextBoxState(self: *Surface, comptime prefix: []const u8) void {
+fn logImeTextBoxState(self: *Self, comptime prefix: []const u8) void {
     const ime_tb = self.ime_text_box orelse return;
     var opacity: f64 = -1;
     var is_hit_test_visible = false;
@@ -1647,7 +1648,7 @@ fn logImeTextBoxState(self: *Surface, comptime prefix: []const u8) void {
 /// Called from the renderer thread after creating a composition swap chain.
 /// ISwapChainPanelNative::SetSwapChain must be called from the UI thread,
 /// so we post WM_APP_BIND_SWAP_CHAIN with wparam=swap_chain, lparam=self.
-pub fn bindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
+pub fn bindSwapChain(self: *Self, swap_chain: *anyopaque) void {
     self.last_swap_chain = swap_chain;
     log.info(
         "bindSwapChain: loaded={} pending_before={} swap_chain=0x{x}",
@@ -1669,7 +1670,7 @@ pub fn bindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
 }
 
 /// Bind a composition surface handle to the SwapChainPanel via ISwapChainPanelNative2.
-pub fn bindSwapChainHandle(self: *Surface, swap_chain_handle: usize) void {
+pub fn bindSwapChainHandle(self: *Self, swap_chain_handle: usize) void {
     self.last_swap_chain_handle = swap_chain_handle;
     log.info(
         "bindSwapChainHandle: loaded={} pending_before={} handle=0x{x}",
@@ -1692,7 +1693,7 @@ pub fn bindSwapChainHandle(self: *Surface, swap_chain_handle: usize) void {
 
 /// Actually perform the swap chain binding. Must be called on the UI thread.
 /// swap_chain comes from wparam of the posted message.
-pub fn completeBindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
+pub fn completeBindSwapChain(self: *Self, swap_chain: *anyopaque) void {
     self.last_swap_chain = swap_chain;
     self.pending_swap_chain = null;
 
@@ -1709,7 +1710,7 @@ pub fn completeBindSwapChain(self: *Surface, swap_chain: *anyopaque) void {
 }
 
 /// Actually perform swap chain HANDLE binding. Must be called on the UI thread.
-pub fn completeBindSwapChainHandle(self: *Surface, swap_chain_handle: usize) void {
+pub fn completeBindSwapChainHandle(self: *Self, swap_chain_handle: usize) void {
     self.last_swap_chain_handle = swap_chain_handle;
     self.pending_swap_chain_handle = null;
 
@@ -1727,7 +1728,7 @@ pub fn completeBindSwapChainHandle(self: *Surface, swap_chain_handle: usize) voi
 
 const min_bind_dimension: u32 = 2;
 
-fn maybeBindPendingSwapChain(self: *Surface, caller: []const u8) void {
+fn maybeBindPendingSwapChain(self: *Self, caller: []const u8) void {
     const sc = self.pending_swap_chain orelse return;
     if (!self.loaded) {
         log.info("{s}: panel not loaded yet, keeping swap chain deferred", .{caller});
@@ -1748,7 +1749,7 @@ fn maybeBindPendingSwapChain(self: *Surface, caller: []const u8) void {
     );
 }
 
-fn maybeBindPendingSwapChainHandle(self: *Surface, caller: []const u8) void {
+fn maybeBindPendingSwapChainHandle(self: *Self, caller: []const u8) void {
     const h = self.pending_swap_chain_handle orelse return;
     if (!self.loaded) {
         log.info("{s}: panel not loaded yet, keeping swap chain handle deferred", .{caller});
@@ -1770,7 +1771,7 @@ fn maybeBindPendingSwapChainHandle(self: *Surface, caller: []const u8) void {
 }
 
 /// Called from App.performAction(.scrollbar) on the UI thread.
-pub fn updateScrollbarUi(self: *Surface, total: usize, offset: usize, len: usize) void {
+pub fn updateScrollbarUi(self: *Self, total: usize, offset: usize, len: usize) void {
     App.fileLog("updateScrollbarUi: total={} offset={} len={}", .{ total, offset, len });
     const sb = self.scroll_bar_insp orelse return;
     self.is_internal_scroll_update = true;
@@ -1827,7 +1828,7 @@ pub fn updateScrollbarUi(self: *Surface, total: usize, offset: usize, len: usize
 }
 
 /// RangeBase.ValueChanged event callback (fires on user drag and programmatic changes).
-fn onScrollBarValueChanged(self: *Surface, _: ?*anyopaque, args_raw: ?*anyopaque) void {
+fn onScrollBarValueChanged(self: *Self, _: ?*anyopaque, args_raw: ?*anyopaque) void {
     if (self.is_internal_scroll_update) return;
 
     const args: *com.IRangeBaseValueChangedEventArgs = @ptrCast(@alignCast(args_raw orelse return));
@@ -1844,7 +1845,7 @@ fn onScrollBarValueChanged(self: *Surface, _: ?*anyopaque, args_raw: ?*anyopaque
 }
 
 /// Loaded event callback. Triggered when the SwapChainPanel is added to the visual tree.
-fn onLoaded(self: *Surface, _: *anyopaque, _: *anyopaque) void {
+fn onLoaded(self: *Self, _: *anyopaque, _: *anyopaque) void {
     if (self.in_loaded_handler) return;
     self.in_loaded_handler = true;
     defer self.in_loaded_handler = false;
@@ -1891,7 +1892,7 @@ fn onLoaded(self: *Surface, _: *anyopaque, _: *anyopaque) void {
 /// This is the XAML-driven resize path (matching Windows Terminal's architecture):
 ///   WM_SIZE → RootGrid Width/Height → XAML layout → SwapChainPanel SizeChanged → sizeCallback
 /// The core terminal size is derived from XAML layout, NOT from WM_SIZE directly.
-fn onSizeChanged(self: *Surface, _: *anyopaque, _: *anyopaque) void {
+fn onSizeChanged(self: *Self, _: *anyopaque, _: *anyopaque) void {
     // Get actual panel dimensions from XAML layout (in DIPs).
     const panel = self.swap_chain_panel orelse return;
     const fe = panel.queryInterface(com.IFrameworkElement) catch return;
@@ -1929,7 +1930,7 @@ fn onSizeChanged(self: *Surface, _: *anyopaque, _: *anyopaque) void {
 
 /// Re-apply the current swap chain to this panel.
 /// Useful when the panel is reparented/shown by TabView selection changes.
-pub fn rebindSwapChain(self: *Surface) void {
+pub fn rebindSwapChain(self: *Self) void {
     if (self.last_swap_chain_handle) |h| {
         self.bindSwapChainHandle(h);
         return;
@@ -1943,7 +1944,7 @@ pub fn rebindSwapChain(self: *Surface) void {
 
 // --- Parity Audit / Apprt interface methods ---
 
-pub fn setMouseShape(self: *Surface, shape: terminal.MouseShape) void {
+pub fn setMouseShape(self: *Self, shape: terminal.MouseShape) void {
     _ = self;
     log.info("Surface.setMouseShape: {s}", .{@tagName(shape)});
     const cursor_id = cursorIdForShape(shape);
@@ -1954,7 +1955,7 @@ pub fn setMouseShape(self: *Surface, shape: terminal.MouseShape) void {
     _ = os.SetCursor(cursor);
 }
 
-pub fn setProgressReport(self: *Surface, value: terminal.osc.Command.ProgressReport) void {
+pub fn setProgressReport(self: *Self, value: terminal.osc.Command.ProgressReport) void {
     _ = self;
     log.info("Surface.setProgressReport: state={s} progress={?}", .{ @tagName(value.state), value.progress });
 
@@ -1965,7 +1966,7 @@ pub fn setProgressReport(self: *Surface, value: terminal.osc.Command.ProgressRep
     }
 }
 
-pub fn commandFinished(self: *Surface, value: apprt.Action.Value(.command_finished)) bool {
+pub fn commandFinished(self: *Self, value: apprt.Action.Value(.command_finished)) bool {
     _ = self;
     log.info("Surface.commandFinished: duration={}ns", .{value.duration.duration});
 
@@ -1976,7 +1977,7 @@ pub fn commandFinished(self: *Surface, value: apprt.Action.Value(.command_finish
     return true;
 }
 
-pub fn setBellRinging(self: *Surface, value: bool) void {
+pub fn setBellRinging(self: *Self, value: bool) void {
     _ = self;
     if (value) {
         log.info("Surface.setBellRinging: Ringing visual/audio bell", .{});
@@ -2019,17 +2020,21 @@ test "Surface title memory management" {
     const testing = std.testing;
     const alloc = testing.allocator;
 
-    var app = App{
-        .core_app = undefined,
-        .surfaces = std.ArrayList(*Surface).init(alloc),
-    };
-    defer app.surfaces.deinit();
+    // Create a minimal CoreApp with just the allocator field set.
+    var core_app: CoreApp = undefined;
+    core_app.alloc = alloc;
 
-    var surface = Surface{
-        .app = &app,
-        .core_surface = undefined,
-    };
-    defer surface.deinit();
+    var app: App = undefined;
+    app.core_app = &core_app;
+    app.surfaces = .{};
+
+    var surface: Self = undefined;
+    surface.app = &app;
+    surface.core_surface = undefined;
+    surface.title = null;
+    surface.tab_view_item_inspectable = null;
+    // Only clean up title, not full deinit (which touches XAML objects).
+    defer if (surface.title) |t| alloc.free(t);
 
     surface.setTabTitle("Test Title 1");
     try testing.expectEqualStrings("Test Title 1", surface.title.?);
@@ -2037,3 +2042,6 @@ test "Surface title memory management" {
     surface.setTabTitle("Test Title 2 - Long title");
     try testing.expectEqualStrings("Test Title 2 - Long title", surface.title.?);
 }
+
+    }; // return struct
+} // pub fn Surface

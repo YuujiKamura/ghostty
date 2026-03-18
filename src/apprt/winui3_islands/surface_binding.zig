@@ -1,6 +1,7 @@
 /// Surface binding for winui3_islands — local copy with correct Surface type.
 const std = @import("std");
-const Surface = @import("Surface.zig");
+const App = @import("App.zig");
+const Surface = @import("Surface.zig").Surface(App);
 const com = @import("../winui3/com.zig");
 const winrt = @import("../winui3/winrt.zig");
 const os = @import("../winui3/os.zig");
