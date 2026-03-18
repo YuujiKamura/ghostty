@@ -76,6 +76,7 @@ $sharedTests = @(
     "test-02b-ime-overlay",
     "test-02c-drag-bar",
     "test-02d-control-plane",
+    "test-02e-agent-roundtrip",
     "test-03-window-ops",
     "test-04-keyboard"
 )
