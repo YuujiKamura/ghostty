@@ -16,7 +16,7 @@ pub const Runtime = enum {
 
     /// WinUI 3 with XAML Islands. Uses CreateWindowEx + DesktopWindowXamlSource
     /// for custom titlebar support (Windows Terminal architecture).
-    winui3_islands,
+    winui3,
 
     pub fn default(target: std.Target) Runtime {
         return switch (target.os.tag) {

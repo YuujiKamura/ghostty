@@ -77,7 +77,8 @@ pub fn unboxString(ins: *winrt.IInspectable) !winrt.HSTRING {
     }
     const pv: *com.IPropertyValue = @ptrCast(@alignCast(pv_raw orelse return error.WinRTFailed));
     defer pv.release();
-    return try pv.getString();
+    const raw = try pv.getString();
+    return @ptrCast(raw);
 }
 
 test "WinRT string boxing" {
@@ -117,5 +118,5 @@ test "E2E-like: PropertyValue boxed string supports IPropertyValue QI" {
     defer pv.release();
 
     const h = try pv.getString();
-    defer _ = winrt.WindowsDeleteString(h);
+    defer _ = winrt.WindowsDeleteString(@ptrCast(h));
 }

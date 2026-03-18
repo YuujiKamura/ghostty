@@ -1,4 +1,4 @@
-# run-all-tests.ps1 — winui3_islands integration test runner (reorganized)
+# run-all-tests.ps1 — winui3 integration test runner (reorganized)
 # Usage: pwsh.exe -File run-all-tests.ps1
 #
 # test-01-lifecycle runs FIRST and SEPARATELY (manages its own process).
@@ -16,12 +16,12 @@ Import-Module "$PSScriptRoot\test-helpers.psm1" -Force
 
 # --- Build check ---
 if (-not $ExePath) {
-    $ExePath = Join-Path $PSScriptRoot "..\..\zig-out-winui3-islands\bin\ghostty.exe"
+    $ExePath = Join-Path $PSScriptRoot "..\..\zig-out-winui3\bin\ghostty.exe"
 }
 
 if (-not (Test-Path $ExePath)) {
     Write-Host "ERROR: ghostty.exe not found at $ExePath" -ForegroundColor Red
-    Write-Host "Build first: ./build-winui3-islands.sh" -ForegroundColor Yellow
+    Write-Host "Build first: ./build-winui3.sh" -ForegroundColor Yellow
     exit 1
 }
 

@@ -9,11 +9,11 @@
 /// Ref: github.com/microsoft/terminal/blob/main/src/cascadia/WindowsTerminal/IslandWindow.cpp
 
 const std = @import("std");
-const com = @import("../winui3/com.zig");
-const os = @import("../winui3/os.zig");
-const winrt = @import("../winui3/winrt.zig");
+const com = @import("com.zig");
+const os = @import("os.zig");
+const winrt = @import("winrt.zig");
 
-const log = std.log.scoped(.winui3_islands);
+const log = std.log.scoped(.winui3);
 
 const IslandWindow = @This();
 

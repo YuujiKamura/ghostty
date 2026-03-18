@@ -4,8 +4,8 @@
 //
 // App.zig: islands-specific AppHost using NonClientIslandWindow (Task 5).
 // Surface.zig: islands-local copy with import paths adjusted to shared modules.
-pub const App = @import("winui3_islands/App.zig");
-pub const Surface = @import("winui3_islands/Surface.zig").Surface(App);
+pub const App = @import("winui3/App.zig");
+pub const Surface = @import("winui3/Surface.zig").Surface(App);
 
 const internal_os = @import("../os/main.zig");
 pub const resourcesDir = internal_os.resourcesDir;

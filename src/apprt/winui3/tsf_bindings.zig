@@ -5,8 +5,8 @@
 //! Source: https://github.com/AmeliasCode/win-zig-bindgen  (test: tests/bindgen/tsf_gen.zig)
 
 const std = @import("std");
-const com = @import("../winui3/com.zig");
-const gen = @import("../winui3/com_generated.zig");
+const com = @import("com.zig");
+const gen = @import("com_generated.zig");
 
 // Re-export prologue types from existing COM infrastructure
 const GUID = gen.GUID;

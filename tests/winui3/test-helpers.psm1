@@ -1,4 +1,4 @@
-# test-helpers.psm1 — Shared PowerShell module for winui3_islands GUI tests
+# test-helpers.psm1 — Shared PowerShell module for winui3 GUI tests
 # Usage: Import-Module .\test-helpers.psm1 -Force
 
 Set-StrictMode -Version Latest
@@ -232,7 +232,7 @@ function Start-GhosttyIslands {
     .SYNOPSIS
         Launch ghostty.exe and return the Process object.
     .PARAMETER ExePath
-        Full path to ghostty.exe. Defaults to zig-out-winui3-islands\bin\ghostty.exe
+        Full path to ghostty.exe. Defaults to zig-out-winui3\bin\ghostty.exe
         relative to the repo root.
     #>
     [CmdletBinding()]
@@ -241,12 +241,12 @@ function Start-GhosttyIslands {
     )
 
     if (-not $ExePath) {
-        $ExePath = Join-Path $PSScriptRoot "..\..\zig-out-winui3-islands\bin\ghostty.exe"
+        $ExePath = Join-Path $PSScriptRoot "..\..\zig-out-winui3\bin\ghostty.exe"
     }
     $ExePath = (Resolve-Path $ExePath -ErrorAction Stop).Path
 
     if (-not (Test-Path $ExePath)) {
-        throw "ghostty.exe not found at $ExePath — build first with ./build-winui3-islands.sh"
+        throw "ghostty.exe not found at $ExePath — build first with ./build-winui3.sh"
     }
 
     Write-Host "  Launching $ExePath ..." -ForegroundColor DarkGray

@@ -34,7 +34,7 @@ zig-out-*/
 
 # Local caches
 LOCAL_APPDATA_FONTCONFIG_CACHE/
-tests/winui3_islands/LOCAL_APPDATA_FONTCONFIG_CACHE/
+tests/winui3/LOCAL_APPDATA_FONTCONFIG_CACHE/
 
 # Legacy runtimes (kept locally, removed from tracking)
 src/apprt/win32/

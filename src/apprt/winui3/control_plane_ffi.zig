@@ -10,7 +10,7 @@ const log = std.log.scoped(.winui3_control_plane_ffi);
 /// DLL-backed control plane that bridges to the Rust control_plane_server.dll.
 ///
 /// This is the "islands" variant of the control plane, intended for use with
-/// the winui3_islands App runtime. It loads control_plane_server.dll at runtime,
+/// the winui3 App runtime. It loads control_plane_server.dll at runtime,
 /// wires up a C-ABI VTable of callbacks, and delegates terminal operations
 /// (read buffer, send input, tab management, etc.) back to the App.
 pub const ControlPlaneFfi = struct {

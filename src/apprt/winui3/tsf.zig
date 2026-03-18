@@ -42,17 +42,17 @@
 //! This Zig port is part of the Ghostty project (MIT License).
 
 const std = @import("std");
-const log = std.log.scoped(.winui3_islands);
-const com = @import("../winui3/com.zig");
-const os = @import("../winui3/os.zig");
+const log = std.log.scoped(.winui3);
+const com = @import("com.zig");
+const os = @import("os.zig");
 const tsf = @import("tsf_bindings.zig");
 const App = @import("App.zig");
 
-const GUID = @import("../winui3/winrt.zig").GUID;
-const HRESULT = @import("../winui3/winrt.zig").HRESULT;
+const GUID = @import("winrt.zig").GUID;
+const HRESULT = @import("winrt.zig").HRESULT;
 
 // TSF bindings re-export gen.POINT, gen.RECT, gen.BOOL from com_generated.zig.
-const gen = @import("../winui3/com_generated.zig");
+const gen = @import("com_generated.zig");
 
 // --- Win32 extern declarations for COM ---
 const CLSCTX_INPROC_SERVER: u32 = 0x1;

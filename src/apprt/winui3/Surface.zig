@@ -15,15 +15,15 @@ pub fn Surface(comptime App: type) type {
         const configpkg = @import("../../config.zig");
         const input = @import("../../input.zig");
         const terminal = @import("../../terminal/main.zig");
-        const com = @import("../winui3/com.zig");
-        const winrt = @import("../winui3/winrt.zig");
-        const native_interop = @import("../winui3/native_interop.zig");
-        const input_runtime = @import("../winui3/input_runtime.zig"); // Keep this import
+        const com = @import("com.zig");
+        const winrt = @import("winrt.zig");
+        const native_interop = @import("native_interop.zig");
+        const input_runtime = @import("input_runtime.zig"); // Keep this import
         const profiles = @import("profiles.zig"); // Import profiles.zig
-        const key = @import("../winui3/key.zig");
-        const os = @import("../winui3/os.zig");
+        const key = @import("key.zig");
+        const os = @import("os.zig");
 
-        const SearchOverlay = @import("../winui3/SearchOverlay_generic.zig").SearchOverlay(Self);
+        const SearchOverlay = @import("SearchOverlay_generic.zig").SearchOverlay(Self);
 
 const log = std.log.scoped(.winui3);
 
@@ -254,7 +254,7 @@ pub fn init(self: *Self, app: *App, core_app: *CoreApp, config: *const configpkg
         // Windows Terminal also uses ValueChanged for scrollbar interaction.
         const range_base = try sb_insp.queryInterface(com.IRangeBase);
         defer range_base.release();
-        const gen = @import("../winui3/com_generated.zig");
+        const gen = @import("com_generated.zig");
         const ValueChangedDelegate = gen.RangeBaseValueChangedEventHandlerImpl(Self, *const fn (*Self, ?*anyopaque, ?*anyopaque) void);
         const vc_delegate = try ValueChangedDelegate.createWithIid(
             self.app.core_app.alloc,
@@ -309,7 +309,7 @@ pub fn init(self: *Self, app: *App, core_app: *CoreApp, config: *const configpkg
     // Register Loaded handler to defer SetSwapChain until the panel is ready.
     const framework_element = try panel.queryInterface(com.IFrameworkElement);
     defer framework_element.release();
-    const gen = @import("../winui3/com_generated.zig");
+    const gen = @import("com_generated.zig");
     const LoadedDelegate = gen.RoutedEventHandlerImpl(Self, *const fn (*Self, *anyopaque, *anyopaque) void);
     const loaded_delegate = try LoadedDelegate.createWithIid(self.app.core_app.alloc, self, &onLoaded, &com.IID_RoutedEventHandler);
     // Note: LoadedDelegate.createWithIid returns a ref-counted COM object.
@@ -794,7 +794,7 @@ pub fn setTabTitle(self: *Self, title: [:0]const u8) void {
                 defer alloc.free(utf16);
                 if (winrt.createHString(utf16)) |hstr| {
                     defer winrt.deleteHString(hstr);
-                    const util = @import("../winui3/util.zig");
+                    const util = @import("util.zig");
                     if (util.boxString(hstr)) |boxed| {
                         defer _ = boxed.release();
                         _ = tvi.SetHeader(boxed) catch |err| {

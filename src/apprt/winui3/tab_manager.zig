@@ -1,17 +1,17 @@
-/// Tab management for winui3_islands — local copy with correct Surface/App imports.
+/// Tab management for winui3 — local copy with correct Surface/App imports.
 const std = @import("std");
 const configpkg = @import("../../config.zig");
 const App = @import("App.zig");
 const Surface = @import("Surface.zig").Surface(App);
-const com = @import("../winui3/com.zig");
-const winrt = @import("../winui3/winrt.zig");
-const os = @import("../winui3/os.zig");
-const tab_index = @import("../winui3/tab_index.zig");
-const input_runtime = @import("../winui3/input_runtime.zig");
+const com = @import("com.zig");
+const winrt = @import("winrt.zig");
+const os = @import("os.zig");
+const tab_index = @import("tab_index.zig");
+const input_runtime = @import("input_runtime.zig");
 const surface_binding = @import("surface_binding.zig");
 const profiles = @import("profiles.zig"); // Added import for profiles
 
-const log = std.log.scoped(.winui3_islands);
+const log = std.log.scoped(.winui3);
 
 pub fn closeActiveTab(self: anytype) bool {
     if (self.surfaces.items.len == 0) return false;

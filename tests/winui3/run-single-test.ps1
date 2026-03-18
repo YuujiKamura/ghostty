@@ -8,7 +8,7 @@ Import-Module "$PSScriptRoot\test-helpers.psm1" -Force -WarningAction SilentlyCo
 
 # Default exe path relative to repo root
 if (-not $ExePath) {
-    $ExePath = Join-Path $PSScriptRoot "..\..\zig-out-winui3-islands\bin\ghostty.exe"
+    $ExePath = Join-Path $PSScriptRoot "..\..\zig-out-winui3\bin\ghostty.exe"
 }
 
 # Find or launch ghostty

@@ -7,7 +7,7 @@ const builtin = @import("builtin");
 const std = @import("std");
 const os = @import("os.zig");
 const input = @import("../../input.zig");
-const App = @import("../winui3_islands/App.zig");
+const App = @import("App.zig");
 const ime = @import("ime.zig");
 
 const log = std.log.scoped(.winui3);

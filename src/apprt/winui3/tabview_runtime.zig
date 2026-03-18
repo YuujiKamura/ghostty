@@ -9,10 +9,10 @@
 ///     +-- Row 0 (40px): TabView (tab strip only)
 ///     +-- Row 1 (Star): TabContent Grid (SwapChainPanel swapped on SelectionChanged)
 const std = @import("std");
-const com = @import("../winui3/com.zig");
-const winrt = @import("../winui3/winrt.zig");
+const com = @import("com.zig");
+const winrt = @import("winrt.zig");
 
-const log = std.log.scoped(.winui3_islands);
+const log = std.log.scoped(.winui3);
 const App = @import("App.zig");
 const profiles = @import("profiles.zig"); // Import profiles.zig
 

@@ -21,29 +21,29 @@ const CoreSurface = @import("../../Surface.zig");
 const configpkg = @import("../../config.zig");
 const input = @import("../../input.zig");
 const Surface = @import("Surface.zig").Surface(App);
-const key = @import("../winui3/key.zig");
-const winrt = @import("../winui3/winrt.zig");
-const bootstrap = @import("../winui3/bootstrap.zig");
-const com = @import("../winui3/com.zig");
-const gen = @import("../winui3/com_generated.zig");
-const os = @import("../winui3/os.zig");
-const com_aggregation = @import("../winui3/com_aggregation.zig");
-const ime = @import("../winui3/ime.zig");
-const debug_harness = @import("../winui3/debug_harness.zig");
+const key = @import("key.zig");
+const winrt = @import("winrt.zig");
+const bootstrap = @import("bootstrap.zig");
+const com = @import("com.zig");
+const gen = @import("com_generated.zig");
+const os = @import("os.zig");
+const com_aggregation = @import("com_aggregation.zig");
+const ime = @import("ime.zig");
+const debug_harness = @import("debug_harness.zig");
 const tabview_runtime = @import("tabview_runtime.zig");
-const tab_index = @import("../winui3/tab_index.zig");
+const tab_index = @import("tab_index.zig");
 const tab_manager = @import("tab_manager.zig");
-const input_runtime = @import("../winui3/input_runtime.zig");
-const caption_buttons_mod = @import("../winui3/caption_buttons.zig");
-const xaml_helpers = @import("../winui3/xaml_helpers.zig");
+const input_runtime = @import("input_runtime.zig");
+const caption_buttons_mod = @import("caption_buttons.zig");
+const xaml_helpers = @import("xaml_helpers.zig");
 const surface_binding = @import("surface_binding.zig");
-const event_handlers = @import("../winui3/event_handlers.zig");
-const ControlPlaneFfi = @import("../winui3/control_plane_ffi.zig").ControlPlaneFfi;
+const event_handlers = @import("event_handlers.zig");
+const ControlPlaneFfi = @import("control_plane_ffi.zig").ControlPlaneFfi;
 const nonclient_island_window = @import("nonclient_island_window.zig");
 const NonClientIslandWindow = nonclient_island_window.NonClientIslandWindow;
 const Tsf = @import("tsf.zig");
 
-const log = std.log.scoped(.winui3_islands);
+const log = std.log.scoped(.winui3);
 
 /// Timer ID for live resize preview.
 const RESIZE_TIMER_ID: usize = 1;
@@ -207,7 +207,7 @@ pub fn init(
 ) !void {
     _ = opts;
 
-    log.info("App.init: ENTRY (winui3_islands)", .{});
+    log.info("App.init: ENTRY (winui3)", .{});
 
     // Allocate a debug console so log output is visible for GUI apps.
     os.attachDebugConsole();
@@ -267,7 +267,7 @@ pub fn init(
         .dq_controller = dq_controller,
         .dispatcher_queue = dispatcher_queue,
     };
-    log.info("winui3_islands xaml_metadata_provider={s}", .{
+    log.info("winui3 xaml_metadata_provider={s}", .{
         if (self.debug_cfg.use_ixaml_metadata_provider) "on" else "off",
     });
     self.debug_cfg.log(log);
@@ -280,7 +280,7 @@ pub fn init(
 
 /// Called from inside Application.Start() callback — XAML thread is active here.
 pub fn initXaml(self: *App) !void {
-    log.info("initXaml: START (winui3_islands)", .{});
+    log.info("initXaml: START (winui3)", .{});
     log.info("initXaml: creating NonClientIslandWindow inside XAML thread", .{});
     self.startup_bootstrapped = false;
     self.parity_verified = false;
@@ -659,7 +659,7 @@ fn syncVisualDiagnostics(self: *App) void {
 fn setupNativeInputWindows(self: *App) void {
     // In XAML Islands mode, we create the input overlay but do NOT subclass
     // child windows (we own the wndproc, no subclassing needed).
-    const input_overlay = @import("../winui3/input_overlay.zig");
+    const input_overlay = @import("input_overlay.zig");
     if (self.hwnd) |hwnd| {
         self.input_hwnd = input_overlay.createInputWindow(hwnd, @intFromPtr(self));
         if (self.input_hwnd) |input_hwnd| {

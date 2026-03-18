@@ -11,7 +11,7 @@ $testName = "test-01-lifecycle"
 
 Import-Module "$PSScriptRoot\test-helpers.psm1" -Force
 
-$exePath = Join-Path $PSScriptRoot "..\..\zig-out-winui3-islands\bin\ghostty.exe"
+$exePath = Join-Path $PSScriptRoot "..\..\zig-out-winui3\bin\ghostty.exe"
 $exePath = (Resolve-Path $exePath -ErrorAction Stop).Path
 
 if (-not (Test-Path $exePath)) {

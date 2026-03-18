@@ -4577,7 +4577,7 @@ pub fn finalize(self: *Config) !void {
 
     // Apprt-specific defaults
     switch (build_config.app_runtime) {
-        .none, .win32, .winui3_islands => {},
+        .none, .win32, .winui3 => {},
         .gtk => {
             switch (self.@"gtk-single-instance") {
                 .true, .false => {},
