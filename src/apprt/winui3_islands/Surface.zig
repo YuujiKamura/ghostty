@@ -49,6 +49,9 @@ core_initialized: bool = false,
 /// Tracks XAML focus state to deduplicate focusCallback calls.
 has_focus: bool = false,
 
+/// Whether this surface has been closed (use-after-free guard).
+closed: bool = false,
+
 /// Whether the SwapChainPanel has fired its Loaded event.
 loaded: bool = false,
 
@@ -591,6 +594,7 @@ pub fn rtApp(self: *Self) *App {
 
 pub fn close(self: *Self, process_active: bool) void {
     _ = process_active;
+    self.closed = true;
     self.app.closeSurface(self);
 }
 
@@ -883,33 +887,21 @@ pub fn handleKeyEvent(self: *Self, vk: u16, pressed: bool) void {
         .unshifted_codepoint = unshifted,
     };
 
-    // keyCallback may trigger close_tab, which destroys this Surface.
-    // Save app pointer before the call so we can check liveness after.
-    const app_ref = self.app;
+    // keyCallback may trigger close_tab, which closes this Surface.
     _ = self.core_surface.keyCallback(event) catch |err| {
         log.warn("key callback error vk=0x{X:0>2}: {}", .{ vk, err });
         return;
     };
 
-    // If keyCallback destroyed this surface (e.g. close_tab binding),
-    // self is freed memory — do not access it.
-    if (!isSurfaceAlive(app_ref, self)) return;
+    // If keyCallback closed this surface (e.g. close_tab binding),
+    // do not access further state.
+    if (self.closed) return;
 
     // Suppress any subsequent WM_CHAR for consumed press events.
     // (Releases don't produce WM_CHAR.)
     if (pressed) {
         self.pending_keydown = .consumed;
     }
-}
-
-/// Check if a Surface pointer is still in the app's surface list.
-/// Used to detect use-after-free when a keybinding destroys the surface
-/// during keyCallback (e.g. close_tab).
-fn isSurfaceAlive(app: *App, surface: *const Self) bool {
-    for (app.surfaces.items) |s| {
-        if (s == surface) return true;
-    }
-    return false;
 }
 
 pub fn handleCharEvent(self: *Self, char_code: u16) void {
@@ -1135,12 +1127,8 @@ fn onXamlPreviewKeyDown(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
         }
         return; // Don't mark handled — let IME process via TSF.
     }
-    // Save app pointer before handleKeyEvent — a keybinding (e.g. close_tab)
-    // may destroy this Surface, freeing self.
-    const app_ref = self.app;
     self.handleKeyEvent(@intCast(@as(u32, @bitCast(vk))), true);
-    // If the surface was destroyed during handleKeyEvent, self is freed.
-    if (!isSurfaceAlive(app_ref, self)) return;
+    if (self.closed) return;
     // For text-producing keys, handleKeyEvent defers to CharacterReceived by
     // leaving pending_keydown=.pending. Do not mark those handled here or the
     // character event is suppressed.
@@ -1154,9 +1142,8 @@ fn onXamlPreviewKeyUp(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
     if (!self.core_initialized) return;
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const vk = ea.Key() catch return;
-    const app_ref = self.app;
     self.handleKeyEvent(@intCast(@as(u32, @bitCast(vk))), false);
-    if (!isSurfaceAlive(app_ref, self)) return;
+    if (self.closed) return;
     ea.SetHandled(true) catch {};
 }
 
@@ -1165,9 +1152,8 @@ fn onXamlCharacterReceived(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void 
     const ea: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const ch = ea.Character() catch return;
     App.fileLog("xaml_surface: CharacterReceived ch=0x{x}", .{ch});
-    const app_ref = self.app;
     self.handleCharEvent(ch);
-    if (!isSurfaceAlive(app_ref, self)) return;
+    if (self.closed) return;
     ea.SetHandled(true) catch {};
 }
 
@@ -1182,9 +1168,8 @@ fn onImeTextBoxPreviewKeyDown(self: *Self, _: ?*anyopaque, args: ?*anyopaque) vo
     if (isImePassthroughVirtualKey(vk_u32)) return;
     // ime_text_box is NOT inside SwapChainPanel's visual tree, so
     // SwapChainPanel's PreviewKeyDown does NOT fire for these keys.
-    const app_ref = self.app;
     self.handleKeyEvent(@intCast(vk_u32), true);
-    if (!isSurfaceAlive(app_ref, self)) return;
+    if (self.closed) return;
     // Text keys (a-z, 0-9, etc.): handleKeyEvent sets pending_keydown = .pending
     // and defers to CharacterReceived/TextChanged. Do NOT SetHandled — let the
     // TextBox process the character so TextChanged fires and sends it to PTY.
@@ -1203,9 +1188,8 @@ fn onImeTextBoxPreviewKeyUp(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void
     const vk = ea.Key() catch return;
     const vk_u32 = @as(u32, @bitCast(vk));
     if (isImePassthroughVirtualKey(vk_u32)) return;
-    const app_ref = self.app;
     self.handleKeyEvent(@intCast(vk_u32), false);
-    if (!isSurfaceAlive(app_ref, self)) return;
+    if (self.closed) return;
     ea.SetHandled(true) catch {};
 }
 
@@ -1450,10 +1434,9 @@ fn flushImeTextBoxCommittedDelta(self: *Self, utf16: []const u16) void {
     // and utf16 has content that doesn't start from a previous prefix.
     if (sent.len == 0 and utf16.len > 0) {
         App.fileLog("ime_text_box: FlushCommitted sent=0 -> sending all {} chars", .{utf16.len});
-        const app_ref = self.app;
         for (utf16) |code_unit| {
             self.handleCharEvent(code_unit);
-            if (!isSurfaceAlive(app_ref, self)) return;
+            if (self.closed) return;
         }
         self.setImeTextBoxSentSnapshot(utf16);
         return;
@@ -1469,10 +1452,9 @@ fn flushImeTextBoxCommittedDelta(self: *Self, utf16: []const u16) void {
         return;
     }
 
-    const app_ref = self.app;
     for (utf16[sent.len..]) |code_unit| {
         self.handleCharEvent(code_unit);
-        if (!isSurfaceAlive(app_ref, self)) return;
+        if (self.closed) return;
     }
     self.setImeTextBoxSentSnapshot(utf16);
 }
@@ -1510,21 +1492,20 @@ pub fn handleTsfOutput(self: *Self, text_utf8: []const u8) void {
     // handleCharEvent, which already handles surrogate pairs.
     const view = std.unicode.Utf8View.initUnchecked(text_utf8);
     var it = view.iterator();
-    const app_ref = self.app;
     while (it.nextCodepoint()) |cp| {
         if (cp <= 0xFFFF) {
             // BMP: single UTF-16 code unit
             self.handleCharEvent(@intCast(cp));
-            if (!isSurfaceAlive(app_ref, self)) return;
+            if (self.closed) return;
         } else {
             // Supplementary plane: encode as surrogate pair
             const v = cp - 0x10000;
             const high: u16 = @intCast(0xD800 + (v >> 10));
             const low: u16 = @intCast(0xDC00 + (v & 0x3FF));
             self.handleCharEvent(high);
-            if (!isSurfaceAlive(app_ref, self)) return;
+            if (self.closed) return;
             self.handleCharEvent(low);
-            if (!isSurfaceAlive(app_ref, self)) return;
+            if (self.closed) return;
         }
     }
 }

@@ -230,6 +230,9 @@ tsf_impl: ?Tsf.TsfImplementation = null,
 /// DispatcherQueueController — must be kept alive for the lifetime of the app.
 dq_controller: ?*winrt.IInspectable = null,
 
+/// DispatcherQueue for thread-safe TryEnqueue wakeup (avoids PostMessageW deprioritization).
+dispatcher_queue: ?*gen.IDispatcherQueue = null,
+
 pub fn init(
     self: *App,
     core_app: *CoreApp,
@@ -282,12 +285,20 @@ pub fn init(
         return error.AppInitFailed;
     };
     fileLog("App.init: after DispatcherQueue", .{});
+
+    // Obtain IDispatcherQueue from the controller for TryEnqueue-based wakeup.
+    const dispatcher_queue: ?*gen.IDispatcherQueue = dq_controller.queryInterface(gen.IDispatcherQueue) catch |err| blk: {
+        fileLog("App.init: IDispatcherQueue QI failed err={}, falling back to PostMessageW wakeup", .{err});
+        break :blk null;
+    };
+
     self.* = .{
         .core_app = core_app,
         .debug_cfg = debug_harness.RuntimeDebugConfig.load(),
         .surfaces = .{},
         .running = true,
         .dq_controller = dq_controller,
+        .dispatcher_queue = dispatcher_queue,
     };
     log.info("winui3_islands xaml_metadata_provider={s}", .{
         if (self.debug_cfg.use_ixaml_metadata_provider) "on" else "off",
@@ -1195,6 +1206,13 @@ fn fullCleanup(self: *App) void {
 
     if (self.input_hwnd) |h| _ = os.DestroyWindow(h);
 
+    // Release DispatcherQueue before controller.
+    if (self.dispatcher_queue) |dq| {
+        dq.release();
+        self.dispatcher_queue = null;
+    }
+    WakeupHandler.g_app.store(null, .release);
+
     // Release DispatcherQueueController last — it owns the message loop infrastructure.
     if (self.dq_controller) |dqc| {
         _ = dqc.release();
@@ -1208,11 +1226,68 @@ fn fullCleanup(self: *App) void {
 }
 
 /// Thread-safe wakeup: any thread can call this to unblock the event loop.
+/// Uses DispatcherQueue.TryEnqueue to avoid OS deprioritization of background windows.
 pub fn wakeup(self: *App) void {
-    if (self.hwnd) |hwnd| {
-        _ = os.PostMessageW(hwnd, os.WM_USER, 0, 0);
+    if (self.dispatcher_queue) |dq| {
+        WakeupHandler.g_app.store(self, .release);
+        _ = dq.tryEnqueue(@ptrCast(&WakeupHandler.instance)) catch {
+            if (self.hwnd) |hwnd| _ = os.PostMessageW(hwnd, os.WM_USER, 0, 0);
+        };
+    } else {
+        if (self.hwnd) |hwnd| _ = os.PostMessageW(hwnd, os.WM_USER, 0, 0);
     }
 }
+
+/// Static COM callback for DispatcherQueue.TryEnqueue that calls drainMailbox.
+/// Uses a module-level atomic App pointer — no heap allocation per wakeup.
+const WakeupHandler = struct {
+    const HRESULT = gen.HRESULT;
+    const GUID = gen.GUID;
+    const S_OK: HRESULT = 0;
+    const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+    const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+    const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+
+    lpVtbl: *const gen.DispatcherQueueHandler.VTable,
+
+    /// Atomic App pointer set by wakeup(), read by invoke on the dispatcher thread.
+    var g_app: std.atomic.Value(?*App) = std.atomic.Value(?*App).init(null);
+
+    /// Single static instance — ref counting is no-op (static lifetime).
+    var instance: WakeupHandler = .{ .lpVtbl = &vtable };
+
+    const vtable = gen.DispatcherQueueHandler.VTable{
+        .QueryInterface = &queryInterfaceFn,
+        .AddRef = &addRefFn,
+        .Release = &releaseFn,
+        .Invoke = &invokeFn,
+    };
+
+    fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+        const eql = com_aggregation.guidEql;
+        if (eql(riid, &IID_IUnknown) or eql(riid, &IID_IAgileObject) or eql(riid, &gen.IID_DispatcherQueueHandler)) {
+            ppv.* = this;
+            return S_OK;
+        }
+        ppv.* = null;
+        return E_NOINTERFACE;
+    }
+
+    fn addRefFn(_: *anyopaque) callconv(.winapi) u32 {
+        return 1; // Static object, no-op.
+    }
+
+    fn releaseFn(_: *anyopaque) callconv(.winapi) u32 {
+        return 1; // Static object, no-op.
+    }
+
+    fn invokeFn(_: *anyopaque) callconv(.winapi) HRESULT {
+        if (g_app.load(.acquire)) |app| {
+            app.drainMailbox();
+        }
+        return S_OK;
+    }
+};
 
 pub fn requestCloseWindow(self: *App) void {
     fileLog("requestCloseWindow called! stage={s} exit_intent={s}", .{
