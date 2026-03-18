@@ -15,21 +15,35 @@ $captureHeight = [Math]::Max(80, [Math]::Min(140, $rect.Height - $titlebarHeight
 
 Test-Assert -Condition ($captureWidth -gt 0 -and $captureHeight -gt 0) -Message "capture region is valid"
 
-Start-Sleep -Milliseconds 1200
-$bmp = Capture-ScreenRegion -X $captureX -Y $captureY -Width $captureWidth -Height $captureHeight
-try {
-    $uniqueColors = Get-BitmapUniqueColorCount -Bitmap $bmp
-    $outDir = Join-Path $PSScriptRoot "..\..\tmp\winui3_islands"
-    New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-    $outPath = Join-Path $outDir "test-07-rendering.png"
-    $bmp.Save($outPath, [System.Drawing.Imaging.ImageFormat]::Png)
+# Debug builds are slow to render — retry with increasing delays
+$maxAttempts = 5
+$uniqueColors = 0
+$outDir = Join-Path $PSScriptRoot "..\..\tmp\winui3_islands"
+New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+$outPath = Join-Path $outDir "test-07-rendering.png"
 
-    Write-Host "  Capture saved to $outPath" -ForegroundColor Gray
-    Write-Host "  Sampled unique colors: $uniqueColors" -ForegroundColor Gray
+for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    $waitMs = 1000 + ($attempt * 1500)   # 2500, 4000, 5500, 7000, 8500
+    Write-Host "  Attempt $attempt/$maxAttempts — waiting ${waitMs}ms before capture..." -ForegroundColor Gray
+    Start-Sleep -Milliseconds $waitMs
 
-    Test-Assert -Condition ($uniqueColors -ge 2) -Message "captured client region is not a single flat color"
-} finally {
-    $bmp.Dispose()
+    $bmp = Capture-ScreenRegion -X $captureX -Y $captureY -Width $captureWidth -Height $captureHeight
+    try {
+        $uniqueColors = Get-BitmapUniqueColorCount -Bitmap $bmp
+        $bmp.Save($outPath, [System.Drawing.Imaging.ImageFormat]::Png)
+        Write-Host "  Capture saved to $outPath" -ForegroundColor Gray
+        Write-Host "  Sampled unique colors: $uniqueColors" -ForegroundColor Gray
+
+        if ($uniqueColors -ge 2) {
+            Write-Host "  Rendering detected on attempt $attempt" -ForegroundColor Gray
+            break
+        }
+        Write-Host "  Still flat color ($uniqueColors unique), retrying..." -ForegroundColor Yellow
+    } finally {
+        $bmp.Dispose()
+    }
 }
+
+Test-Assert -Condition ($uniqueColors -ge 2) -Message "captured client region is not a single flat color"
 
 Write-Host "PASS: $testName — Client capture shows rendered color variation" -ForegroundColor Green

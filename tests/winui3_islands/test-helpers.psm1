@@ -798,9 +798,30 @@ function Find-GhosttyUIAElement {
 
     $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMs)
     while ([DateTime]::UtcNow -lt $deadline) {
+        # Fast path: direct child of RootElement (works for traditional windows)
         $elem = $root.FindFirst(
             [System.Windows.Automation.TreeScope]::Children, $pidCond)
-        if ($elem -ne $null) { return $elem }
+        if ($elem -ne $null) {
+            Write-Host "  UIA: Found element via RootElement.Children for PID $ProcessId" -ForegroundColor DarkGray
+            return $elem
+        }
+
+        # Fallback: XAML Islands apps nest UIA elements under a SiteBridge child HWND,
+        # so RootElement.Children won't find them. Use Win32 to locate the top-level
+        # HWND and build the AutomationElement from its handle instead.
+        $hwnd = [Win32]::FindWindowByPid([uint32]$ProcessId)
+        if ($hwnd -ne [IntPtr]::Zero) {
+            try {
+                $elem = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+                if ($elem -ne $null) {
+                    Write-Host "  UIA: Found element via FromHandle(0x$($hwnd.ToString('X'))) for PID $ProcessId" -ForegroundColor DarkGray
+                    return $elem
+                }
+            } catch {
+                # FromHandle can throw if the window is not yet ready; keep polling.
+            }
+        }
+
         Start-Sleep -Milliseconds $script:POLL_INTERVAL_MS
     }
     throw "UIA: Timed out finding AutomationElement for PID $ProcessId (${TimeoutMs}ms)"

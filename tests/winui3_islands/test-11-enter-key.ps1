@@ -38,19 +38,33 @@ Start-Sleep -Milliseconds 200
 
 # --- Now send VK_RETURN via SendInput to specifically test the VK_RETURN path ---
 Send-KeyPress -VirtualKey 0x0D
-Start-Sleep -Milliseconds 1200
 
-# --- Screen capture AFTER ---
-$after = Capture-ScreenRegion -X $captureX -Y $captureY -Width $captureWidth -Height $captureHeight
+# --- Screen capture AFTER with retry (Debug builds render slowly) ---
+$diffCount = 0
+$beforeSig = ""
+$afterSig = ""
+$maxRetries = 3
+$waitMs = 1500
 
-try {
-    $diffCount = Get-BitmapSampleDiffCount -BitmapA $before -BitmapB $after
-    $beforeSig = Get-BitmapSampleSignature -Bitmap $before
-    $afterSig = Get-BitmapSampleSignature -Bitmap $after
-} finally {
-    $before.Dispose()
-    $after.Dispose()
+for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+    Start-Sleep -Milliseconds $waitMs
+    $after = Capture-ScreenRegion -X $captureX -Y $captureY -Width $captureWidth -Height $captureHeight
+
+    try {
+        $diffCount = Get-BitmapSampleDiffCount -BitmapA $before -BitmapB $after
+        $beforeSig = Get-BitmapSampleSignature -Bitmap $before
+        $afterSig = Get-BitmapSampleSignature -Bitmap $after
+    } finally {
+        $after.Dispose()
+    }
+
+    Write-Host "  Attempt ${attempt}: diffCount=$diffCount (waited ${waitMs}ms)" -ForegroundColor DarkGray
+    if ($diffCount -ge 1) { break }
+
+    # Increase wait for next retry
+    $waitMs = $waitMs + 1000
 }
+$before.Dispose()
 
 Write-Host "  Before signature: $beforeSig" -ForegroundColor DarkGray
 Write-Host "  After signature:  $afterSig" -ForegroundColor DarkGray

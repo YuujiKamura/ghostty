@@ -71,8 +71,8 @@ Write-Host "`n============================================" -ForegroundColor Whi
 Write-Host "  TEST RESULTS" -ForegroundColor White
 Write-Host "============================================" -ForegroundColor White
 
-$passed = ($results | Where-Object { $_.Status -eq "PASS" }).Count
-$failed = ($results | Where-Object { $_.Status -eq "FAIL" }).Count
+$passed = @($results | Where-Object { $_.Status -eq "PASS" }).Count
+$failed = @($results | Where-Object { $_.Status -eq "FAIL" }).Count
 $total = $results.Count
 
 foreach ($r in $results) {

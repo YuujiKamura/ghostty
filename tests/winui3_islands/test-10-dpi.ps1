@@ -38,10 +38,29 @@ Test-AssertInRange -Value $dpi -Min 96 -Max 768 -Message "GetDpiForWindow return
 Test-Assert -Condition ($dragBar -ne [IntPtr]::Zero) -Message "GhosttyDragBar child window exists"
 
 $dragRect = Get-WindowPosition -Hwnd $dragBar
-Write-Host "  DPI=$dpi expectedH=$expectedDragBarHeight dragBar=$($dragRect.Width)x$($dragRect.Height) client=$($clientRect.Width)x$($clientRect.Height)" -ForegroundColor Gray
+$windowRect = Get-WindowPosition -Hwnd $Hwnd
+
+# Expected drag bar width: DRAG_ZONE_96DPI (538) scaled by DPI, clamped to half client width
+$DRAG_ZONE_96DPI = 538
+$scale = $dpi / 96.0
+$expectedDragW = [int]($DRAG_ZONE_96DPI * $scale)
+$maxZone = [int][Math]::Floor($clientRect.Width / 2)
+$expectedDragW = [Math]::Min($expectedDragW, $maxZone)
+
+Write-Host "  DPI=$dpi scale=$scale expectedH=$expectedDragBarHeight expectedW=$expectedDragW dragBar=$($dragRect.Width)x$($dragRect.Height) client=$($clientRect.Width)x$($clientRect.Height)" -ForegroundColor Gray
 
 Test-AssertInRange -Value $dragRect.Height -Min ([Math]::Max(24, $expectedDragBarHeight - 6)) -Max ($expectedDragBarHeight + 8) -Message "drag bar height matches AdjustWindowRectExForDpi frame top"
-Test-AssertInRange -Value $dragRect.Width -Min ([Math]::Max(64, $clientRect.Width - 8)) -Max ($clientRect.Width + 8) -Message "drag bar width tracks client width"
+
+# Drag bar width: must be > 0, <= client width, and approximately DRAG_ZONE_96DPI * scale (clamped)
+Test-Assert -Condition ($dragRect.Width -gt 0) -Message "drag bar width > 0"
+Test-Assert -Condition ($dragRect.Width -le ($clientRect.Width + 8)) -Message "drag bar width does not exceed client width"
+Test-AssertInRange -Value $dragRect.Width -Min ([Math]::Max(64, $expectedDragW - 16)) -Max ($expectedDragW + 16) -Message "drag bar width scales with DPI (expected ~$expectedDragW)"
+
+# Drag bar is positioned on the RIGHT side of the titlebar
+$dragRightEdge = $dragRect.Right
+$windowRightEdge = $windowRect.Right
+Test-AssertInRange -Value $dragRightEdge -Min ($windowRightEdge - 16) -Max ($windowRightEdge + 16) -Message "drag bar right edge aligns with window right edge"
+Test-Assert -Condition ($dragRect.Left -gt $windowRect.Left) -Message "drag bar starts to the right of window left edge (tabs area uncovered)"
 
 # Check drag bar extended styles (WS_EX_LAYERED is ideal but may not be settable
 # on all XAML Islands configurations — warn but don't fail)

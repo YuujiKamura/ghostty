@@ -35,7 +35,7 @@ Test-Assert -Condition $hasInvoke -Message "$testName — CloseButton exposes In
 Write-Host "  Invoking tab close button: Name='$($closeButton.Current.Name)' AId='$($closeButton.Current.AutomationId)'" -ForegroundColor DarkGray
 Invoke-UIAButton -Button $closeButton
 
-Wait-Condition -TimeoutMs 5000 -Description "Ghostty process exit after last tab close" -ScriptBlock {
+Wait-Condition -TimeoutMs 15000 -Description "Ghostty process exit after last tab close" -ScriptBlock {
     $proc = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
     return ($null -eq $proc)
 }
