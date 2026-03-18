@@ -36,7 +36,7 @@ $captureHeight = [Math]::Max(120, [Math]::Min(180, $rect.Height - $titlebarHeigh
 # ============================================================
 Write-Host "  --- Sub-test: ASCII keyboard input (via control plane) ---" -ForegroundColor Cyan
 
-$agentCtl = Join-Path $env:USERPROFILE "agent-ctl\target\debug\agent-ctl.exe"
+$agentCtl = Join-Path $env:USERPROFILE "agent-relay\target\debug\agent-ctl.exe"
 # Discover session name dynamically (same as test-02e)
 $listOutput = & $agentCtl list 2>$null | Where-Object { $_ -match "ALIVE" }
 $sessionName = $null

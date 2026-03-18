@@ -10,8 +10,8 @@ $testName = "test-02e-agent-roundtrip"
 # Find agent-ctl binary
 $agentCtl = $null
 foreach ($candidate in @(
-    "$env:USERPROFILE\agent-ctl\target\release\agent-ctl.exe",
-    "$env:USERPROFILE\agent-ctl\target\debug\agent-ctl.exe"
+    "$env:USERPROFILE\agent-relay\target\release\agent-ctl.exe",
+    "$env:USERPROFILE\agent-relay\target\debug\agent-ctl.exe"
 )) {
     if (Test-Path $candidate) { $agentCtl = $candidate; break }
 }
