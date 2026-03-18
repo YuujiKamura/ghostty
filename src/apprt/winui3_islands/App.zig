@@ -84,6 +84,7 @@ const TAB_CLOSE_POLL_INTERVAL_MS: u32 = 500;
 const CLOSE_TAB_POLL_TIMER_ID: usize = 997;
 const CLOSE_TAB_TIMER_ID: usize = 998;
 const CLOSE_TIMER_ID: usize = 999;
+const DUMP_VT_TIMER_ID: usize = 9999;
 const CONTEXT_MENU_NEW_TAB: usize = 1001;
 const CONTEXT_MENU_CLOSE_TAB: usize = 1002;
 const CONTEXT_MENU_PASTE: usize = 1003;
@@ -421,8 +422,7 @@ pub fn initXaml(self: *App) !void {
     // Dump visual tree after layout pass (needs message pump running).
     // Use SetTimer with 500ms delay so XAML has time to measure+arrange.
     if (comptime builtin.mode == .Debug) {
-        const WM_TIMER_DUMP_VT: usize = 9999;
-        _ = os.SetTimer(self.hwnd.?, WM_TIMER_DUMP_VT, 500, null);
+        _ = os.SetTimer(self.hwnd.?, DUMP_VT_TIMER_ID, 500, null);
     }
 }
 
@@ -2075,9 +2075,9 @@ fn handleTimer(self: *App, hwnd: os.HWND, wparam: os.WPARAM) os.LRESULT {
             self.closeActiveTab();
             return 0;
         },
-        9999 => if (comptime builtin.mode == .Debug) {
+        DUMP_VT_TIMER_ID => if (comptime builtin.mode == .Debug) {
             // One-shot visual tree dump after layout.
-            _ = os.KillTimer(self.hwnd.?, 9999);
+            _ = os.KillTimer(self.hwnd.?, DUMP_VT_TIMER_ID);
             self.dumpVisualTreeRoot();
             return 0;
         } else 0,
