@@ -694,8 +694,6 @@ fn setupNativeInputWindows(self: *App) void {
     }
 
     // Initialize TSF for IME composition display.
-    // Store the App pointer in thread-local so TSF callbacks can recover it.
-    tsf_app_instance = self;
     // CRITICAL: Initialize directly in self.tsf_impl, NOT a local variable.
     // TSF stores pointers to our inline COM objects (&self.tsf_impl._compositionSinkObj etc.)
     // during initialize(). If we init a local and copy, those pointers become dangling.
@@ -706,6 +704,7 @@ fn setupNativeInputWindows(self: *App) void {
         return;
     };
     // Wire up callbacks for text output, preedit display, and cursor positioning.
+    self.tsf_impl.?._userdata = @ptrCast(self);
     self.tsf_impl.?._handleOutput = &tsfHandleOutput;
     self.tsf_impl.?._handlePreedit = &tsfHandlePreedit;
     self.tsf_impl.?._getCursorRect = &tsfGetCursorRect;
@@ -719,15 +718,9 @@ fn setupNativeInputWindows(self: *App) void {
 // TSF callback infrastructure
 // ---------------------------------------------------------------
 
-/// Thread-local App pointer for TSF callbacks (TSF callbacks don't carry userdata).
-/// NOTE: This limits TSF to a single App instance per thread. Ghostty-win currently
-/// creates only one window, so this is fine. If multi-window support is added,
-/// TsfImplementation's callback signatures would need userdata parameters.
-threadlocal var tsf_app_instance: ?*App = null;
-
 /// TSF callback: finalized text — send each codepoint to the active surface's PTY.
-fn tsfHandleOutput(utf8: []const u8) void {
-    const app = tsf_app_instance orelse return;
+fn tsfHandleOutput(userdata: ?*anyopaque, utf8: []const u8) void {
+    const app: *App = @ptrCast(@alignCast(userdata orelse return));
     const surface = app.activeSurface() orelse return;
     fileLog("TSF tsfHandleOutput: {} bytes, pending_keydown={s}", .{ utf8.len, @tagName(surface.pending_keydown) });
 
@@ -767,8 +760,8 @@ fn tsfHandleOutput(utf8: []const u8) void {
 }
 
 /// TSF callback: preedit text — forward to the active surface's core preedit display.
-fn tsfHandlePreedit(text: ?[]const u8) void {
-    const app = tsf_app_instance orelse return;
+fn tsfHandlePreedit(userdata: ?*anyopaque, text: ?[]const u8) void {
+    const app: *App = @ptrCast(@alignCast(userdata orelse return));
     const surface = app.activeSurface() orelse return;
     surface.core_surface.preeditCallback(text) catch |err| {
         fileLog("TSF tsfHandlePreedit error: {}", .{err});
@@ -776,8 +769,8 @@ fn tsfHandlePreedit(text: ?[]const u8) void {
 }
 
 /// TSF callback: cursor screen rect — used for IME candidate window positioning.
-fn tsfGetCursorRect() os.RECT {
-    const app = tsf_app_instance orelse return os.RECT{};
+fn tsfGetCursorRect(userdata: ?*anyopaque) os.RECT {
+    const app: *App = @ptrCast(@alignCast(userdata orelse return os.RECT{}));
     const surface = app.activeSurface() orelse return os.RECT{};
     const hwnd = app.hwnd orelse return os.RECT{};
     const ime_pos = surface.core_surface.imePoint();
@@ -1112,7 +1105,6 @@ pub fn onWindowClose(self: *App) void {
         tsf.uninitialize();
         self.tsf_impl = null;
     }
-    tsf_app_instance = null;
 
     // Tear down drag bar and input windows immediately.
     if (self.nci_window) |nci| {
@@ -1148,7 +1140,6 @@ fn fullCleanup(self: *App) void {
         tsf.uninitialize();
         self.tsf_impl = null;
     }
-    tsf_app_instance = null;
 
     // 0b. Stop control plane before surfaces are destroyed.
     if (self.control_plane) |cp| {

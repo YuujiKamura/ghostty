@@ -183,12 +183,15 @@ pub const TsfImplementation = struct {
     // --- Associated window ---
     _associatedHwnd: ?os.HWND = null,
 
+    // --- User data for callbacks ---
+    _userdata: ?*anyopaque = null,
+
     // --- Callbacks to deliver text to the terminal surface ---
-    _handleOutput: ?*const fn ([]const u8) void = null,
-    _handlePreedit: ?*const fn (?[]const u8) void = null,
+    _handleOutput: ?*const fn (?*anyopaque, []const u8) void = null,
+    _handlePreedit: ?*const fn (?*anyopaque, ?[]const u8) void = null,
 
     // --- Cursor rect provider (screen coordinates, for IME candidate window positioning) ---
-    _getCursorRect: ?*const fn () os.RECT = null,
+    _getCursorRect: ?*const fn (?*anyopaque) os.RECT = null,
 
     // --- COM reference count (for our IUnknown implementation) ---
     _referenceCount: u32 = 1,
@@ -533,7 +536,7 @@ pub const TsfImplementation = struct {
 
         // WT clears the renderer's tsfPreview — we clear preedit via callback
         if (self._handlePreedit) |cb| {
-            cb(null);
+            cb(self._userdata, null);
         }
 
         // Clear callbacks (equivalent to _provider.reset())
@@ -673,7 +676,7 @@ pub const TsfImplementation = struct {
     fn ctxOwnerGetTextExt(this: *anyopaque, _: i32, _: i32, prc: *gen.RECT, pfClipped: *gen.BOOL) callconv(.winapi) HRESULT {
         const self = selfFromContextOwner(this);
         if (self._getCursorRect) |getCursorRect| {
-            const r = getCursorRect();
+            const r = getCursorRect(self._userdata);
             prc.* = .{ .left = r.left, .top = r.top, .right = r.right, .bottom = r.bottom };
         } else {
             prc.* = .{ .left = 0, .top = 0, .right = 0, .bottom = 0 };
@@ -1333,14 +1336,14 @@ pub const TsfImplementation = struct {
             if (utf8_len > 0) {
                 if (self._handlePreedit) |cb| {
                     App.fileLog("TSF: calling handlePreedit with {} bytes", .{utf8_len});
-                    cb(utf8_buf[0..utf8_len]);
+                    cb(self._userdata, utf8_buf[0..utf8_len]);
                 }
             }
         } else {
             // No active composition text — clear preedit
             if (self._handlePreedit) |cb| {
                 App.fileLog("TSF: calling handlePreedit with null (clear)", .{});
-                cb(null);
+                cb(self._userdata, null);
             }
         }
 
@@ -1352,7 +1355,7 @@ pub const TsfImplementation = struct {
                 App.fileLog("TSF: finalized text ({} bytes UTF-8)", .{utf8_len});
                 if (self._handleOutput) |cb| {
                     App.fileLog("TSF: calling handleOutput with {} bytes", .{utf8_len});
-                    cb(utf8_buf[0..utf8_len]);
+                    cb(self._userdata, utf8_buf[0..utf8_len]);
                 }
             }
         }
