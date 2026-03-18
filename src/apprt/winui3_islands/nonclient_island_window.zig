@@ -40,7 +40,8 @@ const TOP_BORDER_VISIBLE_HEIGHT: c_int = 1;
 const CAPTION_BUTTON_ZONE_96DPI: c_int = 138;
 
 /// Extra drag space (at 96 DPI) to the left of caption buttons for window dragging.
-const DRAG_SPACE_96DPI: c_int = 100;
+/// WT dynamically sizes this from XAML; we use a generous fixed value.
+const DRAG_SPACE_96DPI: c_int = 400;
 
 /// Total drag zone at 96 DPI = caption buttons + extra drag space.
 const DRAG_ZONE_96DPI: c_int = CAPTION_BUTTON_ZONE_96DPI + DRAG_SPACE_96DPI;
@@ -73,6 +74,17 @@ pub fn init(self: *NonClientIslandWindow, app_ptr: *anyopaque) !void {
 pub fn createDragBarIfNeeded(self: *NonClientIslandWindow) void {
     if (self.drag_bar_hwnd != null) return;
     self.drag_bar_hwnd = self.createDragBarWindow();
+    if (self.drag_bar_hwnd != null) {
+        // Force interop HWND to BOTTOM so drag bar receives mouse events.
+        if (self.island.interop_hwnd) |ih| {
+            _ = os.SetWindowPos(ih, os.HWND_BOTTOM, 0, 0, 0, 0,
+                os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOACTIVATE);
+        }
+        // Show the drag bar at the correct position.
+        var rect: os.RECT = .{};
+        _ = os.GetClientRect(self.island.hwnd, &rect);
+        self.resizeDragBarWindow(rect.right - rect.left);
+    }
 }
 
 /// WT: NonClientIslandWindow::Close()
@@ -280,12 +292,17 @@ pub fn resizeDragBarWindow(self: *NonClientIslandWindow, width_px: c_int) void {
     });
 
     if (width_px > 0 and titlebar_h > 0) {
-        // Only cover the RIGHT portion of the titlebar for dragging.
-        // Leave the left portion (tabs, + button) open for XAML clicks.
+        // Drag bar covers the RIGHT portion of the titlebar only.
+        // Left portion (tabs) is left uncovered so XAML receives clicks.
+        // WT uses _GetDragAreaRect() from XAML to size this; we approximate
+        // with a fixed zone = caption buttons + generous drag space.
         const scale: f32 = @as(f32, @floatFromInt(dpi)) / 96.0;
         const drag_zone: c_int = @intFromFloat(@as(f32, @floatFromInt(DRAG_ZONE_96DPI)) * scale);
-        const drag_x = @max(0, width_px - drag_zone);
-        const drag_w = width_px - drag_x;
+        // Clamp: don't exceed half the window width so tabs stay clickable.
+        const max_zone = @divFloor(width_px, 2);
+        const clamped_zone = @min(drag_zone, max_zone);
+        const drag_x = width_px - clamped_zone;
+        const drag_w = clamped_zone;
 
         _ = os.SetWindowPos(
             drag_bar_hwnd,
@@ -297,9 +314,7 @@ pub fn resizeDragBarWindow(self: *NonClientIslandWindow, width_px: c_int) void {
             os.SWP_NOACTIVATE | os.SWP_SHOWWINDOW | os.SWP_NOSENDCHANGING,
         );
 
-        // WT: SetLayeredWindowAttributes(alpha=255, LWA_ALPHA)
-        // Makes the layered window opaque for input (hit testing).
-        // WS_EX_NOREDIRECTIONBITMAP keeps it visually transparent (DWM composites through).
+        // WT: alpha=255 — opaque to hit testing, visually transparent via NOREDIRECTIONBITMAP.
         _ = os.SetLayeredWindowAttributes(drag_bar_hwnd, 0, 255, os.LWA_ALPHA);
     } else {
         _ = os.SetWindowPos(drag_bar_hwnd, os.HWND_BOTTOM, 0, 0, 0, 0, os.SWP_HIDEWINDOW | os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOSENDCHANGING);
@@ -361,13 +376,14 @@ fn createDragBarWindow(self: *NonClientIslandWindow) ?os.HWND {
         drag_bar_class_registered = true;
     }
 
-    // WT: CreateWindowExW(WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP, ..., WS_CHILD, ...)
-    // Requires supportedOS GUID in app manifest for Windows 8+ (WS_EX_LAYERED on child).
+    // WT: WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP.
+    // NOREDIRECTIONBITMAP = no surface → DWM sees through (visually transparent).
+    // Combined with alpha=255 → window is opaque to hit testing but invisible.
     const hwnd = os.CreateWindowExW(
         os.WS_EX_LAYERED | os.WS_EX_NOREDIRECTIONBITMAP,
         DRAG_BAR_CLASS_NAME,
         EMPTY_WINDOW_NAME,
-        os.WS_CHILD,
+        os.WS_CHILD | os.WS_VISIBLE,
         0, 0, 0, 0,
         self.island.hwnd,
         null,
@@ -377,7 +393,11 @@ fn createDragBarWindow(self: *NonClientIslandWindow) ?os.HWND {
         fileLog("createDragBarWindow: FAILED err={} — check supportedOS in manifest", .{os.GetLastError()});
         return null;
     };
-    fileLog("createDragBarWindow: OK hwnd=0x{x} (LAYERED|NOREDIR child)", .{@intFromPtr(hwnd)});
+    // WT: alpha=255 (opaque to hit testing). NOREDIRECTIONBITMAP makes it
+    // visually transparent since DWM has no surface to composite.
+    _ = os.SetLayeredWindowAttributes(hwnd, 0, 255, os.LWA_ALPHA);
+    _ = os.SetWindowPos(hwnd, os.HWND_TOP, 0, 0, 0, 0, os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOACTIVATE);
+    fileLog("createDragBarWindow: OK hwnd=0x{x} (LAYERED visible child)", .{@intFromPtr(hwnd)});
 
     return hwnd;
 }
@@ -410,7 +430,10 @@ fn dragBarStaticWndProc(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: 
 
 /// WT: _InputSinkMessageHandler
 fn inputSinkMessageHandler(self: *NonClientIslandWindow, hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
-    _ = self; // TODO: will use for titlebar button state when XAML buttons are integrated
+    _ = self;
+    if (msg == os.WM_NCHITTEST or msg == os.WM_NCLBUTTONDOWN or msg == os.WM_NCLBUTTONDBLCLK or msg == os.WM_NCLBUTTONUP) {
+        std.debug.print("DEBUG inputSink: msg=0x{x} wparam=0x{x}\n", .{ msg, @as(usize, @bitCast(wparam)) });
+    }
 
     switch (msg) {
         os.WM_NCHITTEST => return dragBarNcHitTest(hwnd, lparam),
@@ -469,6 +492,8 @@ fn inputSinkMessageHandler(self: *NonClientIslandWindow, hwnd: os.HWND, msg: os.
 }
 
 /// WT: _dragBarNcHitTest
+/// Right-portion drag bar: returns HT*BUTTON for caption buttons,
+/// HTTOP for resize handle, HTCAPTION for everything else in the drag bar.
 fn dragBarNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
     const lp: usize = @bitCast(lparam);
     const pt = os.POINT{

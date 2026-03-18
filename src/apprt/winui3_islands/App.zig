@@ -365,6 +365,21 @@ pub fn initXaml(self: *App) !void {
         caption_buttons_mod.install(tv, self.hwnd.?);
     }
 
+    // Step 6.5: Re-assert drag bar Z-order after XAML content is set.
+    // setContent() may internally reposition the interop HWND, pushing it
+    // above the drag bar. Force interop back to BOTTOM and drag bar to TOP.
+    if (self.nci_window) |nci2| {
+        if (nci2.island.interop_hwnd) |ih| {
+            _ = os.SetWindowPos(ih, os.HWND_BOTTOM, 0, 0, 0, 0,
+                os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOACTIVATE);
+        }
+        if (nci2.drag_bar_hwnd) |db| {
+            _ = os.SetWindowPos(db, os.HWND_TOP, 0, 0, 0, 0,
+                os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOACTIVATE);
+        }
+        fileLog("initXaml step 6.5: drag bar Z-order re-asserted", .{});
+    }
+
     // Step 7: Create native input windows (input overlay for IME).
     self.setupNativeInputWindows();
 
