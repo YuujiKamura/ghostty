@@ -1,10 +1,10 @@
 param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
-# Test 10: DPI — GetDpiForWindow と drag bar 寸法の整合を確認
-# WT方式: AdjustWindowRectExForDpi で -frame.top を算出
+# test-02c-drag-bar — Verify drag bar HWND exists with correct DPI-scaled dimensions.
+# Pure Win32, no UIA needed. Drag bar covers RIGHT portion only.
 
 $ErrorActionPreference = 'Stop'
-$testName = "test-10-dpi"
+$testName = "test-02c-drag-bar"
 
 # Add AdjustWindowRectExForDpi P/Invoke
 Add-Type @"
@@ -34,8 +34,8 @@ $expectedDragBarHeight = -$frame.Top
 $clientRect = Get-ClientPosition -Hwnd $Hwnd
 $dragBar = Get-ChildWindowByClass -Hwnd $Hwnd -ClassName "GhosttyDragBar"
 
-Test-AssertInRange -Value $dpi -Min 96 -Max 768 -Message "GetDpiForWindow returned a sane DPI"
-Test-Assert -Condition ($dragBar -ne [IntPtr]::Zero) -Message "GhosttyDragBar child window exists"
+Test-AssertInRange -Value $dpi -Min 96 -Max 768 -Message "$testName - GetDpiForWindow returned a sane DPI"
+Test-Assert -Condition ($dragBar -ne [IntPtr]::Zero) -Message "$testName - GhosttyDragBar child window exists"
 
 $dragRect = Get-WindowPosition -Hwnd $dragBar
 $windowRect = Get-WindowPosition -Hwnd $Hwnd
@@ -49,21 +49,20 @@ $expectedDragW = [Math]::Min($expectedDragW, $maxZone)
 
 Write-Host "  DPI=$dpi scale=$scale expectedH=$expectedDragBarHeight expectedW=$expectedDragW dragBar=$($dragRect.Width)x$($dragRect.Height) client=$($clientRect.Width)x$($clientRect.Height)" -ForegroundColor Gray
 
-Test-AssertInRange -Value $dragRect.Height -Min ([Math]::Max(24, $expectedDragBarHeight - 6)) -Max ($expectedDragBarHeight + 8) -Message "drag bar height matches AdjustWindowRectExForDpi frame top"
+Test-AssertInRange -Value $dragRect.Height -Min ([Math]::Max(24, $expectedDragBarHeight - 6)) -Max ($expectedDragBarHeight + 8) -Message "$testName - drag bar height matches AdjustWindowRectExForDpi frame top"
 
 # Drag bar width: must be > 0, <= client width, and approximately DRAG_ZONE_96DPI * scale (clamped)
-Test-Assert -Condition ($dragRect.Width -gt 0) -Message "drag bar width > 0"
-Test-Assert -Condition ($dragRect.Width -le ($clientRect.Width + 8)) -Message "drag bar width does not exceed client width"
-Test-AssertInRange -Value $dragRect.Width -Min ([Math]::Max(64, $expectedDragW - 16)) -Max ($expectedDragW + 16) -Message "drag bar width scales with DPI (expected ~$expectedDragW)"
+Test-Assert -Condition ($dragRect.Width -gt 0) -Message "$testName - drag bar width > 0"
+Test-Assert -Condition ($dragRect.Width -le ($clientRect.Width + 8)) -Message "$testName - drag bar width does not exceed client width"
+Test-AssertInRange -Value $dragRect.Width -Min ([Math]::Max(64, $expectedDragW - 16)) -Max ($expectedDragW + 16) -Message "$testName - drag bar width scales with DPI (expected ~$expectedDragW)"
 
 # Drag bar is positioned on the RIGHT side of the titlebar
 $dragRightEdge = $dragRect.Right
 $windowRightEdge = $windowRect.Right
-Test-AssertInRange -Value $dragRightEdge -Min ($windowRightEdge - 16) -Max ($windowRightEdge + 16) -Message "drag bar right edge aligns with window right edge"
-Test-Assert -Condition ($dragRect.Left -gt $windowRect.Left) -Message "drag bar starts to the right of window left edge (tabs area uncovered)"
+Test-AssertInRange -Value $dragRightEdge -Min ($windowRightEdge - 16) -Max ($windowRightEdge + 16) -Message "$testName - drag bar right edge aligns with window right edge"
+Test-Assert -Condition ($dragRect.Left -gt $windowRect.Left) -Message "$testName - drag bar starts to the right of window left edge (tabs area uncovered)"
 
-# Check drag bar extended styles (WS_EX_LAYERED is ideal but may not be settable
-# on all XAML Islands configurations — warn but don't fail)
+# Check drag bar extended styles
 $dbExStyle = [Win32]::GetWindowLong($dragBar, [Win32]::GWL_EXSTYLE)
 $WS_EX_LAYERED = 0x00080000
 if (($dbExStyle -band $WS_EX_LAYERED) -ne 0) {
@@ -72,4 +71,4 @@ if (($dbExStyle -band $WS_EX_LAYERED) -ne 0) {
     Write-Host "  WARN: drag bar missing WS_EX_LAYERED (exStyle=0x$($dbExStyle.ToString('X8'))) — may work without it under NOREDIRECTIONBITMAP parent" -ForegroundColor Yellow
 }
 
-Write-Host "PASS: $testName — DPI and drag bar metrics are internally consistent" -ForegroundColor Green
+Write-Host "PASS: $testName - DPI and drag bar metrics are internally consistent" -ForegroundColor Green

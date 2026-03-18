@@ -1,8 +1,8 @@
-# run-all-tests.ps1 — winui3_islands integration test runner (UIA-based)
+# run-all-tests.ps1 — winui3_islands integration test runner (reorganized)
 # Usage: pwsh.exe -File run-all-tests.ps1
 #
-# Launches ghostty.exe, runs all test-*.ps1 scripts using UI Automation.
-# No SendInput or mouse cursor stealing — safe for background execution.
+# test-01-lifecycle runs FIRST and SEPARATELY (manages its own process).
+# Then a shared ghostty is launched for tests 02a through 04.
 
 param(
     [string]$ExePath,
@@ -25,8 +25,35 @@ if (-not (Test-Path $ExePath)) {
     exit 1
 }
 
-# --- Launch ---
-Write-Host "`n=== Launching Ghostty (winui3_islands) ===" -ForegroundColor Cyan
+$results = @()
+
+# ============================================================
+# Phase 1: Lifecycle test (own process, no shared ghostty)
+# ============================================================
+Write-Host "`n=== Phase 1: Lifecycle Test (standalone) ===" -ForegroundColor Cyan
+
+$lifecycleTest = Join-Path $PSScriptRoot "test-01-lifecycle.ps1"
+if (Test-Path $lifecycleTest) {
+    $name = "test-01-lifecycle"
+    Write-Host "`n--- $name ---" -ForegroundColor Cyan
+    $startTime = [DateTime]::UtcNow
+    try {
+        & $lifecycleTest
+        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
+        $results += @{ Name = $name; Status = "PASS"; Time = [int]$elapsed; Error = $null }
+    } catch {
+        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
+        $results += @{ Name = $name; Status = "FAIL"; Time = [int]$elapsed; Error = $_.Exception.Message }
+        Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
+    }
+} else {
+    Write-Host "  SKIP: test-01-lifecycle.ps1 not found" -ForegroundColor Yellow
+}
+
+# ============================================================
+# Phase 2: Shared-process tests (02a through 04)
+# ============================================================
+Write-Host "`n=== Phase 2: Launching Ghostty for shared tests ===" -ForegroundColor Cyan
 $proc = Start-GhosttyIslands -ExePath $ExePath
 $hwnd = [IntPtr]::Zero
 
@@ -42,22 +69,31 @@ try {
 # Give XAML time to fully initialize
 Start-Sleep -Milliseconds 2000
 
-# --- Run tests ---
-$tests = Get-ChildItem "$PSScriptRoot\test-*.ps1" | Sort-Object Name
-$results = @()
+# Run tests 02a, 02b, 02c, 03, 04 in order
+$sharedTests = @(
+    "test-02a-tabview",
+    "test-02b-ime-overlay",
+    "test-02c-drag-bar",
+    "test-03-window-ops",
+    "test-04-keyboard"
+)
 
-foreach ($test in $tests) {
-    $name = $test.BaseName
-    Write-Host "`n--- $name ---" -ForegroundColor Cyan
+foreach ($testBaseName in $sharedTests) {
+    $testPath = Join-Path $PSScriptRoot "$testBaseName.ps1"
+    if (-not (Test-Path $testPath)) {
+        Write-Host "`n--- $testBaseName --- SKIP (not found)" -ForegroundColor Yellow
+        continue
+    }
 
+    Write-Host "`n--- $testBaseName ---" -ForegroundColor Cyan
     $startTime = [DateTime]::UtcNow
     try {
-        & $test.FullName -Hwnd $hwnd -ProcessId $proc.Id
+        & $testPath -Hwnd $hwnd -ProcessId $proc.Id
         $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
-        $results += @{ Name = $name; Status = "PASS"; Time = [int]$elapsed; Error = $null }
+        $results += @{ Name = $testBaseName; Status = "PASS"; Time = [int]$elapsed; Error = $null }
     } catch {
         $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
-        $results += @{ Name = $name; Status = "FAIL"; Time = [int]$elapsed; Error = $_.Exception.Message }
+        $results += @{ Name = $testBaseName; Status = "FAIL"; Time = [int]$elapsed; Error = $_.Exception.Message }
         Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
     }
 }
