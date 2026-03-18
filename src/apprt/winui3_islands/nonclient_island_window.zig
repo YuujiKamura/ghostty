@@ -12,10 +12,7 @@
 const std = @import("std");
 const os = @import("../winui3/os.zig");
 const IslandWindow = @import("island_window.zig");
-const AppHost = @import("App.zig");
-
 const log = std.log.scoped(.winui3_islands);
-const fileLog = AppHost.fileLog;
 
 pub const NonClientIslandWindow = @This();
 
@@ -161,9 +158,9 @@ pub fn updateFrameMargins(self: *NonClientIslandWindow) void {
     };
     const hr = os.DwmExtendFrameIntoClientArea(hwnd, &margins);
     if (hr >= 0) {
-        fileLog("DwmExtendFrameIntoClientArea OK (cyTopHeight={} dpi={})", .{ top_height, dpi });
+        log.debug("DwmExtendFrameIntoClientArea OK (cyTopHeight={} dpi={})", .{ top_height, dpi });
     } else {
-        fileLog("DwmExtendFrameIntoClientArea failed: hr=0x{x}", .{@as(u32, @bitCast(hr))});
+        log.err("DwmExtendFrameIntoClientArea failed: hr=0x{x}", .{@as(u32, @bitCast(hr))});
     }
 }
 
@@ -241,7 +238,7 @@ pub fn onNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
 /// The drag bar sits on top (HWND_TOP) to intercept mouse events.
 pub fn updateIslandPosition(self: *NonClientIslandWindow, width: c_int, height: c_int) void {
     const ih = self.island.interop_hwnd orelse {
-        fileLog("updateIslandPosition: no interop_hwnd, skip", .{});
+        log.debug("updateIslandPosition: no interop_hwnd, skip", .{});
         return;
     };
 
@@ -264,7 +261,7 @@ pub fn updateIslandPosition(self: *NonClientIslandWindow, width: c_int, height: 
     );
 
     // Resize drag bar to match new width.
-    fileLog("updateIslandPosition: width={} height={} top_offset={} interop=0x{x}", .{ width, height, top_offset, @intFromPtr(ih) });
+    log.debug("updateIslandPosition: width={} height={} top_offset={} interop=0x{x}", .{ width, height, top_offset, @intFromPtr(ih) });
     self.resizeDragBarWindow(width);
 }
 
@@ -287,7 +284,7 @@ pub fn resizeDragBarWindow(self: *NonClientIslandWindow, width_px: c_int) void {
     const titlebar_h: c_int = -frame.top;
     _ = resize_h; // used by getResizeHandleHeight for top border
 
-    fileLog("resizeDragBarWindow: width={} titlebar_h={} frame.top={} top_offset={} style=0x{x}", .{
+    log.debug("resizeDragBarWindow: width={} titlebar_h={} frame.top={} top_offset={} style=0x{x}", .{
         width_px, titlebar_h, frame.top, top_offset, @as(usize, @bitCast(style)),
     });
 
@@ -345,7 +342,7 @@ fn getResizeHandleHeight(hwnd: os.HWND) c_int {
 
 fn createDragBarWindow(self: *NonClientIslandWindow) ?os.HWND {
     const hinstance = os.GetModuleHandleW(null) orelse {
-        fileLog("createDragBarWindow: GetModuleHandleW returned null", .{});
+        log.err("createDragBarWindow: GetModuleHandleW returned null", .{});
         return null;
     };
 
@@ -365,13 +362,13 @@ fn createDragBarWindow(self: *NonClientIslandWindow) ?os.HWND {
         if (atom == 0) {
             const reg_err = os.GetLastError();
             if (reg_err == 1410) {
-                fileLog("createDragBarWindow: class already registered (1410), continuing", .{});
+                log.debug("createDragBarWindow: class already registered (1410), continuing", .{});
             } else {
-                fileLog("createDragBarWindow: RegisterClassExW failed err={}", .{reg_err});
+                log.err("createDragBarWindow: RegisterClassExW failed err={}", .{reg_err});
                 return null;
             }
         } else {
-            fileLog("createDragBarWindow: class registered atom={}", .{atom});
+            log.debug("createDragBarWindow: class registered atom={}", .{atom});
         }
         drag_bar_class_registered = true;
     }
@@ -390,14 +387,14 @@ fn createDragBarWindow(self: *NonClientIslandWindow) ?os.HWND {
         hinstance,
         @ptrCast(self),
     ) orelse {
-        fileLog("createDragBarWindow: FAILED err={} — check supportedOS in manifest", .{os.GetLastError()});
+        log.err("createDragBarWindow: FAILED err={} — check supportedOS in manifest", .{os.GetLastError()});
         return null;
     };
     // WT: alpha=255 (opaque to hit testing). NOREDIRECTIONBITMAP makes it
     // visually transparent since DWM has no surface to composite.
     _ = os.SetLayeredWindowAttributes(hwnd, 0, 255, os.LWA_ALPHA);
     _ = os.SetWindowPos(hwnd, os.HWND_TOP, 0, 0, 0, 0, os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOACTIVATE);
-    fileLog("createDragBarWindow: OK hwnd=0x{x} (LAYERED visible child)", .{@intFromPtr(hwnd)});
+    log.info("createDragBarWindow: OK hwnd=0x{x} (LAYERED visible child)", .{@intFromPtr(hwnd)});
 
     return hwnd;
 }
@@ -414,7 +411,7 @@ fn dragBarStaticWndProc(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: 
         const cs: *os.CREATESTRUCTW = @ptrFromInt(@as(usize, @bitCast(lparam)));
         if (cs.lpCreateParams) |nci_ptr| {
             _ = os.SetWindowLongPtrW(hwnd, os.GWLP_USERDATA, @intFromPtr(nci_ptr));
-            fileLog("dragBarWndProc: WM_NCCREATE hwnd=0x{x} nci=0x{x}", .{ @intFromPtr(hwnd), @intFromPtr(nci_ptr) });
+            log.debug("dragBarWndProc: WM_NCCREATE hwnd=0x{x} nci=0x{x}", .{ @intFromPtr(hwnd), @intFromPtr(nci_ptr) });
         }
         // WT: fall through to DefWindowProc (do NOT return early)
     } else {

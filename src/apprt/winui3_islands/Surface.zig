@@ -815,7 +815,7 @@ pub fn setTabTitle(self: *Self, title: [:0]const u8) void {
 
 pub fn updateSize(self: *Self, width: u32, height: u32) void {
     if (width == 0 or height == 0) return;
-    App.fileLog("Surface.updateSize: {}x{} -> {}x{}", .{ self.size.width, self.size.height, width, height });
+    log.info("Surface.updateSize: {}x{} -> {}x{}", .{ self.size.width, self.size.height, width, height });
     self.size = .{ .width = width, .height = height };
     if (self.core_initialized) {
         self.core_surface.sizeCallback(self.size) catch |err| {
@@ -847,10 +847,10 @@ pub fn handleKeyEvent(self: *Self, vk: u16, pressed: bool) void {
         // any subsequent WM_CHAR (IME commit text) passes through as a
         // standalone character event.
         if (pressed) self.pending_keydown = .none;
-        App.fileLog("handleKeyEvent: unmapped vk=0x{X:0>4} pressed={} -> pending=none", .{ vk, pressed });
+        log.debug("handleKeyEvent: unmapped vk=0x{X:0>4} pressed={} -> pending=none", .{ vk, pressed });
         return;
     };
-    App.fileLog("handleKeyEvent: vk=0x{X:0>4} pressed={} key={s}", .{ vk, pressed, @tagName(ghostty_key) });
+    log.debug("handleKeyEvent: vk=0x{X:0>4} pressed={} key={s}", .{ vk, pressed, @tagName(ghostty_key) });
     const mods = key.getModifiers();
     const unshifted = key.vkToUnshiftedCodepoint(vk);
 
@@ -915,14 +915,14 @@ pub fn handleCharEvent(self: *Self, char_code: u16) void {
         // WM_KEYDOWN was already consumed (function key, keybinding, etc.)
         // -- suppress this WM_CHAR to avoid double input.
         .consumed => {
-            App.fileLog("handleCharEvent: SUPPRESSED char=0x{X:0>4} (pending_keydown=consumed)", .{char_code});
+            log.debug("handleCharEvent: SUPPRESSED char=0x{X:0>4} (pending_keydown=consumed)", .{char_code});
             return;
         },
 
         // .pending or .none -- process the character below.
         .pending, .none => {},
     }
-    App.fileLog("handleCharEvent: char=0x{X:0>4} state={s}", .{ char_code, @tagName(state) });
+    log.debug("handleCharEvent: char=0x{X:0>4} state={s}", .{ char_code, @tagName(state) });
 
     var codepoint: u21 = undefined;
 
@@ -973,10 +973,10 @@ pub fn handleCharEvent(self: *Self, char_code: u16) void {
 
     const result = self.core_surface.keyCallback(ev) catch |err| {
         log.warn("char callback error: {}", .{err});
-        App.fileLog("handleCharEvent: keyCallback ERROR for U+{X:0>4}: {}", .{ @as(u32, codepoint), err });
+        log.err("handleCharEvent: keyCallback ERROR for U+{X:0>4}: {}", .{ @as(u32, codepoint), err });
         return;
     };
-    App.fileLog("handleCharEvent: keyCallback U+{X:0>4} result={s}", .{ @as(u32, codepoint), @tagName(result) });
+    log.debug("handleCharEvent: keyCallback U+{X:0>4} result={s}", .{ @as(u32, codepoint), @tagName(result) });
 }
 
 pub fn handleMouseMove(self: *Self, x: f64, y: f64) void {
@@ -1018,7 +1018,7 @@ pub fn handleScroll(self: *Self, xoffset: f64, yoffset: f64) void {
 // --- XAML event callbacks ---
 
 fn onXamlPointerPressed(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
-    App.fileLog("onXamlPointerPressed: core_initialized={}", .{self.core_initialized});
+    log.debug("onXamlPointerPressed: core_initialized={}", .{self.core_initialized});
     if (!self.core_initialized) return;
     const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const point = ea.getCurrentPoint(null) catch return;
@@ -1115,12 +1115,12 @@ fn onXamlPreviewKeyDown(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const vk = ea.Key() catch return;
     const vk_u32 = @as(u32, @bitCast(vk));
-    App.fileLog("xaml_surface: PreviewKeyDown vk=0x{x}", .{vk_u32});
+    log.debug("xaml_surface: PreviewKeyDown vk=0x{x}", .{vk_u32});
     if (isImePassthroughVirtualKey(vk_u32)) {
         // IME toggle/mode key or VK_PROCESSKEY — let TSF handle it.
         // TSF is associated with the main HWND and will process IME
         // composition directly without needing the TextBox.
-        App.fileLog("PreviewKeyDown: IME key 0x{x} -> pass to TSF (no TextBox redirect)", .{vk_u32});
+        log.debug("PreviewKeyDown: IME key 0x{x} -> pass to TSF (no TextBox redirect)", .{vk_u32});
         // Notify TSF that focus should be set (in case it was lost).
         if (self.app.tsf_impl) |*tsf_impl| {
             tsf_impl.focus();
@@ -1151,7 +1151,7 @@ fn onXamlCharacterReceived(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void 
     if (!self.core_initialized) return;
     const ea: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const ch = ea.Character() catch return;
-    App.fileLog("xaml_surface: CharacterReceived ch=0x{x}", .{ch});
+    log.debug("xaml_surface: CharacterReceived ch=0x{x}", .{ch});
     self.handleCharEvent(ch);
     if (self.closed) return;
     ea.SetHandled(true) catch {};
@@ -1162,7 +1162,7 @@ fn onImeTextBoxPreviewKeyDown(self: *Self, _: ?*anyopaque, args: ?*anyopaque) vo
     const ea: *com.IKeyRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const vk = ea.Key() catch return;
     const vk_u32 = @as(u32, @bitCast(vk));
-    App.fileLog("ime_text_box: PreviewKeyDown vk=0x{x} focus_target={s}", .{ vk_u32, @tagName(self.app.keyboard_focus_target) });
+    log.debug("ime_text_box: PreviewKeyDown vk=0x{x} focus_target={s}", .{ vk_u32, @tagName(self.app.keyboard_focus_target) });
     // Let IME passthrough keys (e.g. VK_PROCESSKEY, IME toggle) be handled
     // by the TextBox so IME composition works correctly.
     if (isImePassthroughVirtualKey(vk_u32)) return;
@@ -1198,7 +1198,7 @@ fn onImeTextBoxCharacterReceived(self: *Self, _: ?*anyopaque, args: ?*anyopaque)
     if (self.app.keyboard_focus_target != .ime_text_box) return;
     const ea: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const ch = ea.Character() catch return;
-    App.fileLog("ime_text_box: CharacterReceived ch=0x{x} (deferred to TextChanged)", .{ch});
+    log.debug("ime_text_box: CharacterReceived ch=0x{x} (deferred to TextChanged)", .{ch});
 }
 
 fn onImeTextBoxTextChanged(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
@@ -1218,7 +1218,7 @@ fn onImeTextBoxTextChanged(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
     }
 
     const append_only = commonPrefixLen(u16, prev, utf16) == prev.len and utf16.len > prev.len;
-    App.fileLog(
+    log.debug(
         "ime_text_box: TextChanged utf16_len={} prev_len={} sent_len={} composing={} append_only={} append_len={}",
         .{
             utf16.len,
@@ -1267,7 +1267,7 @@ fn onXamlGotFocus(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
 fn onXamlLostFocus(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
     if (self.app.keyboard_focus_target == .ime_text_box) {
-        App.fileLog("SwapChainPanel LostFocus ignored: IME text box now owns focus", .{});
+        log.debug("SwapChainPanel LostFocus ignored: IME text box now owns focus", .{});
         return;
     }
     if (!self.has_focus) return; // deduplicate
@@ -1285,7 +1285,7 @@ fn onXamlLostFocus(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
 
 fn onImeTextBoxGotFocus(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
-    App.fileLog("ime_text_box: GotFocus", .{});
+    log.debug("ime_text_box: GotFocus", .{});
     self.logImeTextBoxState("ime_text_box: GotFocus");
     if (self.has_focus) return;
     self.has_focus = true;
@@ -1296,7 +1296,7 @@ fn onImeTextBoxGotFocus(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
 
 fn onImeTextBoxLostFocus(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
     if (!self.core_initialized) return;
-    App.fileLog("ime_text_box: LostFocus keyboard_focus_target={s}", .{@tagName(self.app.keyboard_focus_target)});
+    log.debug("ime_text_box: LostFocus keyboard_focus_target={s}", .{@tagName(self.app.keyboard_focus_target)});
     if (self.app.keyboard_focus_target != .ime_text_box) return;
     if (!self.has_focus) return;
     self.has_focus = false;
@@ -1318,21 +1318,21 @@ pub fn focusSwapChainPanel(self: *Self) void {
             defer ue.release();
             const result = ue.focus(com.FocusState.Programmatic);
             if (result) |ok| {
-                App.fileLog("focusSwapChainPanel: focus() returned {}", .{ok});
+                log.debug("focusSwapChainPanel: focus() returned {}", .{ok});
             } else |err| {
-                App.fileLog("focusSwapChainPanel: focus() FAILED: {}", .{@intFromError(err)});
+                log.err("focusSwapChainPanel: focus() FAILED: {}", .{@intFromError(err)});
             }
         } else |err| {
-            App.fileLog("focusSwapChainPanel: QI IUIElement FAILED: {}", .{@intFromError(err)});
+            log.err("focusSwapChainPanel: QI IUIElement FAILED: {}", .{@intFromError(err)});
         }
     } else {
-        App.fileLog("focusSwapChainPanel: no swap_chain_panel!", .{});
+        log.err("focusSwapChainPanel: no swap_chain_panel!", .{});
     }
 }
 
 pub fn focusImeTextBox(self: *Self) bool {
     const ime_tb = self.ime_text_box orelse {
-        App.fileLog("focusImeTextBox: no ime_text_box", .{});
+        log.debug("focusImeTextBox: no ime_text_box", .{});
         return false;
     };
     self.clearImeTextBoxText();
@@ -1342,21 +1342,21 @@ pub fn focusImeTextBox(self: *Self) bool {
         defer ime_ue.release();
         const result = ime_ue.focus(com.FocusState.Programmatic);
         if (result) |ok| {
-            App.fileLog("focusImeTextBox: focus() returned {}", .{ok});
+            log.debug("focusImeTextBox: focus() returned {}", .{ok});
             self.logImeTextBoxState("focusImeTextBox: after focus");
             return ok;
         } else |err| {
-            App.fileLog("focusImeTextBox: focus() FAILED: {}", .{@intFromError(err)});
+            log.err("focusImeTextBox: focus() FAILED: {}", .{@intFromError(err)});
         }
     } else |err| {
-        App.fileLog("focusImeTextBox: QI IUIElement FAILED: {}", .{@intFromError(err)});
+        log.err("focusImeTextBox: QI IUIElement FAILED: {}", .{@intFromError(err)});
     }
     return false;
 }
 
 pub fn clearImeTextBoxText(self: *Self) void {
     const ime_tb = self.ime_text_box orelse {
-        App.fileLog("clearImeTextBoxText: no ime_text_box", .{});
+        log.debug("clearImeTextBoxText: no ime_text_box", .{});
         return;
     };
     // WinRT: null HSTRING == empty string. winrt.hstring("") may fail
@@ -1371,15 +1371,15 @@ pub fn clearImeTextBoxText(self: *Self) void {
         self.ime_text_box_last_text.clearRetainingCapacity();
         self.ime_text_box_sent_text.clearRetainingCapacity();
         self.ime_text_box_composing = false;
-        App.fileLog("clearImeTextBoxText: cleared sent={}->{} last={}->{}", .{
+        log.debug("clearImeTextBoxText: cleared sent={}->{} last={}->{}", .{
             prev_sent, self.ime_text_box_sent_text.items.len,
             prev_last, self.ime_text_box_last_text.items.len,
         });
     } else |err| {
-        App.fileLog("clearImeTextBoxText: SetText FAILED: {}", .{@intFromError(err)});
+        log.err("clearImeTextBoxText: SetText FAILED: {}", .{@intFromError(err)});
     }
     ime_tb.Select(0, 0) catch |err| {
-        App.fileLog("clearImeTextBoxText: Select FAILED: {}", .{@intFromError(err)});
+        log.err("clearImeTextBoxText: Select FAILED: {}", .{@intFromError(err)});
     };
 }
 
@@ -1403,7 +1403,7 @@ fn positionImeTextBox(self: *Self) void {
 
 fn setImeTextBoxSnapshot(self: *Self, utf16: []const u16) void {
     self.ime_text_box_last_text.resize(self.app.core_app.alloc, utf16.len) catch {
-        App.fileLog("ime_text_box: snapshot resize failed len={}", .{utf16.len});
+        log.err("ime_text_box: snapshot resize failed len={}", .{utf16.len});
         return;
     };
     std.mem.copyForwards(u16, self.ime_text_box_last_text.items, utf16);
@@ -1411,7 +1411,7 @@ fn setImeTextBoxSnapshot(self: *Self, utf16: []const u16) void {
 
 fn setImeTextBoxSentSnapshot(self: *Self, utf16: []const u16) void {
     self.ime_text_box_sent_text.resize(self.app.core_app.alloc, utf16.len) catch {
-        App.fileLog("ime_text_box: sent snapshot resize failed len={}", .{utf16.len});
+        log.err("ime_text_box: sent snapshot resize failed len={}", .{utf16.len});
         return;
     };
     std.mem.copyForwards(u16, self.ime_text_box_sent_text.items, utf16);
@@ -1433,7 +1433,7 @@ fn flushImeTextBoxCommittedDelta(self: *Self, utf16: []const u16) void {
     // because commonPrefixLen(empty, text) == 0 != sent.len when sent is empty
     // and utf16 has content that doesn't start from a previous prefix.
     if (sent.len == 0 and utf16.len > 0) {
-        App.fileLog("ime_text_box: FlushCommitted sent=0 -> sending all {} chars", .{utf16.len});
+        log.debug("ime_text_box: FlushCommitted sent=0 -> sending all {} chars", .{utf16.len});
         for (utf16) |code_unit| {
             self.handleCharEvent(code_unit);
             if (self.closed) return;
@@ -1443,7 +1443,7 @@ fn flushImeTextBoxCommittedDelta(self: *Self, utf16: []const u16) void {
     }
 
     const append_only = commonPrefixLen(u16, sent, utf16) == sent.len and utf16.len > sent.len;
-    App.fileLog(
+    log.debug(
         "ime_text_box: FlushCommitted utf16_len={} sent_len={} append_only={} append_len={}",
         .{ utf16.len, sent.len, append_only, if (append_only) utf16.len - sent.len else 0 },
     );
@@ -1475,7 +1475,7 @@ fn commonPrefixLen(comptime T: type, a: []const T, b: []const T) usize {
 pub fn setTsfPreedit(self: *Self, preedit_utf8: ?[]const u8) void {
     if (!self.core_initialized) return;
     self.core_surface.preeditCallback(preedit_utf8) catch |err| {
-        App.fileLog("TSF preedit error: {}", .{err});
+        log.err("TSF preedit error: {}", .{err});
     };
 }
 
@@ -1486,7 +1486,7 @@ pub fn handleTsfOutput(self: *Self, text_utf8: []const u8) void {
     if (!self.core_initialized) return;
     if (text_utf8.len == 0) return;
 
-    App.fileLog("TSF output: {} bytes", .{text_utf8.len});
+    log.debug("TSF output: {} bytes", .{text_utf8.len});
 
     // Convert UTF-8 to UTF-16 code units and feed each one through
     // handleCharEvent, which already handles surrogate pairs.
@@ -1533,7 +1533,7 @@ pub fn getTsfCursorRect(self: *Self) os.RECT {
 
     // Convert client coordinates to screen coordinates using the main HWND.
     const hwnd = self.app.hwnd orelse {
-        App.fileLog("TSF getTsfCursorRect: no hwnd", .{});
+        log.debug("TSF getTsfCursorRect: no hwnd", .{});
         return .{ .left = left_px, .top = top_px, .right = left_px + 1, .bottom = bottom_px };
     };
 
@@ -1607,7 +1607,7 @@ fn logImeTextBoxState(self: *Self, comptime prefix: []const u8) void {
         actual_height = ime_fe.ActualHeight() catch -1;
     } else |_| {}
 
-    App.fileLog(
+    log.debug(
         prefix ++ " state: win32_focus=0x{x} hwnd=0x{x} opacity={d:.2} visible={} hit_test={} tab_stop={} enabled={} allow_focus_on_interaction={} focus_state={} actual={d:.2}x{d:.2}",
         .{
             hwndValue(os.GetFocus()),
@@ -1686,7 +1686,7 @@ pub fn completeBindSwapChain(self: *Self, swap_chain: *anyopaque) void {
         log.err("ISwapChainPanelNative::SetSwapChain failed: {}", .{err});
         return;
     };
-    App.fileLog("Swap chain bound to SwapChainPanel (UI thread)", .{});
+    log.debug("Swap chain bound to SwapChainPanel (UI thread)", .{});
     log.info("Swap chain bound to SwapChainPanel (UI thread)", .{});
 }
 
@@ -1753,7 +1753,7 @@ fn maybeBindPendingSwapChainHandle(self: *Self, caller: []const u8) void {
 
 /// Called from App.performAction(.scrollbar) on the UI thread.
 pub fn updateScrollbarUi(self: *Self, total: usize, offset: usize, len: usize) void {
-    App.fileLog("updateScrollbarUi: total={} offset={} len={}", .{ total, offset, len });
+    log.debug("updateScrollbarUi: total={} offset={} len={}", .{ total, offset, len });
     const sb = self.scroll_bar_insp orelse return;
     self.is_internal_scroll_update = true;
     defer {
@@ -1850,7 +1850,7 @@ fn onLoaded(self: *Self, _: *anyopaque, _: *anyopaque) void {
         }
     }
     const scale: f64 = @floatCast(self.content_scale.x);
-    App.fileLog(
+    log.info(
         "SwapChainPanel.Loaded: surface_size={}x{} actual_dip={d:.1}x{d:.1} actual_px={d:.0}x{d:.0} scale={d:.2}",
         .{ self.size.width, self.size.height, actual_w, actual_h, actual_w * scale, actual_h * scale, scale },
     );
@@ -1890,18 +1890,18 @@ fn onSizeChanged(self: *Self, _: *anyopaque, _: *anyopaque) void {
     const dip_w: u32 = @intFromFloat(dip_width);
     const dip_h: u32 = @intFromFloat(dip_height);
 
-    App.fileLog("onSizeChanged: dip={d:.1}x{d:.1} -> {}x{}", .{ dip_width, dip_height, dip_w, dip_h });
+    log.info("onSizeChanged: dip={d:.1}x{d:.1} -> {}x{}", .{ dip_width, dip_height, dip_w, dip_h });
 
     if (dip_w > 0 and dip_h > 0) {
         self.size = .{ .width = dip_w, .height = dip_h };
         if (self.core_initialized) {
-            App.fileLog("onSizeChanged: calling sizeCallback {}x{}", .{ dip_w, dip_h });
+            log.info("onSizeChanged: calling sizeCallback {}x{}", .{ dip_w, dip_h });
             self.core_surface.sizeCallback(self.size) catch |err| {
-                App.fileLog("onSizeChanged: sizeCallback FAILED: {}", .{err});
+                log.err("onSizeChanged: sizeCallback FAILED: {}", .{err});
                 log.warn("onSizeChanged sizeCallback error: {}", .{err});
             };
         } else {
-            App.fileLog("onSizeChanged: core NOT initialized, skip sizeCallback", .{});
+            log.debug("onSizeChanged: core NOT initialized, skip sizeCallback", .{});
         }
     }
 

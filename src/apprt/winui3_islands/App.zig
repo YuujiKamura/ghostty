@@ -45,39 +45,6 @@ const Tsf = @import("tsf.zig");
 
 const log = std.log.scoped(.winui3_islands);
 
-/// Temporary file logger for debugging GUI app (no stderr visible).
-pub fn fileLog(comptime fmt: []const u8, args: anytype) void {
-    if (comptime builtin.mode != .Debug) return;
-
-    var buf: [1024]u8 = undefined;
-    const msg = std.fmt.bufPrint(&buf, fmt ++ "\n", args) catch return;
-
-    // Use dynamic path: %TEMP%\ghostty_debug.log
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    const temp_path = std.process.getEnvVarOwned(allocator, "TEMP") catch return;
-    const log_path = std.fs.path.join(allocator, &.{ temp_path, "ghostty_debug.log" }) catch return;
-    const path_w = std.unicode.utf8ToUtf16LeAllocZ(allocator, log_path) catch return;
-
-    const K32 = std.os.windows.kernel32;
-    const h = K32.CreateFileW(
-        path_w.ptr,
-        0x40000000, // GENERIC_WRITE
-        1, // FILE_SHARE_READ
-        null,
-        4, // OPEN_ALWAYS
-        0x80, // FILE_ATTRIBUTE_NORMAL
-        null,
-    );
-    if (h == std.os.windows.INVALID_HANDLE_VALUE) return;
-    defer _ = std.os.windows.ntdll.NtClose(h);
-    _ = K32.SetFilePointerEx(h, @bitCast(@as(i64, 0)), null, 2); // FILE_END
-    _ = K32.WriteFile(h, msg.ptr, @intCast(msg.len), null, null);
-    _ = os.FlushFileBuffers(h);
-}
-
 /// Timer ID for live resize preview.
 const RESIZE_TIMER_ID: usize = 1;
 const TAB_CLOSE_POLL_INTERVAL_MS: u32 = 500;
@@ -240,11 +207,11 @@ pub fn init(
 ) !void {
     _ = opts;
 
-    fileLog("App.init: ENTRY (winui3_islands)", .{});
+    log.info("App.init: ENTRY (winui3_islands)", .{});
 
     // Allocate a debug console so log output is visible for GUI apps.
     os.attachDebugConsole();
-    fileLog("App.init: after attachDebugConsole", .{});
+    log.debug("App.init: after attachDebugConsole", .{});
 
     // WT: BufferedPaintInit() — required once before BeginBufferedPaint in WM_PAINT.
     _ = os.BufferedPaintInit();
@@ -252,43 +219,43 @@ pub fn init(
     // Install a Vectored Exception Handler to capture details of
     // STATUS_STOWED_EXCEPTION before the process terminates.
     _ = os.AddVectoredExceptionHandler(1, &stowedExceptionHandler);
-    fileLog("App.init: after VEH install", .{});
+    log.debug("App.init: after VEH install", .{});
 
     // Request 1ms timer resolution for smooth animation timing.
     _ = os.timeBeginPeriod(1);
 
     logPackageIdentity();
-    fileLog("App.init: after logPackageIdentity", .{});
+    log.debug("App.init: after logPackageIdentity", .{});
 
     // Step 1: Bootstrap the Windows App SDK runtime.
     bootstrap.init() catch |err| {
-        fileLog("App.init: bootstrap FAILED err={}", .{err});
+        log.err("App.init: bootstrap FAILED err={}", .{err});
         log.err("Windows App SDK bootstrap failed: {}", .{err});
         return error.AppInitFailed;
     };
-    fileLog("App.init: after bootstrap.init", .{});
+    log.debug("App.init: after bootstrap.init", .{});
 
     // Step 2: Initialize WinRT.
     winrt.hrCheck(winrt.RoInitialize(winrt.RO_INIT_SINGLETHREADED)) catch |err| {
-        fileLog("App.init: RoInitialize FAILED err={}", .{err});
+        log.err("App.init: RoInitialize FAILED err={}", .{err});
         log.err("RoInitialize failed: {}", .{err});
         return error.AppInitFailed;
     };
-    fileLog("App.init: after RoInitialize", .{});
+    log.debug("App.init: after RoInitialize", .{});
 
     // Step 3: Create a DispatcherQueue for the current thread.
     // This is required before creating any XAML objects.
     const dq_opts = winrt.DispatcherQueueOptions{};
     const dq_controller = winrt.createDispatcherQueueController(&dq_opts) catch |err| {
-        fileLog("App.init: DispatcherQueue FAILED err={}", .{err});
+        log.err("App.init: DispatcherQueue FAILED err={}", .{err});
         log.err("CreateDispatcherQueueController failed: {}", .{err});
         return error.AppInitFailed;
     };
-    fileLog("App.init: after DispatcherQueue", .{});
+    log.debug("App.init: after DispatcherQueue", .{});
 
     // Obtain IDispatcherQueue from the controller for TryEnqueue-based wakeup.
     const dispatcher_queue: ?*gen.IDispatcherQueue = dq_controller.queryInterface(gen.IDispatcherQueue) catch |err| blk: {
-        fileLog("App.init: IDispatcherQueue QI failed err={}, falling back to PostMessageW wakeup", .{err});
+        log.warn("App.init: IDispatcherQueue QI failed err={}, falling back to PostMessageW wakeup", .{err});
         break :blk null;
     };
 
@@ -308,12 +275,12 @@ pub fn init(
     // Window/UI creation happens inside run() via Application.Start(callback).
     // WinUI 3 requires Window creation on the XAML thread which is set up by Start().
     log.info("WinUI 3 Islands runtime initialized (window creation deferred to run)", .{});
-    fileLog("App.init: EXIT OK", .{});
+    log.info("App.init: EXIT OK", .{});
 }
 
 /// Called from inside Application.Start() callback — XAML thread is active here.
 pub fn initXaml(self: *App) !void {
-    fileLog("initXaml: START (winui3_islands)", .{});
+    log.info("initXaml: START (winui3_islands)", .{});
     log.info("initXaml: creating NonClientIslandWindow inside XAML thread", .{});
     self.startup_bootstrapped = false;
     self.parity_verified = false;
@@ -325,25 +292,25 @@ pub fn initXaml(self: *App) !void {
     self.setStartupStage(.application_ready);
 
     // Step 1: Create NonClientIslandWindow (CreateWindowEx + DWM frame).
-    fileLog("initXaml step 1: NonClientIslandWindow.init...", .{});
+    log.debug("initXaml step 1: NonClientIslandWindow.init...", .{});
     const nci = try self.core_app.alloc.create(NonClientIslandWindow);
     errdefer self.core_app.alloc.destroy(nci);
     try nci.init(self);
-    fileLog("initXaml step 1 OK: HWND=0x{x}", .{@intFromPtr(nci.island.hwnd)});
+    log.debug("initXaml step 1 OK: HWND=0x{x}", .{@intFromPtr(nci.island.hwnd)});
 
     // Step 2: Initialize DesktopWindowXamlSource with our window's WindowId.
-    fileLog("initXaml step 2: island.initialize...", .{});
+    log.debug("initXaml step 2: island.initialize...", .{});
     try nci.island.initialize();
-    fileLog("initXaml step 2 OK: DesktopWindowXamlSource initialized", .{});
+    log.debug("initXaml step 2 OK: DesktopWindowXamlSource initialized", .{});
 
     // Step 3: Create drag bar AFTER DXWS initialization.
     // WS_EX_LAYERED on child windows fails (err=183) if called before
     // the WinUI3 runtime is initialized. Deferring to after step 2.
     nci.createDragBarIfNeeded();
     if (nci.drag_bar_hwnd) |db| {
-        fileLog("initXaml step 3: drag_bar_hwnd=0x{x}", .{@intFromPtr(db)});
+        log.debug("initXaml step 3: drag_bar_hwnd=0x{x}", .{@intFromPtr(db)});
     } else {
-        fileLog("initXaml step 3: drag_bar creation FAILED", .{});
+        log.warn("initXaml step 3: drag_bar creation FAILED", .{});
     }
 
     self.nci_window = nci;
@@ -364,7 +331,7 @@ pub fn initXaml(self: *App) !void {
     _ = os.ShowWindow(self.hwnd.?, os.SW_SHOWNORMAL);
     _ = os.UpdateWindow(self.hwnd.?);
     _ = os.SetForegroundWindow(self.hwnd.?);
-    fileLog("initXaml step 5: ShowWindow + SetForegroundWindow OK", .{});
+    log.debug("initXaml step 5: ShowWindow + SetForegroundWindow OK", .{});
     self.setStartupStage(.window_activated);
 
     // Step 6: Create XAML content (TabView + SwapChainPanel).
@@ -389,7 +356,7 @@ pub fn initXaml(self: *App) !void {
             _ = os.SetWindowPos(db, os.HWND_TOP, 0, 0, 0, 0,
                 os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOACTIVATE);
         }
-        fileLog("initXaml step 6.5: drag bar Z-order re-asserted", .{});
+        log.debug("initXaml step 6.5: drag bar Z-order re-asserted", .{});
     }
 
     // Step 7: Create native input windows (input overlay for IME).
@@ -398,13 +365,13 @@ pub fn initXaml(self: *App) !void {
     input_runtime.focusKeyboardTarget(self);
     self.startup_bootstrapped = true;
     self.setStartupStage(.content_ready);
-    fileLog("initXaml: content_ready, entering message loop", .{});
+    log.info("initXaml: content_ready, entering message loop", .{});
 
     // --- Control Plane (optional, env-gated) ---
     const cp_enabled = ControlPlaneFfi.isEnabled(self.core_app.alloc);
-    fileLog("control_plane: isEnabled={}", .{@intFromBool(cp_enabled)});
+    log.debug("control_plane: isEnabled={}", .{@intFromBool(cp_enabled)});
     if (cp_enabled) {
-        fileLog("control_plane: hwnd={}", .{@intFromPtr(self.hwnd)});
+        log.debug("control_plane: hwnd={}", .{@intFromPtr(self.hwnd)});
         if (self.hwnd) |hwnd| {
             self.control_plane = ControlPlaneFfi.create(
                 self.core_app.alloc,
@@ -414,10 +381,10 @@ pub fn initXaml(self: *App) !void {
                 controlPlaneCaptureTail,
                 controlPlaneCaptureTabList,
             ) catch |err| blk: {
-                fileLog("control_plane: create FAILED err={s}", .{@errorName(err)});
+                log.err("control_plane: create FAILED err={s}", .{@errorName(err)});
                 break :blk null;
             };
-            fileLog("control_plane: create OK ptr={}", .{@intFromPtr(self.control_plane)});
+            log.info("control_plane: create OK ptr={}", .{@intFromPtr(self.control_plane)});
         }
     }
 
@@ -468,7 +435,7 @@ fn dumpVisualTreeRoot(self: *App) void {
             } else |_| {}
         }
         const sc = @as(f64, @floatCast(surface.content_scale.x));
-        fileLog("SIZE COMPARE: surface={}x{} panel_dip={d:.1}x{d:.1} panel_px={d:.0}x{d:.0} scale={d:.2}", .{
+        log.debug("SIZE COMPARE: surface={}x{} panel_dip={d:.1}x{d:.1} panel_px={d:.0}x{d:.0} scale={d:.2}", .{
             ssize.width, ssize.height, panel_w, panel_h, panel_w * sc, panel_h * sc, sc,
         });
     }
@@ -499,26 +466,26 @@ fn dumpVisualTreeImpl(vth: *com.IVisualTreeHelperStatics, element: ?*winrt.IInsp
                 aw = fe.ActualWidth() catch -1;
                 ah = fe.ActualHeight() catch -1;
             } else |_| {}
-            fileLog("VT[{d}] {s} actual={d:.1}x{d:.1}", .{ depth, name, aw, ah });
+            log.debug("VT[{d}] {s} actual={d:.1}x{d:.1}", .{ depth, name, aw, ah });
         } else {
-            fileLog("VT[{d}] <null-name>", .{depth});
+            log.debug("VT[{d}] <null-name>", .{depth});
         }
     } else {
-        fileLog("VT[{d}] <no-name>", .{depth});
+        log.debug("VT[{d}] <no-name>", .{depth});
     }
 
     // QI for IDependencyObject — VisualTreeHelper methods require IDependencyObject, not IInspectable.
     const dep_obj = elem.queryInterface(com.IDependencyObject) catch {
-        fileLog("VT[{d}] QI IDependencyObject failed", .{depth});
+        log.debug("VT[{d}] QI IDependencyObject failed", .{depth});
         return;
     };
     defer dep_obj.release();
 
     const count = vth.getChildrenCount(dep_obj) catch |err| blk: {
-        fileLog("VT[{d}] getChildrenCount FAILED: {}", .{ depth, @intFromError(err) });
+        log.debug("VT[{d}] getChildrenCount FAILED: {}", .{ depth, @intFromError(err) });
         break :blk @as(i32, 0);
     };
-    fileLog("VT[{d}] children={d}", .{ depth, count });
+    log.debug("VT[{d}] children={d}", .{ depth, count });
     var i: i32 = 0;
     while (i < count) : (i += 1) {
         if (vth.getChild(dep_obj, i)) |child| {
@@ -698,9 +665,9 @@ fn setupNativeInputWindows(self: *App) void {
         if (self.input_hwnd) |input_hwnd| {
             _ = os.ImmAssociateContextEx(input_hwnd, null, os.IACE_DEFAULT);
             // keyboard_focus_target stays .xaml_surface — TSF is the sole IME handler.
-            fileLog("setupNativeInputWindows: input HWND=0x{x} created; text owner=xaml_surface (TSF direct)", .{@intFromPtr(input_hwnd)});
+            log.debug("setupNativeInputWindows: input HWND=0x{x} created; text owner=xaml_surface (TSF direct)", .{@intFromPtr(input_hwnd)});
         } else {
-            fileLog("setupNativeInputWindows: WARNING input_hwnd creation FAILED", .{});
+            log.warn("setupNativeInputWindows: WARNING input_hwnd creation FAILED", .{});
         }
     }
 
@@ -710,7 +677,7 @@ fn setupNativeInputWindows(self: *App) void {
     // during initialize(). If we init a local and copy, those pointers become dangling.
     self.tsf_impl = Tsf.TsfImplementation{};
     self.tsf_impl.?.initialize() catch |err| {
-        fileLog("TSF: initialize failed: {}", .{err});
+        log.err("TSF: initialize failed: {}", .{err});
         self.tsf_impl = null;
         return;
     };
@@ -722,7 +689,7 @@ fn setupNativeInputWindows(self: *App) void {
     if (self.hwnd) |h| {
         self.tsf_impl.?.associateFocus(h);
     }
-    fileLog("setupNativeInputWindows: TSF initialized OK", .{});
+    log.info("setupNativeInputWindows: TSF initialized OK", .{});
 }
 
 // ---------------------------------------------------------------
@@ -733,7 +700,7 @@ fn setupNativeInputWindows(self: *App) void {
 fn tsfHandleOutput(userdata: ?*anyopaque, utf8: []const u8) void {
     const app: *App = @ptrCast(@alignCast(userdata orelse return));
     const surface = app.activeSurface() orelse return;
-    fileLog("TSF tsfHandleOutput: {} bytes, pending_keydown={s}", .{ utf8.len, @tagName(surface.pending_keydown) });
+    log.debug("TSF tsfHandleOutput: {} bytes, pending_keydown={s}", .{ utf8.len, @tagName(surface.pending_keydown) });
 
     // CRITICAL: Clear pending_keydown before sending TSF output.
     // When IME confirms with Enter, WM_KEYDOWN sets pending_keydown=.consumed.
@@ -754,7 +721,7 @@ fn tsfHandleOutput(userdata: ?*anyopaque, utf8: []const u8) void {
             i += cp_len;
             continue;
         };
-        fileLog("TSF tsfHandleOutput: sending codepoint U+{X:0>4}", .{@as(u32, codepoint)});
+        log.debug("TSF tsfHandleOutput: sending codepoint U+{X:0>4}", .{@as(u32, codepoint)});
         // Encode as UTF-16 and send via handleCharEvent (supports surrogate pairs).
         if (codepoint <= 0xFFFF) {
             surface.handleCharEvent(@intCast(codepoint));
@@ -767,7 +734,7 @@ fn tsfHandleOutput(userdata: ?*anyopaque, utf8: []const u8) void {
         }
         i += cp_len;
     }
-    fileLog("TSF tsfHandleOutput: done, pending_keydown={s}", .{@tagName(surface.pending_keydown)});
+    log.debug("TSF tsfHandleOutput: done, pending_keydown={s}", .{@tagName(surface.pending_keydown)});
 }
 
 /// TSF callback: preedit text — forward to the active surface's core preedit display.
@@ -775,7 +742,7 @@ fn tsfHandlePreedit(userdata: ?*anyopaque, text: ?[]const u8) void {
     const app: *App = @ptrCast(@alignCast(userdata orelse return));
     const surface = app.activeSurface() orelse return;
     surface.core_surface.preeditCallback(text) catch |err| {
-        fileLog("TSF tsfHandlePreedit error: {}", .{err});
+        log.err("TSF tsfHandlePreedit error: {}", .{err});
     };
 }
 
@@ -911,12 +878,12 @@ fn registerTabViewHandlers(self: *App, tab_view: ?*com.ITabView) !void {
         const alloc = self.core_app.alloc;
         if (self.debug_cfg.enable_handler_close) {
             self.tab_close_handler = try TypedHandler.createWithIid(alloc, self, &onTabCloseRequested, &com.IID_TypedEventHandler_TabCloseRequested);
-            fileLog(
+            log.debug(
                 "registerTabViewHandlers: AddTabCloseRequested start tab_view=0x{x} handler=0x{x}",
                 .{ @intFromPtr(tab_view.?), @intFromPtr(self.tab_close_handler.?) },
             );
             self.tab_close_token = try tab_view.?.AddTabCloseRequested(self.tab_close_handler.?.comPtr());
-            fileLog("registerTabViewHandlers: AddTabCloseRequested success token={}", .{self.tab_close_token.?});
+            log.debug("registerTabViewHandlers: AddTabCloseRequested success token={}", .{self.tab_close_token.?});
             log.info("initXaml step 7.5: TabCloseRequested handler registered", .{});
         }
         if (self.debug_cfg.enable_handler_addtab) {
@@ -958,14 +925,14 @@ fn currentTabItemsSize(self: *App) !u32 {
 
 fn pollTabCloseState(self: *App) void {
     const current_size = self.currentTabItemsSize() catch |err| {
-        fileLog("pollTabCloseState: currentTabItemsSize failed err={}", .{@intFromError(err)});
+        log.warn("pollTabCloseState: currentTabItemsSize failed err={}", .{@intFromError(err)});
         return;
     };
     const previous_size = self.last_polled_tab_items_size orelse current_size;
     self.last_polled_tab_items_size = current_size;
 
     if (current_size < previous_size and current_size < self.surfaces.items.len) {
-        fileLog(
+        log.debug(
             "pollTabCloseState: size decreased prev={} current={} surfaces={}, closing active tab",
             .{ previous_size, current_size, self.surfaces.items.len },
         );
@@ -1098,7 +1065,7 @@ pub fn terminate(self: *App) void {
 
 /// Called when the window is being closed (from wndproc WM_CLOSE).
 pub fn onWindowClose(self: *App) void {
-    fileLog("onWindowClose called! stage={s} exit_intent={s}", .{
+    log.info("onWindowClose called! stage={s} exit_intent={s}", .{
         startupStageLabel(self.startup_stage),
         exitIntentLabel(self.exit_intent),
     });
@@ -1290,7 +1257,7 @@ const WakeupHandler = struct {
 };
 
 pub fn requestCloseWindow(self: *App) void {
-    fileLog("requestCloseWindow called! stage={s} exit_intent={s}", .{
+    log.info("requestCloseWindow called! stage={s} exit_intent={s}", .{
         startupStageLabel(self.startup_stage),
         exitIntentLabel(self.exit_intent),
     });
@@ -1311,7 +1278,7 @@ pub fn performAction(
 ) !bool {
     switch (action) {
         .quit => {
-            fileLog("performAction: .quit", .{});
+            log.info("performAction: .quit", .{});
             self.setExitIntent(.quit_action);
             self.running = false;
             if (self.xaml_app) |xa| {
@@ -1324,7 +1291,7 @@ pub fn performAction(
             return false;
         },
         .close_all_windows => {
-            fileLog("performAction: .close_all_windows", .{});
+            log.info("performAction: .close_all_windows", .{});
             self.setExitIntent(.close_all_windows);
             self.running = false;
             if (self.xaml_app) |xa| {
@@ -1451,24 +1418,24 @@ pub fn newTab(self: *App) !void {
 
 /// Close the active tab and its surface.
 pub fn closeActiveTab(self: *App) void {
-    fileLog("closeActiveTab: ENTRY active={} total={}", .{ self.active_surface_idx, self.surfaces.items.len });
+    log.debug("closeActiveTab: ENTRY active={} total={}", .{ self.active_surface_idx, self.surfaces.items.len });
     if (tab_manager.closeActiveTab(self)) {
-        fileLog("closeActiveTab: no tabs remain, requesting app exit", .{});
+        log.info("closeActiveTab: no tabs remain, requesting app exit", .{});
         self.running = false;
         if (self.xaml_app) |xa| xa.Exit() catch {};
     }
-    fileLog("closeActiveTab: EXIT total={}", .{self.surfaces.items.len});
+    log.debug("closeActiveTab: EXIT total={}", .{self.surfaces.items.len});
 }
 
 /// Close a specific tab by index.
 pub fn closeTab(self: *App, idx: usize) void {
-    fileLog("closeTab: ENTRY idx={} total={}", .{ idx, self.surfaces.items.len });
+    log.debug("closeTab: ENTRY idx={} total={}", .{ idx, self.surfaces.items.len });
     if (tab_manager.closeTab(self, idx)) {
-        fileLog("closeTab: no tabs remain, requesting app exit", .{});
+        log.info("closeTab: no tabs remain, requesting app exit", .{});
         self.running = false;
         if (self.xaml_app) |xa| xa.Exit() catch {};
     }
-    fileLog("closeTab: EXIT total={}", .{self.surfaces.items.len});
+    log.debug("closeTab: EXIT total={}", .{self.surfaces.items.len});
 }
 
 /// Close a surface by pointer (called from Surface.close).
@@ -1566,60 +1533,60 @@ fn controlPlaneCaptureTabList(ctx: *anyopaque, allocator: Allocator) !?[]u8 {
 // ---------------------------------------------------------------
 
 fn onTabCloseRequested(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
-    fileLog("onTabCloseRequested: ENTRY sender={} args={} tabs={}", .{
+    log.debug("onTabCloseRequested: ENTRY sender={} args={} tabs={}", .{
         @intFromPtr(sender),
         @intFromPtr(args),
         self.surfaces.items.len,
     });
     event_handlers.onTabCloseRequested(self, sender, args);
-    fileLog("onTabCloseRequested: EXIT tabs={}", .{self.surfaces.items.len});
+    log.debug("onTabCloseRequested: EXIT tabs={}", .{self.surfaces.items.len});
 }
 
 fn onAddTabButtonClick(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
-    fileLog("onAddTabButtonClick: ENTRY tabs={}", .{self.surfaces.items.len});
+    log.debug("onAddTabButtonClick: ENTRY tabs={}", .{self.surfaces.items.len});
     event_handlers.onAddTabButtonClick(self, sender, args);
-    fileLog("onAddTabButtonClick: EXIT tabs={}", .{self.surfaces.items.len});
+    log.debug("onAddTabButtonClick: EXIT tabs={}", .{self.surfaces.items.len});
 }
 
 fn onResourceManagerRequested(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
     _ = self;
     _ = sender;
-    fileLog("onResourceManagerRequested: ENTRY", .{});
+    log.debug("onResourceManagerRequested: ENTRY", .{});
     const args_insp: *winrt.IInspectable = @ptrCast(@alignCast(args orelse return));
     const e = args_insp.queryInterface(gen.IResourceManagerRequestedEventArgs) catch |err| {
-        fileLog("onResourceManagerRequested: QI IResourceManagerRequestedEventArgs failed: {}", .{@intFromError(err)});
+        log.err("onResourceManagerRequested: QI IResourceManagerRequestedEventArgs failed: {}", .{@intFromError(err)});
         return;
     };
     defer e.release();
 
     const res_manager_class = winrt.hstring("Microsoft.Windows.ApplicationModel.Resources.ResourceManager") catch |err| {
-        fileLog("onResourceManagerRequested: hstring failed: {}", .{@intFromError(err)});
+        log.err("onResourceManagerRequested: hstring failed: {}", .{@intFromError(err)});
         return;
     };
     defer winrt.deleteHString(res_manager_class);
 
     // Fallback: DllGetActivationFactory → IActivationFactory.ActivateInstance (default ctor)
     // This creates a ResourceManager that auto-discovers resources.pri in the exe directory
-    fileLog("onResourceManagerRequested: trying DllGetActivationFactory+ActivateInstance", .{});
+    log.debug("onResourceManagerRequested: trying DllGetActivationFactory+ActivateInstance", .{});
     const resource_manager = activateResourceManagerDirect(res_manager_class) catch |err2| {
-        fileLog("onResourceManagerRequested: direct activation failed: {}", .{@intFromError(err2)});
+        log.err("onResourceManagerRequested: direct activation failed: {}", .{@intFromError(err2)});
         return;
     };
     // DO NOT release resource_manager here — XAML framework takes ownership
     // and will use it throughout the app lifetime.
 
     e.SetCustomResourceManager(@ptrCast(resource_manager)) catch |err| {
-        fileLog("onResourceManagerRequested: SetCustomResourceManager failed: {}", .{@intFromError(err)});
+        log.err("onResourceManagerRequested: SetCustomResourceManager failed: {}", .{@intFromError(err)});
         return;
     };
 
-    fileLog("onResourceManagerRequested: SUCCESS - custom ResourceManager set", .{});
+    log.info("onResourceManagerRequested: SUCCESS - custom ResourceManager set", .{});
 }
 
 fn activateResourceManagerDirect(class_name: winrt.HSTRING) !*winrt.IInspectable {
     const dll_name_z = [_:0]u16{ 'M', 'i', 'c', 'r', 'o', 's', 'o', 'f', 't', '.', 'W', 'i', 'n', 'd', 'o', 'w', 's', '.', 'A', 'p', 'p', 'l', 'i', 'c', 'a', 't', 'i', 'o', 'n', 'M', 'o', 'd', 'e', 'l', '.', 'R', 'e', 's', 'o', 'u', 'r', 'c', 'e', 's', '.', 'd', 'l', 'l' };
     const module = std.os.windows.kernel32.LoadLibraryW(&dll_name_z) orelse {
-        fileLog("activateResourceManagerDirect: LoadLibrary failed", .{});
+        log.err("activateResourceManagerDirect: LoadLibrary failed", .{});
         return error.WinRTFailed;
     };
 
@@ -1628,17 +1595,17 @@ fn activateResourceManagerDirect(class_name: winrt.HSTRING) !*winrt.IInspectable
         module,
         "DllGetActivationFactory",
     ) orelse {
-        fileLog("activateResourceManagerDirect: GetProcAddress failed", .{});
+        log.err("activateResourceManagerDirect: GetProcAddress failed", .{});
         return error.WinRTFailed;
     });
 
     var act_factory: ?*anyopaque = null;
     const hr1 = get_factory_fn(class_name, &act_factory);
     if (hr1 < 0 or act_factory == null) {
-        fileLog("activateResourceManagerDirect: DllGetActivationFactory failed: 0x{x}", .{@as(u32, @bitCast(hr1))});
+        log.err("activateResourceManagerDirect: DllGetActivationFactory failed: 0x{x}", .{@as(u32, @bitCast(hr1))});
         return error.WinRTFailed;
     }
-    fileLog("activateResourceManagerDirect: DllGetActivationFactory OK", .{});
+    log.debug("activateResourceManagerDirect: DllGetActivationFactory OK", .{});
 
     // IActivationFactory vtable: slots 0-5 = IInspectable, slot 6 = ActivateInstance
     const IActivationFactoryVTable = extern struct {
@@ -1658,10 +1625,10 @@ fn activateResourceManagerDirect(class_name: winrt.HSTRING) !*winrt.IInspectable
     _ = act_vtbl.*.Release(act_factory.?);
 
     if (hr2 < 0 or instance == null) {
-        fileLog("activateResourceManagerDirect: ActivateInstance failed: 0x{x}", .{@as(u32, @bitCast(hr2))});
+        log.err("activateResourceManagerDirect: ActivateInstance failed: 0x{x}", .{@as(u32, @bitCast(hr2))});
         return error.WinRTFailed;
     }
-    fileLog("activateResourceManagerDirect: SUCCESS", .{});
+    log.info("activateResourceManagerDirect: SUCCESS", .{});
     return @ptrCast(@alignCast(instance.?));
 }
 
@@ -1851,18 +1818,18 @@ pub fn loadXamlResources(self: *App, xa: *com.IApplication) void {
 
 fn enableDebugSettings(_: *App, xa: *com.IApplication) void {
     const ds = xa.DebugSettings() catch |err| {
-        fileLog("DebugSettings: failed to get: {}", .{@intFromError(err)});
+        log.warn("DebugSettings: failed to get: {}", .{@intFromError(err)});
         return;
     };
     ds.SetIsBindingTracingEnabled(true) catch {};
-    fileLog("DebugSettings: BindingTracing enabled", .{});
+    log.debug("DebugSettings: BindingTracing enabled", .{});
 
     // IDebugSettings2: resource reference tracing
     if (ds.queryInterface(com.IDebugSettings2)) |ds2| {
         ds2.SetIsXamlResourceReferenceTracingEnabled(true) catch {};
-        fileLog("DebugSettings: XamlResourceReferenceTracing enabled", .{});
+        log.debug("DebugSettings: XamlResourceReferenceTracing enabled", .{});
     } else |_| {
-        fileLog("DebugSettings: IDebugSettings2 not available", .{});
+        log.debug("DebugSettings: IDebugSettings2 not available", .{});
     }
 }
 
@@ -1885,9 +1852,9 @@ pub fn drainMailbox(self: *App) void {
 }
 
 fn logDiagnosticSnapshot(self: *App) void {
-    fileLog("=== DIAGNOSTIC tick={} ===", .{diagnostic_tick_count});
-    fileLog("  surfaces={} active_idx={}", .{ self.surfaces.items.len, self.active_surface_idx });
-    fileLog("  resizing={} pending_size={}", .{
+    log.debug("=== DIAGNOSTIC tick={} ===", .{diagnostic_tick_count});
+    log.debug("  surfaces={} active_idx={}", .{ self.surfaces.items.len, self.active_surface_idx });
+    log.debug("  resizing={} pending_size={}", .{
         @intFromBool(self.resizing),
         @intFromBool(self.pending_size != null),
     });
@@ -1903,7 +1870,7 @@ fn logDiagnosticSnapshot(self: *App) void {
                 page_count += 1;
             }
             const tracked_pins = screen.pages.countTrackedPins();
-            fileLog("  surface[{}] pages={} rows={} cols={} pins={} page_size={}", .{
+            log.debug("  surface[{}] pages={} rows={} cols={} pins={} page_size={}", .{
                 i,
                 page_count,
                 screen.pages.rows,
@@ -1913,7 +1880,7 @@ fn logDiagnosticSnapshot(self: *App) void {
             });
         }
     }
-    fileLog("=== END DIAGNOSTIC ===", .{});
+    log.debug("=== END DIAGNOSTIC ===", .{});
 }
 
 fn setWindowTitle(self: *App, title: [:0]const u8) void {
@@ -2006,7 +1973,7 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
                 }
             }
             if (!alive) {
-                fileLog("handleBindSwapChain: drop stale surface ptr=0x{x}", .{@intFromPtr(surface)});
+                log.warn("handleBindSwapChain: drop stale surface ptr=0x{x}", .{@intFromPtr(surface)});
                 return 0;
             }
             surface.completeBindSwapChain(swap_chain);
@@ -2024,7 +1991,7 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
                 }
             }
             if (!alive) {
-                fileLog("handleBindSwapChainHandle: drop stale surface ptr=0x{x}", .{@intFromPtr(surface)});
+                log.warn("handleBindSwapChainHandle: drop stale surface ptr=0x{x}", .{@intFromPtr(surface)});
                 return 0;
             }
             surface.completeBindSwapChainHandle(swap_chain_handle);
@@ -2224,7 +2191,7 @@ pub fn stowedExceptionHandler(exception_info: *os.EXCEPTION_POINTERS) callconv(.
     if (code == 0xE06D7363) return 0;
     // MS_VC_EXCEPTION: SetThreadName via RaiseException (debugger thread naming).
     if (code == 0x406D1388) return 0;
-    fileLog("!!! EXCEPTION code=0x{X:0>8} addr={?} !!!", .{ code, rec.ExceptionAddress });
+    log.err("!!! EXCEPTION code=0x{X:0>8} addr={?} !!!", .{ code, rec.ExceptionAddress });
     return 0; // EXCEPTION_CONTINUE_SEARCH
 }
 

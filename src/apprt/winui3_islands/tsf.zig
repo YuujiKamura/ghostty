@@ -42,6 +42,7 @@
 //! This Zig port is part of the Ghostty project (MIT License).
 
 const std = @import("std");
+const log = std.log.scoped(.winui3_islands);
 const com = @import("../winui3/com.zig");
 const os = @import("../winui3/os.zig");
 const tsf = @import("tsf_bindings.zig");
@@ -229,7 +230,7 @@ pub const TsfImplementation = struct {
     /// Initialize TSF: create ThreadMgrEx, DocumentMgr, Context, and advise sinks.
     /// Matches WT Implementation::Initialize() exactly.
     pub fn initialize(self: *TsfImplementation) !void {
-        App.fileLog("TSF: initialize() starting", .{});
+        log.info("TSF: initialize() starting", .{});
 
         // Initialize the edit session proxy's back-pointer
         self._editSessionCompositionUpdate.self = self;
@@ -239,7 +240,7 @@ pub const TsfImplementation = struct {
             var ptr: ?*anyopaque = null;
             const hr = CoCreateInstance(&tsf.CLSID_TF_CategoryMgr, null, CLSCTX_INPROC_SERVER, &tsf.ITfCategoryMgr.IID, &ptr);
             if (hr < 0) {
-                App.fileLog("TSF: CoCreateInstance(CategoryMgr) failed: 0x{x}", .{@as(u32, @bitCast(hr))});
+                log.err("TSF: CoCreateInstance(CategoryMgr) failed: 0x{x}", .{@as(u32, @bitCast(hr))});
                 return error.WinRTFailed;
             }
             self._categoryMgr = @ptrCast(@alignCast(ptr));
@@ -250,7 +251,7 @@ pub const TsfImplementation = struct {
             var ptr: ?*anyopaque = null;
             const hr = CoCreateInstance(&tsf.CLSID_TF_DisplayAttributeMgr, null, CLSCTX_INPROC_SERVER, &tsf.ITfDisplayAttributeMgr.IID, &ptr);
             if (hr < 0) {
-                App.fileLog("TSF: CoCreateInstance(DisplayAttributeMgr) failed: 0x{x}", .{@as(u32, @bitCast(hr))});
+                log.err("TSF: CoCreateInstance(DisplayAttributeMgr) failed: 0x{x}", .{@as(u32, @bitCast(hr))});
                 return error.WinRTFailed;
             }
             self._displayAttributeMgr = @ptrCast(@alignCast(ptr));
@@ -261,7 +262,7 @@ pub const TsfImplementation = struct {
             var ptr: ?*anyopaque = null;
             const hr = CoCreateInstance(&tsf.CLSID_TF_ThreadMgr, null, CLSCTX_INPROC_SERVER, &tsf.ITfThreadMgrEx.IID, &ptr);
             if (hr < 0) {
-                App.fileLog("TSF: CoCreateInstance(ThreadMgrEx) failed: 0x{x}", .{@as(u32, @bitCast(hr))});
+                log.err("TSF: CoCreateInstance(ThreadMgrEx) failed: 0x{x}", .{@as(u32, @bitCast(hr))});
                 return error.WinRTFailed;
             }
             self._threadMgrEx = @ptrCast(@alignCast(ptr));
@@ -272,7 +273,7 @@ pub const TsfImplementation = struct {
             const hr = self._threadMgrEx.?.lpVtbl.ActivateEx(@ptrCast(self._threadMgrEx.?), &self._clientId, s_activationFlags);
             if (hr < 0) return error.WinRTFailed;
         }
-        App.fileLog("TSF: ActivateEx succeeded, clientId={}", .{self._clientId});
+        log.debug("TSF: ActivateEx succeeded, clientId={}", .{self._clientId});
 
         // CreateDocumentMgr
         {
@@ -356,13 +357,13 @@ pub const TsfImplementation = struct {
             if (hr < 0) return error.WinRTFailed;
         }
 
-        App.fileLog("TSF: initialize() complete", .{});
+        log.info("TSF: initialize() complete", .{});
     }
 
     /// Uninitialize TSF: unadvise sinks, pop context, deactivate.
     /// Matches WT Implementation::Uninitialize() exactly.
     pub fn uninitialize(self: *TsfImplementation) void {
-        App.fileLog("TSF: uninitialize()", .{});
+        log.info("TSF: uninitialize()", .{});
 
         // Clear callbacks (equivalent to _provider.reset())
         self._handleOutput = null;
@@ -488,7 +489,7 @@ pub const TsfImplementation = struct {
         if (hwnd_val.Value == 0) return null;
 
         const result: os.HWND = @ptrFromInt(@as(usize, @bitCast(hwnd_val.Value)));
-        App.fileLog("TSF: findWindowOfActiveTSF found hwnd=0x{x}", .{hwnd_val.Value});
+        log.debug("TSF: findWindowOfActiveTSF found hwnd=0x{x}", .{hwnd_val.Value});
         return result;
     }
 
@@ -509,9 +510,9 @@ pub const TsfImplementation = struct {
                 unk.release();
             }
             if (hr < 0) {
-                App.fileLog("TSF: AssociateFocus failed: 0x{x}", .{@as(u32, @bitCast(hr))});
+                log.err("TSF: AssociateFocus failed: 0x{x}", .{@as(u32, @bitCast(hr))});
             } else {
-                App.fileLog("TSF: associateFocus hwnd=0x{x}", .{@intFromPtr(hwnd)});
+                log.debug("TSF: associateFocus hwnd=0x{x}", .{@intFromPtr(hwnd)});
             }
         }
     }
@@ -522,9 +523,9 @@ pub const TsfImplementation = struct {
         if (self._threadMgrEx) |tmgr| {
             const hr = tmgr.lpVtbl.SetFocus(@ptrCast(tmgr), @ptrCast(self._documentMgr.?));
             if (hr < 0) {
-                App.fileLog("TSF: SetFocus failed: 0x{x}", .{@as(u32, @bitCast(hr))});
+                log.err("TSF: SetFocus failed: 0x{x}", .{@as(u32, @bitCast(hr))});
             } else {
-                App.fileLog("TSF: focus()", .{});
+                log.debug("TSF: focus()", .{});
             }
         }
     }
@@ -532,7 +533,7 @@ pub const TsfImplementation = struct {
     /// Remove TSF focus, terminate any active composition, clear preedit.
     /// Matches WT Implementation::Unfocus().
     pub fn unfocus(self: *TsfImplementation) void {
-        App.fileLog("TSF: unfocus() compositions={}", .{self._compositions});
+        log.debug("TSF: unfocus() compositions={}", .{self._compositions});
 
         // WT clears the renderer's tsfPreview — we clear preedit via callback
         if (self._handlePreedit) |cb| {
@@ -788,7 +789,7 @@ pub const TsfImplementation = struct {
         const self = selfFromCompositionSink(this);
         self._compositions += 1;
         pfOk.* = 1; // TRUE
-        App.fileLog("TSF: OnStartComposition (compositions={})", .{self._compositions});
+        log.debug("TSF: OnStartComposition (compositions={})", .{self._compositions});
         return S_OK;
     }
 
@@ -802,7 +803,7 @@ pub const TsfImplementation = struct {
         if (self._compositions <= 0) return E_FAIL;
 
         self._compositions -= 1;
-        App.fileLog("TSF: OnEndComposition (compositions={})", .{self._compositions});
+        log.debug("TSF: OnEndComposition (compositions={})", .{self._compositions});
 
         if (self._compositions == 0) {
             // WT: _request(_editSessionCompositionUpdate, TF_ES_READWRITE | TF_ES_ASYNC)
@@ -968,18 +969,18 @@ pub const TsfImplementation = struct {
     /// Matches WT Implementation::_request().
     fn requestEditSession(self: *TsfImplementation, flags: u32) HRESULT {
         const ctx = self._context orelse {
-            App.fileLog("TSF: requestEditSession — no context", .{});
+            log.debug("TSF: requestEditSession — no context", .{});
             return S_FALSE;
         };
 
         // WT: if (session.referenceCount) return S_FALSE;
         // Don't send another request if one is still in flight (async).
         if (self._editSessionCompositionUpdate.referenceCount != 0) {
-            App.fileLog("TSF: requestEditSession — session in flight, skipping", .{});
+            log.debug("TSF: requestEditSession — session in flight, skipping", .{});
             return S_FALSE;
         }
 
-        App.fileLog("TSF: requestEditSession flags=0x{x}", .{flags});
+        log.debug("TSF: requestEditSession flags=0x{x}", .{flags});
 
         var hr_session: HRESULT = S_OK;
         const hr = ctx.lpVtbl.RequestEditSession(
@@ -990,10 +991,10 @@ pub const TsfImplementation = struct {
             &hr_session,
         );
         if (hr < 0) {
-            App.fileLog("TSF: RequestEditSession failed: 0x{x}", .{@as(u32, @bitCast(hr))});
+            log.err("TSF: RequestEditSession failed: 0x{x}", .{@as(u32, @bitCast(hr))});
             return hr;
         }
-        App.fileLog("TSF: RequestEditSession ok, hr_session=0x{x}", .{@as(u32, @bitCast(hr_session))});
+        log.debug("TSF: RequestEditSession ok, hr_session=0x{x}", .{@as(u32, @bitCast(hr_session))});
         if (hr_session < 0) return hr_session;
         return S_OK;
     }
@@ -1075,13 +1076,13 @@ pub const TsfImplementation = struct {
     /// Extract finalized and active composition text from the TSF context.
     /// Called within an edit session (ec = edit cookie).
     fn doCompositionUpdate(self: *TsfImplementation, ec: u32) void {
-        App.fileLog("TSF: doCompositionUpdate ec={}", .{ec});
+        log.debug("TSF: doCompositionUpdate ec={}", .{ec});
         const ctx = self._context orelse return;
 
         // Get full range of the document
         var full_range_ptr: ?*anyopaque = null;
         const hr_start = ctx.lpVtbl.GetStart(@ptrCast(ctx), ec, &full_range_ptr);
-        App.fileLog("TSF: GetStart hr=0x{x}", .{@as(u32, @bitCast(hr_start))});
+        log.debug("TSF: GetStart hr=0x{x}", .{@as(u32, @bitCast(hr_start))});
         if (hr_start < 0) return;
         const full_range: *tsf.ITfRange = @ptrCast(@alignCast(full_range_ptr orelse return));
         defer full_range.release();
@@ -1089,7 +1090,7 @@ pub const TsfImplementation = struct {
         var full_range_length: i32 = 0;
         var null_halt: ?*anyopaque = null;
         const hr_shift = full_range.lpVtbl.ShiftEnd(@ptrCast(full_range), ec, std.math.maxInt(i32), &full_range_length, &null_halt);
-        App.fileLog("TSF: ShiftEnd hr=0x{x} fullRangeLength={}", .{ @as(u32, @bitCast(hr_shift)), full_range_length });
+        log.debug("TSF: ShiftEnd hr=0x{x} fullRangeLength={}", .{ @as(u32, @bitCast(hr_shift)), full_range_length });
 
         // Track GUID_PROP_COMPOSING and GUID_PROP_ATTRIBUTE properties
         var guids: [2]?*anyopaque = .{
@@ -1099,7 +1100,7 @@ pub const TsfImplementation = struct {
         var no_app_props: ?*anyopaque = null;
         var props_ptr: ?*anyopaque = null;
         const hr_track = ctx.lpVtbl.TrackProperties(@ptrCast(ctx), @ptrCast(&guids[0]), 2, @ptrCast(&no_app_props), 0, &props_ptr);
-        App.fileLog("TSF: TrackProperties hr=0x{x}", .{@as(u32, @bitCast(hr_track))});
+        log.debug("TSF: TrackProperties hr=0x{x}", .{@as(u32, @bitCast(hr_track))});
         if (hr_track < 0) return;
         const props: *tsf.ITfReadOnlyProperty = @ptrCast(@alignCast(props_ptr orelse return));
         defer props.release();
@@ -1107,7 +1108,7 @@ pub const TsfImplementation = struct {
         // Enumerate ranges
         var enum_ranges_ptr: ?*anyopaque = null;
         const hr_enum = props.lpVtbl.EnumRanges(@ptrCast(props), ec, &enum_ranges_ptr, @ptrCast(full_range));
-        App.fileLog("TSF: EnumRanges hr=0x{x}", .{@as(u32, @bitCast(hr_enum))});
+        log.debug("TSF: EnumRanges hr=0x{x}", .{@as(u32, @bitCast(hr_enum))});
         if (hr_enum < 0) return;
         const enum_ranges: *tsf.IEnumTfRanges = @ptrCast(@alignCast(enum_ranges_ptr orelse return));
         defer enum_ranges.release();
@@ -1126,7 +1127,7 @@ pub const TsfImplementation = struct {
             var range_ptrs: [8]?*anyopaque = .{null} ** 8;
             var ranges_count: u32 = 0;
             next_result = enum_ranges.lpVtbl.Next(@ptrCast(enum_ranges), 8, @ptrCast(&range_ptrs[0]), &ranges_count);
-            App.fileLog("TSF: IEnumTfRanges.Next hr=0x{x} rangesCount={}", .{ @as(u32, @bitCast(next_result)), ranges_count });
+            log.debug("TSF: IEnumTfRanges.Next hr=0x{x} rangesCount={}", .{ @as(u32, @bitCast(next_result)), ranges_count });
 
             // Cleanup: release all returned ranges when done with this batch
             defer {
@@ -1186,7 +1187,7 @@ pub const TsfImplementation = struct {
                         // VariantClear the outer variant
                         _ = VariantClear(@ptrCast(&variant));
                     }
-                    App.fileLog("TSF: GetValue hr=0x{x} composing={}", .{ @as(u32, @bitCast(hr_val)), composing });
+                    log.debug("TSF: GetValue hr=0x{x} composing={}", .{ @as(u32, @bitCast(hr_val)), composing });
                 }
 
                 // Read text from range (matching WT's inner loop with 128-char buffer)
@@ -1203,14 +1204,14 @@ pub const TsfImplementation = struct {
                         buf_cap,
                         &len,
                     );
-                    App.fileLog("TSF: GetText hr=0x{x} len={}", .{ @as(u32, @bitCast(gt_hr)), len });
+                    log.debug("TSF: GetText hr=0x{x} len={}", .{ @as(u32, @bitCast(gt_hr)), len });
                     if (gt_hr < 0 or len == 0) break;
 
                     const slice = buf[0..len];
                     {
                         var log_buf: [512]u8 = undefined;
                         const log_len = utf16ToUtf8(&log_buf, slice);
-                        App.fileLog("TSF: range text: '{s}'", .{log_buf[0..log_len]});
+                        log.debug("TSF: range text: '{s}'", .{log_buf[0..log_len]});
                     }
 
                     // WT: since we can't un-finalize finalized text, only finalize text at the start
@@ -1256,7 +1257,7 @@ pub const TsfImplementation = struct {
                 @ptrCast(&sel_data),
                 &sel_count,
             );
-            App.fileLog("TSF: GetSelection hr=0x{x} count={}", .{ @as(u32, @bitCast(sel_hr)), sel_count });
+            log.debug("TSF: GetSelection hr=0x{x} count={}", .{ @as(u32, @bitCast(sel_hr)), sel_count });
 
             if (sel_hr >= 0 and sel_count == 1) {
                 // Extract the range pointer from sel_data[0..8]
@@ -1305,7 +1306,7 @@ pub const TsfImplementation = struct {
             // Compensate for finalized text that will be erased
             cursor_pos -= @intCast(finalized_len);
             cursor_pos = std.math.clamp(cursor_pos, 0, @as(i32, @intCast(active_len)));
-            App.fileLog("TSF: final cursorPos={}", .{cursor_pos});
+            log.debug("TSF: final cursorPos={}", .{cursor_pos});
         }
 
         // --- Erase finalized text from the TSF context ---
@@ -1323,7 +1324,7 @@ pub const TsfImplementation = struct {
             }
         }
 
-        App.fileLog("TSF: finalized_len={} active_len={}", .{ finalized_len, active_len });
+        log.debug("TSF: finalized_len={} active_len={}", .{ finalized_len, active_len });
 
         // --- Deliver text via callbacks ---
         // WT delivers to _provider->HandleOutput() and renderer's tsfPreview.
@@ -1335,14 +1336,14 @@ pub const TsfImplementation = struct {
             const utf8_len = utf16ToUtf8(&utf8_buf, active_buf[0..active_len]);
             if (utf8_len > 0) {
                 if (self._handlePreedit) |cb| {
-                    App.fileLog("TSF: calling handlePreedit with {} bytes", .{utf8_len});
+                    log.debug("TSF: calling handlePreedit with {} bytes", .{utf8_len});
                     cb(self._userdata, utf8_buf[0..utf8_len]);
                 }
             }
         } else {
             // No active composition text — clear preedit
             if (self._handlePreedit) |cb| {
-                App.fileLog("TSF: calling handlePreedit with null (clear)", .{});
+                log.debug("TSF: calling handlePreedit with null (clear)", .{});
                 cb(self._userdata, null);
             }
         }
@@ -1352,9 +1353,9 @@ pub const TsfImplementation = struct {
             var utf8_buf: [2048]u8 = undefined;
             const utf8_len = utf16ToUtf8(&utf8_buf, finalized_buf[0..finalized_len]);
             if (utf8_len > 0) {
-                App.fileLog("TSF: finalized text ({} bytes UTF-8)", .{utf8_len});
+                log.debug("TSF: finalized text ({} bytes UTF-8)", .{utf8_len});
                 if (self._handleOutput) |cb| {
-                    App.fileLog("TSF: calling handleOutput with {} bytes", .{utf8_len});
+                    log.debug("TSF: calling handleOutput with {} bytes", .{utf8_len});
                     cb(self._userdata, utf8_buf[0..utf8_len]);
                 }
             }
