@@ -36,5 +36,5 @@ $testFile = Join-Path $PSScriptRoot "$TestName.ps1"
 
 # Cleanup
 if ($launched) {
-    Stop-GhosttyIslands -Process $proc
+    Stop-Ghostty -Process $proc
 }

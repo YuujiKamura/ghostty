@@ -57,7 +57,7 @@ if (Test-Path $lifecycleTest) {
 # ============================================================
 Write-Host "`n=== Phase 2: Launching Ghostty for shared tests ===" -ForegroundColor Cyan
 $env:GHOSTTY_CONTROL_PLANE = "1"
-$proc = Start-GhosttyIslands -ExePath $ExePath
+$proc = Start-Ghostty -ExePath $ExePath
 $hwnd = [IntPtr]::Zero
 
 try {
@@ -65,7 +65,7 @@ try {
     Write-Host "  Window ready: HWND=0x$($hwnd.ToString('X'))" -ForegroundColor Green
 } catch {
     Write-Host "FATAL: Could not find Ghostty window: $_" -ForegroundColor Red
-    Stop-GhosttyIslands -Process $proc
+    Stop-Ghostty -Process $proc
     exit 1
 }
 
@@ -109,7 +109,7 @@ foreach ($testBaseName in $sharedTests) {
 
 # --- Cleanup ---
 Write-Host "`n=== Stopping Ghostty ===" -ForegroundColor Cyan
-Stop-GhosttyIslands -Process $proc
+Stop-Ghostty -Process $proc
 
 # --- Summary ---
 Write-Host "`n============================================" -ForegroundColor White

@@ -218,7 +218,7 @@ public struct KEYBDINPUT {
 # ============================================================
 # Constants
 # ============================================================
-$script:GHOSTTY_CLASS_PRIMARY  = "GhosttyIslandWindow"
+$script:GHOSTTY_CLASS_PRIMARY  = "GhosttyWindow"
 $script:GHOSTTY_WINDOW_TITLE   = "Ghostty"
 $script:DEFAULT_TIMEOUT_MS     = 10000
 $script:POLL_INTERVAL_MS       = 200
@@ -227,7 +227,7 @@ $script:POLL_INTERVAL_MS       = 200
 # Process management
 # ============================================================
 
-function Start-GhosttyIslands {
+function Start-Ghostty {
     <#
     .SYNOPSIS
         Launch ghostty.exe and return the Process object.
@@ -254,7 +254,7 @@ function Start-GhosttyIslands {
     return $proc
 }
 
-function Stop-GhosttyIslands {
+function Stop-Ghostty {
     <#
     .SYNOPSIS
         Kill the ghostty process (and children) gracefully.
@@ -1008,8 +1008,8 @@ function Dump-UIATree {
 # Exports
 # ============================================================
 Export-ModuleMember -Function @(
-    'Start-GhosttyIslands'
-    'Stop-GhosttyIslands'
+    'Start-Ghostty'
+    'Stop-Ghostty'
     'Find-GhosttyWindow'
     'Get-WindowPosition'
     'Get-ClientPosition'

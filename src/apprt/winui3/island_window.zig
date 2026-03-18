@@ -32,7 +32,7 @@ interop_hwnd: ?os.HWND = null,
 auto_resize: bool = false,
 
 /// Window class name (UTF-16LE, null-terminated).
-const CLASS_NAME = std.unicode.utf8ToUtf16LeStringLiteral("GhosttyIslandWindow");
+const CLASS_NAME = std.unicode.utf8ToUtf16LeStringLiteral("GhosttyWindow");
 
 /// Whether the window class has been registered.
 var class_registered: bool = false;
