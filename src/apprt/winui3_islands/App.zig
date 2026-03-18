@@ -38,7 +38,7 @@ const caption_buttons_mod = @import("../winui3/caption_buttons.zig");
 const xaml_helpers = @import("../winui3/xaml_helpers.zig");
 const surface_binding = @import("surface_binding.zig");
 const event_handlers = @import("../winui3/event_handlers.zig");
-const ControlPlane = @import("../winui3/control_plane.zig").ControlPlane;
+const ControlPlaneFfi = @import("../winui3/control_plane_ffi.zig").ControlPlaneFfi;
 const nonclient_island_window = @import("nonclient_island_window.zig");
 const NonClientIslandWindow = nonclient_island_window.NonClientIslandWindow;
 const Tsf = @import("tsf.zig");
@@ -222,7 +222,7 @@ add_tab_token: ?i64 = null,
 selection_changed_token: ?i64 = null,
 resource_manager_requested_token: ?i64 = null,
 /// Optional side-channel control plane for session-aware automation.
-control_plane: ?*ControlPlane = null,
+control_plane: ?*ControlPlaneFfi = null,
 
 /// TSF (Text Services Framework) implementation for IME composition.
 tsf_impl: ?Tsf.TsfImplementation = null,
@@ -390,12 +390,12 @@ pub fn initXaml(self: *App) !void {
     fileLog("initXaml: content_ready, entering message loop", .{});
 
     // --- Control Plane (optional, env-gated) ---
-    const cp_enabled = ControlPlane.isEnabled(self.core_app.alloc);
+    const cp_enabled = ControlPlaneFfi.isEnabled(self.core_app.alloc);
     fileLog("control_plane: isEnabled={}", .{@intFromBool(cp_enabled)});
     if (cp_enabled) {
         fileLog("control_plane: hwnd={}", .{@intFromPtr(self.hwnd)});
         if (self.hwnd) |hwnd| {
-            self.control_plane = ControlPlane.create(
+            self.control_plane = ControlPlaneFfi.create(
                 self.core_app.alloc,
                 hwnd,
                 @ptrCast(self),
@@ -1436,7 +1436,7 @@ pub fn activeSurface(self: *App) ?*Surface {
 // Control plane capture callbacks
 // ---------------------------------------------------------------
 
-fn controlPlaneCaptureState(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) !?ControlPlane.StateSnapshot {
+fn controlPlaneCaptureState(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) !?ControlPlaneFfi.StateSnapshot {
     const self: *App = @ptrCast(@alignCast(ctx));
     const surface = if (tab_idx) |idx|
         (if (idx < self.surfaces.items.len) self.surfaces.items[idx] else null)
@@ -2019,7 +2019,7 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
         },
         os.WM_APP_CONTROL_ACTION => {
             // Execute a tab/window action from the control plane.
-            const action: ControlPlane.Action = @enumFromInt(@as(usize, @bitCast(wparam)));
+            const action: ControlPlaneFfi.Action = @enumFromInt(@as(usize, @bitCast(wparam)));
             const param: usize = @bitCast(lparam);
             switch (action) {
                 .new_tab => self.newTab() catch |err| {

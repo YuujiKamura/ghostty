@@ -32,6 +32,8 @@ Write-Host "  Launching $exePath with GHOSTTY_WINUI3_CLOSE_TAB_AFTER_MS=5000 ...
 $proc = $null
 try {
     $env:GHOSTTY_WINUI3_CLOSE_TAB_AFTER_MS = "5000"
+    $env:GHOSTTY_CONTROL_PLANE = $null
+    $env:WINDOWS_TERMINAL_CONTROL_PLANE = $null
     $proc = Start-Process -FilePath $exePath -PassThru
 } finally {
     $env:GHOSTTY_WINUI3_CLOSE_TAB_AFTER_MS = $null

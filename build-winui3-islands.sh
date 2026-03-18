@@ -26,3 +26,9 @@ if [ -d "$XAML_OBJ" ]; then
     cp -f "$XAML_OBJ"/*.xbf "$PREFIX/bin/" 2>/dev/null && echo "[build-winui3-islands] Copied XBF files"
     cp -f "$XAML_BIN"/ghostty.pri "$PREFIX/bin/resources.pri" 2>/dev/null && echo "[build-winui3-islands] Copied PRI file"
 fi
+
+# Step 4: Copy control_plane_server.dll if available
+if [ -f "$HOME/control-plane-server/target/release/control_plane_server.dll" ]; then
+    cp "$HOME/control-plane-server/target/release/control_plane_server.dll" "$PREFIX/bin/"
+    echo "[build-winui3-islands] Copied control_plane_server.dll"
+fi
