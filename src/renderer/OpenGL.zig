@@ -247,7 +247,7 @@ pub fn surfaceInit(surface: *apprt.Surface) !void {
         // GTK uses global OpenGL context so we load from null.
         .gtk => try prepareContext(null),
 
-        .win32, .winui3, .winui3_islands => {
+        .win32, .winui3_islands => {
             // Win32/WinUI 3 manages its own OpenGL context via WGL.
             // The context is already current when this is called.
             try prepareContext(null);
@@ -270,7 +270,7 @@ pub fn finalizeSurfaceInit(self: *const OpenGL, surface: *apprt.Surface) !void {
     _ = self;
 
     switch (build_config.app_runtime) {
-        .win32, .winui3, .winui3_islands => {
+        .win32, .winui3_islands => {
             // Release the OpenGL context from the main thread so the
             // renderer thread can acquire it.
             surface.app.releaseGLContext();
@@ -286,7 +286,7 @@ pub fn threadEnter(self: *const OpenGL, surface: *apprt.Surface) !void {
     switch (build_config.app_runtime) {
         .none => {},
 
-        .win32, .winui3, .winui3_islands => {
+        .win32, .winui3_islands => {
             // Make the OpenGL context current on this (renderer) thread.
             try surface.app.makeGLContextCurrent();
             try prepareContext(null);
@@ -334,7 +334,7 @@ pub fn threadExit(self: *const OpenGL) void {
             // be sharing the global bindings with other windows.
         },
 
-        .win32, .winui3, .winui3_islands => {
+        .win32, .winui3_islands => {
             // Release the OpenGL context from the renderer thread.
             const win32_gl = struct {
                 extern "opengl32" fn wglMakeCurrent(hdc: ?std.os.windows.HANDLE, hglrc: ?std.os.windows.HANDLE) callconv(.winapi) std.os.windows.BOOL;
@@ -348,7 +348,7 @@ pub fn displayRealized(self: *const OpenGL) void {
     _ = self;
 
     switch (build_config.app_runtime) {
-        .none, .win32, .winui3, .winui3_islands => {},
+        .none, .win32, .winui3_islands => {},
 
         .gtk => prepareContext(null) catch |err| {
             log.warn(
@@ -366,7 +366,7 @@ pub fn displayRealized(self: *const OpenGL) void {
 /// that does this automatically (unlike GTK).
 pub fn drawFrameStart(self: *OpenGL) void {
     switch (build_config.app_runtime) {
-        .win32, .winui3, .winui3_islands => {
+        .win32, .winui3_islands => {
             self.perf.recordFrameStart();
 
             // Wait on the previous frame's GL fence to ensure the GPU
@@ -420,7 +420,7 @@ pub fn drawFrameStart(self: *OpenGL) void {
 /// Actions taken after `drawFrame` is done.
 pub fn drawFrameEnd(self: *OpenGL) void {
     switch (build_config.app_runtime) {
-        .win32, .winui3, .winui3_islands => {
+        .win32, .winui3_islands => {
             // Swap the front and back buffers to display the rendered frame.
             const win32_gl = struct {
                 extern "opengl32" fn wglGetCurrentDC() callconv(.winapi) ?std.os.windows.HANDLE;
@@ -457,7 +457,7 @@ pub fn initShaders(
 pub fn surfaceSize(self: *const OpenGL) !struct { width: u32, height: u32 } {
     // On Win32, use the cached viewport from drawFrameStart to avoid
     // a redundant glGetIntegerv call every frame.
-    if (comptime build_config.app_runtime == .win32 or build_config.app_runtime == .winui3 or build_config.app_runtime == .winui3_islands) {
+    if (comptime build_config.app_runtime == .win32 or build_config.app_runtime == .winui3_islands) {
         return .{
             .width = self.cached_viewport_width,
             .height = self.cached_viewport_height,

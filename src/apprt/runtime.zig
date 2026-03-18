@@ -14,10 +14,6 @@ pub const Runtime = enum {
     /// Win32. Native Windows application using the Win32 API directly.
     win32,
 
-    /// WinUI 3. Native Windows application using WinUI 3 via WinRT COM vtables.
-    /// Provides tabbed UI, Mica backdrop, and modern Windows styling.
-    winui3,
-
     /// WinUI 3 with XAML Islands. Uses CreateWindowEx + DesktopWindowXamlSource
     /// for custom titlebar support (Windows Terminal architecture).
     winui3_islands,
