@@ -793,7 +793,15 @@ pub const TsfImplementation = struct {
         return S_OK;
     }
 
-    fn compSinkOnUpdateComposition(_: *anyopaque, _: ?*anyopaque, _: ?*anyopaque) callconv(.winapi) HRESULT {
+    /// Matches WT Implementation::OnUpdateComposition().
+    /// Triggers an edit session to extract the current preedit text so it
+    /// can be displayed by the renderer during live IME composition.
+    fn compSinkOnUpdateComposition(this: *anyopaque, _: ?*anyopaque, _: ?*anyopaque) callconv(.winapi) HRESULT {
+        const self = selfFromCompositionSink(this);
+        log.debug("TSF: OnUpdateComposition (compositions={})", .{self._compositions});
+        if (self._compositions > 0) {
+            _ = self.requestEditSession(tsf.TF_ES_READWRITE | tsf.TF_ES_ASYNC);
+        }
         return S_OK;
     }
 

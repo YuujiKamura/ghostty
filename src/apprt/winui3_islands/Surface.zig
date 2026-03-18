@@ -1127,6 +1127,22 @@ fn onXamlPreviewKeyDown(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
         }
         return; // Don't mark handled — let IME process via TSF.
     }
+    // When TSF has an active composition and the key is a text-producing key
+    // (not a modifier or control combo), suppress it. In XAML Islands, some
+    // composition keystrokes may arrive with their real VK instead of
+    // VK_PROCESSKEY, causing raw characters to leak into the PTY.
+    // Modifier combos (Ctrl+C, Alt+F4) are let through so they still work
+    // during composition.
+    if (self.app.tsf_impl) |*tsf_impl| {
+        if (tsf_impl.hasActiveComposition()) {
+            const mods = key.getModifiers().binding();
+            const is_modifier_combo = mods.ctrl or mods.alt or mods.super;
+            if (!is_modifier_combo) {
+                log.debug("PreviewKeyDown: vk=0x{x} SUPPRESSED (TSF composition active)", .{vk_u32});
+                return; // Let TSF handle this key within the composition.
+            }
+        }
+    }
     self.handleKeyEvent(@intCast(@as(u32, @bitCast(vk))), true);
     if (self.closed) return;
     // For text-producing keys, handleKeyEvent defers to CharacterReceived by
@@ -1149,6 +1165,16 @@ fn onXamlPreviewKeyUp(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
 
 fn onXamlCharacterReceived(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
     if (!self.core_initialized) return;
+    // When TSF has an active composition, character events are handled by TSF's
+    // preedit/output callbacks. Letting them through here would cause raw
+    // keystroke characters (e.g. 'k', 'a') to leak into the PTY alongside the
+    // composed IME text — the "input drift" regression.
+    if (self.app.tsf_impl) |*tsf_impl| {
+        if (tsf_impl.hasActiveComposition()) {
+            log.debug("xaml_surface: CharacterReceived SUPPRESSED (TSF composition active)", .{});
+            return;
+        }
+    }
     const ea: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
     const ch = ea.Character() catch return;
     log.debug("xaml_surface: CharacterReceived ch=0x{x}", .{ch});
