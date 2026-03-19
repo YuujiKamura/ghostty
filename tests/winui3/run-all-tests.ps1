@@ -81,8 +81,8 @@ $sharedTests = @(
     "test-02e-agent-roundtrip",
     "test-03-window-ops",
     "test-04-keyboard",
-    "test-05-ime-input",
-    "test-06-tsf-ime"
+    "test-06-ime-input",
+    "test-07-tsf-ime"
 )
 
 foreach ($testBaseName in $sharedTests) {
@@ -109,9 +109,40 @@ foreach ($testBaseName in $sharedTests) {
     }
 }
 
-# --- Cleanup ---
-Write-Host "`n=== Stopping Ghostty ===" -ForegroundColor Cyan
+# --- Cleanup Phase 2 ---
+Write-Host "`n=== Stopping Ghostty (shared) ===" -ForegroundColor Cyan
 Stop-Ghostty -Process $proc
+
+# ============================================================
+# Phase 3: Standalone tests (own process, ReleaseFast verification)
+# ============================================================
+Write-Host "`n=== Phase 3: Standalone Tests ===" -ForegroundColor Cyan
+
+$standaloneTests = @(
+    "test-05-ghost-demo"
+)
+
+foreach ($testBaseName in $standaloneTests) {
+    $testPath = Join-Path $PSScriptRoot "$testBaseName.ps1"
+    if (-not (Test-Path $testPath)) {
+        Write-Host "`n--- $testBaseName --- SKIP (not found)" -ForegroundColor Yellow
+        continue
+    }
+
+    $startTime = [DateTime]::UtcNow
+    $testOutput = $null
+    try {
+        $testOutput = & $testPath 6>&1
+        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
+        $results += @{ Name = $testBaseName; Status = "PASS"; Time = [int]$elapsed; Error = $null }
+    } catch {
+        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
+        $results += @{ Name = $testBaseName; Status = "FAIL"; Time = [int]$elapsed; Error = $_.Exception.Message }
+        Write-Host "`n--- $testBaseName (FAIL) ---" -ForegroundColor Red
+        if ($testOutput) { $testOutput | ForEach-Object { Write-Host "  $_" } }
+        Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
 
 # --- Summary ---
 Write-Host "`n============================================" -ForegroundColor White
