@@ -59,3 +59,4 @@ nul
 *.png
 test_resize_caption.ps1
 tmp_estimate_note.txt
+logs/
