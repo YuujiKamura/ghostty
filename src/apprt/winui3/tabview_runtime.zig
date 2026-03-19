@@ -9,6 +9,7 @@
 ///     +-- Row 0 (40px): TabView (tab strip only)
 ///     +-- Row 1 (Star): TabContent Grid (SwapChainPanel swapped on SelectionChanged)
 const std = @import("std");
+const builtin = @import("builtin");
 const com = @import("com.zig");
 const winrt = @import("winrt.zig");
 
@@ -28,9 +29,11 @@ pub fn createRoot(
     comptime tabview_class_name: [:0]const u8,
 ) !?*com.ITabView {
     _ = tabview_class_name;
-    if (!self.debug_cfg.enable_tabview) {
-        log.debug("initXaml step 7.5: SKIPPED (GHOSTTY_WINUI3_ENABLE_TABVIEW=false)", .{});
-        return null;
+    if (comptime builtin.mode == .Debug) {
+        if (!self.debug_cfg.enable_tabview) {
+            log.debug("initXaml step 7.5: SKIPPED (GHOSTTY_WINUI3_ENABLE_TABVIEW=false)", .{});
+            return null;
+        }
     }
 
     log.info("initXaml step 7.5: Creating RootGrid + TabView from TabViewRoot.xbf (Issue #28 architecture)...", .{});

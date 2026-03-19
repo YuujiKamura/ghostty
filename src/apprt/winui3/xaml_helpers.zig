@@ -1,49 +1,52 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const winrt = @import("winrt.zig");
 const com = @import("com.zig");
 
 const log = std.log.scoped(.winui3);
 
 pub fn activateXamlType(self: anytype, comptime class_name: [:0]const u8) !*winrt.IInspectable {
-    if (self.debug_cfg.use_ixaml_metadata_provider and self.app_outer.provider != null) {
-        const provider = self.app_outer.provider.?;
-        const name = try winrt.hstring(class_name);
-        defer winrt.deleteHString(name);
-        log.info(
-            "activateXamlType(provider): class={s} provider=0x{x} name=0x{x} name_len={}",
-            .{ class_name, @intFromPtr(provider), @intFromPtr(name), class_name.len },
-        );
-
-        var xaml_type_raw: ?*anyopaque = null;
-        const provider_hr = provider.lpVtbl.GetXamlType_2(@ptrCast(provider), @ptrCast(name), &xaml_type_raw);
-        if (provider_hr < 0) {
+    if (comptime builtin.mode == .Debug) {
+        if (self.debug_cfg.use_ixaml_metadata_provider and self.app_outer.provider != null) {
+            const provider = self.app_outer.provider.?;
+            const name = try winrt.hstring(class_name);
+            defer winrt.deleteHString(name);
             log.info(
-                "activateXamlType(provider): GetXamlType_2 failed class={s} hr=0x{x:0>8}, fallback",
-                .{ class_name, @as(u32, @bitCast(provider_hr)) },
+                "activateXamlType(provider): class={s} provider=0x{x} name=0x{x} name_len={}",
+                .{ class_name, @intFromPtr(provider), @intFromPtr(name), class_name.len },
             );
-        } else if (xaml_type_raw) |xaml_type_raw_non_null| {
-            const xaml_type: *com.IXamlType = @ptrCast(@alignCast(xaml_type_raw_non_null));
-            const xaml_type_ptr = @intFromPtr(xaml_type);
-            if (!com.isValidComPtr(xaml_type_ptr)) {
-                log.err("activateXamlType(provider): suspicious IXamlType pointer 0x{x}", .{xaml_type_ptr});
-                return error.WinRTFailed;
+
+            var xaml_type_raw: ?*anyopaque = null;
+            const provider_hr = provider.lpVtbl.GetXamlType_2(@ptrCast(provider), @ptrCast(name), &xaml_type_raw);
+            if (provider_hr < 0) {
+                log.info(
+                    "activateXamlType(provider): GetXamlType_2 failed class={s} hr=0x{x:0>8}, fallback",
+                    .{ class_name, @as(u32, @bitCast(provider_hr)) },
+                );
+            } else if (xaml_type_raw) |xaml_type_raw_non_null| {
+                const xaml_type: *com.IXamlType = @ptrCast(@alignCast(xaml_type_raw_non_null));
+                const xaml_type_ptr = @intFromPtr(xaml_type);
+                if (!com.isValidComPtr(xaml_type_ptr)) {
+                    log.err("activateXamlType(provider): suspicious IXamlType pointer 0x{x}", .{xaml_type_ptr});
+                    return error.WinRTFailed;
+                }
+                if ((xaml_type_ptr & 0x7) != 0) {
+                    log.warn("activateXamlType(provider): unaligned IXamlType pointer 0x{x}", .{xaml_type_ptr});
+                }
+                log.info("activateXamlType(provider): got IXamlType=0x{x}", .{xaml_type_ptr});
+                var xaml_type_guard = winrt.ComRef(com.IXamlType).init(xaml_type);
+                defer xaml_type_guard.deinit();
+                const instance = try xaml_type_guard.get().activateInstance();
+                const instance_ptr = @intFromPtr(instance);
+                if (!com.isValidComPtr(instance_ptr)) {
+                    log.err("activateXamlType(provider): suspicious activateInstance ptr 0x{x}", .{instance_ptr});
+                    return error.WinRTFailed;
+                }
+                log.info("activateXamlType(provider): activateInstance=0x{x}", .{instance_ptr});
+                return @ptrCast(@alignCast(instance));
+            } else {
+                log.info("activateXamlType(provider): GetXamlType_2 returned null class={s}, fallback", .{class_name});
             }
-            if ((xaml_type_ptr & 0x7) != 0) {
-                log.warn("activateXamlType(provider): unaligned IXamlType pointer 0x{x}", .{xaml_type_ptr});
-            }
-            log.info("activateXamlType(provider): got IXamlType=0x{x}", .{xaml_type_ptr});
-            var xaml_type_guard = winrt.ComRef(com.IXamlType).init(xaml_type);
-            defer xaml_type_guard.deinit();
-            const instance = try xaml_type_guard.get().activateInstance();
-            const instance_ptr = @intFromPtr(instance);
-            if (!com.isValidComPtr(instance_ptr)) {
-                log.err("activateXamlType(provider): suspicious activateInstance ptr 0x{x}", .{instance_ptr});
-                return error.WinRTFailed;
-            }
-            log.info("activateXamlType(provider): activateInstance=0x{x}", .{instance_ptr});
-            return @ptrCast(@alignCast(instance));
-        } else {
-            log.info("activateXamlType(provider): GetXamlType_2 returned null class={s}, fallback", .{class_name});
         }
     }
     // Fallback to RoActivateInstance (works for base framework types).
