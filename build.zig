@@ -5,6 +5,7 @@ const buildpkg = @import("src/build/main.zig");
 
 const appVersion = @import("build.zig.zon").version;
 const minimumZigVersion = @import("build.zig.zon").minimum_zig_version;
+const default_winappsdk_version = "1.4.230822000";
 
 comptime {
     buildpkg.requireZig(minimumZigVersion);
@@ -21,6 +22,11 @@ pub fn build(b: *std.Build) !void {
         "test-filter",
         "Filter for test. Only applies to Zig tests.",
     ) orelse &[0][]const u8{};
+    const winappsdk_version = b.option(
+        []const u8,
+        "winappsdk-version",
+        "Version of Microsoft.WindowsAppSDK package used to locate Bootstrap DLL.",
+    ) orelse default_winappsdk_version;
 
     // Ghostty dependencies used by many artifacts.
     const deps = try buildpkg.SharedDeps.init(b, &config);
@@ -183,7 +189,7 @@ pub fn build(b: *std.Build) !void {
     if (config.target.result.os.tag == .windows and (config.app_runtime == .winui3)) {
         // Stage the Windows App SDK bootstrap DLL next to the exe so LoadLibraryW finds it.
         const default_user_profile = std.process.getEnvVarOwned(b.allocator, "USERPROFILE") catch ".";
-        const default_bootstrap_path = std.fs.path.join(b.allocator, &.{ default_user_profile, ".nuget", "packages", "microsoft.windowsappsdk", "1.4.230822000", "runtimes", "win10-x64", "native", "Microsoft.WindowsAppRuntime.Bootstrap.dll" }) catch unreachable;
+        const default_bootstrap_path = std.fs.path.join(b.allocator, &.{ default_user_profile, ".nuget", "packages", "microsoft.windowsappsdk", winappsdk_version, "runtimes", "win10-x64", "native", "Microsoft.WindowsAppRuntime.Bootstrap.dll" }) catch unreachable;
         const bootstrap_dll_path = b.option([]const u8, "winappsdk-bootstrap-dll", "Path to Microsoft.WindowsAppRuntime.Bootstrap.dll") orelse default_bootstrap_path;
 
         {
