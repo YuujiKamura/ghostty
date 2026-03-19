@@ -9,6 +9,8 @@ const CLEAR_SCREEN = "\x1b[2J";
 const RESET = "\x1b[0m";
 const ALT_SCREEN_ON = "\x1b[?1049h";
 const ALT_SCREEN_OFF = "\x1b[?1049l";
+const SYNC_START = "\x1b[?2026h"; // Begin synchronized update — hold rendering
+const SYNC_END = "\x1b[?2026l"; // End synchronized update — flush to screen
 
 fn writeAll(handle: windows.HANDLE, data: []const u8) void {
     var offset: usize = 0;
@@ -96,12 +98,24 @@ pub fn main() !void {
         var times: [32]f64 = undefined;
         const iter_count: usize = @min(iterations, 32);
 
+        // Pre-build output buffers: CURSOR_HOME + frame in one buffer
+        var outputs = try allocator.alloc([]const u8, FRAME_COUNT);
+        defer {
+            for (outputs) |o| allocator.free(o);
+            allocator.free(outputs);
+        }
+        for (frames, 0..) |frame, fi| {
+            var buf = try allocator.alloc(u8, CURSOR_HOME.len + frame.len);
+            @memcpy(buf[0..CURSOR_HOME.len], CURSOR_HOME);
+            @memcpy(buf[CURSOR_HOME.len..], frame);
+            outputs[fi] = buf;
+        }
+
         for (0..iter_count) |it| {
             writeAll(handle, CLEAR_SCREEN ++ CURSOR_HOME);
             var timer = try std.time.Timer.start();
-            for (frames) |frame| {
-                writeAll(handle, CURSOR_HOME);
-                writeAll(handle, frame);
+            for (outputs) |out| {
+                writeAll(handle, out);
             }
             times[it] = @as(f64, @floatFromInt(timer.read())) / 1_000_000_000.0;
         }
@@ -127,15 +141,33 @@ pub fn main() !void {
         const delay_ns: u64 = 1_000_000_000 / @as(u64, fps);
         writeAll(handle, ALT_SCREEN_ON ++ CLEAR_SCREEN ++ HIDE_CURSOR);
 
+        // Pre-allocate output buffer to send each frame in a single WriteFile call.
+        // This eliminates flicker caused by partial frame rendering between writes.
+        var out_buf = try allocator.alloc(u8, 1 << 20);
+        defer allocator.free(out_buf);
+
         var loop_count: u32 = 0;
         while (true) {
             loop_count += 1;
             for (frames, 0..) |frame, fi| {
-                writeAll(handle, CURSOR_HOME);
-                writeAll(handle, frame);
-                var status_buf: [128]u8 = undefined;
-                const status = std.fmt.bufPrint(&status_buf, "\x1b[999;1H\x1b[7m loop {d} | frame {d}/{d} | {d}fps | Ctrl+C to quit \x1b[0m", .{ loop_count, fi + 1, FRAME_COUNT, fps }) catch "";
-                writeAll(handle, status);
+                var pos: usize = 0;
+                // Synchronized output: tell terminal to hold rendering
+                @memcpy(out_buf[pos..][0..SYNC_START.len], SYNC_START);
+                pos += SYNC_START.len;
+                // CURSOR_HOME
+                @memcpy(out_buf[pos..][0..CURSOR_HOME.len], CURSOR_HOME);
+                pos += CURSOR_HOME.len;
+                // Frame data
+                @memcpy(out_buf[pos..][0..frame.len], frame);
+                pos += frame.len;
+                // Status line
+                const status = std.fmt.bufPrint(out_buf[pos..], "\x1b[999;1H\x1b[7m loop {d} | frame {d}/{d} | {d}fps | Ctrl+C to quit \x1b[0m", .{ loop_count, fi + 1, FRAME_COUNT, fps }) catch "";
+                pos += status.len;
+                // End sync: flush entire frame to screen at once
+                @memcpy(out_buf[pos..][0..SYNC_END.len], SYNC_END);
+                pos += SYNC_END.len;
+                // Single write for entire frame
+                writeAll(handle, out_buf[0..pos]);
                 windows.kernel32.Sleep(@intCast(delay_ns / 1_000_000));
             }
         }
