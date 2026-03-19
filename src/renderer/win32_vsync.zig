@@ -64,6 +64,8 @@ pub const Win32VSync = struct {
 
     /// Thread function. Calls DwmFlush() to block until the compositor's
     /// next vertical blank, then notifies draw_now.
+    /// When paused (background), still notifies draw_now but at a reduced
+    /// rate (Sleep-based) to avoid stalling the render pipeline (Issue #116).
     fn threadFn(self: *Self) void {
         const win32_api = struct {
             extern "dwmapi" fn DwmFlush() callconv(.winapi) c_long;
@@ -73,10 +75,9 @@ pub const Win32VSync = struct {
         while (self.running.load(.acquire)) {
             if (self.paused.load(.acquire)) {
                 win32_api.Sleep(PAUSE_SLEEP_MS);
-                continue;
+            } else {
+                _ = win32_api.DwmFlush();
             }
-
-            _ = win32_api.DwmFlush();
 
             if (self.draw_now) |draw_now| {
                 draw_now.notify() catch |err| {
