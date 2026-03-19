@@ -11,9 +11,14 @@ VT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ghost_animat
 
 
 def html_to_ansi(html: str) -> str:
-    """Convert HTML span tags to ANSI escape sequences."""
+    """Convert HTML span tags to ANSI escape sequences.
+
+    On the ghostty.org website, .b class is styled with --brand-color: #3551F3
+    (a vivid blue-purple) on a near-black background (#0F0F11).
+    We replicate this with 24-bit TrueColor ANSI: bold + RGB(53, 81, 243).
+    """
     s = html
-    s = re.sub(r'<span class="b">', '\033[1m', s)
+    s = re.sub(r'<span class="b">', '\033[1;38;2;53;81;243m', s)
     s = s.replace('</span>', '\033[0m')
     s = re.sub(r'<[^>]+>', '', s)  # strip any remaining HTML
     return s
