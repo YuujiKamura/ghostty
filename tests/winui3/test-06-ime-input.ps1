@@ -1,4 +1,4 @@
-param([IntPtr]$Hwnd, [int]$ProcessId = 0)
+﻿param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
 # test-06-ime-input — Japanese IME input verification.
 # Sub-test 1: UTF-8 Japanese text round-trip via Control Plane echo + TAIL
