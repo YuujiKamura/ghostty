@@ -83,11 +83,7 @@ pub fn InitCallback(comptime AppType: type) type {
 
         fn invokeFn(this: *anyopaque, _: *anyopaque) callconv(.winapi) winrt.HRESULT {
             const self = fromComPtr(this);
-            self.app.initXaml() catch |err| {
-                log.err("initXaml failed in Application.Start callback: {}", .{err});
-                return winrt.E_FAIL;
-            };
-            return winrt.S_OK;
+            return self.app.onApplicationStart();
         }
     };
 }

@@ -279,8 +279,18 @@ pub fn init(
     log.info("App.init: EXIT OK", .{});
 }
 
-/// Called from inside Application.Start() callback — XAML thread is active here.
-pub fn initXaml(self: *App) !void {
+/// COM callback entry point for Application.Start() delegate.
+/// Called from com_aggregation.InitCallback.invokeFn.
+pub fn onApplicationStart(self: *App) winrt.HRESULT {
+    self.initXaml() catch |err| {
+        log.err("initXaml failed in Application.Start callback: {}", .{err});
+        return winrt.E_FAIL;
+    };
+    return winrt.S_OK;
+}
+
+/// Internal XAML initialization — called from onApplicationStart.
+fn initXaml(self: *App) !void {
     log.info("initXaml: START (winui3)", .{});
     log.info("initXaml: creating NonClientIslandWindow inside XAML thread", .{});
     self.startup_bootstrapped = false;
