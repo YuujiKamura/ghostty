@@ -650,7 +650,6 @@ pub extern "kernel32" fn SetStdHandle(nStdHandle: DWORD, hHandle: HANDLE) callco
 pub const STD_ERROR_HANDLE: DWORD = @as(DWORD, @bitCast(@as(i32, -12)));
 
 pub extern "user32" fn MessageBeep(uType: UINT) callconv(.winapi) BOOL;
-pub extern "kernel32" fn OutputDebugStringA(lpOutputString: [*:0]const u8) callconv(.winapi) void;
 pub const MB_OK: UINT = 0x00000000;
 
 const CreateFileW = win32.kernel32.CreateFileW;
