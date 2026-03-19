@@ -4,15 +4,26 @@ set -e
 
 PREFIX="zig-out-winui3"
 XAML_DIR="xaml"
-XAML_OBJ="$XAML_DIR/obj/x64/Debug/net9.0-windows10.0.22621.0"
-XAML_BIN="$XAML_DIR/bin/x64/Debug/net9.0-windows10.0.22621.0"
+
+# Detect Release mode from args
+BUILD_CONFIG="Debug"
+for arg in "$@"; do
+    case "$arg" in
+        -Doptimize=ReleaseFast|-Doptimize=ReleaseSafe|-Doptimize=ReleaseSmall)
+            BUILD_CONFIG="Release"
+            ;;
+    esac
+done
+
+XAML_OBJ="$XAML_DIR/obj/x64/$BUILD_CONFIG/net9.0-windows10.0.22621.0"
+XAML_BIN="$XAML_DIR/bin/x64/$BUILD_CONFIG/net9.0-windows10.0.22621.0"
 
 # Step 1: Build XAML (XBF + PRI) via MSBuild if xaml/ project exists
 if [ -f "$XAML_DIR/ghostty.csproj" ]; then
     MSBUILD="/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe"
     if [ -f "$MSBUILD" ]; then
-        echo "[build-winui3] Building XAML resources (XBF + PRI)..."
-        "$MSBUILD" "$XAML_DIR/ghostty.csproj" -p:Configuration=Debug -p:Platform=x64 -restore -nologo -v:minimal
+        echo "[build-winui3] Building XAML resources ($BUILD_CONFIG)..."
+        "$MSBUILD" "$XAML_DIR/ghostty.csproj" -p:Configuration=$BUILD_CONFIG -p:Platform=x64 -restore -nologo -v:minimal
     else
         echo "[build-winui3] WARNING: MSBuild not found, skipping XAML build"
     fi
@@ -25,6 +36,15 @@ zig build -Dapp-runtime=winui3 -Dslow-safety=false --prefix "$PREFIX" "$@"
 if [ -d "$XAML_OBJ" ]; then
     cp -f "$XAML_OBJ"/*.xbf "$PREFIX/bin/" 2>/dev/null && echo "[build-winui3] Copied XBF files"
     cp -f "$XAML_BIN"/ghostty.pri "$PREFIX/bin/resources.pri" 2>/dev/null && echo "[build-winui3] Copied PRI file"
+else
+    # Fallback: try Debug paths if Release not available
+    XAML_OBJ_FALLBACK="$XAML_DIR/obj/x64/Debug/net9.0-windows10.0.22621.0"
+    XAML_BIN_FALLBACK="$XAML_DIR/bin/x64/Debug/net9.0-windows10.0.22621.0"
+    if [ -d "$XAML_OBJ_FALLBACK" ]; then
+        echo "[build-winui3] WARNING: $BUILD_CONFIG XAML not found, falling back to Debug"
+        cp -f "$XAML_OBJ_FALLBACK"/*.xbf "$PREFIX/bin/" 2>/dev/null && echo "[build-winui3] Copied XBF files (Debug)"
+        cp -f "$XAML_BIN_FALLBACK"/ghostty.pri "$PREFIX/bin/resources.pri" 2>/dev/null && echo "[build-winui3] Copied PRI file (Debug)"
+    fi
 fi
 
 # Step 4: Copy control_plane_server.dll if available
