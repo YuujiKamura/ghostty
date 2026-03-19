@@ -252,11 +252,7 @@ pub fn init(
     };
     log.debug("App.init: after DispatcherQueue", .{});
 
-    // Obtain IDispatcherQueue from the controller for TryEnqueue-based wakeup.
-    const dispatcher_queue: ?*gen.IDispatcherQueue = dq_controller.queryInterface(gen.IDispatcherQueue) catch |err| blk: {
-        log.warn("App.init: IDispatcherQueue QI failed err={}, falling back to PostMessageW wakeup", .{err});
-        break :blk null;
-    };
+    // IDispatcherQueue QI is deferred to initXaml — XAML must be initialized first.
 
     self.* = .{
         .core_app = core_app,
@@ -264,7 +260,7 @@ pub fn init(
         .surfaces = .{},
         .running = true,
         .dq_controller = dq_controller,
-        .dispatcher_queue = dispatcher_queue,
+        .dispatcher_queue = null,
     };
     if (comptime builtin.mode == .Debug) {
         log.info("winui3 xaml_metadata_provider={s}", .{
@@ -327,6 +323,28 @@ fn initXaml(self: *App) !void {
     self.nci_window = nci;
     self.hwnd = nci.island.hwnd;
     self.setStartupStage(.window_ready);
+
+    // Obtain IDispatcherQueue via GetForCurrentThread() (WT pattern).
+    // DispatcherQueueController.QI fails, but the static factory works after XAML init.
+    dq_init: {
+        const class_name = winrt.hstring("Microsoft.UI.Dispatching.DispatcherQueue") catch |err| {
+            log.warn("initXaml: hstring creation failed err={}", .{err});
+            break :dq_init;
+        };
+        defer winrt.deleteHString(class_name);
+        if (winrt.getActivationFactory(gen.IDispatcherQueueStatics, class_name)) |statics| {
+            defer statics.release();
+            self.dispatcher_queue = statics.getForCurrentThread() catch |err| blk: {
+                log.warn("initXaml: GetForCurrentThread failed err={}, falling back to PostMessageW", .{err});
+                break :blk null;
+            };
+            if (self.dispatcher_queue != null) {
+                log.info("initXaml: IDispatcherQueue obtained via GetForCurrentThread — TryEnqueue wakeup enabled", .{});
+            }
+        } else |err| {
+            log.warn("initXaml: DispatcherQueue activation factory failed err={}, falling back to PostMessageW", .{err});
+        }
+    } // dq_init
 
     // Step 3.5: Enable XAML debug diagnostics.
     if (self.xaml_app) |xa| {
