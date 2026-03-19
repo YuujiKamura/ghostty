@@ -62,6 +62,8 @@ surface_height: u32 = 0,
 /// HWND to bind the swap chain to.
 hwnd: ?com.HWND = null,
 use_composition: bool = false,
+/// When false (background), skip VSync to avoid DWM deprioritization stalls.
+focused: bool = true,
 
 /// Reference to the surface for size synchronization.
 surface: ?*apprt.Surface = null,
@@ -333,7 +335,7 @@ pub fn present(self: *D3D11, target: Target) !void {
     }
 
     const present_flags: u32 = if (self.use_composition) 0 else com.DXGI_PRESENT_ALLOW_TEARING;
-    const sync_interval: u32 = if (self.use_composition) 1 else 0;
+    const sync_interval: u32 = if (self.use_composition and self.focused) 1 else 0;
     const phr = sc.present(sync_interval, present_flags);
     self.present_count += 1;
     if (phr < 0) {

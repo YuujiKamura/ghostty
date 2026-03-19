@@ -28,6 +28,8 @@ SHOW_CURSOR = "\033[?25h"
 CURSOR_HOME = "\033[H"
 CLEAR_SCREEN = "\033[2J"
 RESET = "\033[0m"
+ALT_SCREEN_ON = "\033[?1049h"
+ALT_SCREEN_OFF = "\033[?1049l"
 
 
 def get_term_size():
@@ -116,7 +118,7 @@ def play_demo(frames, fps, rows):
     delay = 1.0 / fps
     total = len(frames)
     loop = 0
-    sys.stdout.write(CLEAR_SCREEN + HIDE_CURSOR)
+    sys.stdout.write(ALT_SCREEN_ON + CLEAR_SCREEN + HIDE_CURSOR)
     sys.stdout.flush()
     try:
         while True:
@@ -132,7 +134,7 @@ def play_demo(frames, fps, rows):
     except KeyboardInterrupt:
         pass
     finally:
-        sys.stdout.write(SHOW_CURSOR + RESET + CLEAR_SCREEN + CURSOR_HOME)
+        sys.stdout.write(SHOW_CURSOR + RESET + ALT_SCREEN_OFF)
         sys.stdout.flush()
         print(f"Played {loop} loops.")
 
@@ -142,7 +144,7 @@ def run_benchmark(frames, iterations):
     # Pre-build output strings for zero-overhead in the loop
     outputs = [CURSOR_HOME + frame for frame in frames]
 
-    sys.stdout.write(HIDE_CURSOR)
+    sys.stdout.write(ALT_SCREEN_ON + HIDE_CURSOR)
     sys.stdout.flush()
     times = []
     try:
@@ -156,7 +158,7 @@ def run_benchmark(frames, iterations):
             elapsed = time.perf_counter() - start
             times.append(elapsed)
     finally:
-        sys.stdout.write(SHOW_CURSOR + RESET + CLEAR_SCREEN + CURSOR_HOME)
+        sys.stdout.write(SHOW_CURSOR + RESET + ALT_SCREEN_OFF)
         sys.stdout.flush()
 
     # Results

@@ -980,6 +980,12 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
             self.focused = focus;
 
+            // Update D3D11 focus state for VSync control.
+            // Background windows skip VSync to avoid DWM deprioritization stalls.
+            if (@hasField(@TypeOf(self.api), "focused")) {
+                self.api.focused = focus;
+            }
+
             // Flag that we need to update our custom shaders
             self.custom_shader_focused_changed = true;
 
