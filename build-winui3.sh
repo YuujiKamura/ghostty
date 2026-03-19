@@ -48,7 +48,21 @@ else
 fi
 
 # Step 4: Copy control_plane_server.dll if available
-if [ -f "$HOME/control-plane-server/target/release/control_plane_server.dll" ]; then
-    cp "$HOME/control-plane-server/target/release/control_plane_server.dll" "$PREFIX/bin/"
-    echo "[build-winui3] Copied control_plane_server.dll"
+# This DLL provides the control plane (CP) for terminal automation and testing.
+# Without it, ghostty runs fine but CP features (agent-ctl, TSF inject tests) are disabled.
+# To build:
+#   git clone https://github.com/YuujiKamura/control-plane-server.git ~/control-plane-server
+#   cd ~/control-plane-server && cargo build --release
+CP_DLL="$HOME/control-plane-server/target/release/control_plane_server.dll"
+CP_DLL_DEBUG="$HOME/control-plane-server/target/debug/control_plane_server.dll"
+if [ -f "$CP_DLL" ]; then
+    cp "$CP_DLL" "$PREFIX/bin/"
+    echo "[build-winui3] Copied control_plane_server.dll (release)"
+elif [ -f "$CP_DLL_DEBUG" ]; then
+    cp "$CP_DLL_DEBUG" "$PREFIX/bin/"
+    echo "[build-winui3] Copied control_plane_server.dll (debug)"
+else
+    echo "[build-winui3] NOTE: control_plane_server.dll not found — CP disabled"
+    echo "[build-winui3]   To enable: git clone https://github.com/YuujiKamura/control-plane-server.git ~/control-plane-server"
+    echo "[build-winui3]             cd ~/control-plane-server && cargo build --release"
 fi
