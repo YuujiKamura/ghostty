@@ -46,13 +46,14 @@ pub fn init() winrt.WinRTError!void {
     };
     module_handle = module;
 
-    const init_fn: MddBootstrapInitializeFn = @ptrCast(std.os.windows.kernel32.GetProcAddress(
+    const init_fn_ptr = std.os.windows.kernel32.GetProcAddress(
         module,
         "MddBootstrapInitialize",
     ) orelse {
         log.err("MddBootstrapInitialize not found in bootstrap DLL", .{});
         return error.WinRTFailed;
-    });
+    };
+    const init_fn: MddBootstrapInitializeFn = @ptrCast(init_fn_ptr);
 
     shutdown_fn = @ptrCast(std.os.windows.kernel32.GetProcAddress(
         module,
@@ -62,11 +63,19 @@ pub fn init() winrt.WinRTError!void {
         return error.WinRTFailed;
     });
 
-    const hr = init_fn(
-        WINDOWSAPPSDK_RELEASE_MAJORMINOR,
-        &WINDOWSAPPSDK_RELEASE_VERSION_TAG_W,
-        WINDOWSAPPSDK_RUNTIME_VERSION_UINT64,
-    );
+    const v_major_minor = WINDOWSAPPSDK_RELEASE_MAJORMINOR;
+    const v_tag: [*:0]const u16 = &WINDOWSAPPSDK_RELEASE_VERSION_TAG_W;
+    const v_min_ver = WINDOWSAPPSDK_RUNTIME_VERSION_UINT64;
+
+    std.debug.print("bootstrap: CALLING MddBootstrapInitialize(0x{x:0>8}, {*}, 0x{x:0>16})\n", .{
+        v_major_minor,
+        v_tag,
+        v_min_ver,
+    });
+
+    const hr = init_fn(v_major_minor, v_tag, v_min_ver);
+
+    std.debug.print("bootstrap: RETURNED hr=0x{x:0>8}\n", .{@as(u32, @bitCast(hr))});
 
     std.debug.print(
         "bootstrap: MddBootstrapInitialize hr=0x{x:0>8} majorMinor=0x{x:0>8} minVersion=0x{x:0>16}\n",

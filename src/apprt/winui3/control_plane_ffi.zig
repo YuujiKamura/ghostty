@@ -357,8 +357,29 @@ pub const ControlPlaneFfi = struct {
 
     fn vtSendInput(ctx: *anyopaque, text: [*]const u8, len: usize, raw: bool) callconv(.c) void {
         const self: *ControlPlaneFfi = @ptrCast(@alignCast(ctx));
-        self.enqueueInput("dll", text[0..len], raw);
+        const slice = text[0..len];
+
+        // Special prefix "\x1b[TSF:" routes text through the TSF commit path
+        // instead of the PTY, allowing CP-based IME composition testing.
+        const tsf_prefix = "\x1b[TSF:";
+        if (slice.len > tsf_prefix.len and std.mem.startsWith(u8, slice, tsf_prefix)) {
+            const payload = slice[tsf_prefix.len..];
+            self.enqueueImeInject(payload);
+            _ = os.PostMessageW(self.hwnd, os.WM_APP_TSF_INJECT, 0, 0);
+            return;
+        }
+
+        self.enqueueInput("dll", slice, raw);
         _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0);
+    }
+
+    fn enqueueImeInject(self: *ControlPlaneFfi, text: []const u8) void {
+        const owned = self.allocator.dupe(u8, text) catch return;
+        self.pending_ime_injects_lock.lock();
+        defer self.pending_ime_injects_lock.unlock();
+        self.pending_ime_injects.append(self.allocator, owned) catch {
+            self.allocator.free(owned);
+        };
     }
 
     fn vtTabCount(ctx: *anyopaque) callconv(.c) usize {

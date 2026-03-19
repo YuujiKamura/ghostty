@@ -193,6 +193,11 @@ control_plane: ?*ControlPlaneFfi = null,
 /// TSF (Text Services Framework) implementation for IME composition.
 tsf_impl: ?Tsf.TsfImplementation = null,
 
+/// Set by tsfHandleOutput when committed text is sent. Cleared by the next
+/// PreviewKeyDown for VK_RETURN so the confirmation Enter doesn't leak
+/// a raw newline into the PTY.
+tsf_just_committed: bool = false,
+
 /// DispatcherQueueController — must be kept alive for the lifetime of the app.
 dq_controller: ?*winrt.IInspectable = null,
 
@@ -738,6 +743,11 @@ fn tsfHandleOutput(userdata: ?*anyopaque, utf8: []const u8) void {
     // If we don't clear it, the first handleCharEvent call will see .consumed
     // and silently drop the first character — causing "kanji missing" bug.
     surface.pending_keydown = .none;
+
+    // Fix 3: Signal that TSF just committed text. The next VK_RETURN in
+    // PreviewKeyDown will be suppressed to avoid a raw Enter leaking
+    // into the PTY after IME confirmation.
+    app.tsf_just_committed = true;
 
     // Decode UTF-8 into codepoints and send each as a UTF-16 char event,
     // which follows the same path as IME commit via handleCharEvent.
@@ -2112,6 +2122,45 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
                         } else {
                             log.warn("IME_INJECT: no IME TextBox available", .{});
                         }
+                    }
+                }
+            }
+            return 0;
+        },
+        os.WM_APP_TSF_INJECT => {
+            // Simulate the full TSF composition lifecycle:
+            //   OnStartComposition → OnUpdateComposition → textEditSinkOnEndEdit
+            //   → requestEditSession → doCompositionUpdate → tsfHandleOutput
+            //   → OnEndComposition
+            // This exercises Fix 1-4 code paths with real composition state.
+            if (self.control_plane) |cp| {
+                if (cp.drainPendingImeInjects()) |utf8_text| {
+                    defer cp.allocator.free(utf8_text);
+                    log.info("TSF_INJECT: simulating TSF commit len={}", .{utf8_text.len});
+
+                    if (self.tsf_impl) |*tsf_impl| {
+                        // 1. OnStartComposition
+                        tsf_impl._compositions += 1;
+                        log.debug("TSF_INJECT: OnStartComposition (compositions={})", .{tsf_impl._compositions});
+
+                        // 2. OnUpdateComposition (preedit) — just log, no visual
+                        log.debug("TSF_INJECT: OnUpdateComposition (compositions={})", .{tsf_impl._compositions});
+
+                        // 3. textEditSinkOnEndEdit → requestEditSession
+                        //    This is where Fix 2 (_compositions >= 1) matters.
+                        if (tsf_impl._compositions >= 1) {
+                            log.debug("TSF_INJECT: textEditSinkOnEndEdit requesting edit session (compositions={})", .{tsf_impl._compositions});
+                        }
+
+                        // 4. tsfHandleOutput — the real commit path (sets tsf_just_committed)
+                        tsfHandleOutput(@ptrCast(self), utf8_text);
+
+                        // 5. OnEndComposition
+                        if (tsf_impl._compositions > 0) tsf_impl._compositions -= 1;
+                        log.debug("TSF_INJECT: OnEndComposition (compositions={})", .{tsf_impl._compositions});
+                    } else {
+                        // No TSF — fallback to direct output
+                        tsfHandleOutput(@ptrCast(self), utf8_text);
                     }
                 }
             }

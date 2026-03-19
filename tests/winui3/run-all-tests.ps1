@@ -80,7 +80,9 @@ $sharedTests = @(
     "test-02d-control-plane",
     "test-02e-agent-roundtrip",
     "test-03-window-ops",
-    "test-04-keyboard"
+    "test-04-keyboard",
+    "test-05-ime-input",
+    "test-06-tsf-ime"
 )
 
 foreach ($testBaseName in $sharedTests) {

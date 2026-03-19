@@ -26,7 +26,9 @@ pub const Win32VSync = struct {
     const Self = @This();
 
     /// Sleep duration (ms) while paused — balances CPU usage vs resume latency.
-    const PAUSE_SLEEP_MS: u32 = 100;
+    /// 16ms ≈ one frame at 60fps. 100ms caused visible stutter when the window
+    /// goes to background after being focused (Issue #116 regression).
+    const PAUSE_SLEEP_MS: u32 = 16;
 
     /// Spawn the VSync thread that calls DwmFlush() in a loop.
     pub fn start(self: *Self, draw_now: *xev.Async) void {

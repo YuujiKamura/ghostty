@@ -1143,6 +1143,16 @@ fn onXamlPreviewKeyDown(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
             }
         }
     }
+    // Fix 3: After TSF commits text (Enter confirmation), suppress the trailing
+    // VK_RETURN that arrives once the composition has already ended.
+    // Without this, a raw newline leaks into the PTY after every IME commit.
+    if (self.app.tsf_just_committed and vk_u32 == 0x0D) { // VK_RETURN
+        log.debug("PreviewKeyDown: VK_RETURN SUPPRESSED (tsf_just_committed)", .{});
+        self.app.tsf_just_committed = false;
+        ea.SetHandled(true) catch {};
+        return;
+    }
+    self.app.tsf_just_committed = false; // Clear for non-Enter keys
     self.handleKeyEvent(@intCast(@as(u32, @bitCast(vk))), true);
     if (self.closed) return;
     // For text-producing keys, handleKeyEvent defers to CharacterReceived by
@@ -1173,6 +1183,17 @@ fn onXamlCharacterReceived(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void 
         if (tsf_impl.hasActiveComposition()) {
             log.debug("xaml_surface: CharacterReceived SUPPRESSED (TSF composition active)", .{});
             return;
+        }
+        // Fix 4: After TSF commits text via tsfHandleOutput, the same characters may
+        // also arrive here via the XAML CharacterReceived path. Suppress non-
+        // ASCII chars while the just-committed flag is set to avoid doubles.
+        if (self.app.tsf_just_committed) {
+            const ea_peek: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
+            const ch_peek = ea_peek.Character() catch return;
+            if (ch_peek > 0x7F) {
+                log.debug("xaml_surface: CharacterReceived ch=0x{x} SUPPRESSED (tsf_just_committed, non-ASCII)", .{ch_peek});
+                return;
+            }
         }
     }
     const ea: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
@@ -1286,6 +1307,12 @@ fn onXamlGotFocus(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
     // TSF focus: matching Windows Terminal's _GotFocusHandler pattern.
     // Done via XAML event (not Win32 WM_SETFOCUS) to avoid recursive message crashes.
     if (self.app.tsf_impl) |*tsf_impl| {
+        // Fix 1 DISABLED: Re-associating TSF HWND on GotFocus breaks the
+        // document context — GetText returns len=0 and ShiftEnd returns
+        // E_INVALIDARG after the HWND changes. The initial associateFocus
+        // in setupNativeInputWindows is sufficient. Further investigation
+        // needed on why findWindowOfActiveTSF returns a different HWND.
+        // if (tsf_impl.findWindowOfActiveTSF()) |current_hwnd| { ... }
         tsf_impl.focus();
     }
 }

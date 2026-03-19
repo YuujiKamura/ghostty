@@ -87,6 +87,8 @@ pub const WM_APP_CONTROL_ACTION: UINT = WM_USER + 5;
 pub const WM_APP_CLOSE_TAB: UINT = WM_USER + 6;
 /// Control plane: inject text into IME TextBox on the UI thread (simulates committed IME input).
 pub const WM_APP_IME_INJECT: UINT = WM_USER + 7;
+/// Control plane: inject text through TSF path (simulates TSF composition commit for testing).
+pub const WM_APP_TSF_INJECT: UINT = WM_USER + 8;
 
 // --- Window styles ---
 pub const WS_OVERLAPPEDWINDOW: DWORD = 0x00CF0000;

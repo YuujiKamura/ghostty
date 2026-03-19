@@ -794,14 +794,11 @@ pub const TsfImplementation = struct {
     }
 
     /// Matches WT Implementation::OnUpdateComposition().
-    /// Triggers an edit session to extract the current preedit text so it
-    /// can be displayed by the renderer during live IME composition.
+    /// Matches WT Implementation::OnUpdateComposition() — returns S_OK without
+    /// requesting an edit session. Preedit updates are handled by OnEndEdit.
     fn compSinkOnUpdateComposition(this: *anyopaque, _: ?*anyopaque, _: ?*anyopaque) callconv(.winapi) HRESULT {
         const self = selfFromCompositionSink(this);
         log.debug("TSF: OnUpdateComposition (compositions={})", .{self._compositions});
-        if (self._compositions > 0) {
-            _ = self.requestEditSession(tsf.TF_ES_READWRITE | tsf.TF_ES_ASYNC);
-        }
         return S_OK;
     }
 
@@ -1096,8 +1093,7 @@ pub const TsfImplementation = struct {
         defer full_range.release();
 
         var full_range_length: i32 = 0;
-        var null_halt: ?*anyopaque = null;
-        const hr_shift = full_range.lpVtbl.ShiftEnd(@ptrCast(full_range), ec, std.math.maxInt(i32), &full_range_length, &null_halt);
+        const hr_shift = full_range.lpVtbl.ShiftEnd(@ptrCast(full_range), ec, std.math.maxInt(i32), &full_range_length, null);
         log.debug("TSF: ShiftEnd hr=0x{x} fullRangeLength={}", .{ @as(u32, @bitCast(hr_shift)), full_range_length });
 
         // Track GUID_PROP_COMPOSING and GUID_PROP_ATTRIBUTE properties
@@ -1325,8 +1321,7 @@ pub const TsfImplementation = struct {
                     const erase_range: *tsf.ITfRange = @ptrCast(@alignCast(erp));
                     defer erase_range.release();
                     var cch: i32 = 0;
-                    var null_halt2: ?*anyopaque = null;
-                    _ = erase_range.lpVtbl.ShiftEnd(@ptrCast(erase_range), ec, @intCast(finalized_len), &cch, &null_halt2);
+                    _ = erase_range.lpVtbl.ShiftEnd(@ptrCast(erase_range), ec, @intCast(finalized_len), &cch, null);
                     _ = erase_range.lpVtbl.SetText(@ptrCast(erase_range), ec, 0, null, 0);
                 }
             }
