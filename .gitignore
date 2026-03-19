@@ -60,3 +60,4 @@ nul
 test_resize_caption.ps1
 tmp_estimate_note.txt
 logs/
+tools/ghost-demo/ghost_demo.exe
