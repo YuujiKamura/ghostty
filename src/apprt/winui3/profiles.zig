@@ -52,14 +52,14 @@ const known_profiles = [_]struct {
 };
 
 /// Detect available shell profiles on the system.
-/// Caller owns the returned ArrayList and its backing memory.
-pub fn detectProfiles(alloc: Allocator) !std.ArrayList(Profile) {
-    var profiles = std.ArrayList(Profile).init(alloc);
-    errdefer profiles.deinit();
+/// Caller owns the returned slice and its backing memory.
+pub fn detectProfiles(alloc: Allocator) !std.ArrayListUnmanaged(Profile) {
+    var profiles: std.ArrayListUnmanaged(Profile) = .{};
+    errdefer profiles.deinit(alloc);
 
     for (known_profiles) |kp| {
         if (kp.always or fileExistsAbsolute(kp.path)) {
-            try profiles.append(.{
+            try profiles.append(alloc, .{
                 .name = kp.name,
                 .path = kp.path,
                 .args = kp.args,

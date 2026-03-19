@@ -31,6 +31,7 @@ const com_aggregation = @import("com_aggregation.zig");
 const ime = @import("ime.zig");
 const debug_harness = @import("debug_harness.zig");
 const tabview_runtime = @import("tabview_runtime.zig");
+const profile_menu = @import("profile_menu.zig");
 const tab_index = @import("tab_index.zig");
 const tab_manager = @import("tab_manager.zig");
 const input_runtime = @import("input_runtime.zig");
@@ -642,6 +643,13 @@ fn createWindowContent(self: *App) !void {
 
     if (tv) |tab_view| {
         tabview_runtime.configureDefaults(tab_view);
+    }
+
+    // Populate the profile dropdown menu with detected shells.
+    if (self.profile_menu_flyout) |flyout| {
+        profile_menu.populateProfileMenu(self.core_app.alloc, flyout, self) catch |err| {
+            log.warn("Failed to populate profile menu: {}", .{err});
+        };
     }
 
     // Create initial Surface and content.

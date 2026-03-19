@@ -12,9 +12,21 @@ $testName = "test-06-ime-input"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
+# --- Helper: run agent-ctl without $ErrorActionPreference='Stop' killing on stderr ---
+function Invoke-AgentCtl {
+    param([string[]]$CtlArgs)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $agentCtl @CtlArgs 2>$null
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
 # --- Prerequisite: agent-ctl + session ---
 $agentCtl = Join-Path $env:USERPROFILE "agent-relay\target\debug\agent-ctl.exe"
-$listOutput = & $agentCtl list 2>$null | Where-Object { $_ -match "ALIVE" }
+$listOutput = Invoke-AgentCtl -CtlArgs @('list') | Where-Object { $_ -match "ALIVE" }
 $sessionName = $null
 if ($listOutput) {
     $sessionLine = if ($listOutput -is [array]) { $listOutput[0] } else { $listOutput }
@@ -38,11 +50,11 @@ $jpText = [char]0x30C6 + [char]0x30B9 + [char]0x30C8  # テスト
 $echoCmd = "echo ${marker}-${jpText}"
 
 # Use direct invocation instead of Start-Process for proper UTF-8 argument passing
-& $agentCtl send $sessionName "`"$echoCmd`"" 2>&1 | Out-Null
-& $agentCtl raw-send $sessionName "`r" 2>&1 | Out-Null
+Invoke-AgentCtl -CtlArgs @('send', $sessionName, "`"$echoCmd`"") | Out-Null
+Invoke-AgentCtl -CtlArgs @('raw-send', $sessionName, "`r") | Out-Null
 Start-Sleep -Milliseconds 3000
 
-$tail = & $agentCtl read $sessionName 2>&1
+$tail = Invoke-AgentCtl -CtlArgs @('read', $sessionName)
 $tailStr = ($tail | Out-String)
 
 # Check marker (ASCII) is present
@@ -107,11 +119,11 @@ for ($i = 0; $i -lt $jpStrings.Count; $i++) {
     $driftJp = $jpStrings[$i]
     $driftCmd = "echo ${driftMarker}-${driftJp}"
 
-    & $agentCtl send $sessionName "`"$driftCmd`"" 2>&1 | Out-Null
-    & $agentCtl raw-send $sessionName "`r" 2>&1 | Out-Null
+    Invoke-AgentCtl -CtlArgs @('send', $sessionName, "`"$driftCmd`"") | Out-Null
+    Invoke-AgentCtl -CtlArgs @('raw-send', $sessionName, "`r") | Out-Null
     Start-Sleep -Milliseconds 2000
 
-    $driftTail = & $agentCtl read $sessionName 2>&1
+    $driftTail = Invoke-AgentCtl -CtlArgs @('read', $sessionName)
     $driftStr = ($driftTail | Out-String)
 
     $driftOk = $driftStr -match "${driftMarker}-${driftJp}"
