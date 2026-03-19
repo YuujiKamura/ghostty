@@ -111,7 +111,7 @@ const ResourceManagerRequestedHandler = gen.TypedEventHandlerImpl(App, *const fn
 
 /// The core application.
 core_app: *CoreApp,
-debug_cfg: if (comptime builtin.mode == .Debug) debug_harness.RuntimeDebugConfig else void = if (comptime builtin.mode == .Debug) .{} else {},
+debug_cfg: if (builtin.mode == .Debug) debug_harness.RuntimeDebugConfig else void = if (builtin.mode == .Debug) .{} else {},
 /// COM aggregation outer object that implements IXamlMetadataProvider.
 /// Must be kept alive for the lifetime of the Application.
 app_outer: AppOuter = undefined,
@@ -2162,7 +2162,7 @@ fn handleTimer(self: *App, hwnd: os.HWND, wparam: os.WPARAM) os.LRESULT {
             _ = os.KillTimer(self.hwnd.?, DUMP_VT_TIMER_ID);
             self.dumpVisualTreeRoot();
             return 0;
-        } else 0,
+        } else return 0,
         else => return 0,
     }
 }
