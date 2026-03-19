@@ -1,7 +1,6 @@
 const std = @import("std");
 const windows = std.os.windows;
 
-const FRAMES_DIR = "tools/ghost-demo/frames";
 const FRAME_COUNT = 235;
 const HIDE_CURSOR = "\x1b[?25l";
 const SHOW_CURSOR = "\x1b[?25h";
@@ -21,13 +20,38 @@ fn writeAll(handle: windows.HANDLE, data: []const u8) void {
     }
 }
 
+fn getExeDir(allocator: std.mem.Allocator) ![]const u8 {
+    const path = try std.fs.selfExePath(allocator);
+    // Find last separator
+    var last_sep: usize = 0;
+    for (path, 0..) |c, idx| {
+        if (c == '\\' or c == '/') last_sep = idx;
+    }
+    if (last_sep > 0) {
+        allocator.free(path[last_sep..]);
+        return path[0..last_sep];
+    }
+    allocator.free(path);
+    return ".";
+}
+
 fn loadFrames(allocator: std.mem.Allocator) ![][]const u8 {
+    // Resolve frames dir relative to exe location
+    const exe_path_buf = try std.fs.selfExePathAlloc(allocator);
+    defer allocator.free(exe_path_buf);
+    // Strip exe filename to get dir
+    const exe_dir = std.fs.path.dirname(exe_path_buf) orelse ".";
+    const frames_dir = try std.fs.path.join(allocator, &.{ exe_dir, "frames" });
+    defer allocator.free(frames_dir);
+
     var frames = try allocator.alloc([]const u8, FRAME_COUNT);
     for (0..FRAME_COUNT) |i| {
-        var name_buf: [64]u8 = undefined;
-        const name = std.fmt.bufPrint(&name_buf, FRAMES_DIR ++ "/frame_{d:0>3}.txt", .{i + 1}) catch unreachable;
-        frames[i] = std.fs.cwd().readFileAlloc(allocator, name, 1 << 20) catch |err| {
-            std.debug.print("Failed to load {s}: {}\n", .{ name, err });
+        var name_buf: [32]u8 = undefined;
+        const fname = std.fmt.bufPrint(&name_buf, "frame_{d:0>3}.txt", .{i + 1}) catch unreachable;
+        const full_path = try std.fs.path.join(allocator, &.{ frames_dir, fname });
+        defer allocator.free(full_path);
+        frames[i] = std.fs.cwd().readFileAlloc(allocator, full_path, 1 << 20) catch |err| {
+            std.debug.print("Failed to load {s}: {}\n", .{ full_path, err });
             return err;
         };
     }
