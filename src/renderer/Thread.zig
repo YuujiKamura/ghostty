@@ -346,7 +346,15 @@ fn drainMailbox(self: *Thread) !void {
     defer if (builtin.os.tag.isDarwin()) pool.deinit();
 
     while (self.mailbox.pop()) |message| {
-        log.debug("mailbox message={}", .{message});
+        // Gate high-frequency mailbox log to avoid I/O bottleneck during animation/output.
+        // reset_cursor_blink fires on every PTY character batch (500ms throttle) and
+        // floods the log during fast output (e.g. ghost demo at 15fps).
+        if (comptime builtin.mode == .Debug) {
+            switch (message) {
+                .reset_cursor_blink => {},
+                else => log.debug("mailbox message={}", .{message}),
+            }
+        }
         switch (message) {
             .crash => @panic("crash request, crashing intentionally"),
 
