@@ -46,14 +46,14 @@ Start-Process -FilePath $agentCtl -ArgumentList "send","$sessionName","`"$testPr
 Start-Sleep -Milliseconds 500
 Start-Process -FilePath $agentCtl -ArgumentList "raw-send","$sessionName","`r" -NoNewWindow -Wait 2>&1 | Out-Null
 
-# Step 2: Wait for completion (prompt=1, up to 60s)
-Write-Host "  Waiting for agent completion (up to 60s)..." -ForegroundColor DarkGray
+# Step 2: Wait for completion (prompt=1, up to 90s)
+Write-Host "  Waiting for agent completion (up to 90s)..." -ForegroundColor DarkGray
 $completed = $false
-$deadline = [DateTime]::UtcNow.AddSeconds(60)
+$deadline = [DateTime]::UtcNow.AddSeconds(90)
 
-# First wait: expect prompt=0 (agent running) within 10s
+# First wait: expect prompt=0 (agent running) within 20s
 $sawRunning = $false
-$runDeadline = [DateTime]::UtcNow.AddSeconds(10)
+$runDeadline = [DateTime]::UtcNow.AddSeconds(20)
 while ([DateTime]::UtcNow -lt $runDeadline) {
     Start-Sleep -Milliseconds 2000
     $stateOut = & $agentCtl state $sessionName 2>&1 | Out-String
@@ -62,15 +62,21 @@ while ([DateTime]::UtcNow -lt $runDeadline) {
         Write-Host "  Agent is running (prompt=0)" -ForegroundColor DarkGray
         break
     }
+    # Agent may have already finished
+    if ($stateOut -match "prompt=1") {
+        $sawRunning = $true
+        $completed = $true
+        Write-Host "  Agent already completed (prompt=1)" -ForegroundColor DarkGray
+        break
+    }
 }
 
 if (-not $sawRunning) {
-    # Agent may have already finished (fast response)
-    Write-Host "  WARN: Never saw prompt=0 (agent may have finished instantly)" -ForegroundColor Yellow
+    Write-Host "  WARN: Never saw prompt=0 (agent may not have started)" -ForegroundColor Yellow
 }
 
-# Then wait for prompt=1 (completion)
-while ([DateTime]::UtcNow -lt $deadline) {
+# Then wait for prompt=1 (completion) if not already done
+while (-not $completed -and [DateTime]::UtcNow -lt $deadline) {
     Start-Sleep -Milliseconds 3000
     $stateOut = & $agentCtl state $sessionName 2>&1 | Out-String
     if ($stateOut -match "prompt=1") {

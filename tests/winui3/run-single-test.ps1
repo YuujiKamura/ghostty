@@ -25,9 +25,8 @@ $hwnd = Find-GhosttyWindow -ProcessId $proc.Id -TimeoutMs 10000
 Write-Host "HWND: 0x$($hwnd.ToString('X'))"
 Write-Host "PID: $($proc.Id)"
 
-# Use UIA SetFocus instead of SendInput/mouse to bring window to foreground
-$uiaElem = Find-GhosttyUIAElement -ProcessId $proc.Id -TimeoutMs 5000
-$uiaElem.SetFocus()
+# Bring window to foreground via Win32 (UIA may timeout on XAML Islands)
+[Win32]::SetForegroundWindow($hwnd) | Out-Null
 Start-Sleep -Milliseconds 500
 
 # Run the test (pass both Hwnd and ProcessId)

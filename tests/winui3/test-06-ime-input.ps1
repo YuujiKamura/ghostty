@@ -1,12 +1,12 @@
 param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
-# test-05-ime-input — Japanese IME input verification.
+# test-06-ime-input — Japanese IME input verification.
 # Sub-test 1: UTF-8 Japanese text round-trip via Control Plane echo + TAIL
 # Sub-test 2: IME composing state management via WM_APP_TEST_FAKE_IME_COMPOSING
 # Sub-test 3: Multi-byte echo stability (repeat to detect drift)
 
 $ErrorActionPreference = 'Stop'
-$testName = "test-05-ime-input"
+$testName = "test-06-ime-input"
 
 # Ensure UTF-8 for Japanese text handling
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8

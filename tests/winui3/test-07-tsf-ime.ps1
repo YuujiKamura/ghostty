@@ -1,10 +1,10 @@
 param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
-# test-06-tsf-ime -- TSF IME fix verification via CP TSF_INJECT.
+# test-07-tsf-ime -- TSF IME fix verification via CP TSF_INJECT.
 # Uses agent-ctl send with ESC[TSF: prefix to route text through TSF commit path.
 
 $ErrorActionPreference = 'Continue'
-$testName = "test-06-tsf-ime"
+$testName = "test-07-tsf-ime"
 $script:subFails = 0
 
 function Test-Soft {
@@ -175,7 +175,7 @@ Test-Soft -Condition (-not $hasDoubled) -Message "$testName/fix4 - no doubled te
 # ============================================================
 if ($script:subFails -gt 0) {
     Write-Host "FAIL: $testName - $($script:subFails) sub-test(s) failed" -ForegroundColor Red
-    throw "test-06-tsf-ime: $($script:subFails) sub-test(s) failed"
+    throw "test-07-tsf-ime: $($script:subFails) sub-test(s) failed"
 } else {
     Write-Host "PASS: $testName - TSF IME fix verification complete" -ForegroundColor Green
 }

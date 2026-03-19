@@ -210,6 +210,56 @@ pub fn build(b: *std.Build) !void {
             b.pathFromRoot("contracts/vtable_manifest.json"),
         });
         exe.exe.step.dependOn(&vtable_cmd.step);
+
+        // WinUI3 integration tests (PowerShell test suite)
+        {
+            const exe_install = b.addInstallArtifact(exe.exe, .{});
+
+            // "test-winui3" runs the full test suite
+            const run_all = b.addSystemCommand(&.{
+                "powershell.exe",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                b.pathFromRoot("tests/winui3/run-all-tests.ps1"),
+            });
+            run_all.step.dependOn(&exe_install.step);
+
+            const test_winui3_step = b.step("test-winui3", "Run all WinUI3 integration tests");
+            test_winui3_step.dependOn(&run_all.step);
+
+            // Individual test steps: "test-winui3-<name>" for each test-*.ps1
+            // run-single-test.ps1 expects -TestName (base name without .ps1)
+            const individual_tests = .{
+                .{ "test-winui3-lifecycle", "test-01-lifecycle", "Run WinUI3 lifecycle test" },
+                .{ "test-winui3-tabview", "test-02a-tabview", "Run WinUI3 tabview test" },
+                .{ "test-winui3-ime-overlay", "test-02b-ime-overlay", "Run WinUI3 IME overlay test" },
+                .{ "test-winui3-drag-bar", "test-02c-drag-bar", "Run WinUI3 drag bar test" },
+                .{ "test-winui3-control-plane", "test-02d-control-plane", "Run WinUI3 control plane test" },
+                .{ "test-winui3-agent-roundtrip", "test-02e-agent-roundtrip", "Run WinUI3 agent roundtrip test" },
+                .{ "test-winui3-window-ops", "test-03-window-ops", "Run WinUI3 window ops test" },
+                .{ "test-winui3-keyboard", "test-04-keyboard", "Run WinUI3 keyboard test" },
+                .{ "test-winui3-ghost-demo", "test-05-ghost-demo", "Run WinUI3 ghost demo test" },
+                .{ "test-winui3-ime-input", "test-06-ime-input", "Run WinUI3 IME input test" },
+                .{ "test-winui3-tsf-ime", "test-07-tsf-ime", "Run WinUI3 TSF IME test" },
+            };
+
+            inline for (individual_tests) |entry| {
+                const cmd = b.addSystemCommand(&.{
+                    "powershell.exe",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    b.pathFromRoot("tests/winui3/run-single-test.ps1"),
+                    "-TestName",
+                    entry[1],
+                });
+                cmd.step.dependOn(&exe_install.step);
+
+                const step = b.step(entry[0], entry[2]);
+                step.dependOn(&cmd.step);
+            }
+        }
     }
 
     // macOS only artifacts. These will error if they're initialized for
