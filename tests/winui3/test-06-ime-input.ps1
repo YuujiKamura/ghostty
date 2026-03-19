@@ -87,17 +87,26 @@ if ($inputOverlay -eq [IntPtr]::Zero) {
     [Win32]::PostMessageW($inputOverlay, $WM_KILLFOCUS, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
     Start-Sleep -Milliseconds 500
 
-    # Verify via debug.log that the composing state was set and cleaned up
-    $logPath = Join-Path $env:TEMP "ghostty_debug.log"
-    if (Test-Path $logPath) {
-        $logContent = Get-Content $logPath -Tail 50 -ErrorAction SilentlyContinue | Out-String
-        $fakeSet = $logContent -match "WM_APP_TEST_FAKE_IME_COMPOSING"
-        $killFocusClear = $logContent -match "WM_KILLFOCUS while ime_composing"
-        Write-Host "  Log: fake_ime_set=$fakeSet, killfocus_clear=$killFocusClear" -ForegroundColor Gray
-        Test-Assert -Condition $fakeSet -Message "$testName/ime-state - fake IME composing state was set"
-        Test-Assert -Condition $killFocusClear -Message "$testName/ime-state - KILLFOCUS cleared composing preedit"
+    # Verify via debug.log that the composing state was set and cleaned up.
+    # NOTE: The WM_APP_TEST_FAKE_IME_COMPOSING handler is gated behind
+    # `comptime builtin.mode == .Debug` — it does not exist in ReleaseFast.
+    # Skip this check for Release builds (exe < 50MB = Release).
+    $exePath2 = Join-Path $PSScriptRoot "..\..\zig-out-winui3\bin\ghostty.exe"
+    $isRelease = (Test-Path $exePath2) -and ((Get-Item $exePath2).Length -lt 50MB)
+    if ($isRelease) {
+        Write-Host "  SKIP: fake IME composing test (Debug-only handler, ReleaseFast build)" -ForegroundColor Yellow
     } else {
-        Write-Host "  SKIP: debug.log not found at $logPath" -ForegroundColor Yellow
+        $logPath = Join-Path $env:TEMP "ghostty_debug.log"
+        if (Test-Path $logPath) {
+            $logContent = Get-Content $logPath -Tail 50 -ErrorAction SilentlyContinue | Out-String
+            $fakeSet = $logContent -match "WM_APP_TEST_FAKE_IME_COMPOSING"
+            $killFocusClear = $logContent -match "WM_KILLFOCUS while ime_composing"
+            Write-Host "  Log: fake_ime_set=$fakeSet, killfocus_clear=$killFocusClear" -ForegroundColor Gray
+            Test-Assert -Condition $fakeSet -Message "$testName/ime-state - fake IME composing state was set"
+            Test-Assert -Condition $killFocusClear -Message "$testName/ime-state - KILLFOCUS cleared composing preedit"
+        } else {
+            Write-Host "  SKIP: debug.log not found at $logPath" -ForegroundColor Yellow
+        }
     }
 }
 
