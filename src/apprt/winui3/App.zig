@@ -43,6 +43,8 @@ const ControlPlaneFfi = @import("control_plane_ffi.zig").ControlPlaneFfi;
 const nonclient_island_window = @import("nonclient_island_window.zig");
 const NonClientIslandWindow = nonclient_island_window.NonClientIslandWindow;
 const Tsf = @import("tsf.zig");
+const IpcServer = @import("ipc.zig");
+
 
 const log = std.log.scoped(.winui3);
 
@@ -208,6 +210,9 @@ dq_controller: ?*winrt.IInspectable = null,
 
 /// DispatcherQueue for thread-safe TryEnqueue wakeup (avoids PostMessageW deprioritization).
 dispatcher_queue: ?*gen.IDispatcherQueue = null,
+
+/// Named Pipe IPC server for cross-process communication.
+ipc_server: ?*IpcServer = null,
 
 pub fn init(
     self: *App,
@@ -405,6 +410,16 @@ fn initXaml(self: *App) !void {
     self.startup_bootstrapped = true;
     self.setStartupStage(.content_ready);
     log.info("initXaml: content_ready, entering message loop", .{});
+
+    // --- IPC Server (Named Pipe) ---
+    self.ipc_server = if (self.hwnd) |hwnd|
+        IpcServer.init(self.core_app.alloc, hwnd) catch |err| blk: {
+            log.err("IPC server init failed: {}", .{err});
+            break :blk null;
+        }
+    else
+        null;
+    if (self.ipc_server != null) log.info("IPC server started", .{});
 
     // --- Control Plane (optional, env-gated) ---
     const cp_enabled = ControlPlaneFfi.isEnabled(self.core_app.alloc);
@@ -1119,6 +1134,10 @@ pub fn run(self: *App) !void {
 
 pub fn terminate(self: *App) void {
     log.info("Termination requested", .{});
+    if (self.ipc_server) |ipc| {
+        ipc.deinit();
+        self.ipc_server = null;
+    }
     if (self.control_plane) |cp| {
         cp.destroy();
         self.control_plane = null;
@@ -1191,6 +1210,12 @@ fn fullCleanup(self: *App) void {
     if (self.control_plane) |cp| {
         cp.destroy();
         self.control_plane = null;
+    }
+
+    // 0c. Stop IPC server.
+    if (self.ipc_server) |ipc| {
+        ipc.deinit();
+        self.ipc_server = null;
     }
 
     // 1. No subclassing to remove (we own the wndproc).
@@ -1465,12 +1490,16 @@ pub fn performAction(
 }
 
 pub fn performIpc(
-    _: Allocator,
+    alloc: Allocator,
     _: apprt.ipc.Target,
     comptime action: apprt.ipc.Action.Key,
     _: apprt.ipc.Action.Value(action),
 ) !bool {
-    return false;
+    // Map IPC action keys to named pipe action strings.
+    const action_str = switch (action) {
+        .new_window => "new-window",
+    };
+    return IpcServer.sendIpc(alloc, action_str) catch false;
 }
 
 pub fn redrawInspector(_: *App, _: *Surface) void {}
