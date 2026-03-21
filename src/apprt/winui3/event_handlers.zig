@@ -56,6 +56,13 @@ pub fn onSelectionChanged(self: anytype, sender_obj: ?*anyopaque, args_obj: ?*an
     const sender_ptr = if (sender_obj) |p| @intFromPtr(p) else @as(usize, 0);
     const args_ptr = if (args_obj) |p| @intFromPtr(p) else @as(usize, 0);
     log.info("handler enter: onSelectionChanged sender=0x{x} args=0x{x}", .{ sender_ptr, args_ptr });
+
+    // Skip side effects during programmatic tab mutations (Issue #127).
+    if (self.tab_mutation_in_progress) {
+        log.info("onSelectionChanged: skipped (tab_mutation_in_progress)", .{});
+        return;
+    }
+
     if (!com.isValidComPtr(sender_ptr) or !com.isValidComPtr(args_ptr)) {
         log.err("handler guard: onSelectionChanged suspicious sender/args sender=0x{x} args=0x{x}", .{ sender_ptr, args_ptr });
         return;
@@ -81,7 +88,7 @@ pub fn onSelectionChanged(self: anytype, sender_obj: ?*anyopaque, args_obj: ?*an
             // Notify new surface it gained focus.
             self.surfaces.items[new_idx].has_focus = true;
             self.surfaces.items[new_idx].core_surface.focusCallback(true) catch {};
-            self.surfaces.items[new_idx].rebindSwapChain();
+            // rebindSwapChain is now called inside attachSurfaceToTabItem (Issue #128).
 
             // Keep normal keyboard input on the XAML surface. IME focus is
             // redirected to input_hwnd only when composition starts.

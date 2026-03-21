@@ -78,21 +78,30 @@ pub fn newTabWithProfile(
     const tab_items_raw = try tab_view.TabItems();
     const tab_items: *com.IVector = @ptrCast(@alignCast(tab_items_raw));
     defer tab_items.release();
+
+    // Guard: suppress onSelectionChanged side effects during mutation (Issue #127).
+    self.tab_mutation_in_progress = true;
+    defer self.tab_mutation_in_progress = false;
+
     try tab_items.append(@ptrCast(tvi_inspectable));
 
     // Store the IInspectable reference on the surface for later title updates.
     surface.tab_view_item_inspectable = tvi_inspectable;
 
-    // Select the new tab (this triggers SelectionChanged which swaps panel in tab_content_grid).
+    // Select the new tab and swap panel visibility.
     const size = try tab_items.getSize();
     const prev_idx = self.active_surface_idx;
-    try tab_view.SetSelectedIndex(@intCast(size - 1));
-    self.active_surface_idx = @intCast(size - 1);
+    const new_idx: usize = @intCast(size - 1);
+    try tab_view.SetSelectedIndex(@intCast(new_idx));
+    self.active_surface_idx = new_idx;
 
-    // Swap SwapChainPanel into tab_content_grid.
-    self.attachSurfaceToTabItem(if (self.surfaces.items.len > 1) prev_idx else null, self.active_surface_idx) catch |err| {
-        log.warn("newTabWithProfile: attachSurfaceToTabItem({}) failed: {}", .{ self.active_surface_idx, err });
+    // Single authoritative panel switch (no more triple-fire).
+    self.attachSurfaceToTabItem(if (self.surfaces.items.len > 1) prev_idx else null, new_idx) catch |err| {
+        log.warn("newTabWithProfile: attachSurfaceToTabItem({}) failed: {}", .{ new_idx, err });
     };
+
+    // Rebind swap chain on the new surface (may be no-op if renderer hasn't started yet).
+    surface.rebindSwapChain();
 
     // Keep normal keyboard focus on the XAML surface after tab creation.
     input_runtime.focusKeyboardTarget(self);
@@ -136,6 +145,10 @@ pub fn closeTab(self: anytype, idx: usize) bool {
 
     // 2. Adjust active index before TabView triggers SelectionChanged.
     if (self.surfaces.items.len == 0) {
+        // Guard: suppress onSelectionChanged during last-tab removal (Issue #129).
+        self.tab_mutation_in_progress = true;
+        defer self.tab_mutation_in_progress = false;
+
         // Remove from TabView last (triggers SelectionChanged with -1).
         if (self.tab_view) |tv| {
             const tab_items_raw = tv.TabItems() catch {
@@ -158,7 +171,10 @@ pub fn closeTab(self: anytype, idx: usize) bool {
         self.active_surface_idx -= 1;
     }
 
-    // 3. Remove from TabView (triggers onSelectionChanged).
+    // 3. Remove from TabView — guard SelectionChanged side effects (Issue #129).
+    self.tab_mutation_in_progress = true;
+    defer self.tab_mutation_in_progress = false;
+
     if (self.tab_view) |tv| {
         const tab_items_raw2 = tv.TabItems() catch {
             self.core_app.alloc.destroy(surface);
@@ -175,6 +191,12 @@ pub fn closeTab(self: anytype, idx: usize) bool {
         surface_binding.attachSurfaceToTabItem(self, null, self.active_surface_idx) catch |err| {
             log.warn("closeTab: attachSurfaceToTabItem({}) failed: {}", .{ self.active_surface_idx, err });
         };
+
+        // Rebind swap chain on the newly active surface (Issue #128).
+        if (self.active_surface_idx < self.surfaces.items.len) {
+            self.surfaces.items[self.active_surface_idx].rebindSwapChain();
+        }
+
         input_runtime.focusKeyboardTarget(self);
     }
 

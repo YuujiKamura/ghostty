@@ -54,6 +54,7 @@ pub fn attachSurfaceToTabItem(self: anytype, prev_idx_opt: ?usize, idx: usize) !
     defer children.release();
 
     // Ensure the active panel is in the grid (add if not already present).
+    // IVector.indexOf (com_native) returns !?u32 — null means not found.
     const already_in_grid = children.indexOf(@ptrCast(panel)) catch null;
     if (already_in_grid == null) {
         try children.append(@ptrCast(panel));
@@ -67,7 +68,11 @@ pub fn attachSurfaceToTabItem(self: anytype, prev_idx_opt: ?usize, idx: usize) !
     }
     setPanelVisibility(panel, 0); // Visible
 
-    log.info("attachSurfaceToTabItem: idx={} panel=0x{x} made Visible in tab_content_grid", .{ idx, @intFromPtr(panel) });
+    // Re-bind swap chain after Visible restore — Collapsed may have detached
+    // the panel from the compositor, invalidating the DXGI surface (Issue #128).
+    surface.rebindSwapChain();
+
+    log.info("attachSurfaceToTabItem: idx={} panel=0x{x} made Visible + rebind in tab_content_grid", .{ idx, @intFromPtr(panel) });
 }
 
 pub fn ensureVisibleSurfaceAttached(self: anytype, surface: *Surface) void {
@@ -93,18 +98,19 @@ pub fn auditActiveTabBinding(self: anytype) void {
     const children_raw2 = content_panel.Children() catch return;
     const children2: *com.IVector = @ptrCast(@alignCast(children_raw2));
     defer children2.release();
-    const size = children2.getSize() catch return;
-    if (size > 0) {
-        const first = children2.getAt(0) catch return;
-        defer {
-            const unk: *com.IUnknown = @ptrCast(@alignCast(first));
-            unk.release();
-        }
-        log.info(
-            "auditActiveTabBinding: idx={} tab_content_child=0x{x} panel=0x{x} match={}",
-            .{ self.active_surface_idx, @intFromPtr(first), @intFromPtr(panel), @intFromPtr(first) == @intFromPtr(panel) },
-        );
-    } else {
-        log.warn("auditActiveTabBinding: idx={} tab_content_grid has no children", .{self.active_surface_idx});
-    }
+
+    // Check that active surface's panel is present in the grid and Visible.
+    // IVector.indexOf (com_native) returns !?u32 — null means not found.
+    const found = (children2.indexOf(@ptrCast(panel)) catch null) != null;
+    const ue = panel.queryInterface(com.IUIElement) catch null;
+    const vis: i32 = if (ue) |u| blk: {
+        defer u.release();
+        break :blk u.Visibility() catch -1;
+    } else -1;
+    const size = children2.getSize() catch 0;
+
+    log.info(
+        "auditActiveTabBinding: active_idx={} panel=0x{x} in_grid={} visibility={} total_children={}",
+        .{ self.active_surface_idx, @intFromPtr(panel), found, vis, size },
+    );
 }

@@ -144,6 +144,10 @@ surfaces: std.ArrayListUnmanaged(*Surface) = .{},
 /// Index of the currently active/selected tab.
 active_surface_idx: usize = 0,
 
+/// Guard flag: true while newTab/closeTab are mutating tab state.
+/// onSelectionChanged skips attachSurfaceToTabItem while this is true.
+tab_mutation_in_progress: bool = false,
+
 /// The TabView control that manages tabs.
 tab_view: ?*com.ITabView = null,
 add_tab_split_button: ?*com.ISplitButton = null,
