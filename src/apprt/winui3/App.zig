@@ -152,7 +152,7 @@ active_surface_idx: usize = 0,
 next_tab_id: u64 = 1,
 
 /// Guard flag: true while newTab/closeTab are mutating tab state.
-/// onSelectionChanged skips attachSurfaceToTabItem while this is true.
+/// onSelectionChanged skips updateSelectedTab while this is true.
 tab_mutation_in_progress: bool = false,
 
 /// The TabView control that manages tabs.
@@ -946,18 +946,8 @@ fn createInitialSurfaceContent(self: *App, tab_view: ?*com.ITabView) !void {
 
         try tv.SetSelectedIndex(0);
 
-        // Place SwapChainPanel into tab_content_grid (Row 1).
-        const tab_content = self.tab_content_grid orelse return error.AppInitFailed;
-        const content_panel = try tab_content.queryInterface(com.IPanel);
-        defer content_panel.release();
-        const content_children_raw = try content_panel.Children();
-        const content_children: *com.IVector = @ptrCast(@alignCast(content_children_raw));
-        defer content_children.release();
-        try content_children.append(@ptrCast(panel));
-        log.info("initXaml step 8: surface panel added to tab_content_grid", .{});
-
-        surface.rebindSwapChain();
-        log.info("initXaml step 8 OK: full (TabViewItem+append+selectedIndex+SwapChainPanel in tab_content_grid)", .{});
+        surface_binding.updateSelectedTab(self, 0);
+        log.info("initXaml step 8: surface panel added via updateSelectedTab", .{});
     } else {
         // Single-panel mode: SwapChainPanel directly as XamlSource content.
         const xaml_source = self.nci_window.?.island.xaml_source orelse return error.AppInitFailed;
@@ -1608,11 +1598,8 @@ pub fn switchToTab(self: *App, idx: usize) void {
     if (idx >= self.surfaces.items.len) return;
     if (self.tab_view) |tv| {
         tv.SetSelectedIndex(@intCast(idx)) catch {};
-        const prev_idx = self.active_surface_idx;
         self.active_surface_idx = idx;
-        surface_binding.attachSurfaceToTabItem(self, prev_idx, idx) catch |err| {
-            log.warn("switchToTab: attachSurfaceToTabItem({}) failed: {}", .{ idx, err });
-        };
+        surface_binding.updateSelectedTab(self, idx);
         self.syncWindowTitleToActiveSurface();
         input_runtime.focusKeyboardTarget(self);
     }
@@ -1896,16 +1883,8 @@ pub fn setControlBackground(_: *App, control_insp: *winrt.IInspectable, color: c
     );
 }
 
-fn auditActiveTabBinding(self: *App) void {
-    surface_binding.auditActiveTabBinding(self);
-}
-
 fn setTabItemContent(_: *App, tvi_insp: *winrt.IInspectable, content: ?*winrt.IInspectable) !void {
     return surface_binding.setTabItemContent(tvi_insp, content);
-}
-
-pub fn attachSurfaceToTabItem(self: *App, prev_idx_opt: ?usize, idx: usize) !void {
-    return surface_binding.attachSurfaceToTabItem(self, prev_idx_opt, idx);
 }
 
 pub fn ensureVisibleSurfaceAttached(self: *App, surface: *Surface) void {

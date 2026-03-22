@@ -78,17 +78,13 @@ pub fn onSelectionChanged(self: anytype, sender_obj: ?*anyopaque, args_obj: ?*an
                     self.surfaces.items[self.active_surface_idx].core_surface.focusCallback(false) catch {};
                 }
             }
-            const old_idx = self.active_surface_idx;
             self.active_surface_idx = new_idx;
-            surface_binding.attachSurfaceToTabItem(self, old_idx, new_idx) catch |err| {
-                log.warn("onSelectionChanged: attachSurfaceToTabItem({}) failed: {}", .{ new_idx, err });
-            };
-            surface_binding.auditActiveTabBinding(self);
+            surface_binding.updateSelectedTab(self, new_idx);
             self.syncWindowTitleToActiveSurface();
             // Notify new surface it gained focus.
             self.surfaces.items[new_idx].has_focus = true;
             self.surfaces.items[new_idx].core_surface.focusCallback(true) catch {};
-            // rebindSwapChain is now called inside attachSurfaceToTabItem (Issue #128).
+            // rebindSwapChain is now called inside updateSelectedTab (Issue #128).
 
             // Keep normal keyboard input on the XAML surface. IME focus is
             // redirected to input_hwnd only when composition starts.

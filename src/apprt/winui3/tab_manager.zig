@@ -99,20 +99,14 @@ pub fn newTabWithProfile(
         surface.setTabTitle(title_z);
     } else |_| {}
 
-    // Select the new tab and swap panel visibility.
+    // Select the new tab and switch content (WT-style Clear+Append).
     const size = try tab_items.getSize();
-    const prev_idx = self.active_surface_idx;
     const new_idx: usize = @intCast(size - 1);
     try tab_view.SetSelectedIndex(@intCast(new_idx));
     self.active_surface_idx = new_idx;
 
     // Single authoritative panel switch (no more triple-fire).
-    self.attachSurfaceToTabItem(if (self.surfaces.items.len > 1) prev_idx else null, new_idx) catch |err| {
-        log.warn("newTabWithProfile: attachSurfaceToTabItem({}) failed: {}", .{ new_idx, err });
-    };
-
-    // Rebind swap chain on the new surface (may be no-op if renderer hasn't started yet).
-    surface.rebindSwapChain();
+    surface_binding.updateSelectedTab(self, new_idx);
 
     // Keep normal keyboard focus on the XAML surface after tab creation.
     input_runtime.focusKeyboardTarget(self);
@@ -199,14 +193,7 @@ pub fn closeTab(self: anytype, idx: usize) bool {
 
         // 4. Force-select the correct tab and swap SwapChainPanel.
         tv.SetSelectedIndex(@intCast(self.active_surface_idx)) catch {};
-        surface_binding.attachSurfaceToTabItem(self, null, self.active_surface_idx) catch |err| {
-            log.warn("closeTab: attachSurfaceToTabItem({}) failed: {}", .{ self.active_surface_idx, err });
-        };
-
-        // Rebind swap chain on the newly active surface (Issue #128).
-        if (self.active_surface_idx < self.surfaces.items.len) {
-            self.surfaces.items[self.active_surface_idx].rebindSwapChain();
-        }
+        surface_binding.updateSelectedTab(self, self.active_surface_idx);
 
         input_runtime.focusKeyboardTarget(self);
     }

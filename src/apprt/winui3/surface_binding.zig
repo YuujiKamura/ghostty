@@ -1,4 +1,5 @@
-/// Surface binding for winui3 — local copy with correct Surface type.
+/// Surface binding for winui3 — WT-style Clear+Append tab content switching.
+/// Mirrors Windows Terminal's TerminalPage::_UpdatedSelectedTab() pattern.
 const std = @import("std");
 const App = @import("App.zig");
 const Surface = @import("Surface.zig").Surface(App);
@@ -19,98 +20,55 @@ pub fn setTabItemContent(tvi_insp: *winrt.IInspectable, content: ?*winrt.IInspec
     }
 }
 
-/// Helper: set Visibility on a panel (IInspectable → IUIElement).
-fn setPanelVisibility(panel: *winrt.IInspectable, visibility: i32) void {
-    const ue = panel.queryInterface(com.IUIElement) catch |err| {
-        log.warn("setPanelVisibility: QI IUIElement failed: {}", .{err});
-        return;
-    };
-    defer ue.release();
-    ue.SetVisibility(visibility) catch |err| {
-        log.warn("setPanelVisibility: SetVisibility({}) failed: {}", .{ visibility, err });
-    };
-}
-
-/// Swap the visible SwapChainPanel in tab_content_grid on tab switch.
-/// Instead of removing/adding children (which invalidates swap chains),
-/// keep ALL surface panels in the grid and toggle Visibility.
-pub fn attachSurfaceToTabItem(self: anytype, prev_idx_opt: ?usize, idx: usize) !void {
-    if (self.tab_view == null) return;
+/// WT-style tab content switch: Clear tab_content_grid children, then Append the active tab's panel.
+/// This is the direct equivalent of TerminalPage::_UpdatedSelectedTab() in Windows Terminal.
+pub fn updateSelectedTab(self: anytype, idx: usize) void {
     if (idx >= self.surfaces.items.len) return;
-
-    // Same tab → nothing to do.
-    if (prev_idx_opt) |prev_idx| {
-        if (prev_idx == idx) return;
-    }
-
-    const surface = self.surfaces.items[idx];
-    const panel: *winrt.IInspectable = surface.surface_grid orelse surface.swap_chain_panel orelse return;
     const tab_content = self.tab_content_grid orelse return;
 
-    const content_panel = try tab_content.queryInterface(com.IPanel);
+    const content_panel = tab_content.queryInterface(com.IPanel) catch |err| {
+        log.warn("updateSelectedTab: QI IPanel failed: {}", .{err});
+        return;
+    };
     defer content_panel.release();
-    const children_raw = try content_panel.Children();
+    const children_raw = content_panel.Children() catch |err| {
+        log.warn("updateSelectedTab: Children() failed: {}", .{err});
+        return;
+    };
+    // Same @ptrCast as App.zig initXaml step 8 (line 954) — proven to work for append/clear.
     const children: *com.IVector = @ptrCast(@alignCast(children_raw));
     defer children.release();
 
-    // Ensure the active panel is in the grid (add if not already present).
-    // IVector.indexOf (com_native) returns !?u32 — null means not found.
-    const already_in_grid = children.indexOf(@ptrCast(panel)) catch null;
-    if (already_in_grid == null) {
-        try children.append(@ptrCast(panel));
-    }
+    // WT pattern: Clear + Append (not Visibility toggling)
+    children.clear() catch |err| {
+        log.warn("updateSelectedTab: clear() failed: {}", .{err});
+        return;
+    };
 
-    // Collapse all panels, then make the active one visible.
-    // Visibility values: 0 = Visible, 1 = Collapsed.
-    for (self.surfaces.items) |s| {
-        const p: *winrt.IInspectable = s.surface_grid orelse s.swap_chain_panel orelse continue;
-        setPanelVisibility(p, 1); // Collapsed
-    }
-    setPanelVisibility(panel, 0); // Visible
+    const surface = self.surfaces.items[idx];
+    const panel: *winrt.IInspectable = surface.surface_grid orelse surface.swap_chain_panel orelse {
+        log.warn("updateSelectedTab: idx={} has no panel", .{idx});
+        return;
+    };
+    children.append(@ptrCast(panel)) catch |err| {
+        log.warn("updateSelectedTab: append() failed: {}", .{err});
+        return;
+    };
 
-    // Re-bind swap chain after Visible restore — Collapsed may have detached
-    // the panel from the compositor, invalidating the DXGI surface (Issue #128).
+    // Re-bind swap chain — entering the visual tree may require compositor re-attachment.
     surface.rebindSwapChain();
 
-    log.info("attachSurfaceToTabItem: idx={} panel=0x{x} made Visible + rebind in tab_content_grid", .{ idx, @intFromPtr(panel) });
+    log.info("updateSelectedTab: idx={} panel=0x{x}", .{ idx, @intFromPtr(panel) });
 }
 
+/// Ensure the currently active surface's panel is displayed.
+/// Called from Surface.onLoaded() when a SwapChainPanel enters the visual tree.
 pub fn ensureVisibleSurfaceAttached(self: anytype, surface: *Surface) void {
     if (self.tab_view == null) return;
     for (self.surfaces.items, 0..) |s, i| {
         if (s == surface and i == self.active_surface_idx) {
-            attachSurfaceToTabItem(self, null, i) catch |err| {
-                log.warn("ensureVisibleSurfaceAttached: attach failed: {}", .{err});
-            };
+            updateSelectedTab(self, i);
             return;
         }
     }
-}
-
-pub fn auditActiveTabBinding(self: anytype) void {
-    if (self.active_surface_idx >= self.surfaces.items.len) return;
-    const s = self.surfaces.items[self.active_surface_idx];
-    const panel: *winrt.IInspectable = s.surface_grid orelse s.swap_chain_panel orelse return;
-    const tab_content = self.tab_content_grid orelse return;
-
-    const content_panel = tab_content.queryInterface(com.IPanel) catch return;
-    defer content_panel.release();
-    const children_raw2 = content_panel.Children() catch return;
-    const children2: *com.IVector = @ptrCast(@alignCast(children_raw2));
-    defer children2.release();
-
-    // Check that active surface's panel is present in the grid and Visible.
-    // IVector.indexOf (com_native) returns !?u32 — null means not found.
-    const found = (children2.indexOf(@ptrCast(panel)) catch null) != null;
-    const ue = panel.queryInterface(com.IUIElement) catch null;
-    const vis: i32 = if (ue) |u| blk: {
-        defer u.release();
-        break :blk u.Visibility() catch -1;
-    } else -1;
-    const size = children2.getSize() catch 0;
-
-    log.info(
-        "auditActiveTabBinding: active_idx={} panel=0x{x} in_grid={} visibility={} total_children={}",
-        .{ self.active_surface_idx, @intFromPtr(panel), found, vis, size },
-    );
 }
