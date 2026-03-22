@@ -78,6 +78,8 @@ pub const ControlPlaneFfi = struct {
 
     allocator: Allocator,
     hwnd: os.HWND,
+    /// Session name (e.g. "ghostty-30052") — stored for window title display.
+    session_name: ?[:0]const u8 = null,
     pending_inputs_lock: std.Thread.Mutex = .{},
     pending_inputs: std.ArrayListUnmanaged(PendingInput) = .{},
     pending_ime_injects_lock: std.Thread.Mutex = .{},
@@ -177,6 +179,8 @@ pub const ControlPlaneFfi = struct {
 
         // Null-terminate session name for C ABI
         const session_name_z = try self.allocator.dupeZ(u8, session_name);
+        // Keep a copy for window title display; freed in deinit/destroy.
+        self.session_name = try self.allocator.dupeZ(u8, session_name);
         defer self.allocator.free(session_name_z);
 
         // Pipe prefix for ghostty-islands
@@ -245,6 +249,10 @@ pub const ControlPlaneFfi = struct {
         }
 
         self.clearPendingInputs();
+        if (self.session_name) |sn| {
+            self.allocator.free(sn);
+            self.session_name = null;
+        }
         log.info("control plane stopped", .{});
         self.allocator.destroy(self);
     }

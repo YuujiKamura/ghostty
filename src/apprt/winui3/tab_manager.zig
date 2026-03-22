@@ -92,6 +92,13 @@ pub fn newTabWithProfile(
     // Store the IInspectable reference on the surface for later title updates.
     surface.tab_view_item_inspectable = tvi_inspectable;
 
+    // Re-apply the initial title through setTabTitle so that the CP tab ID
+    // prefix is added when control plane is active.
+    if (alloc.dupeZ(u8, initial_tab_title)) |title_z| {
+        defer alloc.free(title_z);
+        surface.setTabTitle(title_z);
+    } else |_| {}
+
     // Select the new tab and swap panel visibility.
     const size = try tab_items.getSize();
     const prev_idx = self.active_surface_idx;

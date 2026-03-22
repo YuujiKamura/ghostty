@@ -779,36 +779,44 @@ pub fn setTabTitle(self: *Self, title: [:0]const u8) void {
     const alloc = self.app.core_app.alloc;
     if (self.title) |old_title| alloc.free(old_title);
 
-    // Store the title for getTitle() queries
+    // Store the title for getTitle() queries (original, without tab ID prefix)
     self.title = alloc.dupeZ(u8, title) catch {
         log.warn("setTabTitle: failed to allocate title copy (len={})", .{title.len});
         return;
     };
 
+    // Build display title: prepend "[t_NNN] " when control plane is active.
+    const cp_active = self.app.control_plane != null;
+    const display_title: [:0]const u8 = if (cp_active) blk: {
+        const raw = std.fmt.allocPrint(alloc, "[t_{d:0>3}] {s}", .{ self.tab_id, title }) catch break :blk title;
+        defer alloc.free(raw);
+        break :blk alloc.dupeZ(u8, raw) catch title;
+    } else title;
+    const display_owned = cp_active and display_title.ptr != title.ptr;
+    defer if (display_owned) alloc.free(display_title);
+
     // Actually update the TabViewItem UI using WinRT PropertyValue
     if (self.tab_view_item_inspectable) |tvi_insp| {
         if (tvi_insp.queryInterface(com.ITabViewItem)) |tvi| {
             defer tvi.release();
-            if (self.title) |t| {
-                const utf16 = std.unicode.utf8ToUtf16LeAlloc(alloc, t) catch {
-                    log.warn("setTabTitle: utf8ToUtf16LeAlloc failed", .{});
-                    return;
-                };
-                defer alloc.free(utf16);
-                if (winrt.createHString(utf16)) |hstr| {
-                    defer winrt.deleteHString(hstr);
-                    const util = @import("util.zig");
-                    if (util.boxString(hstr)) |boxed| {
-                        defer _ = boxed.release();
-                        _ = tvi.SetHeader(boxed) catch |err| {
-                            log.warn("setTabTitle: putHeader failed: {}", .{err});
-                        };
-                    } else |err| {
-                        log.warn("setTabTitle: boxString failed: {}", .{err});
-                    }
+            const utf16 = std.unicode.utf8ToUtf16LeAlloc(alloc, display_title) catch {
+                log.warn("setTabTitle: utf8ToUtf16LeAlloc failed", .{});
+                return;
+            };
+            defer alloc.free(utf16);
+            if (winrt.createHString(utf16)) |hstr| {
+                defer winrt.deleteHString(hstr);
+                const util = @import("util.zig");
+                if (util.boxString(hstr)) |boxed| {
+                    defer _ = boxed.release();
+                    _ = tvi.SetHeader(boxed) catch |err| {
+                        log.warn("setTabTitle: putHeader failed: {}", .{err});
+                    };
                 } else |err| {
-                    log.warn("setTabTitle: createHString failed: {}", .{err});
+                    log.warn("setTabTitle: boxString failed: {}", .{err});
                 }
+            } else |err| {
+                log.warn("setTabTitle: createHString failed: {}", .{err});
             }
         } else |_| {}
     }

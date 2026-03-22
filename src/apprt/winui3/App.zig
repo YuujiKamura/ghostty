@@ -444,6 +444,15 @@ fn initXaml(self: *App) !void {
                 break :blk null;
             };
             log.info("control_plane: create OK ptr={}", .{@intFromPtr(self.control_plane)});
+
+            // Now that CP is active, refresh tab titles and window title
+            // to include the tab ID prefix and session name.
+            for (self.surfaces.items) |surface| {
+                if (surface.getTitle()) |t| {
+                    surface.setTabTitle(t);
+                }
+            }
+            self.syncWindowTitleToActiveSurface();
         }
     }
 
@@ -860,6 +869,10 @@ fn createInitialSurfaceContent(self: *App, tab_view: ?*com.ITabView) !void {
     errdefer alloc.destroy(surface);
     try surface.init(self, self.core_app, &config, null);
     errdefer surface.deinit();
+
+    // Assign a stable monotonic tab ID (same as newTabWithProfile).
+    surface.tab_id = self.next_tab_id;
+    self.next_tab_id += 1;
 
     try self.surfaces.append(alloc, surface);
 
@@ -2051,17 +2064,40 @@ pub fn syncWindowTitleToActiveSurface(self: *App) void {
         (surface.getTitle() orelse "Ghostty")
     else
         "Ghostty";
-    self.setWindowTitle(title);
+    self.setWindowTitleWithSession(title);
 }
 
 fn setTitle(self: *App, title: [:0]const u8) void {
     log.info("setTitle: \"{s}\"", .{title});
-    self.setWindowTitle(title);
+    self.setWindowTitleWithSession(title);
 
     if (self.activeSurface()) |surface| {
         surface.setTabTitle(title);
     }
     log.info("setTitle: completed", .{});
+}
+
+/// Set the window title, appending the CP session name when active.
+/// e.g. "cmd.exe" becomes "cmd.exe [ghostty-30052]"
+fn setWindowTitleWithSession(self: *App, title: [:0]const u8) void {
+    if (self.control_plane) |cp| {
+        if (cp.session_name) |sn| {
+            const alloc = self.core_app.alloc;
+            const raw = std.fmt.allocPrint(alloc, "{s} [{s}]", .{ title, sn }) catch {
+                self.setWindowTitle(title);
+                return;
+            };
+            defer alloc.free(raw);
+            const decorated = alloc.dupeZ(u8, raw) catch {
+                self.setWindowTitle(title);
+                return;
+            };
+            defer alloc.free(decorated);
+            self.setWindowTitle(decorated);
+            return;
+        }
+    }
+    self.setWindowTitle(title);
 }
 
 // ---------------------------------------------------------------
