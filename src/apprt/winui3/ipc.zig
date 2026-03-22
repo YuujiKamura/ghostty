@@ -16,7 +16,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const windows = std.os.windows;
 const os = @import("os.zig");
-const ControlPlaneFfi = @import("control_plane_ffi.zig").ControlPlaneFfi;
 const ControlPlaneNative = @import("control_plane.zig").ControlPlane;
 
 const log = std.log.scoped(.ipc);

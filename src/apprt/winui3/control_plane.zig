@@ -27,7 +27,7 @@ const PendingInput = struct {
 /// the pipe server thread).
 pub const ControlPlane = struct {
     /// Action codes posted via WM_APP_CONTROL_ACTION (wparam).
-    /// Kept identical to ControlPlaneFfi.Action for wire compatibility with ipc.zig.
+    /// Wire-compatible action codes used by ipc.zig PostMessageW dispatch.
     pub const Action = enum(usize) {
         new_tab = 1,
         close_tab = 2,
@@ -35,7 +35,7 @@ pub const ControlPlane = struct {
         focus_window = 4,
     };
 
-    // Capture function types — same as ControlPlaneFfi for App.zig compatibility
+    // Capture function types for App.zig callbacks
     pub const StateSnapshot = struct {
         pwd: ?[]const u8 = null,
         has_selection: bool = false,

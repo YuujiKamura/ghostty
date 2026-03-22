@@ -39,7 +39,6 @@ const caption_buttons_mod = @import("caption_buttons.zig");
 const xaml_helpers = @import("xaml_helpers.zig");
 const surface_binding = @import("surface_binding.zig");
 const event_handlers = @import("event_handlers.zig");
-const ControlPlaneFfi = @import("control_plane_ffi.zig").ControlPlaneFfi;
 const ControlPlaneNative = @import("control_plane.zig").ControlPlane;
 const nonclient_island_window = @import("nonclient_island_window.zig");
 const NonClientIslandWindow = nonclient_island_window.NonClientIslandWindow;
