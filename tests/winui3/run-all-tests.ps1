@@ -66,8 +66,10 @@ if (Test-Path $sessionDir) {
         $content = Get-Content $_.FullName -Raw
         if ($content -match 'pid=(\d+)') {
             $sessionPid = [int]$Matches[1]
-            $proc = Get-Process -Id $sessionPid -ErrorAction SilentlyContinue
-            if (-not $proc) {
+            $liveProc = Get-Process -Id $sessionPid -ErrorAction SilentlyContinue
+            # PID reuse check: must be ghostty, not some other process
+            $isGhostty = $liveProc -and ($liveProc.ProcessName -eq 'ghostty')
+            if (-not $isGhostty) {
                 Remove-Item $_.FullName -Force
                 Write-Host "  Cleaned stale session: $($_.Name)" -ForegroundColor DarkGray
             }

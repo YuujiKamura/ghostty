@@ -364,6 +364,7 @@ pub const ControlPlaneFfi = struct {
     fn vtSendInput(ctx: *anyopaque, text: [*]const u8, len: usize, raw: bool) callconv(.c) void {
         const self: *ControlPlaneFfi = @ptrCast(@alignCast(ctx));
         const slice = text[0..len];
+        log.info("control_plane: vtSendInput hwnd=0x{x} len={} raw={}", .{ @intFromPtr(self.hwnd), slice.len, raw });
 
         // Special prefix "\x1b[TSF:" routes text through the TSF commit path
         // instead of the PTY, allowing CP-based IME composition testing.
@@ -371,12 +372,20 @@ pub const ControlPlaneFfi = struct {
         if (slice.len > tsf_prefix.len and std.mem.startsWith(u8, slice, tsf_prefix)) {
             const payload = slice[tsf_prefix.len..];
             self.enqueueImeInject(payload);
-            _ = os.PostMessageW(self.hwnd, os.WM_APP_TSF_INJECT, 0, 0);
+            const tsf_result = os.PostMessageW(self.hwnd, os.WM_APP_TSF_INJECT, 0, 0);
+            log.info("control_plane: vtSendInput PostMessageW(WM_APP_TSF_INJECT) result={}", .{tsf_result});
+            if (tsf_result == 0) {
+                log.warn("control_plane: vtSendInput PostMessageW(WM_APP_TSF_INJECT) failed err={}", .{os.GetLastError()});
+            }
             return;
         }
 
         self.enqueueInput("dll", slice, raw);
-        _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0);
+        const result = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0);
+        log.info("control_plane: vtSendInput PostMessageW(WM_APP_CONTROL_INPUT) result={}", .{result});
+        if (result == 0) {
+            log.warn("control_plane: vtSendInput PostMessageW(WM_APP_CONTROL_INPUT) failed err={}", .{os.GetLastError()});
+        }
     }
 
     fn enqueueImeInject(self: *ControlPlaneFfi, text: []const u8) void {
@@ -477,11 +486,14 @@ pub const ControlPlaneFfi = struct {
     }
 
     fn vtSendInputToTab(ctx: *anyopaque, text: [*]const u8, len: usize, raw: bool, tab_index: usize) callconv(.c) void {
-        _ = tab_index; // TODO: route to specific tab
         const self: *ControlPlaneFfi = @ptrCast(@alignCast(ctx));
         const slice = text[0..len];
         self.enqueueInput("dll", slice, raw);
-        _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0);
+        const result = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0);
+        log.info("control_plane: vtSendInputToTab PostMessageW(WM_APP_CONTROL_INPUT) result={} tab_index={}", .{ result, tab_index });
+        if (result == 0) {
+            log.warn("control_plane: vtSendInputToTab PostMessageW(WM_APP_CONTROL_INPUT) failed err={} tab_index={}", .{ os.GetLastError(), tab_index });
+        }
     }
 
     fn vtTabHasSelection(ctx: *anyopaque, index: usize) callconv(.c) bool {
