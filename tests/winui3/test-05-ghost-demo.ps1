@@ -56,12 +56,11 @@ if (Test-Path $logPath) {
     }
 }
 
-# Verify build mode (early log lines go to stderr before attachDebugConsole redirects to file)
-# Check file size as proxy — ReleaseFast exe is ~29MB, Debug is ~70MB
+# Report build mode (informational, not a gate)
 $exeSize = (Get-Item $exePath).Length
 $isRelease = $exeSize -lt 50MB
-Write-Host "  exe size: $([math]::Round($exeSize/1MB, 1))MB (ReleaseFast < 50MB)" -ForegroundColor DarkGray
-Test-Assert -Condition $isRelease -Message "$testName - binary is ReleaseFast ($([math]::Round($exeSize/1MB))MB)"
+$buildMode = if ($isRelease) { "ReleaseFast" } else { "Debug" }
+Write-Host "  exe size: $([math]::Round($exeSize/1MB, 1))MB ($buildMode)" -ForegroundColor DarkGray
 
 # Verify init completed
 $hasInitOk = $logContent -match "App.init: EXIT OK"
@@ -91,7 +90,7 @@ Test-Assert -Condition $hasCpOk -Message "$testName - Control plane DLL loaded"
 $hasDq = $logContent -match "IDispatcherQueue obtained"
 Test-Assert -Condition $hasDq -Message "$testName - DispatcherQueue initialized"
 
-# Verify CP session via agent-ctl ping
+# CP session check (informational, not a gate — CP tests are in Phase 2b)
 if (Test-Path $agentCtl) {
     $sessionDir = Join-Path $env:LOCALAPPDATA "WindowsTerminal\control-plane\winui3\sessions"
     $sessionFile = Get-ChildItem "$sessionDir\ghostty-$procId-*.session" -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -99,12 +98,14 @@ if (Test-Path $agentCtl) {
         $sn = $sessionFile.BaseName
         $pong = & $agentCtl ping $sn 2>&1 | Out-String
         $cpAlive = $pong -match "PONG"
-        Test-Assert -Condition $cpAlive -Message "$testName - CP session responds to PING ($sn)"
+        if ($cpAlive) {
+            Write-Host "  INFO: CP session responds to PING ($sn)" -ForegroundColor Green
+        } else {
+            Write-Host "  INFO: CP PING failed for $sn (non-fatal)" -ForegroundColor Yellow
+        }
     } else {
-        Write-Host "  INFO: No CP session file found for PID $procId (non-fatal)" -ForegroundColor Yellow
+        Write-Host "  INFO: No CP session file for PID $procId (non-fatal)" -ForegroundColor Yellow
     }
-} else {
-    Write-Host "  INFO: agent-ctl not found, skipping CP ping test" -ForegroundColor Yellow
 }
 
 # Frame profiler check

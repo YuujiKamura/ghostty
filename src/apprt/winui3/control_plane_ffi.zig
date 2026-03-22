@@ -69,6 +69,8 @@ pub const ControlPlaneFfi = struct {
         tab_title: *const fn (ctx: *anyopaque, index: usize, buf: [*]u8, buf_len: usize) callconv(.c) usize,
         tab_working_dir: *const fn (ctx: *anyopaque, index: usize, buf: [*]u8, buf_len: usize) callconv(.c) usize,
         tab_has_selection: *const fn (ctx: *anyopaque, index: usize) callconv(.c) bool,
+        read_buffer_for_tab: *const fn (ctx: *anyopaque, tab_index: usize, buf: [*]u8, buf_len: usize) callconv(.c) usize,
+        send_input_to_tab: *const fn (ctx: *anyopaque, text: [*]const u8, len: usize, raw: bool, tab_index: usize) callconv(.c) void,
         ctx: *anyopaque,
     };
 
@@ -196,6 +198,8 @@ pub const ControlPlaneFfi = struct {
             .tab_title = &vtTabTitle,
             .tab_working_dir = &vtTabWorkingDir,
             .tab_has_selection = &vtTabHasSelection,
+            .read_buffer_for_tab = &vtReadBufferForTab,
+            .send_input_to_tab = &vtSendInputToTab,
             .ctx = @ptrCast(self),
         };
 
@@ -288,6 +292,8 @@ pub const ControlPlaneFfi = struct {
         self.pending_inputs = .{};
         self.pending_inputs_lock.unlock();
         defer pending.deinit(self.allocator);
+
+        log.info("drainPendingInputs: {} items", .{pending.items.len});
 
         const termio = @import("../../termio.zig");
 
@@ -457,6 +463,25 @@ pub const ControlPlaneFfi = struct {
         const copy_len = @min(pwd.len, buf_len);
         @memcpy(buf[0..copy_len], pwd[0..copy_len]);
         return copy_len;
+    }
+
+    fn vtReadBufferForTab(ctx: *anyopaque, tab_index: usize, buf: [*]u8, buf_len: usize) callconv(.c) usize {
+        const self: *ControlPlaneFfi = @ptrCast(@alignCast(ctx));
+        const capture = self.capture_tail_fn orelse return 0;
+        const cb_ctx = self.callback_ctx orelse return 0;
+        const viewport = (capture(cb_ctx, self.allocator, tab_index) catch return 0) orelse return 0;
+        defer self.allocator.free(viewport);
+        const copy_len = @min(viewport.len, buf_len);
+        @memcpy(buf[0..copy_len], viewport[0..copy_len]);
+        return copy_len;
+    }
+
+    fn vtSendInputToTab(ctx: *anyopaque, text: [*]const u8, len: usize, raw: bool, tab_index: usize) callconv(.c) void {
+        _ = tab_index; // TODO: route to specific tab
+        const self: *ControlPlaneFfi = @ptrCast(@alignCast(ctx));
+        const slice = text[0..len];
+        self.enqueueInput("dll", slice, raw);
+        _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0);
     }
 
     fn vtTabHasSelection(ctx: *anyopaque, index: usize) callconv(.c) bool {

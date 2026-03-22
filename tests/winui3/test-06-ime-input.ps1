@@ -26,7 +26,10 @@ function Invoke-AgentCtl {
 
 # --- Prerequisite: agent-ctl + session ---
 $agentCtl = Join-Path $env:USERPROFILE "agent-relay\target\debug\agent-ctl.exe"
-$listOutput = Invoke-AgentCtl -CtlArgs @('list') | Where-Object { $_ -match "ALIVE" }
+$listOutput = Invoke-AgentCtl -CtlArgs @('list') | Where-Object { $_ -match "ALIVE.*ghostty-$ProcessId" }
+if (-not $listOutput) {
+    $listOutput = Invoke-AgentCtl -CtlArgs @('list') | Where-Object { $_ -match "ALIVE.*ghostty" }
+}
 $sessionName = $null
 if ($listOutput) {
     $sessionLine = if ($listOutput -is [array]) { $listOutput[0] } else { $listOutput }

@@ -2130,8 +2130,13 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
             // Drain pending control plane inputs to the active surface PTY.
             if (self.control_plane) |cp| {
                 if (self.activeSurface()) |surface| {
+                    log.info("WM_APP_CONTROL_INPUT: draining to surface idx={}", .{self.active_surface_idx});
                     cp.drainPendingInputs(&surface.core_surface);
+                } else {
+                    log.warn("WM_APP_CONTROL_INPUT: no active surface", .{});
                 }
+            } else {
+                log.warn("WM_APP_CONTROL_INPUT: no control_plane", .{});
             }
             return 0;
         },

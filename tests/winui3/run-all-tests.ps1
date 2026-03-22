@@ -72,14 +72,18 @@ try {
 # Give XAML time to fully initialize
 Start-Sleep -Milliseconds 2000
 
-# Run tests 02a, 02b, 02c, 03, 04 in order
+# Run base UI tests (no CP dependency)
 $sharedTests = @(
     "test-02a-tabview",
     "test-02b-ime-overlay",
     "test-02c-drag-bar",
+    "test-03-window-ops"
+)
+
+# CP-dependent tests run separately in Phase 4
+$cpTests = @(
     "test-02d-control-plane",
     "test-02e-agent-roundtrip",
-    "test-03-window-ops",
     "test-04-keyboard",
     "test-06-ime-input",
     "test-07-tsf-ime"
@@ -103,6 +107,33 @@ foreach ($testBaseName in $sharedTests) {
         $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
         $results += @{ Name = $testBaseName; Status = "FAIL"; Time = [int]$elapsed; Error = $_.Exception.Message }
         # Show captured output on failure for debugging
+        Write-Host "`n--- $testBaseName (FAIL) ---" -ForegroundColor Red
+        if ($testOutput) { $testOutput | ForEach-Object { Write-Host "  $_" } }
+        Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+# ============================================================
+# Phase 2b: Control-plane-dependent tests (same process, may be flaky)
+# ============================================================
+Write-Host "`n=== Phase 2b: Control Plane tests (CP-dependent) ===" -ForegroundColor Cyan
+
+foreach ($testBaseName in $cpTests) {
+    $testPath = Join-Path $PSScriptRoot "$testBaseName.ps1"
+    if (-not (Test-Path $testPath)) {
+        Write-Host "`n--- $testBaseName --- SKIP (not found)" -ForegroundColor Yellow
+        continue
+    }
+
+    $startTime = [DateTime]::UtcNow
+    $testOutput = $null
+    try {
+        $testOutput = & $testPath -Hwnd $hwnd -ProcessId $proc.Id 6>&1
+        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
+        $results += @{ Name = $testBaseName; Status = "PASS"; Time = [int]$elapsed; Error = $null }
+    } catch {
+        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
+        $results += @{ Name = $testBaseName; Status = "FAIL"; Time = [int]$elapsed; Error = $_.Exception.Message }
         Write-Host "`n--- $testBaseName (FAIL) ---" -ForegroundColor Red
         if ($testOutput) { $testOutput | ForEach-Object { Write-Host "  $_" } }
         Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red

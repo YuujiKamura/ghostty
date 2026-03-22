@@ -37,8 +37,12 @@ $captureHeight = [Math]::Max(120, [Math]::Min(180, $rect.Height - $titlebarHeigh
 Write-Host "  --- Sub-test: ASCII keyboard input (via control plane) ---" -ForegroundColor Cyan
 
 $agentCtl = Join-Path $env:USERPROFILE "agent-relay\target\debug\agent-ctl.exe"
-# Discover session name dynamically (same as test-02e)
-$listOutput = & $agentCtl list 2>$null | Where-Object { $_ -match "ALIVE" }
+# Discover ghostty session by PID (filter out WT/other sessions)
+$listOutput = & $agentCtl list 2>$null | Where-Object { $_ -match "ALIVE.*ghostty-$ProcessId" }
+if (-not $listOutput) {
+    # Fallback: any alive ghostty session
+    $listOutput = & $agentCtl list 2>$null | Where-Object { $_ -match "ALIVE.*ghostty" }
+}
 $sessionName = $null
 if ($listOutput) {
     $sessionLine = if ($listOutput -is [array]) { $listOutput[0] } else { $listOutput }
@@ -53,7 +57,7 @@ if (-not (Test-Path $agentCtl) -or -not $sessionName) {
 }
 
 # Send command via control plane (same pattern as test-02e: send + raw-send CR)
-Start-Process -FilePath $agentCtl -ArgumentList "send","$sessionName",'"echo codex-kb-test-96"' -NoNewWindow -Wait 2>&1 | Out-Null
+Start-Process -FilePath $agentCtl -ArgumentList "send","$sessionName","`"echo codex-kb-test-96`"" -NoNewWindow -Wait 2>&1 | Out-Null
 Start-Process -FilePath $agentCtl -ArgumentList "raw-send","$sessionName","`r" -NoNewWindow -Wait 2>&1 | Out-Null
 Start-Sleep -Milliseconds 3000
 
