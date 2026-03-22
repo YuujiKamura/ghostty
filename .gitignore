@@ -2,6 +2,7 @@
 .*.swp
 .swp
 *.log
+.last-results.json
 .DS_Store
 .vscode/
 .direnv/

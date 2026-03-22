@@ -48,6 +48,8 @@ const IpcServer = @import("ipc.zig");
 
 const log = std.log.scoped(.winui3);
 
+
+
 /// Timer ID for live resize preview.
 const RESIZE_TIMER_ID: usize = 1;
 const TAB_CLOSE_POLL_INTERVAL_MS: u32 = 500;
@@ -145,6 +147,9 @@ surfaces: std.ArrayListUnmanaged(*Surface) = .{},
 
 /// Index of the currently active/selected tab.
 active_surface_idx: usize = 0,
+
+/// Monotonic counter for stable tab IDs (never reused across tab close/create cycles).
+next_tab_id: u64 = 1,
 
 /// Guard flag: true while newTab/closeTab are mutating tab state.
 /// onSelectionChanged skips attachSurfaceToTabItem while this is true.
@@ -1485,6 +1490,42 @@ pub fn performAction(
             }
             return true;
         },
+        .initial_size => {
+            switch (target) {
+                .app => return false,
+                .surface => {
+                    const hwnd = self.hwnd orelse return false;
+                    const dpi = os.GetDpiForWindow(hwnd);
+                    const style: os.DWORD = @truncate(@as(usize, @bitCast(os.GetWindowLongPtrW(hwnd, os.GWL_STYLE))));
+                    const ex_style: os.DWORD = @truncate(@as(usize, @bitCast(os.GetWindowLongPtrW(hwnd, os.GWL_EXSTYLE))));
+
+                    // Compute non-client area size via AdjustWindowRectExForDpi
+                    var rect = os.RECT{
+                        .left = 0,
+                        .top = 0,
+                        .right = @intCast(value.width),
+                        .bottom = @intCast(value.height),
+                    };
+                    _ = os.AdjustWindowRectExForDpi(&rect, style, 0, ex_style, dpi);
+
+                    const total_width = rect.right - rect.left;
+                    const total_height = rect.bottom - rect.top;
+                    log.info("performAction: initial_size client={}x{} window={}x{} dpi={}", .{
+                        value.width, value.height, total_width, total_height, dpi,
+                    });
+                    _ = os.SetWindowPos(
+                        hwnd,
+                        null,
+                        0,
+                        0,
+                        total_width,
+                        total_height,
+                        os.SWP_NOMOVE | os.SWP_NOZORDER | os.SWP_NOACTIVATE,
+                    );
+                    return true;
+                },
+            }
+        },
         else => return false,
     }
 }
@@ -1614,12 +1655,13 @@ fn controlPlaneCaptureTabList(ctx: *anyopaque, allocator: Allocator) !?[]u8 {
         const pwd_val = surface.pwd(allocator) catch null;
         defer if (pwd_val) |p| allocator.free(p);
         const title = surface.getTitle() orelse "";
-        try writer.print("TAB|{d}|{s}|pwd={s}|prompt={d}|selection={d}\n", .{
+        try writer.print("TAB|{d}|{s}|pwd={s}|prompt={d}|selection={d}|id={d}\n", .{
             i,
             title,
             pwd_val orelse "",
             @as(u8, if (surface.cursorIsAtPrompt()) 1 else 0),
             @as(u8, if (surface.hasSelection()) 1 else 0),
+            surface.tab_id,
         });
     }
     return try buf.toOwnedSlice(allocator);

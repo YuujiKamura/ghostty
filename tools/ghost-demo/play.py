@@ -63,40 +63,36 @@ def strip_ansi(s):
     return re.sub(r'\033\[[^m]*m', '', s)
 
 
+def crop_line_to_width(line, max_cols):
+    """Crop a single line to max visible characters, preserving ANSI escapes."""
+    vis = strip_ansi(line)
+    if len(vis) <= max_cols:
+        return line
+    out = []
+    vis_count = 0
+    i = 0
+    while i < len(line) and vis_count < max_cols:
+        if line[i] == '\033':
+            j = i + 1
+            while j < len(line) and line[j] != 'm':
+                j += 1
+            out.append(line[i:j+1])
+            i = j + 1
+        else:
+            out.append(line[i])
+            vis_count += 1
+            i += 1
+    out.append(RESET)
+    return ''.join(out)
+
+
 def fit_frames(frames, cols, rows):
     """Crop frames to fit terminal size. Reserve 1 row for status line."""
     max_rows = rows - 1
     fitted = []
     for frame in frames:
-        lines = frame.split('\n')
-        # Trim to max rows
-        lines = lines[:max_rows]
-        # Trim each line to visible width (preserving ANSI escapes)
-        cropped = []
-        for line in lines:
-            vis = strip_ansi(line)
-            if len(vis) > cols:
-                # Walk the string keeping ANSI escapes, crop visible chars
-                out = []
-                vis_count = 0
-                i = 0
-                while i < len(line) and vis_count < cols:
-                    if line[i] == '\033':
-                        # Consume entire escape sequence
-                        j = i + 1
-                        while j < len(line) and line[j] != 'm':
-                            j += 1
-                        out.append(line[i:j+1])
-                        i = j + 1
-                    else:
-                        out.append(line[i])
-                        vis_count += 1
-                        i += 1
-                out.append(RESET)  # close any open style
-                cropped.append(''.join(out))
-            else:
-                cropped.append(line)
-        fitted.append('\n'.join(cropped))
+        lines = frame.split('\n')[:max_rows]
+        fitted.append('\n'.join(crop_line_to_width(l, cols) for l in lines))
     return fitted
 
 
@@ -181,7 +177,7 @@ def run_benchmark(frames, iterations):
 
 def main():
     parser = argparse.ArgumentParser(description="Ghost AA animation player/benchmark")
-    parser.add_argument("--fps", type=int, default=15, help="Playback FPS (default: 15)")
+    parser.add_argument("--fps", type=int, default=60, help="Playback FPS (default: 60)")
     parser.add_argument("--benchmark", action="store_true", help="Run benchmark mode")
     parser.add_argument("--iterations", type=int, default=3, help="Benchmark iterations (default: 3)")
     args = parser.parse_args()

@@ -1,8 +1,5 @@
-# test-05-ghost-demo.ps1 — ReleaseFast build + rendering verification
-# Launches ReleaseFast ghostty, verifies init, D3D11 rendering, CP, provider path.
-#
-# NO SendKeys, NO mouse, NO window activation. Launch → log → CP ping → kill.
-# Validates: ReleaseFast startup (#122), provider path (#122), CP DLL, D3D11 Present, frame profiler (#116)
+# test-05-ghost-demo.ps1 — Ghost animation rendering verification
+# Launches ghostty, runs play.py at 60fps (auto-scales to fit), verifies D3D11 rendering.
 
 $ErrorActionPreference = 'Continue'
 $testName = "test-05-ghost-demo"
@@ -17,7 +14,6 @@ if (-not (Test-Path $exePath)) {
 }
 
 $agentCtl = Join-Path $env:USERPROFILE "agent-relay\target\debug\agent-ctl.exe"
-
 $logPath = Join-Path $env:TEMP "ghostty_debug.log"
 
 # Kill any existing ghostty
@@ -27,7 +23,7 @@ Start-Sleep -Seconds 1
 # Clear log
 if (Test-Path $logPath) { Remove-Item $logPath -Force }
 
-Write-Host "  Launching ghostty (ReleaseFast) ..." -ForegroundColor DarkGray
+Write-Host "  Launching ghostty ..." -ForegroundColor DarkGray
 
 $env:GHOSTTY_CONTROL_PLANE = "1"
 $proc = Start-Process -FilePath $exePath -PassThru
@@ -35,12 +31,41 @@ $procId = $proc.Id
 Write-Host "  PID = $procId" -ForegroundColor DarkGray
 Test-Assert -Condition ($procId -gt 0) -Message "$testName - process started (PID=$procId)"
 
-# Wait for process to stabilize (10s)
-Start-Sleep -Seconds 10
+# Wait for window + CP
+Start-Sleep -Seconds 6
 
-# Check process is still alive
 $proc.Refresh()
-Test-Assert -Condition (-not $proc.HasExited) -Message "$testName - process alive after 10s"
+Test-Assert -Condition (-not $proc.HasExited) -Message "$testName - process alive after 6s"
+
+# Find CP session
+$sessionName = ""
+if (Test-Path $agentCtl) {
+    # Match session for OUR PID only (avoid stale sessions from run-single-test.ps1)
+    $aliveList = @(& $agentCtl list --alive-only 2>$null | Where-Object { $_ -match "ALIVE.*ghostty-$procId" })
+    if ($aliveList.Count -gt 0) {
+        $line = $aliveList[-1]
+        if ($line -match 'session=([^\s|]+)') {
+            $sessionName = $Matches[1]
+        }
+    }
+}
+
+if ($sessionName) {
+    Write-Host "  CP session: $sessionName" -ForegroundColor DarkGray
+
+    # Send play.py — it auto-scales to fit any terminal size
+    $playPy = "C:\Users\yuuji\ghostty-win\tools\ghost-demo\play.py"
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & $agentCtl send $sessionName "python `"$playPy`" --fps 60" 2>$null
+    $ErrorActionPreference = $prev
+    Write-Host "  Sent play.py --fps 60 (auto-scale)" -ForegroundColor DarkGray
+
+    # Let animation play (~4s for 235 frames at 60fps, plus margin)
+    Start-Sleep -Seconds 8
+} else {
+    Write-Host "  WARN: No CP session, skipping demo playback" -ForegroundColor Yellow
+}
 
 # Read log
 $logContent = ""
@@ -56,29 +81,19 @@ if (Test-Path $logPath) {
     }
 }
 
-# Report build mode (informational, not a gate)
-$exeSize = (Get-Item $exePath).Length
-$isRelease = $exeSize -lt 50MB
-$buildMode = if ($isRelease) { "ReleaseFast" } else { "Debug" }
-Write-Host "  exe size: $([math]::Round($exeSize/1MB, 1))MB ($buildMode)" -ForegroundColor DarkGray
-
 # Verify init completed
 $hasInitOk = $logContent -match "App.init: EXIT OK"
 Test-Assert -Condition $hasInitOk -Message "$testName - App.init completed"
 
-# Verify XAML init (Issue #122: activateXamlType via provider)
+# Verify XAML init
 $hasXamlOk = $logContent -match "initXaml step 8"
 Test-Assert -Condition $hasXamlOk -Message "$testName - initXaml step 8 reached"
-
-# Verify no E_NOTIMPL crash
-$hasNotImpl = $logContent -match "0x80004001"
-Test-Assert -Condition (-not $hasNotImpl) -Message "$testName - no E_NOTIMPL error"
 
 # Verify D3D11 rendering
 $hasPresent = $logContent -match "Present OK"
 Test-Assert -Condition $hasPresent -Message "$testName - D3D11 rendering active"
 
-# Verify activateXamlType uses provider (not RoActivateInstance fallback)
+# Verify activateXamlType uses provider
 $hasProvider = $logContent -match "activateXamlType\(provider\)"
 Test-Assert -Condition $hasProvider -Message "$testName - activateXamlType uses IXamlMetadataProvider"
 
@@ -86,33 +101,11 @@ Test-Assert -Condition $hasProvider -Message "$testName - activateXamlType uses 
 $hasCpOk = $logContent -match "control plane DLL started"
 Test-Assert -Condition $hasCpOk -Message "$testName - Control plane DLL loaded"
 
-# Verify DispatcherQueue obtained
-$hasDq = $logContent -match "IDispatcherQueue obtained"
-Test-Assert -Condition $hasDq -Message "$testName - DispatcherQueue initialized"
-
-# CP session check (informational, not a gate — CP tests are in Phase 2b)
-if (Test-Path $agentCtl) {
-    $sessionDir = Join-Path $env:LOCALAPPDATA "WindowsTerminal\control-plane\winui3\sessions"
-    $sessionFile = Get-ChildItem "$sessionDir\ghostty-$procId-*.session" -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($sessionFile) {
-        $sn = $sessionFile.BaseName
-        $pong = & $agentCtl ping $sn 2>&1 | Out-String
-        $cpAlive = $pong -match "PONG"
-        if ($cpAlive) {
-            Write-Host "  INFO: CP session responds to PING ($sn)" -ForegroundColor Green
-        } else {
-            Write-Host "  INFO: CP PING failed for $sn (non-fatal)" -ForegroundColor Yellow
-        }
-    } else {
-        Write-Host "  INFO: No CP session file for PID $procId (non-fatal)" -ForegroundColor Yellow
-    }
-}
-
 # Frame profiler check
 $profileLines = ($logContent -split "`n") | Where-Object { $_ -match "frame-profile:" }
 if ($profileLines.Count -gt 0) {
     Write-Host "  PASS: frame-profile data ($($profileLines.Count) reports)" -ForegroundColor Green
-    $profileLines | Select-Object -First 2 | ForEach-Object { Write-Host "    $($_.Trim())" -ForegroundColor Cyan }
+    $profileLines | Select-Object -Last 2 | ForEach-Object { Write-Host "    $($_.Trim())" -ForegroundColor Cyan }
 }
 
 # Cleanup

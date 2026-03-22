@@ -73,6 +73,17 @@ pub fn makeWindow(app_ptr: *anyopaque, wndproc_fn: os.WNDPROC) !IslandWindow {
     }
 
     const title = std.unicode.utf8ToUtf16LeStringLiteral("Ghostty");
+
+    // Use a sensible default size (HD) instead of CW_USEDEFAULT which often
+    // creates oversized windows.  Scale by system DPI so the window looks the
+    // same size regardless of display scaling.  If config specifies
+    // window-width/height, Surface.recomputeInitialSize will resize later.
+    const base_width: c_int = 1280;
+    const base_height: c_int = 960;
+    const sys_dpi = os.GetDpiForSystem();
+    const width = @divTrunc(base_width * @as(c_int, @intCast(sys_dpi)), 96);
+    const height = @divTrunc(base_height * @as(c_int, @intCast(sys_dpi)), 96);
+
     const hwnd = os.CreateWindowExW(
         os.WS_EX_NOREDIRECTIONBITMAP,
         CLASS_NAME,
@@ -80,8 +91,8 @@ pub fn makeWindow(app_ptr: *anyopaque, wndproc_fn: os.WNDPROC) !IslandWindow {
         os.WS_OVERLAPPEDWINDOW | os.WS_CLIPCHILDREN,
         os.CW_USEDEFAULT,
         os.CW_USEDEFAULT,
-        os.CW_USEDEFAULT,
-        os.CW_USEDEFAULT,
+        width,
+        height,
         null, // no parent
         null, // no menu
         hinstance,

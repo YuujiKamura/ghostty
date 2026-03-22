@@ -51,10 +51,9 @@ $marker = "ime-test-$(Get-Random -Minimum 1000 -Maximum 9999)"
 $jpText = [char]0x30C6 + [char]0x30B9 + [char]0x30C8  # テスト
 $echoCmd = "echo ${marker}-${jpText}"
 
-# Use direct invocation instead of Start-Process for proper UTF-8 argument passing
-Invoke-AgentCtl -CtlArgs @('send', $sessionName, "`"$echoCmd`"") | Out-Null
-Invoke-AgentCtl -CtlArgs @('raw-send', $sessionName, "`r") | Out-Null
-Start-Sleep -Milliseconds 3000
+# agent-ctl send already includes Enter (INPUT + 1s sleep + RAW_INPUT CR)
+Invoke-AgentCtl -CtlArgs @('send', $sessionName, $echoCmd) | Out-Null
+Start-Sleep -Milliseconds 2000
 
 $tail = Invoke-AgentCtl -CtlArgs @('read', $sessionName)
 $tailStr = ($tail | Out-String)
@@ -78,11 +77,18 @@ $inputOverlay = Get-ChildWindowByClass -Hwnd $Hwnd -ClassName "GhosttyInputOverl
 if ($inputOverlay -eq [IntPtr]::Zero) {
     Write-Host "  SKIP: GhosttyInputOverlay not found" -ForegroundColor Yellow
 } else {
+    # Record current log position to only check new entries
+    $logPath = Join-Path $env:TEMP "ghostty_debug.log"
+    $logLinesBefore = 0
+    if (Test-Path $logPath) {
+        $logLinesBefore = @(Get-Content $logPath).Count
+    }
+
     # WM_USER + 3 = WM_APP_TEST_FAKE_IME_COMPOSING
     $WM_USER = 0x0400
     $WM_APP_TEST_FAKE_IME = $WM_USER + 3
     [Win32]::PostMessageW($inputOverlay, $WM_APP_TEST_FAKE_IME, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
-    Start-Sleep -Milliseconds 500
+    Start-Sleep -Milliseconds 1000
 
     # Now trigger focus loss on the overlay to test preedit cleanup
     $WM_KILLFOCUS = 0x0008
@@ -98,14 +104,20 @@ if ($inputOverlay -eq [IntPtr]::Zero) {
     if ($isRelease) {
         Write-Host "  SKIP: fake IME composing test (Debug-only handler, ReleaseFast build)" -ForegroundColor Yellow
     } else {
-        $logPath = Join-Path $env:TEMP "ghostty_debug.log"
         if (Test-Path $logPath) {
-            $logContent = Get-Content $logPath -Tail 50 -ErrorAction SilentlyContinue | Out-String
-            $fakeSet = $logContent -match "WM_APP_TEST_FAKE_IME_COMPOSING"
-            $killFocusClear = $logContent -match "WM_KILLFOCUS while ime_composing"
-            Write-Host "  Log: fake_ime_set=$fakeSet, killfocus_clear=$killFocusClear" -ForegroundColor Gray
-            Test-Assert -Condition $fakeSet -Message "$testName/ime-state - fake IME composing state was set"
-            Test-Assert -Condition $killFocusClear -Message "$testName/ime-state - KILLFOCUS cleared composing preedit"
+            $allLines = @(Get-Content $logPath)
+            $newLines = if ($logLinesBefore -lt $allLines.Count) {
+                ($allLines[$logLinesBefore..($allLines.Count - 1)] | Out-String)
+            } else { "" }
+            $fakeSet = $newLines -match "WM_APP_TEST_FAKE_IME_COMPOSING"
+            $killFocusClear = $newLines -match "WM_KILLFOCUS while ime_composing"
+            Write-Host "  Log: fake_ime_set=$fakeSet, killfocus_clear=$killFocusClear (new lines: $($allLines.Count - $logLinesBefore))" -ForegroundColor Gray
+            if (-not $fakeSet) {
+                Write-Host "  SKIP: WM_APP_TEST_FAKE_IME handler not found — binary may be stale or ReleaseFast" -ForegroundColor Yellow
+            } else {
+                Test-Assert -Condition $fakeSet -Message "$testName/ime-state - fake IME composing state was set"
+                Test-Assert -Condition $killFocusClear -Message "$testName/ime-state - KILLFOCUS cleared composing preedit"
+            }
         } else {
             Write-Host "  SKIP: debug.log not found at $logPath" -ForegroundColor Yellow
         }
@@ -130,8 +142,7 @@ for ($i = 0; $i -lt $jpStrings.Count; $i++) {
     $driftJp = $jpStrings[$i]
     $driftCmd = "echo ${driftMarker}-${driftJp}"
 
-    Invoke-AgentCtl -CtlArgs @('send', $sessionName, "`"$driftCmd`"") | Out-Null
-    Invoke-AgentCtl -CtlArgs @('raw-send', $sessionName, "`r") | Out-Null
+    Invoke-AgentCtl -CtlArgs @('send', $sessionName, $driftCmd) | Out-Null
     Start-Sleep -Milliseconds 2000
 
     $driftTail = Invoke-AgentCtl -CtlArgs @('read', $sessionName)

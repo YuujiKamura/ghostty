@@ -6,7 +6,8 @@
 
 param(
     [string]$ExePath,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$OnlyFailed
 )
 
 $ErrorActionPreference = 'Stop'
@@ -27,13 +28,33 @@ if (-not (Test-Path $ExePath)) {
 
 $results = @()
 
+# --- OnlyFailed: load previous results and build filter set ---
+$failedNames = $null
+if ($OnlyFailed) {
+    $lastResultsPath = Join-Path $PSScriptRoot ".last-results.json"
+    if (-not (Test-Path $lastResultsPath)) {
+        Write-Host "No previous failures found. Run full suite first." -ForegroundColor Yellow
+        exit 0
+    }
+    $lastResults = Get-Content $lastResultsPath -Raw | ConvertFrom-Json
+    $failedNames = @($lastResults | Where-Object { $_.Status -eq "FAIL" } | ForEach-Object { $_.Name })
+    if ($failedNames.Count -eq 0) {
+        Write-Host "No previous failures found. Run full suite first." -ForegroundColor Yellow
+        exit 0
+    }
+    Write-Host "`n=== Re-running $($failedNames.Count) previously failed test(s) ===" -ForegroundColor Magenta
+    $failedNames | ForEach-Object { Write-Host "  - $_" -ForegroundColor Magenta }
+}
+
 # ============================================================
 # Phase 1: Lifecycle test (own process, no shared ghostty)
 # ============================================================
 Write-Host "`n=== Phase 1: Lifecycle Test (standalone) ===" -ForegroundColor Cyan
 
 $lifecycleTest = Join-Path $PSScriptRoot "test-01-lifecycle.ps1"
-if (Test-Path $lifecycleTest) {
+if ($failedNames -and ("test-01-lifecycle" -notin $failedNames)) {
+    Write-Host "  SKIP: test-01-lifecycle (not in previous failures)" -ForegroundColor DarkGray
+} elseif (Test-Path $lifecycleTest) {
     $name = "test-01-lifecycle"
     $startTime = [DateTime]::UtcNow
     $testOutput = $null
@@ -77,37 +98,6 @@ if (Test-Path $sessionDir) {
     }
 }
 
-$proc = Start-Ghostty -ExePath $ExePath
-$hwnd = [IntPtr]::Zero
-
-try {
-    $hwnd = Find-GhosttyWindow -ProcessId $proc.Id -TimeoutMs 15000
-    Write-Host "  Window ready: HWND=0x$($hwnd.ToString('X'))" -ForegroundColor Green
-} catch {
-    Write-Host "FATAL: Could not find Ghostty window: $_" -ForegroundColor Red
-    Stop-Ghostty -Process $proc
-    exit 1
-}
-
-# Give XAML time to fully initialize + CP DLL to register session
-Start-Sleep -Milliseconds 3000
-
-# Discover the ghostty CP session (stale sessions were cleaned, so only the new one should appear)
-$env:GHOSTTY_CP_SESSION = ""
-if (Test-Path $agentCtl) {
-    $aliveList = @(& $agentCtl list --alive-only 2>$null | Where-Object { $_ -match "ALIVE.*ghostty" })
-    if ($aliveList.Count -gt 0) {
-        $line = $aliveList[-1]  # most recent
-        if ($line -match 'session=([^\s|]+)') {
-            $env:GHOSTTY_CP_SESSION = $Matches[1]
-            Write-Host "  CP session: $($env:GHOSTTY_CP_SESSION)" -ForegroundColor Green
-        }
-    }
-    if (-not $env:GHOSTTY_CP_SESSION) {
-        Write-Host "  WARN: Could not identify ghostty CP session" -ForegroundColor Yellow
-    }
-}
-
 # Run base UI tests (no CP dependency)
 $sharedTests = @(
     "test-02a-tabview",
@@ -116,7 +106,7 @@ $sharedTests = @(
     "test-03-window-ops"
 )
 
-# CP-dependent tests run separately in Phase 4
+# CP-dependent tests run separately in Phase 2b
 $cpTests = @(
     "test-02d-control-plane",
     "test-02e-agent-roundtrip",
@@ -124,6 +114,51 @@ $cpTests = @(
     "test-06-ime-input",
     "test-07-tsf-ime"
 )
+
+# --- OnlyFailed: filter test arrays to previously-failed tests only ---
+if ($failedNames) {
+    $sharedTests = @($sharedTests | Where-Object { $_ -in $failedNames })
+    $cpTests = @($cpTests | Where-Object { $_ -in $failedNames })
+}
+
+# Skip Ghostty launch entirely if no Phase 2/2b tests to run
+$needSharedGhostty = ($sharedTests.Count -gt 0 -or $cpTests.Count -gt 0)
+$proc = $null
+$hwnd = [IntPtr]::Zero
+
+if (-not $needSharedGhostty) {
+    Write-Host "  SKIP: No Phase 2/2b tests to run" -ForegroundColor DarkGray
+} else {
+    $proc = Start-Ghostty -ExePath $ExePath
+
+    try {
+        $hwnd = Find-GhosttyWindow -ProcessId $proc.Id -TimeoutMs 15000
+        Write-Host "  Window ready: HWND=0x$($hwnd.ToString('X'))" -ForegroundColor Green
+    } catch {
+        Write-Host "FATAL: Could not find Ghostty window: $_" -ForegroundColor Red
+        Stop-Ghostty -Process $proc
+        exit 1
+    }
+
+    # Give XAML time to fully initialize + CP DLL to register session
+    Start-Sleep -Milliseconds 3000
+
+    # Discover the ghostty CP session
+    $env:GHOSTTY_CP_SESSION = ""
+    if (Test-Path $agentCtl) {
+        $aliveList = @(& $agentCtl list --alive-only 2>$null | Where-Object { $_ -match "ALIVE.*ghostty" })
+        if ($aliveList.Count -gt 0) {
+            $line = $aliveList[-1]  # most recent
+            if ($line -match 'session=([^\s|]+)') {
+                $env:GHOSTTY_CP_SESSION = $Matches[1]
+                Write-Host "  CP session: $($env:GHOSTTY_CP_SESSION)" -ForegroundColor Green
+            }
+        }
+        if (-not $env:GHOSTTY_CP_SESSION) {
+            Write-Host "  WARN: Could not identify ghostty CP session" -ForegroundColor Yellow
+        }
+    }
+}
 
 foreach ($testBaseName in $sharedTests) {
     $testPath = Join-Path $PSScriptRoot "$testBaseName.ps1"
@@ -177,8 +212,10 @@ foreach ($testBaseName in $cpTests) {
 }
 
 # --- Cleanup Phase 2 ---
-Write-Host "`n=== Stopping Ghostty (shared) ===" -ForegroundColor Cyan
-Stop-Ghostty -Process $proc
+if ($proc) {
+    Write-Host "`n=== Stopping Ghostty (shared) ===" -ForegroundColor Cyan
+    Stop-Ghostty -Process $proc
+}
 
 # ============================================================
 # Phase 3: Standalone tests (own process, ReleaseFast verification)
@@ -188,6 +225,9 @@ Write-Host "`n=== Phase 3: Standalone Tests ===" -ForegroundColor Cyan
 $standaloneTests = @(
     "test-05-ghost-demo"
 )
+if ($failedNames) {
+    $standaloneTests = @($standaloneTests | Where-Object { $_ -in $failedNames })
+}
 
 foreach ($testBaseName in $standaloneTests) {
     $testPath = Join-Path $PSScriptRoot "$testBaseName.ps1"
@@ -234,5 +274,11 @@ Write-Host "--------------------------------------------" -ForegroundColor White
 $summaryColor = if ($failed -eq 0) { "Green" } else { "Red" }
 Write-Host "  $passed/$total passed, $failed failed" -ForegroundColor $summaryColor
 Write-Host "============================================`n" -ForegroundColor White
+
+# --- Save results to .last-results.json for -OnlyFailed re-runs ---
+$jsonResults = $results | ForEach-Object {
+    [PSCustomObject]@{ Name = $_.Name; Status = $_.Status; Time = $_.Time; Error = $_.Error }
+}
+$jsonResults | ConvertTo-Json -Depth 2 | Set-Content (Join-Path $PSScriptRoot ".last-results.json") -Encoding UTF8
 
 exit $failed
