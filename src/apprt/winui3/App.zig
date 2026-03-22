@@ -2077,13 +2077,12 @@ fn setTitle(self: *App, title: [:0]const u8) void {
     log.info("setTitle: completed", .{});
 }
 
-/// Set the window title, appending the CP session name when active.
-/// e.g. "cmd.exe" becomes "cmd.exe [ghostty-30052]"
+/// Set the window title, using "Ghostty [session-name]" when CP is active.
 fn setWindowTitleWithSession(self: *App, title: [:0]const u8) void {
     if (self.control_plane) |cp| {
         if (cp.session_name) |sn| {
             const alloc = self.core_app.alloc;
-            const raw = std.fmt.allocPrint(alloc, "{s} [{s}]", .{ title, sn }) catch {
+            const raw = std.fmt.allocPrint(alloc, "Ghostty [{s}]", .{sn}) catch {
                 self.setWindowTitle(title);
                 return;
             };

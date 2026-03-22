@@ -785,10 +785,11 @@ pub fn setTabTitle(self: *Self, title: [:0]const u8) void {
         return;
     };
 
-    // Build display title: prepend "[t_NNN] " when control plane is active.
+    // Build display title: prepend "PID:tab_id" when control plane is active.
     const cp_active = self.app.control_plane != null;
     const display_title: [:0]const u8 = if (cp_active) blk: {
-        const raw = std.fmt.allocPrint(alloc, "[t_{d:0>3}] {s}", .{ self.tab_id, title }) catch break :blk title;
+        const sn = if (self.app.control_plane) |cp| (cp.session_name orelse "?") else "?";
+        const raw = std.fmt.allocPrint(alloc, "{s}:t_{d:0>3} {s}", .{ sn, self.tab_id, title }) catch break :blk title;
         defer alloc.free(raw);
         break :blk alloc.dupeZ(u8, raw) catch title;
     } else title;
