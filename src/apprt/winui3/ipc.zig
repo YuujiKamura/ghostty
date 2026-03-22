@@ -17,6 +17,7 @@ const Allocator = std.mem.Allocator;
 const windows = std.os.windows;
 const os = @import("os.zig");
 const ControlPlaneFfi = @import("control_plane_ffi.zig").ControlPlaneFfi;
+const ControlPlaneNative = @import("control_plane.zig").ControlPlane;
 
 const log = std.log.scoped(.ipc);
 
@@ -228,10 +229,10 @@ const IpcRequest = struct {
     action: []const u8,
 };
 
-/// Map IPC action string to a ControlPlaneFfi.Action and post to the UI thread.
+/// Map IPC action string to a ControlPlane.Action and post to the UI thread.
 /// This ensures all UI mutations happen on the XAML/Win32 message loop thread.
 fn dispatchAction(self: *IpcServer, action_str: []const u8) !void {
-    const action: ControlPlaneFfi.Action = if (std.mem.eql(u8, action_str, "new-window"))
+    const action: ControlPlaneNative.Action = if (std.mem.eql(u8, action_str, "new-window"))
         .new_tab // single-window mode: new-window creates a new tab
     else if (std.mem.eql(u8, action_str, "new-tab"))
         .new_tab

@@ -40,6 +40,7 @@ const xaml_helpers = @import("xaml_helpers.zig");
 const surface_binding = @import("surface_binding.zig");
 const event_handlers = @import("event_handlers.zig");
 const ControlPlaneFfi = @import("control_plane_ffi.zig").ControlPlaneFfi;
+const ControlPlaneNative = @import("control_plane.zig").ControlPlane;
 const nonclient_island_window = @import("nonclient_island_window.zig");
 const NonClientIslandWindow = nonclient_island_window.NonClientIslandWindow;
 const Tsf = @import("tsf.zig");
@@ -200,7 +201,8 @@ add_tab_token: ?i64 = null,
 selection_changed_token: ?i64 = null,
 resource_manager_requested_token: ?i64 = null,
 /// Optional side-channel control plane for session-aware automation.
-control_plane: ?*ControlPlaneFfi = null,
+/// Uses the Zig-native control plane (replaces Rust DLL).
+control_plane: ?*ControlPlaneNative = null,
 
 /// TSF (Text Services Framework) implementation for IME composition.
 tsf_impl: ?Tsf.TsfImplementation = null,
@@ -427,12 +429,12 @@ fn initXaml(self: *App) !void {
     if (self.ipc_server != null) log.info("IPC server started", .{});
 
     // --- Control Plane (optional, env-gated) ---
-    const cp_enabled = ControlPlaneFfi.isEnabled(self.core_app.alloc);
+    const cp_enabled = ControlPlaneNative.isEnabled(self.core_app.alloc);
     log.debug("control_plane: isEnabled={}", .{@intFromBool(cp_enabled)});
     if (cp_enabled) {
         log.debug("control_plane: hwnd={}", .{@intFromPtr(self.hwnd)});
         if (self.hwnd) |hwnd| {
-            self.control_plane = ControlPlaneFfi.create(
+            self.control_plane = ControlPlaneNative.create(
                 self.core_app.alloc,
                 hwnd,
                 @ptrCast(self),
@@ -1616,7 +1618,7 @@ pub fn activeSurface(self: *App) ?*Surface {
 // Control plane capture callbacks
 // ---------------------------------------------------------------
 
-fn controlPlaneCaptureState(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) !?ControlPlaneFfi.StateSnapshot {
+fn controlPlaneCaptureState(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) !?ControlPlaneNative.StateSnapshot {
     const self: *App = @ptrCast(@alignCast(ctx));
     const surface = if (tab_idx) |idx|
         (if (idx < self.surfaces.items.len) self.surfaces.items[idx] else null)
@@ -2270,7 +2272,7 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
         },
         os.WM_APP_CONTROL_ACTION => {
             // Execute a tab/window action from the control plane.
-            const action: ControlPlaneFfi.Action = @enumFromInt(@as(usize, @bitCast(wparam)));
+            const action: ControlPlaneNative.Action = @enumFromInt(@as(usize, @bitCast(wparam)));
             const param: usize = @bitCast(lparam);
             switch (action) {
                 .new_tab => self.newTab() catch |err| {

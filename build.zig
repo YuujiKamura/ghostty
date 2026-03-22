@@ -68,6 +68,15 @@ pub fn build(b: *std.Build) !void {
     // Ghostty executable, the actual runnable Ghostty program.
     const exe = try buildpkg.GhosttyExe.init(b, &config, &deps);
 
+    // Zig-native control plane (WinUI3 only)
+    if (config.target.result.os.tag == .windows and config.app_runtime == .winui3) {
+        const zcp_dep = b.dependency("zig_control_plane", .{
+            .target = config.target,
+            .optimize = config.optimize,
+        });
+        exe.exe.root_module.addImport("zig-control-plane", zcp_dep.module("zig-control-plane"));
+    }
+
     // Ghostty docs
     const docs = try buildpkg.GhosttyDocs.init(b, &deps);
     if (config.emit_docs) {
