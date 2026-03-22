@@ -102,6 +102,9 @@ last_swap_chain: ?*anyopaque = null,
 /// Last composition surface handle observed from renderer thread.
 last_swap_chain_handle: ?usize = null,
 
+/// Stable tab ID (monotonically increasing, never reused).
+tab_id: u64 = 0,
+
 /// The IInspectable of the TabViewItem this surface belongs to (for title updates).
 tab_view_item_inspectable: ?*winrt.IInspectable = null,
 

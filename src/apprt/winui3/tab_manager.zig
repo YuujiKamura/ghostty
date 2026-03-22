@@ -41,6 +41,10 @@ pub fn newTabWithProfile(
     try surface.init(self, self.core_app, &config, profile_opt); // Pass profile_opt
     errdefer surface.deinit();
 
+    // Assign a stable monotonic tab ID.
+    surface.tab_id = self.next_tab_id;
+    self.next_tab_id += 1;
+
     try self.surfaces.append(alloc, surface);
     errdefer _ = self.surfaces.pop();
 

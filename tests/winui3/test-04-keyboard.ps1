@@ -54,13 +54,15 @@ if (-not (Test-Path $agentCtl) -or -not $sessionName) {
     return
 }
 
-# Send command via control plane (same pattern as test-02e: send + raw-send CR)
-Start-Process -FilePath $agentCtl -ArgumentList "send","$sessionName","`"echo codex-kb-test-96`"" -NoNewWindow -Wait 2>&1 | Out-Null
-Start-Process -FilePath $agentCtl -ArgumentList "raw-send","$sessionName","`r" -NoNewWindow -Wait 2>&1 | Out-Null
-Start-Sleep -Milliseconds 3000
+# Send command via control plane (direct invocation, not Start-Process)
+Write-Host "  Sending to session: $sessionName" -ForegroundColor DarkGray
+$sendOutput = & $agentCtl send $sessionName "echo codex-kb-test-96" 2>&1
+Write-Host "  send output: $($sendOutput | Out-String)" -ForegroundColor DarkGray
+Start-Sleep -Milliseconds 2000
 
-# Verify via TAIL (read terminal buffer) — no screen capture needed
-$tail = & $agentCtl read $sessionName 2>&1
+# Verify via TAIL (read terminal buffer) — use --lines 200 to avoid
+# missing markers when prior tests filled the buffer with output.
+$tail = & $agentCtl read $sessionName --lines 200 2>&1
 $tailStr = ($tail | Out-String)
 $found = $tailStr -match "codex-kb-test-96"
 
