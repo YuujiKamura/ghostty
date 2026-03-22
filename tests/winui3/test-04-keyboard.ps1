@@ -37,16 +37,14 @@ $captureHeight = [Math]::Max(120, [Math]::Min(180, $rect.Height - $titlebarHeigh
 Write-Host "  --- Sub-test: ASCII keyboard input (via control plane) ---" -ForegroundColor Cyan
 
 $agentCtl = Join-Path $env:USERPROFILE "agent-relay\target\debug\agent-ctl.exe"
-# Discover ghostty session by PID (filter out WT/other sessions)
-$listOutput = & $agentCtl list 2>$null | Where-Object { $_ -match "ALIVE.*ghostty-$ProcessId" }
-if (-not $listOutput) {
-    # Fallback: any alive ghostty session
-    $listOutput = & $agentCtl list 2>$null | Where-Object { $_ -match "ALIVE.*ghostty" }
-}
-$sessionName = $null
-if ($listOutput) {
-    $sessionLine = if ($listOutput -is [array]) { $listOutput[0] } else { $listOutput }
-    if ($sessionLine -match 'session=([^\s|]+)') { $sessionName = $Matches[1] }
+# Use session from test runner (GHOSTTY_CP_SESSION), fallback to discovery
+$sessionName = $env:GHOSTTY_CP_SESSION
+if (-not $sessionName) {
+    $listOutput = & $agentCtl list --alive-only 2>&1 | Where-Object { $_ -match "ALIVE.*ghostty" }
+    if ($listOutput) {
+        $sessionLine = if ($listOutput -is [array]) { $listOutput[-1] } else { $listOutput }
+        if ($sessionLine -match 'session=([^\s|]+)') { $sessionName = $Matches[1] }
+    }
 }
 Write-Host "  Session: $sessionName" -ForegroundColor DarkGray
 

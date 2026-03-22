@@ -57,6 +57,24 @@ if (Test-Path $lifecycleTest) {
 # ============================================================
 Write-Host "`n=== Phase 2: Launching Ghostty for shared tests ===" -ForegroundColor Cyan
 $env:GHOSTTY_CONTROL_PLANE = "1"
+
+# Clean stale ghostty session files (Force Kill doesn't trigger DLL cleanup)
+$agentCtl = Join-Path $env:USERPROFILE "agent-relay\target\debug\agent-ctl.exe"
+$sessionDir = Join-Path $env:LOCALAPPDATA "WindowsTerminal\control-plane\winui3\sessions"
+if (Test-Path $sessionDir) {
+    Get-ChildItem "$sessionDir\ghostty-*.session" -ErrorAction SilentlyContinue | ForEach-Object {
+        $content = Get-Content $_.FullName -Raw
+        if ($content -match 'pid=(\d+)') {
+            $sessionPid = [int]$Matches[1]
+            $proc = Get-Process -Id $sessionPid -ErrorAction SilentlyContinue
+            if (-not $proc) {
+                Remove-Item $_.FullName -Force
+                Write-Host "  Cleaned stale session: $($_.Name)" -ForegroundColor DarkGray
+            }
+        }
+    }
+}
+
 $proc = Start-Ghostty -ExePath $ExePath
 $hwnd = [IntPtr]::Zero
 
@@ -69,8 +87,24 @@ try {
     exit 1
 }
 
-# Give XAML time to fully initialize
-Start-Sleep -Milliseconds 2000
+# Give XAML time to fully initialize + CP DLL to register session
+Start-Sleep -Milliseconds 3000
+
+# Discover the ghostty CP session (stale sessions were cleaned, so only the new one should appear)
+$env:GHOSTTY_CP_SESSION = ""
+if (Test-Path $agentCtl) {
+    $aliveList = @(& $agentCtl list --alive-only 2>$null | Where-Object { $_ -match "ALIVE.*ghostty" })
+    if ($aliveList.Count -gt 0) {
+        $line = $aliveList[-1]  # most recent
+        if ($line -match 'session=([^\s|]+)') {
+            $env:GHOSTTY_CP_SESSION = $Matches[1]
+            Write-Host "  CP session: $($env:GHOSTTY_CP_SESSION)" -ForegroundColor Green
+        }
+    }
+    if (-not $env:GHOSTTY_CP_SESSION) {
+        Write-Host "  WARN: Could not identify ghostty CP session" -ForegroundColor Yellow
+    }
+}
 
 # Run base UI tests (no CP dependency)
 $sharedTests = @(

@@ -26,14 +26,13 @@ function Invoke-AgentCtl {
 
 # --- Prerequisite: agent-ctl + session ---
 $agentCtl = Join-Path $env:USERPROFILE "agent-relay\target\debug\agent-ctl.exe"
-$listOutput = Invoke-AgentCtl -CtlArgs @('list') | Where-Object { $_ -match "ALIVE.*ghostty-$ProcessId" }
-if (-not $listOutput) {
-    $listOutput = Invoke-AgentCtl -CtlArgs @('list') | Where-Object { $_ -match "ALIVE.*ghostty" }
-}
-$sessionName = $null
-if ($listOutput) {
-    $sessionLine = if ($listOutput -is [array]) { $listOutput[0] } else { $listOutput }
-    if ($sessionLine -match 'session=([^\s|]+)') { $sessionName = $Matches[1] }
+$sessionName = $env:GHOSTTY_CP_SESSION
+if (-not $sessionName) {
+    $listOutput = Invoke-AgentCtl -CtlArgs @('list', '--alive-only') | Where-Object { $_ -match "ALIVE.*ghostty" }
+    if ($listOutput) {
+        $sessionLine = if ($listOutput -is [array]) { $listOutput[-1] } else { $listOutput }
+        if ($sessionLine -match 'session=([^\s|]+)') { $sessionName = $Matches[1] }
+    }
 }
 Write-Host "  Session: $sessionName" -ForegroundColor DarkGray
 
