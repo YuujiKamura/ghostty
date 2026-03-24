@@ -3,13 +3,30 @@
 set -e
 
 PREFIX="zig-out-winui3"
+PREFIX_ALT="zig-out-winui3-next"
 XAML_DIR="xaml"
+
+# If the current exe is locked (running), build to alternate prefix.
+# If both are locked, use a third prefix. Windows locks exe for writing while running.
+is_locked() { [ -f "$1/bin/ghostty.exe" ] && ! python -c "open(r'$1/bin/ghostty.exe','r+b').close()" 2>/dev/null; }
+if is_locked "$PREFIX"; then
+    if is_locked "$PREFIX_ALT"; then
+        PREFIX="zig-out-winui3-build"
+        echo "[build-winui3] Both prefixes locked, building to $PREFIX"
+    else
+        echo "[build-winui3] ghostty.exe locked, building to $PREFIX_ALT"
+        PREFIX="$PREFIX_ALT"
+    fi
+fi
 
 # Detect Release mode from args
 BUILD_CONFIG="Debug"
 for arg in "$@"; do
     case "$arg" in
         -Doptimize=ReleaseFast|-Doptimize=ReleaseSafe|-Doptimize=ReleaseSmall)
+            BUILD_CONFIG="Release"
+            ;;
+        --release|--release=*)
             BUILD_CONFIG="Release"
             ;;
     esac

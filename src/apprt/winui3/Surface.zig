@@ -202,8 +202,9 @@ pub fn init(self: *Self, app: *App, core_app: *CoreApp, config: *const configpkg
         }
     }
 
-    // SwapChainPanel background matches Dark theme.
-    self.app.setControlBackground(panel, .{ .A = 255, .R = 32, .G = 32, .B = 32 });
+    // NOTE: SwapChainPanel cannot have a XAML Background set (E_FAIL).
+    // Pointer events are registered on the surface_grid (parent Grid with
+    // Background="Transparent" from Surface.xaml) instead.  See below.
 
     // Create inner surface grid via LoadComponent + SurfaceRoot.xbf:
     // Layout is defined in compiled XAML (xbf), event hookup remains in Zig.
@@ -333,10 +334,17 @@ pub fn init(self: *Self, app: *App, core_app: *CoreApp, config: *const configpkg
         break :blk 0;
     };
 
-    // Register XAML input event handlers on the SwapChainPanel.
-    // These bypass the input_overlay HWND and receive events directly from
-    // the XAML dispatcher, solving the issue where WinUI3 consumes navigation
-    // keys and mouse wheel events before they reach Win32 message queues.
+    // Register XAML input event handlers.
+    //
+    // POINTER events are registered on the surface_grid (parent Grid), NOT on
+    // the SwapChainPanel.  In WinUI3/XAML Islands the SwapChainPanel cannot have
+    // a Background set (SetBackground returns E_FAIL), so it is transparent to
+    // hit testing and never receives PointerPressed/Moved/Released.  The Grid
+    // has Background="Transparent" from Surface.xaml which enables hit testing.
+    // This matches Windows Terminal's TermControl pattern.
+    //
+    // KEYBOARD and FOCUS events stay on the SwapChainPanel because keyboard
+    // focus is tied to the focusable element (IsTabStop=true).
     {
         const ui_element = try panel.queryInterface(com.IUIElement);
         defer ui_element.release();
@@ -351,24 +359,28 @@ pub fn init(self: *Self, app: *App, core_app: *CoreApp, config: *const configpkg
         const RoutedDelegate = gen.RoutedEventHandlerImpl(Self, *const fn (*Self, ?*anyopaque, ?*anyopaque) void);
         const CharRecvDelegate = gen.TypedEventHandlerImpl(Self, *const fn (*Self, ?*anyopaque, ?*anyopaque) void);
 
-        // Pointer events
+        // Pointer events on the surface_grid (has Background="Transparent").
+        const grid_ue = try self.surface_grid.?.queryInterface(com.IUIElement);
+        defer grid_ue.release();
+
         const ptr_pressed = try PointerDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerPressed, &com.IID_PointerEventHandler);
         defer ptr_pressed.release();
-        self.pointer_pressed_token = ui_element.AddPointerPressed(ptr_pressed.comPtr()) catch 0;
+        self.pointer_pressed_token = grid_ue.AddPointerPressed(ptr_pressed.comPtr()) catch 0;
 
         const ptr_moved = try PointerDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerMoved, &com.IID_PointerEventHandler);
         defer ptr_moved.release();
-        self.pointer_moved_token = ui_element.AddPointerMoved(ptr_moved.comPtr()) catch 0;
+        self.pointer_moved_token = grid_ue.AddPointerMoved(ptr_moved.comPtr()) catch 0;
 
         const ptr_released = try PointerDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerReleased, &com.IID_PointerEventHandler);
         defer ptr_released.release();
-        self.pointer_released_token = ui_element.AddPointerReleased(ptr_released.comPtr()) catch 0;
+        self.pointer_released_token = grid_ue.AddPointerReleased(ptr_released.comPtr()) catch 0;
 
         const ptr_wheel = try PointerDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPointerWheelChanged, &com.IID_PointerEventHandler);
         defer ptr_wheel.release();
-        self.pointer_wheel_changed_token = ui_element.AddPointerWheelChanged(ptr_wheel.comPtr()) catch 0;
+        self.pointer_wheel_changed_token = grid_ue.AddPointerWheelChanged(ptr_wheel.comPtr()) catch 0;
 
-        // Keyboard events (PreviewKeyDown catches navigation keys before XAML consumes them)
+        // Keyboard events on the SwapChainPanel (PreviewKeyDown catches navigation keys
+        // before XAML consumes them).
         const key_down = try KeyDelegate.createWithIid(self.app.core_app.alloc, self, &onXamlPreviewKeyDown, &com.IID_KeyEventHandler);
         defer key_down.release();
         self.preview_key_down_token = ui_element.AddPreviewKeyDown(key_down.comPtr()) catch 0;
@@ -484,21 +496,27 @@ pub fn deinit(self: *Self) void {
                 }
             } else |_| {}
 
-            // Unregister XAML input event handlers.
+            // Unregister pointer events from surface_grid.
+            if (self.surface_grid) |grid| {
+                if (grid.queryInterface(com.IUIElement)) |grid_ue| {
+                    defer grid_ue.release();
+                    if (self.pointer_pressed_token != 0) {
+                        grid_ue.RemovePointerPressed(self.pointer_pressed_token) catch {};
+                    }
+                    if (self.pointer_moved_token != 0) {
+                        grid_ue.RemovePointerMoved(self.pointer_moved_token) catch {};
+                    }
+                    if (self.pointer_released_token != 0) {
+                        grid_ue.RemovePointerReleased(self.pointer_released_token) catch {};
+                    }
+                    if (self.pointer_wheel_changed_token != 0) {
+                        grid_ue.RemovePointerWheelChanged(self.pointer_wheel_changed_token) catch {};
+                    }
+                } else |_| {}
+            }
+            // Unregister keyboard/focus events from SwapChainPanel.
             if (panel.queryInterface(com.IUIElement)) |ue| {
                 defer ue.release();
-                if (self.pointer_pressed_token != 0) {
-                    ue.RemovePointerPressed(self.pointer_pressed_token) catch {};
-                }
-                if (self.pointer_moved_token != 0) {
-                    ue.RemovePointerMoved(self.pointer_moved_token) catch {};
-                }
-                if (self.pointer_released_token != 0) {
-                    ue.RemovePointerReleased(self.pointer_released_token) catch {};
-                }
-                if (self.pointer_wheel_changed_token != 0) {
-                    ue.RemovePointerWheelChanged(self.pointer_wheel_changed_token) catch {};
-                }
                 if (self.preview_key_down_token != 0) {
                     ue.RemovePreviewKeyDown(self.preview_key_down_token) catch {};
                 }
