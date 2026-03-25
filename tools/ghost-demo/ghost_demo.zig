@@ -196,15 +196,17 @@ pub fn main() !void {
                 pos += frame.len;
                 // Status line with controls
                 // Status line centered within the ghost's display area
-                // Ghost frame: 16 cols left pad, 68 cols wide (cols 17-84)
+                // Ghost frame: 16 cols left pad, 68 cols wide, 41 lines
+                // 2 blank spacer lines below frame, status on row 44
                 const frame_left: usize = 16;
                 const frame_w: usize = 68;
+                const status_row: usize = 44; // 41 (frame) + 2 (spacer) + 1
                 var status_tmp: [128]u8 = undefined;
                 const content = std.fmt.bufPrint(&status_tmp, "loop {d} | frame {d}/{d} | {d}fps | Up/Down:FPS  q:quit", .{ loop_count, fi + 1, FRAME_COUNT, current_fps }) catch "";
                 const clen = @min(content.len, frame_w);
                 const inner_pad = (frame_w - clen) / 2;
-                const col = frame_left + inner_pad + 1; // +1 for 1-based ANSI column
-                const status = std.fmt.bufPrint(out_buf[pos..], "\x1b[41;{d}H\x1b[1;37;44m{s}\x1b[0m", .{ col, content[0..clen] }) catch "";
+                const col = frame_left + inner_pad + 1;
+                const status = std.fmt.bufPrint(out_buf[pos..], "\x1b[{d};{d}H\x1b[1;37;44m{s}\x1b[0m", .{ status_row, col, content[0..clen] }) catch "";
                 pos += status.len;
                 // End sync: flush entire frame to screen at once
                 @memcpy(out_buf[pos..][0..SYNC_END.len], SYNC_END);
