@@ -195,7 +195,8 @@ pub fn main() !void {
                 @memcpy(out_buf[pos..][0..frame.len], frame);
                 pos += frame.len;
                 // Status line with controls
-                const status = std.fmt.bufPrint(out_buf[pos..], "\x1b[999;1H\x1b[7m loop {d} | frame {d}/{d} | {d}fps | Up/Down:FPS  q:quit \x1b[0m", .{ loop_count, fi + 1, FRAME_COUNT, current_fps }) catch "";
+                // Status line right below the frame (frame is 41 lines, so row 42)
+                const status = std.fmt.bufPrint(out_buf[pos..], "\x1b[42;1H\x1b[7m loop {d} | frame {d}/{d} | {d}fps | Up/Down:FPS  q:quit \x1b[0m\x1b[K", .{ loop_count, fi + 1, FRAME_COUNT, current_fps }) catch "";
                 pos += status.len;
                 // End sync: flush entire frame to screen at once
                 @memcpy(out_buf[pos..][0..SYNC_END.len], SYNC_END);
