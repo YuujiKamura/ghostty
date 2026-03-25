@@ -12,6 +12,34 @@ const ALT_SCREEN_OFF = "\x1b[?1049l";
 const SYNC_START = "\x1b[?2026h"; // Begin synchronized update — hold rendering
 const SYNC_END = "\x1b[?2026l"; // End synchronized update — flush to screen
 
+// Console input types
+const KEY_EVENT: u16 = 0x0001;
+const VK_UP: u16 = 0x26;
+const VK_DOWN: u16 = 0x28;
+const VK_LEFT: u16 = 0x25;
+const VK_RIGHT: u16 = 0x27;
+
+const KEY_EVENT_RECORD = extern struct {
+    bKeyDown: i32,
+    wRepeatCount: u16,
+    wVirtualKeyCode: u16,
+    wVirtualScanCode: u16,
+    uChar: u16,
+    dwControlKeyState: u32,
+};
+
+const INPUT_RECORD = extern struct {
+    EventType: u16,
+    _padding: u16 = 0,
+    Event: extern union {
+        KeyEvent: KEY_EVENT_RECORD,
+        _pad: [16]u8,
+    },
+};
+
+extern "kernel32" fn GetNumberOfConsoleInputEvents(hConsoleInput: windows.HANDLE, lpcNumberOfEvents: *u32) callconv(.winapi) i32;
+extern "kernel32" fn ReadConsoleInputW(hConsoleInput: windows.HANDLE, lpBuffer: *INPUT_RECORD, nLength: u32, lpNumberOfEventsRead: *u32) callconv(.winapi) i32;
+
 fn writeAll(handle: windows.HANDLE, data: []const u8) void {
     var offset: usize = 0;
     while (offset < data.len) {
@@ -138,8 +166,14 @@ pub fn main() !void {
         std.debug.print("------------------------------------------------------------\n", .{});
         std.debug.print("{s:>6} {d:>10.3} {d:>10.1} {d:>10.2}\n", .{ "avg", avg_t, count_f / avg_t, (avg_t / count_f) * 1000.0 });
     } else {
-        const delay_ns: u64 = 1_000_000_000 / @as(u64, fps);
+        var current_fps: u32 = fps;
+        const min_fps: u32 = 1;
+        const max_fps: u32 = 120;
+        const fps_step: u32 = 5;
         writeAll(handle, ALT_SCREEN_ON ++ CLEAR_SCREEN ++ HIDE_CURSOR);
+
+        // Get stdin handle for key input
+        const stdin_handle = windows.kernel32.GetStdHandle(windows.STD_INPUT_HANDLE) orelse return;
 
         // Pre-allocate output buffer to send each frame in a single WriteFile call.
         // This eliminates flicker caused by partial frame rendering between writes.
@@ -160,15 +194,39 @@ pub fn main() !void {
                 // Frame data
                 @memcpy(out_buf[pos..][0..frame.len], frame);
                 pos += frame.len;
-                // Status line
-                const status = std.fmt.bufPrint(out_buf[pos..], "\x1b[999;1H\x1b[7m loop {d} | frame {d}/{d} | {d}fps | Ctrl+C to quit \x1b[0m", .{ loop_count, fi + 1, FRAME_COUNT, fps }) catch "";
+                // Status line with controls
+                const status = std.fmt.bufPrint(out_buf[pos..], "\x1b[999;1H\x1b[7m loop {d} | frame {d}/{d} | {d}fps | \xe2\x86\x91\xe2\x86\x93:FPS  q:quit \x1b[0m", .{ loop_count, fi + 1, FRAME_COUNT, current_fps }) catch "";
                 pos += status.len;
                 // End sync: flush entire frame to screen at once
                 @memcpy(out_buf[pos..][0..SYNC_END.len], SYNC_END);
                 pos += SYNC_END.len;
                 // Single write for entire frame
                 writeAll(handle, out_buf[0..pos]);
-                windows.kernel32.Sleep(@intCast(delay_ns / 1_000_000));
+
+                // Non-blocking key input check
+                var events_available: u32 = 0;
+                _ = GetNumberOfConsoleInputEvents(stdin_handle, &events_available);
+                if (events_available > 0) {
+                    var input_record: INPUT_RECORD = undefined;
+                    var events_read: u32 = 0;
+                    _ = ReadConsoleInputW(stdin_handle, &input_record, 1, &events_read);
+                    if (events_read > 0 and input_record.EventType == KEY_EVENT) {
+                        const key = input_record.Event.KeyEvent;
+                        if (key.bKeyDown != 0) {
+                            if (key.wVirtualKeyCode == VK_UP or key.wVirtualKeyCode == VK_RIGHT) {
+                                if (current_fps + fps_step <= max_fps) current_fps += fps_step else current_fps = max_fps;
+                            } else if (key.wVirtualKeyCode == VK_DOWN or key.wVirtualKeyCode == VK_LEFT) {
+                                if (current_fps > min_fps + fps_step) current_fps -= fps_step else current_fps = min_fps;
+                            } else if (key.wVirtualKeyCode == 0x51) { // 'Q'
+                                writeAll(handle, SHOW_CURSOR ++ RESET ++ ALT_SCREEN_OFF);
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                const delay_ms: u32 = 1000 / current_fps;
+                windows.kernel32.Sleep(delay_ms);
             }
         }
     }

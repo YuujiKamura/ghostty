@@ -111,9 +111,31 @@ def load_frames():
 
 
 def play_demo(frames, fps, rows):
-    delay = 1.0 / fps
     total = len(frames)
     loop = 0
+    current_fps = fps
+    min_fps = 1
+    max_fps = 120
+    fps_step = 5
+
+    # Non-blocking key input on Windows
+    if sys.platform == "win32":
+        import msvcrt
+        def get_key():
+            if msvcrt.kbhit():
+                ch = msvcrt.getch()
+                if ch == b'\xe0' or ch == b'\x00':  # Arrow key prefix
+                    ch2 = msvcrt.getch()
+                    if ch2 == b'H': return 'UP'
+                    if ch2 == b'P': return 'DOWN'
+                    if ch2 == b'M': return 'RIGHT'
+                    if ch2 == b'K': return 'LEFT'
+                elif ch == b'q' or ch == b'Q': return 'QUIT'
+            return None
+    else:
+        def get_key():
+            return None
+
     sys.stdout.write(ALT_SCREEN_ON + CLEAR_SCREEN + HIDE_CURSOR)
     sys.stdout.flush()
     try:
@@ -122,17 +144,27 @@ def play_demo(frames, fps, rows):
             for i, frame in enumerate(frames):
                 sys.stdout.write(CURSOR_HOME)
                 sys.stdout.write(frame)
-                # Status line at bottom of screen
-                status = f" loop {loop} | frame {i+1}/{total} | {fps}fps | Ctrl+C to quit "
+                # Status line with controls help
+                status = f" loop {loop} | frame {i+1}/{total} | {current_fps}fps | \u2191\u2193:FPS  q:quit "
                 sys.stdout.write(f"\033[{rows};1H\033[7m{status}\033[0m")
                 sys.stdout.flush()
-                time.sleep(delay)
+
+                # Handle key input
+                key = get_key()
+                if key == 'UP' or key == 'RIGHT':
+                    current_fps = min(current_fps + fps_step, max_fps)
+                elif key == 'DOWN' or key == 'LEFT':
+                    current_fps = max(current_fps - fps_step, min_fps)
+                elif key == 'QUIT':
+                    raise KeyboardInterrupt
+
+                time.sleep(1.0 / current_fps)
     except KeyboardInterrupt:
         pass
     finally:
         sys.stdout.write(SHOW_CURSOR + RESET + ALT_SCREEN_OFF)
         sys.stdout.flush()
-        print(f"Played {loop} loops.")
+        print(f"Played {loop} loops at last FPS: {current_fps}.")
 
 
 def run_benchmark(frames, iterations):
