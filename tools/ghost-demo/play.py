@@ -136,6 +136,11 @@ def play_demo(frames, fps, rows):
         def get_key():
             return None
 
+    # Ghost frame layout: 16 cols left pad, 68 cols wide, 41 lines
+    frame_left = 16
+    frame_w = 68
+    status_row = 44  # 41 (frame) + 2 (spacer) + 1
+
     sys.stdout.write(ALT_SCREEN_ON + CLEAR_SCREEN + HIDE_CURSOR)
     sys.stdout.flush()
     try:
@@ -144,9 +149,12 @@ def play_demo(frames, fps, rows):
             for i, frame in enumerate(frames):
                 sys.stdout.write(CURSOR_HOME)
                 sys.stdout.write(frame)
-                # Status line with controls help
-                status = f" loop {loop} | frame {i+1}/{total} | {current_fps}fps | \u2191\u2193:FPS  q:quit "
-                sys.stdout.write(f"\033[{rows};1H\033[7m{status}\033[0m")
+                # Status line centered within ghost display area
+                content = f"loop {loop} | frame {i+1}/{total} | {current_fps}fps | Up/Down:FPS  q:quit"
+                clen = min(len(content), frame_w)
+                inner_pad = (frame_w - clen) // 2
+                col = frame_left + inner_pad + 1
+                sys.stdout.write(f"\033[{status_row};{col}H\033[1;37;44m{content[:clen]}\033[0m")
                 sys.stdout.flush()
 
                 # Handle key input
