@@ -2513,26 +2513,6 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                         uniform_color.b,
                         255,
                     };
-
-                    // Directly override text cell color at cursor position.
-                    // The shader-based cursor_pos/cursor_color inversion should
-                    // handle this, but on D3D11 it doesn't produce visible results.
-                    // Belt-and-suspenders: set the color in the cell data too.
-                    const cursor_x = self.uniforms.cursor_pos[0];
-                    const cursor_y = self.uniforms.cursor_pos[1];
-                    const row_idx = @as(usize, cursor_y) + 1;
-                    if (row_idx < self.cells.fg_rows.lists.len) {
-                        for (self.cells.fg_rows.lists[row_idx].items) |*item| {
-                            if (item.grid_pos[0] == cursor_x and item.grid_pos[1] == cursor_y) {
-                                item.color = .{
-                                    uniform_color.r,
-                                    uniform_color.g,
-                                    uniform_color.b,
-                                    255,
-                                };
-                            }
-                        }
-                    }
                 }
             }
 
