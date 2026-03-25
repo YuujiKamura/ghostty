@@ -141,12 +141,23 @@ def play_demo(frames, fps, rows):
     frame_w = 68
     status_row = 44  # 41 (frame) + 2 (spacer) + 1
 
+    import random
+    _haunt_until = 0
+    _next_haunt = time.time() + random.uniform(30, 120)  # first haunting in 30-120s
+
     sys.stdout.write(ALT_SCREEN_ON + CLEAR_SCREEN + HIDE_CURSOR)
     sys.stdout.flush()
     try:
         while True:
             loop += 1
             for i, frame in enumerate(frames):
+                now = time.time()
+                # Spontaneous haunting: triggers randomly, lasts 1-3 seconds
+                if now >= _next_haunt and now >= _haunt_until:
+                    _haunt_until = now + random.uniform(1, 3)
+                    _next_haunt = now + random.uniform(45, 180)
+                if now < _haunt_until and random.random() < 0.35:
+                    sys.stdout.write(CLEAR_SCREEN)
                 sys.stdout.write(CURSOR_HOME)
                 sys.stdout.write(frame)
                 # Status line centered within ghost display area
