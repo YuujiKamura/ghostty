@@ -188,11 +188,11 @@ pub fn main() !void {
                 // Synchronized output: tell terminal to hold rendering
                 @memcpy(out_buf[pos..][0..SYNC_START.len], SYNC_START);
                 pos += SYNC_START.len;
-                // Cursor home + clear screen inside sync block (atomic, no flicker)
+                // Cursor home only — no clear screen.
+                // Previous frame remnants bleed through where line lengths differ,
+                // creating a natural glitch effect from the sync timing gap.
                 @memcpy(out_buf[pos..][0..CURSOR_HOME.len], CURSOR_HOME);
                 pos += CURSOR_HOME.len;
-                @memcpy(out_buf[pos..][0..CLEAR_SCREEN.len], CLEAR_SCREEN);
-                pos += CLEAR_SCREEN.len;
                 // Frame data (clean overwrite after clear)
                 @memcpy(out_buf[pos..][0..frame.len], frame);
                 pos += frame.len;
