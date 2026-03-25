@@ -67,14 +67,9 @@ function Send-CpCommand([string]$PipeName, [string]$Command, [int]$TimeoutMs = 5
         $writer.AutoFlush = $true
         $writer.WriteLine($Command)
 
-        # Signal end of write
-        $pipe.WaitForPipeDrain()
-
         $reader = New-Object System.IO.StreamReader($pipe)
         $response = $reader.ReadToEnd()
 
-        $reader.Close()
-        $writer.Close()
         $pipe.Close()
 
         return $response.Trim()
@@ -97,10 +92,10 @@ function Find-AnyAliveSession() {
     foreach ($f in $files) {
         $props = Parse-SessionFile $f.FullName
         if ($props.ContainsKey("pid")) {
-            $pid = [int]$props["pid"]
+            $sessionPid = [int]$props["pid"]
             try {
-                $proc = Get-Process -Id $pid -ErrorAction Stop
-                return @{ Path = $f.FullName; PID = $pid; Process = $proc }
+                $proc = Get-Process -Id $sessionPid -ErrorAction Stop
+                return @{ Path = $f.FullName; PID = $sessionPid; Process = $proc }
             } catch {}
         }
     }
@@ -254,14 +249,14 @@ $inputText = "echo $marker"
 $inputB64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($inputText))
 $enterB64 = [Convert]::ToBase64String([byte[]]@(0x0D))  # \r
 
-# Send text — Zig-native CP returns ACK|, not QUEUED|
+# Send text — CP returns QUEUED| (or legacy ACK|)
 $inputResp = Send-CpCommand $script:PipeName "INPUT|diag|$inputB64"
-$inputAck = $inputResp -match "^ACK\|"
+$inputAck = ($inputResp -match "^ACK\|") -or ($inputResp -match "^QUEUED\|")
 Report "cp-input-ack" $inputAck $inputResp
 
 # Send Enter via RAW_INPUT
 $rawResp = Send-CpCommand $script:PipeName "RAW_INPUT|diag|$enterB64"
-$rawAck = $rawResp -match "^ACK\|"
+$rawAck = ($rawResp -match "^ACK\|") -or ($rawResp -match "^QUEUED\|")
 Report "cp-raw-input-ack" $rawAck $rawResp
 
 # Wait for shell to process, then check TAIL for marker
@@ -288,10 +283,9 @@ for ($i = 0; $i -lt 10; $i++) {
             $writer = New-Object System.IO.StreamWriter($pipe)
             $writer.AutoFlush = $true
             $writer.WriteLine("PING")
-            $pipe.WaitForPipeDrain()
             $reader = New-Object System.IO.StreamReader($pipe)
-            $resp = $reader.ReadToEnd().Trim()
-            $reader.Close(); $writer.Close(); $pipe.Close()
+            $resp = $reader.ReadLine()
+            $pipe.Close()
             return $resp
         } catch {
             return "ERROR: $($_.Exception.Message)"
