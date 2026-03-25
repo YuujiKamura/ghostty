@@ -106,7 +106,7 @@ VSOutput vs_main(VSInput input) {
     // If this cell is the cursor cell, but we're not processing
     // the cursor glyph itself, then we need to change the color.
     if ((input.glyph_bools & IS_CURSOR_GLYPH) == 0 && is_cursor_pos) {
-        output.color = load_color(unpack4u8(cursor_color_packed_4u8), use_linear_blending);
+        output.color = load_color(unpack4u8(cursor_color_packed_4u8), true);
     }
 
     return output;
