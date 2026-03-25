@@ -188,10 +188,12 @@ pub fn main() !void {
                 // Synchronized output: tell terminal to hold rendering
                 @memcpy(out_buf[pos..][0..SYNC_START.len], SYNC_START);
                 pos += SYNC_START.len;
-                // CURSOR_HOME
+                // Cursor home + clear screen inside sync block (atomic, no flicker)
                 @memcpy(out_buf[pos..][0..CURSOR_HOME.len], CURSOR_HOME);
                 pos += CURSOR_HOME.len;
-                // Frame data
+                @memcpy(out_buf[pos..][0..CLEAR_SCREEN.len], CLEAR_SCREEN);
+                pos += CLEAR_SCREEN.len;
+                // Frame data (clean overwrite after clear)
                 @memcpy(out_buf[pos..][0..frame.len], frame);
                 pos += frame.len;
                 // Status line with controls
