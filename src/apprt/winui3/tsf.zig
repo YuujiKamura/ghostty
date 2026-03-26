@@ -120,7 +120,9 @@ const IEnumTfPropertyValue = extern struct {
         Reset: *const fn (*anyopaque) callconv(.winapi) HRESULT,
         Skip: *const fn (*anyopaque, u32) callconv(.winapi) HRESULT,
     };
-    fn release(self: *@This()) void { com.comRelease(self); }
+    fn release(self: *@This()) void {
+        com.comRelease(self);
+    }
 };
 
 // TF_PROPERTYVAL: { guidId: GUID, varValue: VARIANT }
@@ -134,7 +136,9 @@ const TF_PROPERTYVAL = extern struct {
 // --- ITfContextOwnerCompositionServices (not in bindings) ---
 // IID {86462810-593B-4916-9764-19C08E9CE110}
 const IID_ITfContextOwnerCompositionServices = GUID{
-    .data1 = 0x86462810, .data2 = 0x593B, .data3 = 0x4916,
+    .data1 = 0x86462810,
+    .data2 = 0x593B,
+    .data3 = 0x4916,
     .data4 = .{ 0x97, 0x64, 0x19, 0xC0, 0x8E, 0x9C, 0xE1, 0x10 },
 };
 
@@ -153,7 +157,9 @@ const ITfContextOwnerCompositionServices = extern struct {
         // ITfContextOwnerCompositionServices
         TerminateComposition: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
-    fn release(self: *@This()) void { com.comRelease(self); }
+    fn release(self: *@This()) void {
+        com.comRelease(self);
+    }
 };
 
 // --- Static configuration (matching WT's std::atomic variables) ---
@@ -497,36 +503,46 @@ pub const TsfImplementation = struct {
     /// Matches WT Implementation::AssociateFocus().
     pub fn associateFocus(self: *TsfImplementation, hwnd: os.HWND) void {
         self._associatedHwnd = hwnd;
-        if (self._threadMgrEx) |tmgr| {
-            var prev: ?*anyopaque = null;
-            const hr = tmgr.lpVtbl.AssociateFocus(
-                @ptrCast(tmgr),
-                @bitCast(@intFromPtr(hwnd)),
-                @ptrCast(self._documentMgr.?),
-                &prev,
-            );
-            if (prev) |p| {
-                const unk: *com.IUnknown = @ptrCast(@alignCast(p));
-                unk.release();
-            }
-            if (hr < 0) {
-                log.err("TSF: AssociateFocus failed: 0x{x}", .{@as(u32, @bitCast(hr))});
-            } else {
-                log.debug("TSF: associateFocus hwnd=0x{x}", .{@intFromPtr(hwnd)});
-            }
+        const tmgr = self._threadMgrEx orelse return;
+        const doc_mgr = self._documentMgr orelse {
+            log.warn("TSF: associateFocus called but _documentMgr is null", .{});
+            return;
+        };
+        var prev: ?*anyopaque = null;
+        const hr = tmgr.lpVtbl.AssociateFocus(
+            @ptrCast(tmgr),
+            @bitCast(@intFromPtr(hwnd)),
+            @ptrCast(doc_mgr),
+            &prev,
+        );
+        if (prev) |p| {
+            const unk: *com.IUnknown = @ptrCast(@alignCast(p));
+            unk.release();
+        }
+        if (hr < 0) {
+            log.err("TSF: AssociateFocus failed: 0x{x}", .{@as(u32, @bitCast(hr))});
+        } else {
+            log.debug("TSF: associateFocus hwnd=0x{x}", .{@intFromPtr(hwnd)});
         }
     }
 
     /// Set TSF focus to our document (call when terminal surface gains focus).
     /// Matches WT Implementation::Focus().
+    ///
+    /// SAFETY: Do NOT call from WM_SETFOCUS/WM_KILLFOCUS handlers —
+    /// ITfThreadMgrEx::SetFocus triggers WM_SETFOCUS internally, causing
+    /// infinite recursion. Use XAML GotFocus/LostFocus handlers instead.
     pub fn focus(self: *TsfImplementation) void {
-        if (self._threadMgrEx) |tmgr| {
-            const hr = tmgr.lpVtbl.SetFocus(@ptrCast(tmgr), @ptrCast(self._documentMgr.?));
-            if (hr < 0) {
-                log.err("TSF: SetFocus failed: 0x{x}", .{@as(u32, @bitCast(hr))});
-            } else {
-                log.debug("TSF: focus()", .{});
-            }
+        const tmgr = self._threadMgrEx orelse return;
+        const doc_mgr = self._documentMgr orelse {
+            log.warn("TSF: focus() called but _documentMgr is null", .{});
+            return;
+        };
+        const hr = tmgr.lpVtbl.SetFocus(@ptrCast(tmgr), @ptrCast(doc_mgr));
+        if (hr < 0) {
+            log.err("TSF: SetFocus failed: 0x{x}", .{@as(u32, @bitCast(hr))});
+        } else {
+            log.debug("TSF: focus()", .{});
         }
     }
 
@@ -1098,8 +1114,8 @@ pub const TsfImplementation = struct {
 
         // Track GUID_PROP_COMPOSING and GUID_PROP_ATTRIBUTE properties
         var guids: [2]?*anyopaque = .{
-            @constCast(@ptrCast(&tsf.GUID_PROP_COMPOSING)),
-            @constCast(@ptrCast(&tsf.GUID_PROP_ATTRIBUTE)),
+            @ptrCast(@constCast(&tsf.GUID_PROP_COMPOSING)),
+            @ptrCast(@constCast(&tsf.GUID_PROP_ATTRIBUTE)),
         };
         var no_app_props: ?*anyopaque = null;
         var props_ptr: ?*anyopaque = null;

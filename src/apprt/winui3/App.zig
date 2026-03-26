@@ -45,10 +45,7 @@ const NonClientIslandWindow = nonclient_island_window.NonClientIslandWindow;
 const Tsf = @import("tsf.zig");
 const IpcServer = @import("ipc.zig");
 
-
 const log = std.log.scoped(.winui3);
-
-
 
 /// Timer ID for live resize preview.
 const RESIZE_TIMER_ID: usize = 1;
@@ -399,12 +396,10 @@ fn initXaml(self: *App) !void {
     // above the drag bar. Force interop back to BOTTOM and drag bar to TOP.
     if (self.nci_window) |nci2| {
         if (nci2.island.interop_hwnd) |ih| {
-            _ = os.SetWindowPos(ih, os.HWND_BOTTOM, 0, 0, 0, 0,
-                os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOACTIVATE);
+            _ = os.SetWindowPos(ih, os.HWND_BOTTOM, 0, 0, 0, 0, os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOACTIVATE);
         }
         if (nci2.drag_bar_hwnd) |db| {
-            _ = os.SetWindowPos(db, os.HWND_TOP, 0, 0, 0, 0,
-                os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOACTIVATE);
+            _ = os.SetWindowPos(db, os.HWND_TOP, 0, 0, 0, 0, os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOACTIVATE);
         }
         log.debug("initXaml step 6.5: drag bar Z-order re-asserted", .{});
     }
@@ -2117,11 +2112,29 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
         },
         os.WM_SETFOCUS => {
             input_runtime.ensureInputFocus(self);
-            // TSF focus/unfocus is handled in Surface XAML GotFocus/LostFocus
-            // handlers (matching Windows Terminal's approach). Do NOT call
-            // tsf.focus()/unfocus() from Win32 messages — it causes recursive
-            // WM_SETFOCUS/KILLFOCUS crashes.
+            // TSF focus/unfocus is managed via WM_ACTIVATE below (safe from
+            // recursion). Do NOT call tsf.focus()/unfocus() here — SetFocus
+            // triggers WM_SETFOCUS internally, causing infinite recursion.
             return 0;
+        },
+        os.WM_ACTIVATE => {
+            // WM_ACTIVATE is safe for TSF focus management (no recursion risk).
+            // WA_ACTIVE (1) or WA_CLICKACTIVE (2) = window activated;
+            // WA_INACTIVE (0) = window deactivated.
+            const activation: usize = @as(usize, @bitCast(wparam)) & 0xFFFF;
+            if (activation != 0) {
+                // Window activated — set TSF focus
+                if (self.tsf_impl) |*tsf_inst| {
+                    tsf_inst.focus();
+                }
+            } else {
+                // Window deactivated — remove TSF focus
+                if (self.tsf_impl) |*tsf_inst| {
+                    tsf_inst.unfocus();
+                }
+            }
+            // Pass through to DefWindowProc for default activation handling
+            return os.DefWindowProcW(hwnd, msg, wparam, lparam);
         },
         os.WM_CLOSE => {
             self.onWindowClose();
