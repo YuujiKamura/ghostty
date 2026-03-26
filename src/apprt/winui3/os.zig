@@ -439,6 +439,7 @@ pub const WM_KILLFOCUS: UINT = 0x0008;
 // --- WM_IME_SETCONTEXT ---
 pub const WM_IME_SETCONTEXT: UINT = 0x0281;
 pub const WM_IME_NOTIFY: UINT = 0x0282;
+pub const WM_IME_CHAR: UINT = 0x0286;
 
 // --- ImmSetOpenStatus / ImmGetOpenStatus ---
 pub extern "imm32" fn ImmSetOpenStatus(hIMC: HIMC, fOpen: BOOL) callconv(.winapi) BOOL;

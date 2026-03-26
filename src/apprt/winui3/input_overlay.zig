@@ -111,6 +111,14 @@ pub fn inputWndProc(
             }
             return 0;
         },
+        os.WM_IME_CHAR => {
+            // Chrome Remote Desktop sends WM_IME_CHAR for pre-composed CJK text.
+            const wp: usize = @bitCast(wparam);
+            if (app.activeSurface()) |surface| {
+                surface.handleCharEvent(@truncate(wp));
+            }
+            return 0;
+        },
         os.WM_IME_STARTCOMPOSITION => {
             return ime.handleIMEStartComposition(app, hwnd, msg, wparam, lparam);
         },

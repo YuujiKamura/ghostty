@@ -555,6 +555,11 @@ fn nonclientWndProc(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.L
         }
     }
 
+    // Diagnostic logging for keyboard/IME messages (CRD debugging).
+    if ((msg >= 0x0100 and msg <= 0x010F) or (msg >= 0x0280 and msg <= 0x0290)) {
+        log.debug("nonclientWndProc: msg=0x{x:0>4} wparam=0x{x} lparam=0x{x}", .{ msg, wparam, lparam });
+    }
+
     // WT: NonClientIslandWindow::MessageHandler
     switch (msg) {
         os.WM_NCCALCSIZE => return onNcCalcSize(hwnd, wparam, lparam),

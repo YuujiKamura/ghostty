@@ -2127,6 +2127,16 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
             self.onWindowClose();
             return 0;
         },
+        os.WM_IME_CHAR => {
+            // Chrome Remote Desktop and similar tools send WM_IME_CHAR for
+            // pre-composed CJK text instead of going through TSF/IMM.
+            // Route to the active surface's char handler.
+            const wp: usize = @bitCast(wparam);
+            if (self.activeSurface()) |surface| {
+                surface.handleCharEvent(@truncate(wp));
+            }
+            return 0;
+        },
         os.WM_APP_BIND_SWAP_CHAIN => {
             // Complete swap chain binding on the UI thread.
             const surface: *Surface = @ptrFromInt(@as(usize, @bitCast(lparam)));
