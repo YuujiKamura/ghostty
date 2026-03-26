@@ -78,10 +78,10 @@ function Send-CpCommand([string]$PipeName, [string]$Command, [int]$TimeoutMs = 5
     }
 }
 
-function Find-SessionFile([int]$Pid) {
+function Find-SessionFile([int]$ProcessId) {
     if (-not (Test-Path $script:SessionDir)) { return $null }
     $files = Get-ChildItem $script:SessionDir -Filter "*.session" |
-             Where-Object { $_.Name -match "-${Pid}\.session$" }
+             Where-Object { $_.Name -match "-${ProcessId}\.session$" }
     if ($files) { return $files[0].FullName }
     return $null
 }
