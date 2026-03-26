@@ -1666,6 +1666,7 @@ fn isImePassthroughVirtualKey(vk: u32) bool {
         0xE5, // VK_PROCESSKEY
         0xF3, // IME toggle reported by WinUI3 on Japanese layout in Phase 6
         0xF4, // IME off reported by WinUI3 on Japanese layout in Phase 6
+        0xFF, // VK_OEM_CLEAR — Chrome Remote Desktop sends this for pre-composed IME text
         => true,
         else => false,
     };
