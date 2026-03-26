@@ -756,7 +756,7 @@ test "reset_cursor_blink sets visible without timer interaction" {
     // Case 1: cursor_blink_visible starts false → becomes true
     {
         var flags: Flags = .{};
-        std.debug.assert(!flags.cursor_blink_visible);
+        try std.testing.expect(!flags.cursor_blink_visible);
 
         // Simulate the reset_cursor_blink handler (line 443):
         //   self.flags.cursor_blink_visible = true;

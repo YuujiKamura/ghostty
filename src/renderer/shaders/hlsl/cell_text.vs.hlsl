@@ -35,7 +35,6 @@ VSOutput vs_main(VSInput input) {
     uint2 grid_size = unpack2u16(grid_size_packed_2u16);
     uint2 cursor_pos = unpack2u16(cursor_pos_packed_2u16);
     bool cursor_wide = (bools & CURSOR_WIDE) != 0;
-    bool use_linear_blending = (bools & USE_LINEAR_BLENDING) != 0;
 
     // Convert the grid x, y into world space x, y by accounting for cell size
     float2 cell_pos = cell_size * float2(input.grid_pos);
@@ -90,7 +89,7 @@ VSOutput vs_main(VSInput input) {
         unpack4u8(bg_color_packed_4u8),
         true
     );
-    output.bg_color += global_bg * float4(1.0 - output.bg_color.a, 1.0 - output.bg_color.a, 1.0 - output.bg_color.a, 1.0 - output.bg_color.a);
+    output.bg_color += global_bg * (1.0 - output.bg_color.a);
 
     // If we have a minimum contrast, we need to check if we need to
     // change the color of the text to ensure it has enough contrast
