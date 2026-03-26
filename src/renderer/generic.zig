@@ -150,11 +150,6 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         /// cells for the draw call.
         cells_rebuilt: bool = false,
 
-        /// Track the row where we last applied cursor text color override.
-        /// When cursor blinks off, this row must be rebuilt to restore
-        /// original text colors. Set to maxInt when no override is active.
-        cursor_color_override_row: terminal.size.CellCountInt = std.math.maxInt(terminal.size.CellCountInt),
-
         /// The current GPU uniform values.
         uniforms: shaderpkg.Uniforms,
 
@@ -2388,30 +2383,6 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
             // Setup our cursor rendering information.
             cursor: {
-                // If we previously applied a cursor color override, rebuild
-                // that row to restore original text colors. This handles
-                // cursor blink-off and cursor movement correctly.
-                // On a full rebuild this is redundant but harmless.
-                if (self.cursor_color_override_row != std.math.maxInt(terminal.size.CellCountInt)) {
-                    const prev_y = self.cursor_color_override_row;
-                    self.cursor_color_override_row = std.math.maxInt(terminal.size.CellCountInt);
-                    if (!rebuild and prev_y < self.cells.size.rows and prev_y < row_len) {
-                        self.cells.clear(prev_y);
-                        self.rebuildRow(
-                            prev_y,
-                            row_raws[prev_y],
-                            &row_cells[prev_y],
-                            preedit_range,
-                            row_selection[prev_y],
-                            &row_highlights[prev_y],
-                            links,
-                        ) catch |err| {
-                            log.warn("error rebuilding cursor override row y={} err={}", .{ prev_y, err });
-                            self.cells.clear(prev_y);
-                        };
-                    }
-                }
-
                 // Clear our cursor by default.
                 self.cells.setCursor(null, null);
                 self.uniforms.cursor_pos = .{
@@ -2542,32 +2513,6 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                         uniform_color.b,
                         255,
                     };
-
-                    // Directly override text cell color at cursor position.
-                    // The shader-based cursor_pos/cursor_color inversion exists
-                    // in the vertex shader, but on D3D11 it may not produce
-                    // visible results due to rendering pipeline differences.
-                    // Setting the color directly in the cell data ensures the
-                    // character under the block cursor is always visible with
-                    // the correct inverted color.
-                    const cursor_x = self.uniforms.cursor_pos[0];
-                    const cursor_y = self.uniforms.cursor_pos[1];
-                    const row_idx = @as(usize, cursor_y) + 1;
-                    if (row_idx < self.cells.fg_rows.lists.len) {
-                        for (self.cells.fg_rows.lists[row_idx].items) |*item| {
-                            if (item.grid_pos[0] == cursor_x and item.grid_pos[1] == cursor_y) {
-                                item.color = .{
-                                    uniform_color.r,
-                                    uniform_color.g,
-                                    uniform_color.b,
-                                    255,
-                                };
-                            }
-                        }
-                        // Track this row so we can restore original colors
-                        // when cursor blinks off or moves away.
-                        self.cursor_color_override_row = @intCast(cursor_y);
-                    }
                 }
             }
 
