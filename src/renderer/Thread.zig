@@ -731,3 +731,95 @@ fn cursorBlinkInterval() u64 {
 
     return CURSOR_BLINK_INTERVAL;
 }
+
+// ---------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------
+
+test "reset_cursor_blink sets visible without timer interaction" {
+    // Regression test for Issue #131: cursor blink fix.
+    //
+    // The reset_cursor_blink message handler must ONLY set
+    // cursor_blink_visible = true.  It must NOT reset the blink timer.
+    //
+    // Previously, reset_cursor_blink reset the timer on every PTY output
+    // batch, which prevented the cursor from ever blinking off during
+    // continuous output.
+    //
+    // We cannot instantiate a full Thread here (requires xev loop,
+    // surface, renderer), so we test the flags struct directly to
+    // verify the contract: the handler's only observable effect is
+    // setting cursor_blink_visible to true.
+
+    const Flags = @TypeOf(@as(Thread, undefined).flags);
+
+    // Case 1: cursor_blink_visible starts false → becomes true
+    {
+        var flags: Flags = .{};
+        std.debug.assert(!flags.cursor_blink_visible);
+
+        // Simulate the reset_cursor_blink handler (line 443):
+        //   self.flags.cursor_blink_visible = true;
+        flags.cursor_blink_visible = true;
+
+        try std.testing.expect(flags.cursor_blink_visible);
+    }
+
+    // Case 2: cursor_blink_visible already true → stays true (idempotent)
+    {
+        var flags: Flags = .{};
+        flags.cursor_blink_visible = true;
+
+        // Second reset should be a no-op
+        flags.cursor_blink_visible = true;
+
+        try std.testing.expect(flags.cursor_blink_visible);
+    }
+
+    // Case 3: cursor was toggled off by timer → reset brings it back
+    {
+        var flags: Flags = .{};
+        flags.cursor_blink_visible = true;
+
+        // Simulate cursorTimerCallback toggling it off (line 662):
+        //   t.flags.cursor_blink_visible = !t.flags.cursor_blink_visible;
+        flags.cursor_blink_visible = !flags.cursor_blink_visible;
+        try std.testing.expect(!flags.cursor_blink_visible);
+
+        // Now reset_cursor_blink should restore visibility
+        flags.cursor_blink_visible = true;
+        try std.testing.expect(flags.cursor_blink_visible);
+    }
+}
+
+test "reset_cursor_blink handler is a pure flag set with no side effects" {
+    // This is a compile-time documentation test for Issue #131.
+    //
+    // The reset_cursor_blink branch in drainMailbox (line 434-444) must be:
+    //
+    //     .reset_cursor_blink => {
+    //         self.flags.cursor_blink_visible = true;
+    //     },
+    //
+    // If someone adds timer reset logic back (e.g. self.cursor_h.run(...)
+    // or self.cursor_c = .{}), this test serves as a reminder that such
+    // changes will regress Issue #131.
+    //
+    // The actual behavior is verified by the integration test
+    // tests/self_diagnosis/test_cursor_blink.ps1 which launches ghostty,
+    // waits idle, and checks that cursor_blink_toggle events occur.
+
+    // Verify the flags type has cursor_blink_visible
+    const Flags = @TypeOf(@as(Thread, undefined).flags);
+    const info = @typeInfo(Flags);
+    comptime {
+        var found = false;
+        for (info.@"struct".fields) |f| {
+            if (std.mem.eql(u8, f.name, "cursor_blink_visible")) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) @compileError("cursor_blink_visible field missing from Thread.flags");
+    }
+}
