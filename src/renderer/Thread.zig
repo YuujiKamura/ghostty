@@ -432,18 +432,15 @@ fn drainMailbox(self: *Thread) !void {
             },
 
             .reset_cursor_blink => {
+                // Make the cursor visible immediately, but do NOT reset the
+                // blink timer.  Resetting the timer on every PTY output batch
+                // prevents the cursor from ever blinking off in TUI apps that
+                // produce continuous output (status bars, screen repaints).
+                // Instead, let the timer run at its own cadence — the cursor
+                // will blink off naturally after the next interval completes.
+                // This matches Windows Terminal's approach: mutation → show
+                // cursor, but don't restart the timer if it's already running.
                 self.flags.cursor_blink_visible = true;
-                if (self.cursor_c.state() == .active) {
-                    self.cursor_h.reset(
-                        &self.loop,
-                        &self.cursor_c,
-                        &self.cursor_c_cancel,
-                        cursorBlinkInterval(),
-                        Thread,
-                        self,
-                        cursorTimerCallback,
-                    );
-                }
             },
 
             .font_grid => |grid| {
