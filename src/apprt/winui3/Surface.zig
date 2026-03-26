@@ -1023,18 +1023,34 @@ pub fn handleMouseButton(self: *Self, button: input.MouseButton, action: input.M
     if (!self.core_initialized) return;
     const mods = key.getModifiers();
 
-    // Capture/release the mouse so drag events are delivered even outside the window.
-    // Use input_hwnd when available — mouse events are routed through it.
-    if (action == .press) {
-        const capture_hwnd = self.app.input_hwnd orelse self.app.hwnd;
-        if (capture_hwnd) |h| _ = os.SetCapture(h);
-    } else {
-        _ = os.ReleaseCapture();
-    }
-
     _ = self.core_surface.mouseButtonCallback(action, button, mods) catch |err| {
         log.warn("mouse button callback error: {}", .{err});
         return;
+    };
+}
+
+/// Capture/release pointer on the surface_grid UIElement using XAML's CapturePointer.
+/// In XAML Islands, Win32 SetCapture does not work — pointer capture must go through
+/// the XAML compositor.  This matches Windows Terminal's TermControl pattern.
+fn capturePointer(self: *Self, ea: *com.IPointerRoutedEventArgs) void {
+    const grid = self.surface_grid orelse return;
+    const grid_ue = grid.queryInterface(com.IUIElement) catch return;
+    defer grid_ue.release();
+    const pointer = ea.Pointer() catch return;
+    defer pointer.release();
+    _ = grid_ue.CapturePointer(@ptrCast(pointer)) catch |err| {
+        log.warn("CapturePointer failed: {}", .{err});
+    };
+}
+
+fn releasePointerCapture(self: *Self, ea: *com.IPointerRoutedEventArgs) void {
+    const grid = self.surface_grid orelse return;
+    const grid_ue = grid.queryInterface(com.IUIElement) catch return;
+    defer grid_ue.release();
+    const pointer = ea.Pointer() catch return;
+    defer pointer.release();
+    grid_ue.ReleasePointerCapture(@ptrCast(pointer)) catch |err| {
+        log.warn("ReleasePointerCapture failed: {}", .{err});
     };
 }
 
@@ -1073,6 +1089,7 @@ fn onXamlPointerPressed(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
             tsf_impl.focus();
         }
     }
+    self.capturePointer(ea);
     self.handleMouseButton(button, .press);
     ea.SetHandled(true) catch {};
 }
@@ -1103,6 +1120,7 @@ fn onXamlPointerReleased(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
         6 => .middle, // MiddleButtonReleased
         else => return,
     };
+    self.releasePointerCapture(ea);
     self.handleMouseButton(button, .release);
     if (button == .right) {
         self.app.showContextMenuAtCursor();
