@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Regression test for CRD (Chrome Remote Desktop) IME passthrough.
@@ -189,8 +189,9 @@ try {
             Log "Using agent-ctl session: $sessionName"
             $japaneseText = "テスト入力"
             # Send Japanese text via TSF inject
-            $tsfResult = & bash $tsfScript $sessionName $japaneseText 2>&1
-            Test-Result "TSF inject sent" ($LASTEXITCODE -eq 0 -or $tsfResult -notmatch "ERROR") "$tsfResult"
+            $injectResult = & bash $tsfScript $sessionName $japaneseText 2>&1
+            $injectOk = ($LASTEXITCODE -eq 0) -or ("$injectResult" -notmatch "ERROR")
+            Test-Result "TSF inject sent" $injectOk "$injectResult"
             Start-Sleep -Seconds 2
 
             # Check TAIL for the Japanese text
@@ -213,7 +214,7 @@ try {
 
     # Clean up: send Ctrl+C
     $ctrlC = [Convert]::ToBase64String([byte[]]@(3))
-    Send-CP "INPUT|test|$ctrlC" | Out-Null
+    $null = Send-CP "INPUT|test|$ctrlC"
     Start-Sleep -Milliseconds 500
 
     # Summary
