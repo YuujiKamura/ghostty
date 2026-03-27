@@ -1462,3 +1462,346 @@ test "dirty row resets highlights" {
         try testing.expectEqual(0, row_highlights[0].items.len);
     }
 }
+
+test "preedit dirty flag triggers cursor row dirty" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var t = try Terminal.init(alloc, .{
+        .cols = 10,
+        .rows = 5,
+    });
+    defer t.deinit(alloc);
+
+    var s = t.vtStream();
+    defer s.deinit();
+    try s.nextSlice("Hello");
+
+    var state: RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    // After initial update, clear dirty state to simulate steady state
+    state.dirty = .false;
+    {
+        const row_data = state.row_data.slice();
+        @memset(row_data.items(.dirty), false);
+    }
+
+    // Verify no rows are dirty in steady state
+    try state.update(alloc, &t);
+    try testing.expectEqual(.false, state.dirty);
+    {
+        const row_data = state.row_data.slice();
+        for (row_data.items(.dirty)) |d| try testing.expect(!d);
+    }
+
+    // Now set preedit dirty flag (simulating Surface.preedit call)
+    t.flags.dirty.preedit = true;
+
+    try state.update(alloc, &t);
+
+    // Preedit dirty should trigger a full redraw, so state must be dirty
+    try testing.expect(state.dirty != .false);
+
+    // The cursor is at row 0 (after "Hello"), so row 0 must be dirty
+    {
+        const row_data = state.row_data.slice();
+        const dirty = row_data.items(.dirty);
+        try testing.expect(dirty[0]); // cursor row must be dirty
+    }
+
+    // After update, the preedit flag should be cleared
+    try testing.expect(!t.flags.dirty.preedit);
+}
+
+test "preedit dirty does not affect rows when preedit is inactive" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var t = try Terminal.init(alloc, .{
+        .cols = 10,
+        .rows = 5,
+    });
+    defer t.deinit(alloc);
+
+    var s = t.vtStream();
+    defer s.deinit();
+    try s.nextSlice("Hello");
+
+    var state: RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    // Settle into clean state
+    state.dirty = .false;
+    {
+        const row_data = state.row_data.slice();
+        @memset(row_data.items(.dirty), false);
+    }
+
+    // Without preedit flag, no row should become dirty
+    try state.update(alloc, &t);
+    try testing.expectEqual(.false, state.dirty);
+    {
+        const row_data = state.row_data.slice();
+        for (row_data.items(.dirty)) |d| try testing.expect(!d);
+    }
+}
+
+test "preedit dirty at column 0" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var t = try Terminal.init(alloc, .{
+        .cols = 10,
+        .rows = 5,
+    });
+    defer t.deinit(alloc);
+
+    // Cursor starts at column 0, row 0 — don't write anything
+    var state: RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    // Settle
+    state.dirty = .false;
+    {
+        const row_data = state.row_data.slice();
+        @memset(row_data.items(.dirty), false);
+    }
+    try state.update(alloc, &t);
+
+    // Set preedit dirty with cursor at column 0
+    t.flags.dirty.preedit = true;
+    try state.update(alloc, &t);
+
+    // Row 0 (cursor row) must be dirty
+    try testing.expect(state.dirty != .false);
+    {
+        const row_data = state.row_data.slice();
+        try testing.expect(row_data.items(.dirty)[0]);
+    }
+}
+
+test "preedit dirty at last column" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var t = try Terminal.init(alloc, .{
+        .cols = 10,
+        .rows = 5,
+    });
+    defer t.deinit(alloc);
+
+    var s = t.vtStream();
+    defer s.deinit();
+    // Fill the entire first row to push cursor to col 9 (last col)
+    try s.nextSlice("ABCDEFGHIJ");
+
+    var state: RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    // Settle
+    state.dirty = .false;
+    {
+        const row_data = state.row_data.slice();
+        @memset(row_data.items(.dirty), false);
+    }
+    try state.update(alloc, &t);
+
+    // After writing 10 chars in 10-col terminal, cursor wraps.
+    // Record which row the cursor is on.
+    const cursor_row = state.cursor.active.y;
+
+    t.flags.dirty.preedit = true;
+    try state.update(alloc, &t);
+
+    try testing.expect(state.dirty != .false);
+    {
+        const row_data = state.row_data.slice();
+        try testing.expect(row_data.items(.dirty)[cursor_row]);
+    }
+}
+
+test "preedit dirty on non-zero row" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var t = try Terminal.init(alloc, .{
+        .cols = 10,
+        .rows = 5,
+    });
+    defer t.deinit(alloc);
+
+    var s = t.vtStream();
+    defer s.deinit();
+    // Move cursor to row 3
+    try s.nextSlice("line1\r\nline2\r\nline3\r\nline4");
+
+    var state: RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    // Cursor should be on row 3
+    try testing.expectEqual(@as(size.CellCountInt, 3), state.cursor.active.y);
+
+    // Settle
+    state.dirty = .false;
+    {
+        const row_data = state.row_data.slice();
+        @memset(row_data.items(.dirty), false);
+    }
+    try state.update(alloc, &t);
+
+    // Set preedit dirty — only cursor row (3) should become dirty
+    t.flags.dirty.preedit = true;
+    try state.update(alloc, &t);
+
+    try testing.expect(state.dirty != .false);
+    {
+        const row_data = state.row_data.slice();
+        try testing.expect(row_data.items(.dirty)[3]);
+    }
+}
+
+test "preedit dirty flag cleared after rendering" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var t = try Terminal.init(alloc, .{
+        .cols = 10,
+        .rows = 5,
+    });
+    defer t.deinit(alloc);
+
+    var state: RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    // Settle
+    state.dirty = .false;
+    {
+        const row_data = state.row_data.slice();
+        @memset(row_data.items(.dirty), false);
+    }
+
+    // Set preedit dirty
+    t.flags.dirty.preedit = true;
+    try testing.expect(t.flags.dirty.preedit);
+
+    // Update consumes the dirty flag
+    try state.update(alloc, &t);
+    try testing.expect(!t.flags.dirty.preedit);
+
+    // Second update without re-setting dirty should NOT mark anything dirty
+    state.dirty = .false;
+    {
+        const row_data = state.row_data.slice();
+        @memset(row_data.items(.dirty), false);
+    }
+    try state.update(alloc, &t);
+    try testing.expectEqual(.false, state.dirty);
+}
+
+test "cursor page row dirty forces render state row dirty" {
+    // This tests the scenario where Surface.preeditCallback(null) directly
+    // marks the cursor's page row as dirty (without setting t.flags.dirty).
+    // The RenderState.update must pick up the page-level row dirty flag
+    // and propagate it to the render state's row dirty array.
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var t = try Terminal.init(alloc, .{
+        .cols = 10,
+        .rows = 5,
+    });
+    defer t.deinit(alloc);
+
+    var s = t.vtStream();
+    defer s.deinit();
+    try s.nextSlice("Hello");
+
+    var state: RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    // Settle into clean state
+    state.dirty = .false;
+    {
+        const row_data = state.row_data.slice();
+        @memset(row_data.items(.dirty), false);
+    }
+    try state.update(alloc, &t);
+    try testing.expectEqual(.false, state.dirty);
+
+    // Directly mark the cursor's page row as dirty — this simulates
+    // what the fix in Surface.preeditCallback(null) does
+    {
+        const screen = t.screens.active;
+        const page_rac = screen.cursor.page_pin.rowAndCell();
+        page_rac.row.dirty = true;
+    }
+
+    // Update should detect the page-level row dirty flag
+    try state.update(alloc, &t);
+    try testing.expect(state.dirty != .false);
+    {
+        const row_data = state.row_data.slice();
+        const dirty = row_data.items(.dirty);
+        // Cursor is at row 0, so row 0 must be dirty
+        try testing.expect(dirty[0]);
+        // Other rows must NOT be dirty
+        try testing.expect(!dirty[1]);
+        try testing.expect(!dirty[2]);
+    }
+}
+
+test "cursor page row dirty on non-first row" {
+    // Verify page-level row dirty works when cursor is not on row 0
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var t = try Terminal.init(alloc, .{
+        .cols = 10,
+        .rows = 5,
+    });
+    defer t.deinit(alloc);
+
+    var s = t.vtStream();
+    defer s.deinit();
+    try s.nextSlice("A\r\nB\r\nC");
+
+    var state: RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    // Cursor should be at row 2
+    try testing.expectEqual(@as(size.CellCountInt, 2), state.cursor.active.y);
+
+    // Settle
+    state.dirty = .false;
+    {
+        const row_data = state.row_data.slice();
+        @memset(row_data.items(.dirty), false);
+    }
+    try state.update(alloc, &t);
+
+    // Mark cursor page row dirty
+    {
+        const screen = t.screens.active;
+        const page_rac = screen.cursor.page_pin.rowAndCell();
+        page_rac.row.dirty = true;
+    }
+
+    try state.update(alloc, &t);
+    try testing.expect(state.dirty != .false);
+    {
+        const row_data = state.row_data.slice();
+        const dirty = row_data.items(.dirty);
+        try testing.expect(!dirty[0]); // row 0 clean
+        try testing.expect(!dirty[1]); // row 1 clean
+        try testing.expect(dirty[2]); // cursor row dirty
+    }
+}
