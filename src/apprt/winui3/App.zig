@@ -1991,6 +1991,11 @@ pub fn drainMailbox(self: *App) void {
 }
 
 fn logDiagnosticSnapshot(self: *App) void {
+    // Only run in Debug mode — the full page list walk is O(n) in the
+    // number of scrollback pages and becomes expensive with large
+    // scrollback buffers (Issue #138).
+    if (comptime builtin.mode != .Debug) return;
+
     log.debug("=== DIAGNOSTIC tick={} ===", .{diagnostic_tick_count});
     log.debug("  surfaces={} active_idx={}", .{ self.surfaces.items.len, self.active_surface_idx });
     log.debug("  resizing={} pending_size={}", .{
