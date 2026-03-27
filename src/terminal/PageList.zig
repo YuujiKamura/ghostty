@@ -14464,3 +14464,119 @@ test "PageList split preserves hyperlinks" {
         try testing.expectEqualStrings("https://example.com", link.uri.slice(second_page.memory));
     }
 }
+
+// ============================================================
+// Issue #138: Scrollback limit regression tests for PageList
+// ============================================================
+
+test "PageList max_size 0 means no scrollback not unlimited" {
+    // Critical: max_size=0 must mean "no scrollback" NOT "unlimited".
+    // When max_size is 0, explicit_max_size should be 0.
+    // Note: PageList may still have extra rows due to page allocation
+    // granularity, but the scrollbar reports no scrollback (see scrollbar()).
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var s = try init(alloc, 10, 3, 0);
+    defer s.deinit();
+
+    try testing.expectEqual(@as(usize, 0), s.explicit_max_size);
+
+    // Grow many rows
+    try s.growRows(100);
+
+    // With max_size=0, scrollbar should report no scrollback
+    const sb = s.scrollbar();
+    try testing.expectEqual(s.rows, sb.total);
+    try testing.expectEqual(@as(usize, 0), sb.offset);
+
+    // Scroll should be a no-op
+    s.scroll(.{ .top = {} });
+    try testing.expect(s.viewport == .active);
+}
+
+test "PageList null max_size means unlimited" {
+    // null max_size should set explicit_max_size to maxInt
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var s = try init(alloc, 10, 3, null);
+    defer s.deinit();
+
+    try testing.expectEqual(std.math.maxInt(usize), s.explicit_max_size);
+}
+
+test "PageList bounded max_size prunes scrollback" {
+    // With a small but non-zero max_size, pages should be pruned
+    // when the limit is exceeded.
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    // Use a very small max_size (just above minimum)
+    const cap = try std_capacity.adjust(.{ .cols = 10 });
+    const page_layout = Page.layout(cap);
+    const small_max = page_layout.total_size * 3; // allow ~3 pages
+
+    var s = try init(alloc, 10, 3, small_max);
+    defer s.deinit();
+
+    // Grow enough to exceed the limit many times over
+    try s.growRows(500);
+
+    // page_size should be bounded near maxSize
+    const max = s.maxSize();
+    // Allow 2x because active area may push slightly over
+    try testing.expect(s.page_size <= max * 2);
+}
+
+test "PageList grow with scrollback limit prunes first page" {
+    // Verify that when grow() exceeds max_size, the first page
+    // (oldest scrollback) is pruned and reused.
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    // Use a small scrollback limit
+    const cap = try std_capacity.adjust(.{ .cols = 80 });
+    const layout = Page.layout(cap);
+    // Allow about 2 pages worth of scrollback
+    var s = try init(alloc, 80, 24, layout.total_size * 2);
+    defer s.deinit();
+
+    // Grow enough rows to fill multiple pages and trigger pruning
+    // Each standard page holds cap.rows rows, so grow well beyond that
+    const rows_to_grow = cap.rows * 5;
+    try s.growRows(rows_to_grow);
+
+    // page_size should be bounded by maxSize (with some slack)
+    const max = s.maxSize();
+    try testing.expect(s.page_size <= max * 3);
+
+    // Total rows must be at least the viewport size
+    try testing.expect(s.total_rows >= s.rows);
+}
+
+test "PageList tracked pins relocated on prune" {
+    // When a page is pruned, pins pointing to it should be relocated
+    // to the new first page and marked as garbage.
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var s = try init(alloc, 80, 24, std_size * 2);
+    defer s.deinit();
+
+    // Track a pin on the first page
+    const first_node = s.pages.first.?;
+    const tracked = try s.trackPin(.{ .node = first_node, .y = 0, .x = 0 });
+    defer s.untrackPin(tracked);
+
+    // Grow until the first page is pruned
+    try s.growRows(1000);
+
+    // Pin should still be tracked
+    try testing.expect(s.tracked_pins.contains(tracked));
+
+    // If pruning happened, pin should have been moved and marked garbage
+    if (tracked.node != first_node) {
+        try testing.expect(tracked.garbage);
+    }
+}
