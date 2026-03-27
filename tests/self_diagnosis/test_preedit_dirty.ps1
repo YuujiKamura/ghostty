@@ -90,6 +90,10 @@ $setsDirty = $surfaceContent -match 'dirty\.preedit\s*=\s*true' -or
              $surfaceContent -match 'row\.dirty\s*=\s*true'
 Test-Result "preeditCallback sets dirty flag" $setsDirty
 
+# Check that preeditCallback calls cursorMarkDirty when clearing preedit (#133 fix)
+$callsCursorDirty = $surfaceContent -match 'cursorMarkDirty'
+Test-Result "preeditCallback calls cursorMarkDirty (fix for first-char loss #133)" $callsCursorDirty
+
 # --- Test 4: Terminal.Dirty has preedit field ---
 $terminalZig = Join-Path $script:RepoRoot "src\terminal\Terminal.zig"
 $terminalContent = Get-Content $terminalZig -Raw
