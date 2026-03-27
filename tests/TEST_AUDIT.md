@@ -4,25 +4,30 @@ Generated: 2026-03-27
 
 ## 1. テスト一覧
 
-### tests/self_diagnosis/ (15 files)
+### tests/self_diagnosis/ (20 files)
 
 | # | ファイル | 種別 | テスト対象 | 関連Issue |
 |---|---------|------|-----------|----------|
 | 1 | cursor_test.ps1 | 手動 | カーソル位置の目視確認 | — |
 | 2 | diagnose.ps1 | 統合 | CP全機能(PING/STATE/TAIL/INPUT)、並列PING、メモリ、耐久300s | — |
-| 3 | test_crd_ime_passthrough.ps1 | 静的+RT | VK_OEM_CLEAR(0xFF)のIMEパススルー（CRD対応） | #133 |
-| 4 | test_cursor.py | 手動 | カーソル移動の目視確認（Python版） | — |
-| 5 | test_cursor_blink.ps1 | RT | アイドル時のカーソルブリンク（CPU時間計測） | #131 |
-| 6 | test_diagnose_ps1_syntax.ps1 | 静的 | diagnose.ps1他の構文エラー検出、$Pid→$ProcessIdリネーム | — |
-| 7 | test_eraseline_firstchar.ps1 | RT | 履歴リコール時の先頭文字消失（CP INPUT→TAIL検証） | #133 |
-| 8 | test_ime_char_handler.ps1 | 静的+RT | WM_IME_CHAR(0x0286)ハンドラ存在＋TSFインジェクト | #133 |
-| 9 | test_lefthook_config.ps1 | 静的 | lefthook設定（zig-fmt、vtable-manifest、pre-push） | — |
-| 10 | test_preedit_dirty.ps1 | 静的 | preedit dirtyフラグのコード内存在確認 | #133 |
-| 11 | test_resize_crash.ps1 | RT | リサイズ中のクラッシュ（SetWindowPos×50回） | #86 |
-| 12 | test_surface_refactor.ps1 | 静的 | Surface.zig init/deinit分割の関数存在確認 | — |
-| 13 | test_text_selection.ps1 | 静的+RT | XAML CapturePointer使用、Win32 SetCapture不使用 | #132 |
-| 14 | test_touch_scroll.ps1 | 静的 | PointerDeviceType分岐、touch_anchorフィールド | #134 |
-| 15 | test_tsf_setfocus_null_guard.ps1 | 静的 | TSF focus() nullガード、WM_ACTIVATE移行 | #135 |
+| 3 | test_bg_color_blend.ps1 | 静的 | HLSL bg_color alpha blend簡素化（global_bgとの合成） | — |
+| 4 | test_crd_ime_passthrough.ps1 | 静的+RT | VK_OEM_CLEAR(0xFF)のIMEパススルー（CRD対応） | #133 |
+| 5 | test_cursor.py | 手動 | カーソル移動の目視確認（Python版） | — |
+| 6 | test_cursor_blink.ps1 | RT | アイドル時のカーソルブリンク（CPU時間計測） | #131 |
+| 7 | test_cursor_color_override.ps1 | 静的 | CPUサイドカーソルカラーオーバーライド削除の回帰防止 | #133 |
+| 8 | test_cursor_d3d11_inversion.ps1 | 静的 | D3D11シェーダーによるカーソルテキスト反転（cursor_pos/color/wide） | #130 |
+| 9 | test_diagnose_ps1_syntax.ps1 | 静的 | diagnose.ps1他の構文エラー検出、$Pid→$ProcessIdリネーム | — |
+| 10 | test_eraseline_firstchar.ps1 | RT | 履歴リコール時の先頭文字消失（CP INPUT→TAIL検証） | #133 |
+| 11 | test_ime_char_handler.ps1 | 静的+RT | WM_IME_CHAR(0x0286)ハンドラ存在＋TSFインジェクト | #133 |
+| 12 | test_lefthook_config.ps1 | 静的 | lefthook設定（zig-fmt、vtable-manifest、pre-push） | — |
+| 13 | test_preedit_dirty.ps1 | 静的 | preedit dirtyフラグのコード内存在確認 | #133 |
+| 14 | test_resize_crash.ps1 | RT | リサイズ中のクラッシュ（SetWindowPos×50回） | #86 |
+| 15 | test_surface_refactor.ps1 | 静的 | Surface.zig init/deinit分割の関数存在確認 | — |
+| 16 | test_tab_closetab_fix.ps1 | 静的 | closeTabのCOM indexOf使用、stale indexOfScalar排除 | #129 |
+| 17 | test_text_selection.ps1 | 静的+RT | XAML CapturePointer使用、Win32 SetCapture不使用 | #132 |
+| 18 | test_touch_scroll.ps1 | 静的 | PointerDeviceType分岐、touch_anchorフィールド | #134 |
+| 19 | test_tsf_setfocus_null_guard.ps1 | 静的 | TSF focus() nullガード、WM_ACTIVATE移行 | #135 |
+| 20 | test_zig_native_cp.ps1 | 静的 | Zig-native CP移行完了（Rust DLL参照なし、named pipe IPC） | — |
 
 ### tests/winui3/ (13 test files + 5 runners + 1 helper)
 
@@ -84,7 +89,11 @@ Generated: 2026-03-27
 
 | コミット | 内容 | 不足テスト |
 |---------|------|-----------|
-| `3cc65ef47` | CPUサイドカーソルカラーオーバーライド削除 | **要追加**: Surface.zigに`cursor_color`のCPUサイドオーバーライドが存在しないことを確認する静的テスト |
+| `3cc65ef47` | CPUサイドカーソルカラーオーバーライド削除 | **test_cursor_color_override.ps1で対応済み** |
+| `e3933974f` | ブロックカーソルD3D11反転 (#130) | **test_cursor_d3d11_inversion.ps1で対応済み** |
+| `42297d393` | Zig-native CP (Rust DLL除去) | **test_zig_native_cp.ps1で対応済み** |
+| `b7faab7d3` | closeTab indexOf修正 (#129) | **test_tab_closetab_fix.ps1で対応済み** |
+| `56859a505` | HLSL bg_color blend簡素化 | **test_bg_color_blend.ps1で対応済み** |
 | `2b4c42f78` | GitHub Actions CI workflow追加 | テスト対象外（CI設定自体のテスト不要） |
 
 ## 4. 実行順序の依存関係
