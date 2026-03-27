@@ -56,7 +56,7 @@ Generated: 2026-03-27
 
 | 問題 | 詳細 |
 |------|------|
-| **agent-ctl依存** | winui3テスト群はagent-ctl (agent-relay) を前提とするが、agent-relayはアーカイブ済み。agent-deck経由に切り替える必要あり |
+| **~~agent-ctl依存~~** | ~~winui3テスト群はagent-ctl (agent-relay) を前提~~ → **agent-deck に移行済み** (2026-03-27) |
 | **test_preedit_dirty.ps1のアサーション** | render.zigに`flags.dirty.preedit`参照を期待するが、実際にはrender.zig:276-280でDirty全体を整数比較してる。個別フィールド参照はない。テストが誤検出する可能性 |
 
 ## 3. 今日のコミットとテストカバレッジの突合
@@ -130,7 +130,7 @@ self_diagnosis/:
 
 | テスト | 暗黙の前提 | リスク |
 |--------|-----------|-------|
-| test-02d, 02e, 04, 06, 07 | agent-ctl (agent-relay) | **agent-relay はアーカイブ済み。agent-deck に移行が必要** |
+| test-02d, 02e, 04, 06, 07 | agent-deck (~/agent-deck/agent-deck.exe) | **agent-deck に移行済み** (2026-03-27) |
 | test-07-tsf-ime | bash + tsf-inject.sh | MSYS2 bash がPATHにないと失敗 |
 | test-05-ghost-demo | play.py + python3 | Python未インストールで失敗 |
 | test-01-lifecycle | CLOSE_TAB_AFTER_MS | ReleaseFastではcomptime gateで無効。Stop-Processフォールバック |
@@ -138,6 +138,6 @@ self_diagnosis/:
 ## 5. 推奨アクション
 
 1. **3cc65ef47のテスト追加**: カーソルカラーCPUオーバーライドが復活しないことを確認する静的テスト
-2. **agent-ctl → agent-deck移行**: CP依存テスト群のagent-ctl呼び出しをagent-deck CLIに置き換え
+2. ~~**agent-ctl → agent-deck移行**~~: **完了** (2026-03-27) — 全CP依存テストをagent-deck CLIに移行済み
 3. **test_preedit_dirty.ps1のアサーション修正**: render.zigでの`flags.dirty.preedit`個別参照チェックを、整数比較パスのチェックに変更
 4. **手動テスト(cursor_test.ps1, test_cursor.py)の自動化**: CP TAIL + テキスト検証で自動化可能

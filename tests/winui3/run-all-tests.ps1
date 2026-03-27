@@ -80,19 +80,20 @@ Write-Host "`n=== Phase 2: Launching Ghostty for shared tests ===" -ForegroundCo
 $env:GHOSTTY_CONTROL_PLANE = "1"
 
 # Clean stale ghostty session files (Force Kill doesn't trigger DLL cleanup)
-$agentCtl = Join-Path $env:USERPROFILE "agent-relay\target\debug\agent-ctl.exe"
-$sessionDir = Join-Path $env:LOCALAPPDATA "WindowsTerminal\control-plane\winui3\sessions"
-if (Test-Path $sessionDir) {
-    Get-ChildItem "$sessionDir\ghostty-*.session" -ErrorAction SilentlyContinue | ForEach-Object {
-        $content = Get-Content $_.FullName -Raw
-        if ($content -match 'pid=(\d+)') {
-            $sessionPid = [int]$Matches[1]
-            $liveProc = Get-Process -Id $sessionPid -ErrorAction SilentlyContinue
-            # PID reuse check: must be ghostty, not some other process
-            $isGhostty = $liveProc -and ($liveProc.ProcessName -eq 'ghostty')
-            if (-not $isGhostty) {
-                Remove-Item $_.FullName -Force
-                Write-Host "  Cleaned stale session: $($_.Name)" -ForegroundColor DarkGray
+$agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+$ghosttySessionDir = Join-Path $env:LOCALAPPDATA "ghostty\control-plane\winui3\sessions"
+foreach ($sessionDir in @($ghosttySessionDir, (Join-Path $env:LOCALAPPDATA "WindowsTerminal\control-plane\winui3\sessions"))) {
+    if (Test-Path $sessionDir) {
+        Get-ChildItem "$sessionDir\ghostty-*.session" -ErrorAction SilentlyContinue | ForEach-Object {
+            $content = Get-Content $_.FullName -Raw
+            if ($content -match 'pid=(\d+)') {
+                $sessionPid = [int]$Matches[1]
+                $liveProc = Get-Process -Id $sessionPid -ErrorAction SilentlyContinue
+                $isGhostty = $liveProc -and ($liveProc.ProcessName -eq 'ghostty')
+                if (-not $isGhostty) {
+                    Remove-Item $_.FullName -Force
+                    Write-Host "  Cleaned stale session: $($_.Name)" -ForegroundColor DarkGray
+                }
             }
         }
     }
@@ -143,14 +144,15 @@ if (-not $needSharedGhostty) {
     # Give XAML time to fully initialize + CP DLL to register session
     Start-Sleep -Milliseconds 3000
 
-    # Discover the ghostty CP session
+    # Discover the ghostty CP session via agent-deck
     $env:GHOSTTY_CP_SESSION = ""
-    if (Test-Path $agentCtl) {
-        $aliveList = @(& $agentCtl list --alive-only 2>$null | Where-Object { $_ -match "ALIVE.*ghostty" })
-        if ($aliveList.Count -gt 0) {
-            $line = $aliveList[-1]  # most recent
-            if ($line -match 'session=([^\s|]+)') {
-                $env:GHOSTTY_CP_SESSION = $Matches[1]
+    if (Test-Path $agentDeck) {
+        $lsJson = & $agentDeck ls --json 2>$null
+        if ($lsJson) {
+            $parsed = $lsJson | ConvertFrom-Json
+            $cpSessions = @($parsed | Where-Object { $_.source -eq "ghostty" })
+            if ($cpSessions.Count -gt 0) {
+                $env:GHOSTTY_CP_SESSION = $cpSessions[-1].title
                 Write-Host "  CP session: $($env:GHOSTTY_CP_SESSION)" -ForegroundColor Green
             }
         }

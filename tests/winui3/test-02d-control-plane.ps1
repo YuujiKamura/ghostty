@@ -1,65 +1,59 @@
 param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
-# test-02d-control-plane — Verify control plane DLL responds to agent-ctl smoke test.
+# test-02d-control-plane — Verify control plane DLL responds via agent-deck.
 # Requires: GHOSTTY_CONTROL_PLANE=1 env var on the shared ghostty process,
-# and agent-ctl built at ~/agent-ctl/target/release/ or target/debug/.
+# and agent-deck built at ~/agent-deck/agent-deck.exe.
 
 $ErrorActionPreference = 'Stop'
 $testName = "test-02d-control-plane"
 
-# Find agent-ctl binary
-$agentCtl = $null
-foreach ($candidate in @(
-    "$env:USERPROFILE\agent-relay\target\release\agent-ctl.exe",
-    "$env:USERPROFILE\agent-relay\target\debug\agent-ctl.exe"
-)) {
-    if (Test-Path $candidate) { $agentCtl = $candidate; break }
-}
-
-if (-not $agentCtl) {
-    Write-Host "SKIP: $testName — agent-ctl.exe not found" -ForegroundColor Yellow
+# Find agent-deck binary
+$agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+if (-not (Test-Path $agentDeck)) {
+    Write-Host "SKIP: $testName — agent-deck.exe not found at $agentDeck" -ForegroundColor Yellow
     return
 }
 
-# Find alive ghostty session
-$listOutput = & $agentCtl list --alive-only 2>&1 | Where-Object { $_ -match "ALIVE.*ghostty" }
-if (-not $listOutput -or @($listOutput).Count -eq 0) {
-    Write-Host "SKIP: $testName — no alive ghostty session (is GHOSTTY_CONTROL_PLANE=1 set?)" -ForegroundColor Yellow
+# Find alive ghostty session via agent-deck ls
+$lsOutput = & $agentDeck ls --json 2>$null | ConvertFrom-Json
+$cpSessions = @($lsOutput | Where-Object { $_.source -eq "ghostty" -and $_.pid -gt 0 })
+if ($cpSessions.Count -eq 0) {
+    Write-Host "SKIP: $testName — no alive ghostty CP session (is GHOSTTY_CONTROL_PLANE=1 set?)" -ForegroundColor Yellow
     return
 }
 
-# Extract session name from first alive line
-$sessionLine = if ($listOutput -is [array]) { $listOutput[0] } else { $listOutput }
-if ($sessionLine -match 'session=([^\s|]+)') {
-    $sessionName = $Matches[1]
+$sessionName = $cpSessions[0].title
+Write-Host "  Found session: $sessionName (pid=$($cpSessions[0].pid))" -ForegroundColor DarkGray
+
+# Smoke test: session show (verifies PING + pipe connectivity)
+$showOutput = & $agentDeck session show $sessionName --json 2>&1 | Out-String
+$showExit = $LASTEXITCODE
+
+$passChecks = 0
+$failChecks = 0
+
+# Check 1: session show succeeds
+if ($showExit -eq 0 -and $showOutput -match '"status"') {
+    $passChecks++
+    Write-Host "  PING/SHOW ............... PASS" -ForegroundColor Green
 } else {
-    Write-Host "FAIL: $testName — could not parse session name from: $sessionLine" -ForegroundColor Red
-    throw "FAIL: $testName"
+    $failChecks++
+    Write-Host "  PING/SHOW ............... FAIL" -ForegroundColor Red
 }
 
-Write-Host "  Found session: $sessionName" -ForegroundColor DarkGray
+# Check 2: send a marker and read it back
+$marker = "cp-smoke-$(Get-Random -Minimum 1000 -Maximum 9999)"
+& $agentDeck session send $sessionName "echo $marker" --no-wait 2>$null | Out-Null
+Start-Sleep -Milliseconds 2000
+$outputContent = & $agentDeck session output $sessionName -q 2>$null | Out-String
 
-# Run smoke test
-$smokeOutput = & $agentCtl smoke $sessionName 2>&1
-$smokeExit = $LASTEXITCODE
-
-# Parse results
-# Filter only lines that start with test step names (PING, LIST_TABS, STATE, etc.)
-$passCount = @($smokeOutput | Select-String "^\s*(PING|LIST_TABS|STATE|SEND|TAIL).*PASS").Count
-$failCount = @($smokeOutput | Select-String "^\s*(PING|LIST_TABS|STATE|SEND|TAIL).*FAIL").Count
-# Also check the summary line
-$summaryFail = @($smokeOutput | Select-String "^Results:.*\d+ failed").Count
-if ($summaryFail -gt 0 -and @($smokeOutput | Select-String "^Results: \d+ passed, 0 failed").Count -eq 0) {
-    $failCount = [Math]::Max($failCount, 1)
+if ($outputContent -match $marker) {
+    $passChecks++
+    Write-Host "  SEND+READ ............... PASS" -ForegroundColor Green
+} else {
+    $failChecks++
+    Write-Host "  SEND+READ ............... FAIL (marker '$marker' not found)" -ForegroundColor Red
 }
 
-foreach ($line in $smokeOutput) {
-    if ($line -match "PASS") {
-        Write-Host "  $line" -ForegroundColor Green
-    } elseif ($line -match "FAIL") {
-        Write-Host "  $line" -ForegroundColor Red
-    }
-}
-
-Test-Assert -Condition ($failCount -eq 0) -Message "$testName - agent-ctl smoke passed ($passCount checks, 0 failures)"
-Write-Host "PASS: $testName - control plane responds to agent-ctl (session=$sessionName)" -ForegroundColor Green
+Test-Assert -Condition ($failChecks -eq 0) -Message "$testName - agent-deck CP smoke passed ($passChecks checks, 0 failures)"
+Write-Host "PASS: $testName - control plane responds to agent-deck (session=$sessionName)" -ForegroundColor Green

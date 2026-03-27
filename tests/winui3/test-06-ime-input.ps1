@@ -1,7 +1,7 @@
-﻿param([IntPtr]$Hwnd, [int]$ProcessId = 0)
+param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
 # test-06-ime-input — Japanese IME input verification.
-# Sub-test 1: UTF-8 Japanese text round-trip via Control Plane echo + TAIL
+# Sub-test 1: UTF-8 Japanese text round-trip via agent-deck send + output
 # Sub-test 2: IME composing state management via WM_APP_TEST_FAKE_IME_COMPOSING
 # Sub-test 3: Multi-byte echo stability (repeat to detect drift)
 
@@ -12,32 +12,33 @@ $testName = "test-06-ime-input"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-# --- Helper: run agent-ctl without $ErrorActionPreference='Stop' killing on stderr ---
-function Invoke-AgentCtl {
-    param([string[]]$CtlArgs)
+# --- Helper: run agent-deck without $ErrorActionPreference='Stop' killing on stderr ---
+function Invoke-AgentDeck {
+    param([string[]]$DeckArgs)
     $prev = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        & $agentCtl @CtlArgs 2>$null
+        & $agentDeck @DeckArgs 2>$null
     } finally {
         $ErrorActionPreference = $prev
     }
 }
 
-# --- Prerequisite: agent-ctl + session ---
-$agentCtl = Join-Path $env:USERPROFILE "agent-relay\target\debug\agent-ctl.exe"
+# --- Prerequisite: agent-deck + session ---
+$agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
 $sessionName = $env:GHOSTTY_CP_SESSION
 if (-not $sessionName) {
-    $listOutput = Invoke-AgentCtl -CtlArgs @('list', '--alive-only') | Where-Object { $_ -match "ALIVE.*ghostty" }
-    if ($listOutput) {
-        $sessionLine = if ($listOutput -is [array]) { $listOutput[-1] } else { $listOutput }
-        if ($sessionLine -match 'session=([^\s|]+)') { $sessionName = $Matches[1] }
+    $lsOutput = Invoke-AgentDeck -DeckArgs @('ls', '--json') | Out-String
+    $parsed = $lsOutput | ConvertFrom-Json
+    $cpSessions = @($parsed | Where-Object { $_.source -eq "ghostty" })
+    if ($cpSessions.Count -gt 0) {
+        $sessionName = $cpSessions[-1].title
     }
 }
 Write-Host "  Session: $sessionName" -ForegroundColor DarkGray
 
-if (-not (Test-Path $agentCtl) -or -not $sessionName) {
-    Write-Host "  SKIP: agent-ctl not found or no alive session" -ForegroundColor Yellow
+if (-not (Test-Path $agentDeck) -or -not $sessionName) {
+    Write-Host "  SKIP: agent-deck not found or no alive session" -ForegroundColor Yellow
     Write-Host "PASS: $testName - skipped (no CP)" -ForegroundColor Green
     return
 }
@@ -51,21 +52,21 @@ $marker = "ime-test-$(Get-Random -Minimum 1000 -Maximum 9999)"
 $jpText = [char]0x30C6 + [char]0x30B9 + [char]0x30C8  # テスト
 $echoCmd = "echo ${marker}-${jpText}"
 
-# agent-ctl send already includes Enter (INPUT + 1s sleep + RAW_INPUT CR)
-Invoke-AgentCtl -CtlArgs @('send', $sessionName, $echoCmd) | Out-Null
+# agent-deck session send delivers text+Enter atomically
+Invoke-AgentDeck -DeckArgs @('session', 'send', $sessionName, $echoCmd, '--no-wait') | Out-Null
 Start-Sleep -Milliseconds 2000
 
-$tail = Invoke-AgentCtl -CtlArgs @('read', $sessionName)
+$tail = Invoke-AgentDeck -DeckArgs @('session', 'output', $sessionName, '-q')
 $tailStr = ($tail | Out-String)
 
 # Check marker (ASCII) is present
 $markerFound = $tailStr -match $marker
-Write-Host "  TAIL contains marker '$marker': $markerFound" -ForegroundColor Gray
+Write-Host "  Output contains marker '$marker': $markerFound" -ForegroundColor Gray
 Test-Assert -Condition $markerFound -Message "$testName/jp-roundtrip - marker found in terminal buffer"
 
 # Check Japanese text survived UTF-8 round-trip
 $jpFound = $tailStr -match $jpText
-Write-Host "  TAIL contains Japanese text: $jpFound" -ForegroundColor Gray
+Write-Host "  Output contains Japanese text: $jpFound" -ForegroundColor Gray
 Test-Assert -Condition $jpFound -Message "$testName/jp-roundtrip - Japanese text survives UTF-8 round-trip"
 
 # ============================================================
@@ -95,9 +96,6 @@ if ($inputOverlay -eq [IntPtr]::Zero) {
     [Win32]::PostMessageW($inputOverlay, $WM_KILLFOCUS, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
     Start-Sleep -Milliseconds 500
 
-    # Verify via debug.log that the composing state was set and cleaned up.
-    # NOTE: The WM_APP_TEST_FAKE_IME_COMPOSING handler is gated behind
-    # `comptime builtin.mode == .Debug` — it does not exist in ReleaseFast.
     # Skip this check for Release builds (exe < 50MB = Release).
     $exePath2 = Join-Path $PSScriptRoot "..\..\zig-out-winui3\bin\ghostty.exe"
     $isRelease = (Test-Path $exePath2) -and ((Get-Item $exePath2).Length -lt 50MB)
@@ -142,10 +140,10 @@ for ($i = 0; $i -lt $jpStrings.Count; $i++) {
     $driftJp = $jpStrings[$i]
     $driftCmd = "echo ${driftMarker}-${driftJp}"
 
-    Invoke-AgentCtl -CtlArgs @('send', $sessionName, $driftCmd) | Out-Null
+    Invoke-AgentDeck -DeckArgs @('session', 'send', $sessionName, $driftCmd, '--no-wait') | Out-Null
     Start-Sleep -Milliseconds 2000
 
-    $driftTail = Invoke-AgentCtl -CtlArgs @('read', $sessionName)
+    $driftTail = Invoke-AgentDeck -DeckArgs @('session', 'output', $sessionName, '-q')
     $driftStr = ($driftTail | Out-String)
 
     $driftOk = $driftStr -match "${driftMarker}-${driftJp}"

@@ -13,7 +13,7 @@ if (-not (Test-Path $exePath)) {
     throw "$testName FAIL: ghostty.exe not found at $exePath"
 }
 
-$agentCtl = Join-Path $env:USERPROFILE "agent-relay\target\debug\agent-ctl.exe"
+$agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
 $logPath = Join-Path $env:TEMP "ghostty_debug.log"
 
 # Kill any existing ghostty
@@ -37,15 +37,15 @@ Start-Sleep -Seconds 6
 $proc.Refresh()
 Test-Assert -Condition (-not $proc.HasExited) -Message "$testName - process alive after 6s"
 
-# Find CP session
+# Find CP session via agent-deck
 $sessionName = ""
-if (Test-Path $agentCtl) {
-    # Match session for OUR PID only (avoid stale sessions from run-single-test.ps1)
-    $aliveList = @(& $agentCtl list --alive-only 2>$null | Where-Object { $_ -match "ALIVE.*ghostty-$procId" })
-    if ($aliveList.Count -gt 0) {
-        $line = $aliveList[-1]
-        if ($line -match 'session=([^\s|]+)') {
-            $sessionName = $Matches[1]
+if (Test-Path $agentDeck) {
+    $lsJson = & $agentDeck ls --json 2>$null
+    if ($lsJson) {
+        $parsed = $lsJson | ConvertFrom-Json
+        $cpSessions = @($parsed | Where-Object { $_.source -eq "ghostty" -and $_.pid -eq $procId })
+        if ($cpSessions.Count -gt 0) {
+            $sessionName = $cpSessions[0].title
         }
     }
 }
@@ -57,7 +57,7 @@ if ($sessionName) {
     $playPy = "C:\Users\yuuji\ghostty-win\tools\ghost-demo\play.py"
     $prev = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    & $agentCtl send $sessionName "python `"$playPy`" --fps 60" 2>$null
+    & $agentDeck session send $sessionName "python `"$playPy`" --fps 60" --no-wait 2>$null
     $ErrorActionPreference = $prev
     Write-Host "  Sent play.py --fps 60 (auto-scale)" -ForegroundColor DarkGray
 

@@ -1,7 +1,7 @@
 param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
 # test-07-tsf-ime -- TSF IME fix verification via CP TSF_INJECT.
-# Uses agent-ctl send with ESC[TSF: prefix to route text through TSF commit path.
+# Uses agent-deck session send + bash tsf-inject.sh for ESC[TSF: prefix.
 
 $ErrorActionPreference = 'Continue'
 $testName = "test-07-tsf-ime"
@@ -20,27 +20,28 @@ function Test-Soft {
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-# --- Prerequisite: agent-ctl + session ---
-$agentCtl = Join-Path $env:USERPROFILE "agent-relay\target\debug\agent-ctl.exe"
-$listOutput = & $agentCtl list 2>$null | Where-Object { $_ -match "ALIVE" -and $_ -match "ghostty" }
+# --- Prerequisite: agent-deck + session ---
+$agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
 $sessionName = $null
-if ($listOutput) {
-    # Pick the session matching our PID
-    foreach ($line in $listOutput) {
-        if ($line -match "pid=$ProcessId") {
-            if ($line -match 'session=([^\s|]+)') { $sessionName = $Matches[1] }
-        }
+
+# Discover session: prefer matching PID, fallback to first alive
+$lsOutput = & $agentDeck ls --json 2>$null
+if ($lsOutput) {
+    $parsed = $lsOutput | ConvertFrom-Json
+    $cpSessions = @($parsed | Where-Object { $_.source -eq "ghostty" })
+    # Try matching PID
+    foreach ($s in $cpSessions) {
+        if ($s.pid -eq $ProcessId) { $sessionName = $s.title; break }
     }
-    # Fallback: first alive ghostty session
-    if (-not $sessionName -and $listOutput) {
-        $first = if ($listOutput -is [array]) { $listOutput[0] } else { $listOutput }
-        if ($first -match 'session=([^\s|]+)') { $sessionName = $Matches[1] }
+    # Fallback: first alive
+    if (-not $sessionName -and $cpSessions.Count -gt 0) {
+        $sessionName = $cpSessions[0].title
     }
 }
 Write-Host "  Session: $sessionName" -ForegroundColor DarkGray
 
-if (-not (Test-Path $agentCtl) -or -not $sessionName) {
-    Write-Host "  SKIP: agent-ctl not found or no alive ghostty session" -ForegroundColor Yellow
+if (-not (Test-Path $agentDeck) -or -not $sessionName) {
+    Write-Host "  SKIP: agent-deck not found or no alive ghostty session" -ForegroundColor Yellow
     Write-Host "PASS: $testName - skipped (no CP)" -ForegroundColor Green
     return
 }
@@ -56,11 +57,10 @@ function Get-RecentLog {
 }
 
 # Helper: send TSF inject via bash (PowerShell mangles ESC byte)
+# tsf-inject.sh uses agent-deck session send internally now
 function Send-TsfInject {
     param([string]$Session, [string]$Text)
-    # Use bash printf to construct ESC[TSF:<text> and pipe to agent-ctl send
-    $bashCmd = "printf '\033[TSF:$Text' | xargs -0 ~/agent-relay/target/debug/agent-ctl.exe send $Session"
-    & bash -c $bashCmd 2>&1 | Out-Null
+    & bash (Join-Path $PSScriptRoot "tsf-inject.sh") $Session $Text 2>&1 | Out-Null
 }
 
 # ============================================================
@@ -87,8 +87,6 @@ $hasCodeFix = $surfaceCode -match "fn onXamlGotFocus[\s\S]{0,2000}findWindowOfAc
 Write-Host "  re-associateFocus in log: $hasReAssociate" -ForegroundColor Gray
 Write-Host "  GotFocus + associateFocus in log: $hasGotFocusAssociate" -ForegroundColor Gray
 Write-Host "  Code has fix: $hasCodeFix" -ForegroundColor Gray
-# findWindowOfActiveTSF is currently commented out in Surface.zig, so runtime log
-# won't appear. Code static check alone is sufficient.
 Test-Soft -Condition $hasCodeFix `
     -Message "$testName/fix1 - GotFocus code path exists (findWindowOfActiveTSF in onXamlGotFocus)"
 
@@ -98,7 +96,7 @@ Test-Soft -Condition $hasCodeFix `
 Write-Host "  --- Sub-test 2: TSF_INJECT composition lifecycle ---" -ForegroundColor Cyan
 
 # Send TSF inject: ESC[TSF:あ via bash to avoid PowerShell ESC mangling
-& bash (Join-Path $PSScriptRoot "tsf-inject.sh") $sessionName ([char]0x3042).ToString() 2>&1 | Out-Null
+Send-TsfInject -Session $sessionName -Text ([char]0x3042).ToString()
 Start-Sleep -Milliseconds 2000
 
 $log2 = Get-RecentLog -Lines 500
@@ -116,8 +114,6 @@ Write-Host "  tsfHandleOutput: $hasHandleOutput" -ForegroundColor Gray
 
 Test-Soft -Condition $hasTsfInject `
     -Message "$testName/fix2 - TSF_INJECT route activated via CP"
-# OnStartComposition/OnEndComposition/textEditSinkOnEndEdit are log.debug level
-# and not visible in info-level log output. TSF_INJECT trigger is sufficient.
 if ($hasOnStart -and $hasEndEdit -and $hasOnEnd) {
     Write-Host "  PASS: $testName/fix2 - composition lifecycle visible in log" -ForegroundColor Green
 } else {
@@ -130,7 +126,7 @@ if ($hasOnStart -and $hasEndEdit -and $hasOnEnd) {
 Write-Host "  --- Sub-test 3: tsf_just_committed flag ---" -ForegroundColor Cyan
 
 # Send another TSF inject
-& bash (Join-Path $PSScriptRoot "tsf-inject.sh") $sessionName ([char]0x304B).ToString() 2>&1 | Out-Null
+Send-TsfInject -Session $sessionName -Text ([char]0x304B).ToString()
 Start-Sleep -Milliseconds 1500
 
 $log3 = Get-RecentLog -Lines 500
@@ -146,8 +142,6 @@ $hasFlagCheck = $surfaceContent -match "tsf_just_committed.*0x0D"
 Write-Host "  tsf_just_committed = true in App.zig: $hasFlagSet" -ForegroundColor Gray
 Write-Host "  VK_RETURN check in Surface.zig: $hasFlagCheck" -ForegroundColor Gray
 
-# "tsfHandleOutput" is a function name, not a log message. The function logs
-# "TSF_INJECT: simulating" instead. Use static code checks only.
 Test-Soft -Condition ($hasFlagSet -and $hasFlagCheck) `
     -Message "$testName/fix3 - tsf_just_committed set on commit, checked for VK_RETURN (code check)"
 
@@ -157,16 +151,14 @@ Test-Soft -Condition ($hasFlagSet -and $hasFlagCheck) `
 Write-Host "  --- Sub-test 4: No doubled characters ---" -ForegroundColor Cyan
 
 $marker = "tsf4-$(Get-Random -Minimum 1000 -Maximum 9999)"
-& $agentCtl send $sessionName "`"echo $marker`"" 2>&1 | Out-Null
-& $agentCtl raw-send $sessionName "`r" 2>&1 | Out-Null
+& $agentDeck session send $sessionName "echo $marker" --no-wait 2>$null | Out-Null
 Start-Sleep -Milliseconds 1500
 
 # Inject テスト through TSF path
-$tsfInjectSh = Join-Path $PSScriptRoot "tsf-inject.sh"
-& bash $tsfInjectSh $sessionName ([char]0x30C6 + [char]0x30B9 + [char]0x30C8) 2>&1 | Out-Null
+Send-TsfInject -Session $sessionName -Text ([char]0x30C6 + [char]0x30B9 + [char]0x30C8)
 Start-Sleep -Milliseconds 2000
 
-$tail = & $agentCtl read $sessionName 2>&1
+$tail = & $agentDeck session output $sessionName -q 2>$null
 $tailStr = ($tail | Out-String)
 $markerFound = $tailStr -match $marker
 $doubledText = ([char]0x30C6).ToString() + ([char]0x30B9).ToString() + ([char]0x30C8).ToString() + `

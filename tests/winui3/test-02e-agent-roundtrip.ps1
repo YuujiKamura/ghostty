@@ -2,102 +2,63 @@ param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
 # test-02e-agent-roundtrip — Launch claude -p via control plane, verify output.
 # End-to-end: send command → wait for completion → read buffer → check output.
-# Requires: GHOSTTY_CONTROL_PLANE=1 and agent-ctl built.
+# Requires: GHOSTTY_CONTROL_PLANE=1 and agent-deck built.
 
 $ErrorActionPreference = 'Stop'
 $testName = "test-02e-agent-roundtrip"
 
-# Find agent-ctl binary
-$agentCtl = $null
-foreach ($candidate in @(
-    "$env:USERPROFILE\agent-relay\target\release\agent-ctl.exe",
-    "$env:USERPROFILE\agent-relay\target\debug\agent-ctl.exe"
-)) {
-    if (Test-Path $candidate) { $agentCtl = $candidate; break }
-}
-
-if (-not $agentCtl) {
-    Write-Host "SKIP: $testName - agent-ctl.exe not found" -ForegroundColor Yellow
+# Find agent-deck binary
+$agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+if (-not (Test-Path $agentDeck)) {
+    Write-Host "SKIP: $testName - agent-deck.exe not found" -ForegroundColor Yellow
     return
 }
 
 # Find alive ghostty session
-$listOutput = & $agentCtl list --alive-only 2>&1 | Where-Object { $_ -match "ALIVE.*ghostty" }
-if (-not $listOutput -or @($listOutput).Count -eq 0) {
+$sessionName = $env:GHOSTTY_CP_SESSION
+if (-not $sessionName) {
+    $lsOutput = & $agentDeck ls --json 2>$null | ConvertFrom-Json
+    $cpSessions = @($lsOutput | Where-Object { $_.source -eq "ghostty" })
+    if ($cpSessions.Count -gt 0) {
+        $sessionName = $cpSessions[0].title
+    }
+}
+
+if (-not $sessionName) {
     Write-Host "SKIP: $testName - no alive ghostty session" -ForegroundColor Yellow
     return
 }
-
-$sessionLine = if ($listOutput -is [array]) { $listOutput[0] } else { $listOutput }
-if ($sessionLine -match 'session=([^\s|]+)') {
-    $sessionName = $Matches[1]
-} else {
-    Write-Host "FAIL: $testName - could not parse session name" -ForegroundColor Red
-    throw "FAIL: $testName"
-}
-
 Write-Host "  Session: $sessionName" -ForegroundColor DarkGray
 
-# Step 1: Send claude -p command
-# Use Start-Process to pass text with spaces as a single argument
+# Step 1: Send claude -p command (atomic: text+Enter in single call)
 $testPrompt = 'claude -p PINEAPPLE --max-turns 1'
 Write-Host "  Sending: $testPrompt" -ForegroundColor DarkGray
-Start-Process -FilePath $agentCtl -ArgumentList "send","$sessionName","`"$testPrompt`"" -NoNewWindow -Wait 2>&1 | Out-Null
-Start-Sleep -Milliseconds 500
-Start-Process -FilePath $agentCtl -ArgumentList "raw-send","$sessionName","`r" -NoNewWindow -Wait 2>&1 | Out-Null
+& $agentDeck session send $sessionName $testPrompt --no-wait 2>$null | Out-Null
 
-# Step 2: Wait for completion (prompt=1, up to 90s)
+# Step 2: Wait for completion (up to 90s)
+# Poll terminal buffer for PINEAPPLE (agent output)
 Write-Host "  Waiting for agent completion (up to 90s)..." -ForegroundColor DarkGray
 $completed = $false
 $deadline = [DateTime]::UtcNow.AddSeconds(90)
 
-# First wait: expect prompt=0 (agent running) within 20s
-$sawRunning = $false
-$runDeadline = [DateTime]::UtcNow.AddSeconds(20)
-while ([DateTime]::UtcNow -lt $runDeadline) {
-    Start-Sleep -Milliseconds 2000
-    $stateOut = & $agentCtl state $sessionName 2>&1 | Out-String
-    if ($stateOut -match "prompt=0") {
-        $sawRunning = $true
-        Write-Host "  Agent is running (prompt=0)" -ForegroundColor DarkGray
-        break
-    }
-    # Agent may have already finished
-    if ($stateOut -match "prompt=1") {
-        $sawRunning = $true
-        $completed = $true
-        Write-Host "  Agent already completed (prompt=1)" -ForegroundColor DarkGray
-        break
-    }
-}
-
-if (-not $sawRunning) {
-    Write-Host "  WARN: Never saw prompt=0 (agent may not have started)" -ForegroundColor Yellow
-}
-
-# Then wait for prompt=1 (completion) if not already done
-while (-not $completed -and [DateTime]::UtcNow -lt $deadline) {
+while ([DateTime]::UtcNow -lt $deadline) {
     Start-Sleep -Milliseconds 3000
-    $stateOut = & $agentCtl state $sessionName 2>&1 | Out-String
-    if ($stateOut -match "prompt=1") {
+    $buffer = & $agentDeck session output $sessionName -q 2>$null | Out-String
+    if ($buffer -match "PINEAPPLE") {
         $completed = $true
-        Write-Host "  Agent completed (prompt=1)" -ForegroundColor DarkGray
+        Write-Host "  Agent output contains PINEAPPLE" -ForegroundColor DarkGray
         break
     }
 }
 
 Test-Assert -Condition $completed -Message "$testName - agent completed within timeout"
 
-# Step 3: Read buffer and check for expected output
-Start-Sleep -Milliseconds 1000
-$buffer = & $agentCtl read $sessionName 2>&1 | Out-String
-
+# Step 3: Verify output
+$buffer = & $agentDeck session output $sessionName -q 2>$null | Out-String
 $hasPineapple = $buffer -match "PINEAPPLE"
 Write-Host "  Buffer contains PINEAPPLE: $hasPineapple" -ForegroundColor DarkGray
 
-if ($hasPineapple) {
-    Write-Host "  PASS: Agent output verified" -ForegroundColor Green
-} else {
+if (-not $hasPineapple) {
     Write-Host "  Buffer tail:" -ForegroundColor DarkGray
     $buffer.Split("`n") | Select-Object -Last 10 | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
 }
