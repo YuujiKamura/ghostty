@@ -2525,6 +2525,7 @@ pub fn preeditCallback(self: *Surface, preedit_: ?[]const u8) !void {
     }
 
     // We always clear our prior preedit
+    const had_preedit = self.renderer_state.preedit != null;
     if (self.renderer_state.preedit) |p| {
         self.alloc.free(p.codepoints);
         self.renderer_state.preedit = null;
@@ -2532,6 +2533,14 @@ pub fn preeditCallback(self: *Surface, preedit_: ?[]const u8) !void {
 
     // Mark preedit dirty flag
     self.io.terminal.flags.dirty.preedit = true;
+
+    // If we had a preedit and now it's being cleared (composition ended),
+    // explicitly mark the cursor row dirty so the committed character
+    // is rendered even if the PTY output hasn't arrived yet.
+    // This fixes the "first character disappearing" issue (#133).
+    if (had_preedit) {
+        self.io.terminal.screens.active.cursorMarkDirty();
+    }
 
     // If we have no text, we're done. We queue a render in case we cleared
     // a prior preedit (likely).
