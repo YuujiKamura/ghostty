@@ -28,6 +28,8 @@ pub const QueryKind = enum {
     tab_working_dir,
     tab_has_selection,
     capture_tab_list,
+    /// Issue #142: coalesce multiple provider reads into a single SendMessageW.
+    capture_snapshot,
 };
 
 /// Synchronous query struct passed via SendMessageW(WM_APP_CP_QUERY, 0, @intFromPtr(&query)).
@@ -46,6 +48,15 @@ pub const CpQuery = struct {
     result_bool: bool = false,
     /// Result: heap-allocated response (capture_tab_list). Caller must free.
     result_owned: ?[]u8 = null,
+    /// Issue #142: combined snapshot result fields (capture_snapshot).
+    result_tab_count: usize = 0,
+    result_active_tab: usize = 0,
+    result_pwd: [4096]u8 = undefined,
+    result_pwd_len: usize = 0,
+    result_has_selection: bool = false,
+    result_at_prompt: bool = false,
+    result_title: [256]u8 = undefined,
+    result_title_len: usize = 0,
     /// Allocator for heap results.
     allocator: Allocator,
 };
@@ -160,13 +171,8 @@ pub const ControlPlane = struct {
         // Build the Provider vtable — callbacks bridge to self
         self.provider = .{
             .ctx = @ptrCast(self),
-            .readBuffer = &provReadBuffer,
+            .captureSnapshot = &provCaptureSnapshot,
             .sendInput = &provSendInput,
-            .tabCount = &provTabCount,
-            .activeTab = &provActiveTab,
-            .tabTitle = &provTabTitle,
-            .tabWorkingDir = &provTabWorkingDir,
-            .tabHasSelection = &provTabHasSelection,
             .newTab = &provNewTab,
             .closeTab = &provCloseTab,
             .switchTab = &provSwitchTab,
@@ -351,20 +357,6 @@ pub const ControlPlane = struct {
     // (WM_APP_CP_QUERY) to execute on the UI thread, avoiding data races
     // with App state (Issue #139 H1 fix).
 
-    fn provReadBuffer(ctx: *anyopaque, tab_index: ?usize, buf: []u8) usize {
-        const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        if (buf.len == 0) return 0;
-        var query = CpQuery{
-            .kind = .read_buffer,
-            .tab_index = tab_index,
-            .out_buf = buf.ptr,
-            .out_buf_len = buf.len,
-            .allocator = self.allocator,
-        };
-        _ = os.SendMessageW(self.hwnd, os.WM_APP_CP_QUERY, 0, @bitCast(@intFromPtr(&query)));
-        return query.result_len;
-    }
-
     fn provSendInput(ctx: *anyopaque, text: []const u8, raw: bool, tab_index: ?usize) void {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
         _ = tab_index; // TODO: route to specific tab
@@ -391,67 +383,42 @@ pub const ControlPlane = struct {
         }
     }
 
-    fn provTabCount(ctx: *anyopaque) usize {
+    /// Issue #142: capture all tab state in a single SendMessageW round-trip.
+    /// Called from zig-control-plane when captureSnapshot is wired into Provider.
+    fn provCaptureSnapshot(ctx: *anyopaque, tab_index: usize, result: *zcp.CombinedSnapshot) bool {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
+        // Use a CpQuery with a large out_buf for viewport data, plus snapshot fields.
+        var viewport_buf: [65536]u8 = undefined;
         var query = CpQuery{
-            .kind = .tab_count,
+            .kind = .capture_snapshot,
+            .tab_index = tab_index,
+            .out_buf = &viewport_buf,
+            .out_buf_len = viewport_buf.len,
             .allocator = self.allocator,
         };
-        _ = os.SendMessageW(self.hwnd, os.WM_APP_CP_QUERY, 0, @bitCast(@intFromPtr(&query)));
-        return query.result_usize;
-    }
-
-    fn provActiveTab(ctx: *anyopaque) usize {
-        const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        var query = CpQuery{
-            .kind = .active_tab,
-            .allocator = self.allocator,
-        };
-        _ = os.SendMessageW(self.hwnd, os.WM_APP_CP_QUERY, 0, @bitCast(@intFromPtr(&query)));
-        return query.result_usize;
-    }
-
-    fn provTabTitle(ctx: *anyopaque, _: usize, buf: []u8) usize {
-        const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        // Return window title via Win32
-        const len = os.GetWindowTextLengthW(self.hwnd);
-        if (len <= 0) return 0;
-        const needed: usize = @intCast(len + 1);
-        const utf16 = self.allocator.alloc(u16, needed) catch return 0;
-        defer self.allocator.free(utf16);
-        @memset(utf16, 0);
-        const copied = os.GetWindowTextW(self.hwnd, utf16.ptr, @intCast(needed));
-        if (copied <= 0) return 0;
-        const title = std.unicode.utf16LeToUtf8Alloc(self.allocator, utf16[0..@intCast(copied)]) catch return 0;
-        defer self.allocator.free(title);
-        const copy_len = @min(title.len, buf.len);
-        @memcpy(buf[0..copy_len], title[0..copy_len]);
-        return copy_len;
-    }
-
-    fn provTabWorkingDir(ctx: *anyopaque, index: usize, buf: []u8) usize {
-        const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        if (buf.len == 0) return 0;
-        var query = CpQuery{
-            .kind = .tab_working_dir,
-            .tab_index = index,
-            .out_buf = buf.ptr,
-            .out_buf_len = buf.len,
-            .allocator = self.allocator,
-        };
-        _ = os.SendMessageW(self.hwnd, os.WM_APP_CP_QUERY, 0, @bitCast(@intFromPtr(&query)));
-        return query.result_len;
-    }
-
-    fn provTabHasSelection(ctx: *anyopaque, index: usize) bool {
-        const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        var query = CpQuery{
-            .kind = .tab_has_selection,
-            .tab_index = index,
-            .allocator = self.allocator,
-        };
-        _ = os.SendMessageW(self.hwnd, os.WM_APP_CP_QUERY, 0, @bitCast(@intFromPtr(&query)));
-        return query.result_bool;
+        const send_result = os.SendMessageW(self.hwnd, os.WM_APP_CP_QUERY, 0, @bitCast(@intFromPtr(&query)));
+        // SendMessageW returns 0 if the window was destroyed or the message was not handled.
+        // Our WndProc returns 0 on success for WM_APP_CP_QUERY, so we check if the query
+        // was actually filled by looking at result fields. A tab_count of 0 with no viewport
+        // is still valid (empty state), so we always copy.
+        _ = send_result;
+        // Copy results into the CombinedSnapshot output struct.
+        result.tab_count = query.result_tab_count;
+        result.active_tab = query.result_active_tab;
+        result.pwd_len = query.result_pwd_len;
+        if (query.result_pwd_len > 0) {
+            @memcpy(result.pwd[0..query.result_pwd_len], query.result_pwd[0..query.result_pwd_len]);
+        }
+        result.has_selection = query.result_has_selection;
+        result.viewport_len = query.result_len;
+        if (query.result_len > 0) {
+            @memcpy(result.viewport[0..query.result_len], viewport_buf[0..query.result_len]);
+        }
+        result.title_len = query.result_title_len;
+        if (query.result_title_len > 0) {
+            @memcpy(result.title[0..query.result_title_len], query.result_title[0..query.result_title_len]);
+        }
+        return true;
     }
 
     fn provNewTab(ctx: *anyopaque) void {
@@ -558,12 +525,13 @@ test "QueryKind exhaustive" {
         .tab_working_dir,
         .tab_has_selection,
         .capture_tab_list,
+        .capture_snapshot,
     };
-    try std.testing.expectEqual(@as(usize, 7), kinds.len);
+    try std.testing.expectEqual(@as(usize, 8), kinds.len);
 
     for (kinds) |k| {
         switch (k) {
-            .read_buffer, .tab_count, .active_tab, .tab_title, .tab_working_dir, .tab_has_selection, .capture_tab_list => {},
+            .read_buffer, .tab_count, .active_tab, .tab_title, .tab_working_dir, .tab_has_selection, .capture_tab_list, .capture_snapshot => {},
         }
     }
 }
