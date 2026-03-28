@@ -89,6 +89,9 @@ pub const WM_APP_CLOSE_TAB: UINT = WM_USER + 6;
 pub const WM_APP_IME_INJECT: UINT = WM_USER + 7;
 /// Control plane: inject text through TSF path (simulates TSF composition commit for testing).
 pub const WM_APP_TSF_INJECT: UINT = WM_USER + 8;
+/// Control plane: synchronous query from pipe thread → UI thread via SendMessageW.
+/// lparam = pointer to CpQuery struct. UI thread fills result fields.
+pub const WM_APP_CP_QUERY: UINT = WM_USER + 9;
 
 // --- Window styles ---
 pub const WS_OVERLAPPEDWINDOW: DWORD = 0x00CF0000;

@@ -39,7 +39,9 @@ const caption_buttons_mod = @import("caption_buttons.zig");
 const xaml_helpers = @import("xaml_helpers.zig");
 const surface_binding = @import("surface_binding.zig");
 const event_handlers = @import("event_handlers.zig");
-const ControlPlaneNative = @import("control_plane.zig").ControlPlane;
+const control_plane_mod = @import("control_plane.zig");
+const ControlPlaneNative = control_plane_mod.ControlPlane;
+const CpQuery = control_plane_mod.CpQuery;
 const nonclient_island_window = @import("nonclient_island_window.zig");
 const NonClientIslandWindow = nonclient_island_window.NonClientIslandWindow;
 const Tsf = @import("tsf.zig");
@@ -2325,7 +2327,101 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
             }
             return 0;
         },
+        os.WM_APP_CP_QUERY => {
+            // Synchronous control plane query from pipe thread (Issue #139 H1 fix).
+            // SendMessageW blocks the pipe thread until we fill the result and return.
+            const query: *CpQuery = @ptrFromInt(@as(usize, @bitCast(lparam)));
+            self.handleCpQuery(query);
+            return 0;
+        },
         else => return null,
+    }
+}
+
+/// Handle a synchronous CP query on the UI thread.
+/// Called from WM_APP_CP_QUERY — all App state access is safe here.
+fn handleCpQuery(self: *App, query: *CpQuery) void {
+    switch (query.kind) {
+        .read_buffer => {
+            const result = controlPlaneCaptureTail(
+                @ptrCast(self),
+                query.allocator,
+                query.tab_index,
+            ) catch null;
+            if (result) |viewport| {
+                defer query.allocator.free(viewport);
+                if (query.out_buf) |buf| {
+                    const copy_len = @min(viewport.len, query.out_buf_len);
+                    @memcpy(buf[0..copy_len], viewport[0..copy_len]);
+                    query.result_len = copy_len;
+                }
+            }
+        },
+        .tab_count => {
+            var snapshot = controlPlaneCaptureState(
+                @ptrCast(self),
+                query.allocator,
+                null,
+            ) catch null;
+            if (snapshot) |*s| {
+                query.result_usize = s.tab_count;
+                s.deinit(query.allocator);
+            }
+        },
+        .active_tab => {
+            var snapshot = controlPlaneCaptureState(
+                @ptrCast(self),
+                query.allocator,
+                null,
+            ) catch null;
+            if (snapshot) |*s| {
+                query.result_usize = s.active_tab;
+                s.deinit(query.allocator);
+            }
+        },
+        .tab_working_dir => {
+            var snapshot = controlPlaneCaptureState(
+                @ptrCast(self),
+                query.allocator,
+                query.tab_index,
+            ) catch null;
+            if (snapshot) |*s| {
+                defer s.deinit(query.allocator);
+                if (s.pwd) |pwd| {
+                    if (query.out_buf) |buf| {
+                        const copy_len = @min(pwd.len, query.out_buf_len);
+                        @memcpy(buf[0..copy_len], pwd[0..copy_len]);
+                        query.result_len = copy_len;
+                    }
+                }
+            }
+        },
+        .tab_has_selection => {
+            var snapshot = controlPlaneCaptureState(
+                @ptrCast(self),
+                query.allocator,
+                query.tab_index,
+            ) catch null;
+            if (snapshot) |*s| {
+                query.result_bool = s.has_selection;
+                s.deinit(query.allocator);
+            }
+        },
+        .tab_title => {
+            // provTabTitle uses GetWindowTextW (thread-safe), but handle here too for completeness.
+            if (query.out_buf) |buf| {
+                const title = self.activeSurface().?.getTitle() orelse "";
+                const copy_len = @min(title.len, query.out_buf_len);
+                @memcpy(buf[0..copy_len], title[0..copy_len]);
+                query.result_len = copy_len;
+            }
+        },
+        .capture_tab_list => {
+            query.result_owned = controlPlaneCaptureTabList(
+                @ptrCast(self),
+                query.allocator,
+            ) catch null;
+        },
     }
 }
 

@@ -19,12 +19,43 @@ const PendingInput = struct {
     raw: bool = false,
 };
 
+/// Query kind for CpQuery — dispatched via WM_APP_CP_QUERY (SendMessageW).
+pub const QueryKind = enum {
+    read_buffer,
+    tab_count,
+    active_tab,
+    tab_title,
+    tab_working_dir,
+    tab_has_selection,
+    capture_tab_list,
+};
+
+/// Synchronous query struct passed via SendMessageW(WM_APP_CP_QUERY, 0, @intFromPtr(&query)).
+/// Pipe thread creates on stack → SendMessageW blocks → UI thread fills result → returns.
+pub const CpQuery = struct {
+    kind: QueryKind,
+    tab_index: ?usize = null,
+    /// For read_buffer/tab_title/tab_working_dir: caller-owned buffer to write into.
+    out_buf: ?[*]u8 = null,
+    out_buf_len: usize = 0,
+    /// Result: bytes written to out_buf.
+    result_len: usize = 0,
+    /// Result: scalar value (tabCount, activeTab).
+    result_usize: usize = 0,
+    /// Result: boolean (tabHasSelection).
+    result_bool: bool = false,
+    /// Result: heap-allocated response (capture_tab_list). Caller must free.
+    result_owned: ?[]u8 = null,
+    /// Allocator for heap results.
+    allocator: Allocator,
+};
+
 /// Zig-native control plane that replaces the Rust DLL.
 ///
 /// Integrates the zig-control-plane library with the WinUI3 App runtime.
-/// Thread-safe: mutation callbacks (newTab, closeTab, etc.) are posted to the
-/// UI thread via PostMessageW; read callbacks access App state directly (from
-/// the pipe server thread).
+/// Thread-safe: ALL callbacks are routed to the UI thread.
+/// - Mutations (newTab, closeTab, etc.) via PostMessageW (async).
+/// - Reads (readBuffer, tabCount, etc.) via SendMessageW (sync).
 pub const ControlPlane = struct {
     /// Action codes posted via WM_APP_CONTROL_ACTION (wparam).
     /// Wire-compatible action codes used by ipc.zig PostMessageW dispatch.
@@ -316,17 +347,22 @@ pub const ControlPlane = struct {
     }
 
     // ── Provider callbacks ──
-    // These are called from the pipe server thread via the ControlPlane library.
+    // Called from the pipe server thread. Read callbacks use SendMessageW
+    // (WM_APP_CP_QUERY) to execute on the UI thread, avoiding data races
+    // with App state (Issue #139 H1 fix).
 
     fn provReadBuffer(ctx: *anyopaque, tab_index: ?usize, buf: []u8) usize {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        const capture = self.capture_tail_fn orelse return 0;
-        const cb_ctx = self.callback_ctx orelse return 0;
-        const viewport = (capture(cb_ctx, self.allocator, tab_index) catch return 0) orelse return 0;
-        defer self.allocator.free(viewport);
-        const copy_len = @min(viewport.len, buf.len);
-        @memcpy(buf[0..copy_len], viewport[0..copy_len]);
-        return copy_len;
+        if (buf.len == 0) return 0;
+        var query = CpQuery{
+            .kind = .read_buffer,
+            .tab_index = tab_index,
+            .out_buf = buf.ptr,
+            .out_buf_len = buf.len,
+            .allocator = self.allocator,
+        };
+        _ = os.SendMessageW(self.hwnd, os.WM_APP_CP_QUERY, 0, @bitCast(@intFromPtr(&query)));
+        return query.result_len;
     }
 
     fn provSendInput(ctx: *anyopaque, text: []const u8, raw: bool, tab_index: ?usize) void {
@@ -357,20 +393,22 @@ pub const ControlPlane = struct {
 
     fn provTabCount(ctx: *anyopaque) usize {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        const capture = self.capture_state_fn orelse return 0;
-        const cb_ctx = self.callback_ctx orelse return 0;
-        var snapshot = (capture(cb_ctx, self.allocator, null) catch return 0) orelse return 0;
-        defer snapshot.deinit(self.allocator);
-        return snapshot.tab_count;
+        var query = CpQuery{
+            .kind = .tab_count,
+            .allocator = self.allocator,
+        };
+        _ = os.SendMessageW(self.hwnd, os.WM_APP_CP_QUERY, 0, @bitCast(@intFromPtr(&query)));
+        return query.result_usize;
     }
 
     fn provActiveTab(ctx: *anyopaque) usize {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        const capture = self.capture_state_fn orelse return 0;
-        const cb_ctx = self.callback_ctx orelse return 0;
-        var snapshot = (capture(cb_ctx, self.allocator, null) catch return 0) orelse return 0;
-        defer snapshot.deinit(self.allocator);
-        return snapshot.active_tab;
+        var query = CpQuery{
+            .kind = .active_tab,
+            .allocator = self.allocator,
+        };
+        _ = os.SendMessageW(self.hwnd, os.WM_APP_CP_QUERY, 0, @bitCast(@intFromPtr(&query)));
+        return query.result_usize;
     }
 
     fn provTabTitle(ctx: *anyopaque, _: usize, buf: []u8) usize {
@@ -393,23 +431,27 @@ pub const ControlPlane = struct {
 
     fn provTabWorkingDir(ctx: *anyopaque, index: usize, buf: []u8) usize {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        const capture = self.capture_state_fn orelse return 0;
-        const cb_ctx = self.callback_ctx orelse return 0;
-        var snapshot = (capture(cb_ctx, self.allocator, index) catch return 0) orelse return 0;
-        defer snapshot.deinit(self.allocator);
-        const pwd = snapshot.pwd orelse return 0;
-        const copy_len = @min(pwd.len, buf.len);
-        @memcpy(buf[0..copy_len], pwd[0..copy_len]);
-        return copy_len;
+        if (buf.len == 0) return 0;
+        var query = CpQuery{
+            .kind = .tab_working_dir,
+            .tab_index = index,
+            .out_buf = buf.ptr,
+            .out_buf_len = buf.len,
+            .allocator = self.allocator,
+        };
+        _ = os.SendMessageW(self.hwnd, os.WM_APP_CP_QUERY, 0, @bitCast(@intFromPtr(&query)));
+        return query.result_len;
     }
 
     fn provTabHasSelection(ctx: *anyopaque, index: usize) bool {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        const capture = self.capture_state_fn orelse return false;
-        const cb_ctx = self.callback_ctx orelse return false;
-        var snapshot = (capture(cb_ctx, self.allocator, index) catch return false) orelse return false;
-        defer snapshot.deinit(self.allocator);
-        return snapshot.has_selection;
+        var query = CpQuery{
+            .kind = .tab_has_selection,
+            .tab_index = index,
+            .allocator = self.allocator,
+        };
+        _ = os.SendMessageW(self.hwnd, os.WM_APP_CP_QUERY, 0, @bitCast(@intFromPtr(&query)));
+        return query.result_bool;
     }
 
     fn provNewTab(ctx: *anyopaque) void {
@@ -453,4 +495,61 @@ fn loadSessionName(allocator: Allocator, pid: u32) ![]u8 {
         }
     }
     return std.fmt.allocPrint(allocator, "ghostty-{d}", .{pid});
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Tests
+// ═══════════════════════════════════════════════════════════════
+
+test "CpQuery default values" {
+    const alloc = std.testing.allocator;
+    const q = CpQuery{
+        .kind = .tab_count,
+        .allocator = alloc,
+    };
+    try std.testing.expectEqual(@as(usize, 0), q.result_usize);
+    try std.testing.expectEqual(false, q.result_bool);
+    try std.testing.expectEqual(@as(usize, 0), q.result_len);
+    try std.testing.expect(q.result_owned == null);
+    try std.testing.expect(q.out_buf == null);
+    try std.testing.expect(q.tab_index == null);
+}
+
+test "CpQuery with buffer" {
+    const alloc = std.testing.allocator;
+    var buf: [64]u8 = undefined;
+    var q = CpQuery{
+        .kind = .read_buffer,
+        .tab_index = 0,
+        .out_buf = &buf,
+        .out_buf_len = buf.len,
+        .allocator = alloc,
+    };
+    // Simulate UI thread writing result
+    const data = "hello world";
+    @memcpy(q.out_buf.?[0..data.len], data);
+    q.result_len = data.len;
+
+    try std.testing.expectEqual(data.len, q.result_len);
+    try std.testing.expectEqualStrings(data, buf[0..q.result_len]);
+}
+
+test "QueryKind exhaustive" {
+    // Ensure all variants are handled (compile-time exhaustiveness)
+    const kinds = [_]QueryKind{
+        .read_buffer,
+        .tab_count,
+        .active_tab,
+        .tab_title,
+        .tab_working_dir,
+        .tab_has_selection,
+        .capture_tab_list,
+    };
+    try std.testing.expectEqual(@as(usize, 7), kinds.len);
+
+    for (kinds) |k| {
+        switch (k) {
+            .read_buffer, .tab_count, .active_tab, .tab_title, .tab_working_dir, .tab_has_selection, .capture_tab_list => {},
+        }
+    }
 }
