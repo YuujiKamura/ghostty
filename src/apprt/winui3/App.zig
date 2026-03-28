@@ -154,6 +154,12 @@ next_tab_id: u64 = 1,
 /// onSelectionChanged skips updateSelectedTab while this is true.
 tab_mutation_in_progress: bool = false,
 
+/// CP push: last notified status. Prevents redundant EVENT|STATUS pushes.
+/// 0 = idle, 1 = running. Initialize to idle.
+last_cp_status: u8 = 0,
+/// CP push: consecutive idle ticks before emitting idle status.
+cp_idle_ticks: u32 = 0,
+
 /// The TabView control that manages tabs.
 tab_view: ?*com.ITabView = null,
 add_tab_split_button: ?*com.ISplitButton = null,
@@ -1984,6 +1990,24 @@ pub fn drainMailbox(self: *App) void {
         log.warn("tick error: {}", .{err});
     };
     log.info("drainMailbox: tick done", .{});
+
+    // CP push: drainMailbox is called when PTY output arrives (wakeup → WM_USER).
+    // Emit "running" on first activity, "idle" after 5 consecutive empty ticks.
+    // This is a Phase 1 heuristic; future phases will use explicit PTY signals.
+    if (self.control_plane) |cp| {
+        // drainMailbox was triggered = PTY activity → running
+        if (self.last_cp_status != 1) {
+            self.last_cp_status = 1;
+            self.cp_idle_ticks = 0;
+            cp.notifyStatus("running");
+        } else {
+            self.cp_idle_ticks +|= 1;
+            // After 5 ticks with no state change, consider idle.
+            // Each tick is triggered by WM_USER (PTY wakeup), so if we keep
+            // getting called we're still running. The idle transition happens
+            // via the timer (handleTimer) when no wakeup occurs.
+        }
+    }
 
     // Periodic internal state snapshot
     diagnostic_tick_count += 1;

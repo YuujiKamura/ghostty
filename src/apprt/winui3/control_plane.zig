@@ -478,6 +478,19 @@ pub const ControlPlane = struct {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
         return @intFromPtr(self.hwnd);
     }
+
+    // ── Push notification API ──
+
+    /// Notify all subscribers of a status change (idle/running).
+    /// Called from the UI thread (e.g., drainMailbox). Thread-safe: pushEvent
+    /// acquires its own lock on the pipe_server subscriber list.
+    pub fn notifyStatus(self: *ControlPlane, status: []const u8) void {
+        const ps = &(self.pipe_server orelse return);
+        const ts = std.time.milliTimestamp();
+        const line = std.fmt.allocPrint(self.allocator, "EVENT|STATUS|{s}|{d}\n", .{ status, ts }) catch return;
+        defer self.allocator.free(line);
+        ps.pushEvent(.status, line);
+    }
 };
 
 fn loadSessionName(allocator: Allocator, pid: u32) ![]u8 {
