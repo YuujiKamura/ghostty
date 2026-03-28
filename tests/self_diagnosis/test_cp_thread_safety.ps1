@@ -104,13 +104,18 @@ function Send-CP([string]$pipeName, [string]$cmd, [int]$timeoutMs = 5000) {
 
 function Find-Session {
     if (-not (Test-Path $script:SessionDir)) { return $false }
-    $sessions = Get-ChildItem $script:SessionDir -Filter "*.json" -ErrorAction SilentlyContinue
+    $sessions = Get-ChildItem $script:SessionDir -Filter "*.session" -ErrorAction SilentlyContinue
     foreach ($s in $sessions) {
         try {
-            $json = Get-Content $s.FullName -Raw | ConvertFrom-Json
-            $script:PipeName = $json.pipe_name
-            if (-not $script:PipeName) { $script:PipeName = $json.pipeName }
-            if ($script:PipeName) {
+            $kv = @{}
+            foreach ($line in (Get-Content $s.FullName -ErrorAction SilentlyContinue)) {
+                if ($line -match '^(\w+)=(.*)$') { $kv[$Matches[1]] = $Matches[2] }
+            }
+            $pipePath = $kv['pipe_path']
+            if (-not $pipePath) { $pipePath = $kv['pipe_name'] }
+            if ($pipePath) {
+                # Strip \\.\pipe\ prefix for NamedPipeClientStream
+                $script:PipeName = $pipePath -replace '^\\\\\.\\pipe\\', ''
                 $ping = Send-CP $script:PipeName "PING"
                 if ($ping -match "PONG") { return $true }
             }

@@ -101,21 +101,33 @@ function Send-CP([string]$pipeName, [string]$cmd, [int]$timeoutMs = 5000) {
 # Session discovery
 # ============================================================
 
+function Parse-SessionFile([string]$path) {
+    # Parse KV format: key=value per line
+    $kv = @{}
+    foreach ($line in (Get-Content $path -ErrorAction SilentlyContinue)) {
+        if ($line -match '^(\w+)=(.*)$') {
+            $kv[$Matches[1]] = $Matches[2]
+        }
+    }
+    return $kv
+}
+
 function Find-Sessions {
     $result = @()
     if (-not (Test-Path $script:SessionDir)) { return $result }
-    $files = Get-ChildItem $script:SessionDir -Filter "*.json" -ErrorAction SilentlyContinue
+    $files = Get-ChildItem $script:SessionDir -Filter "*.session" -ErrorAction SilentlyContinue
     foreach ($f in $files) {
         try {
-            $json = Get-Content $f.FullName -Raw | ConvertFrom-Json
-            $pipeName = $json.pipe_name
-            if (-not $pipeName) { $pipeName = $json.pipeName }
-            $pid = $json.pid
-            if (-not $pid) { $pid = $json.PID }
+            $kv = Parse-SessionFile $f.FullName
+            $pipeName = $kv['pipe_path']
+            if (-not $pipeName) { $pipeName = $kv['pipe_name'] }
+            $pid = $kv['pid']
             if ($pipeName) {
+                # Strip \\.\pipe\ prefix for NamedPipeClientStream
+                $shortName = $pipeName -replace '^\\\\\.\\pipe\\', ''
                 $result += @{
-                    PipeName = $pipeName
-                    PID      = [int]$pid
+                    PipeName = $shortName
+                    PID      = if ($pid) { [int]$pid } else { 0 }
                     File     = $f.FullName
                 }
             }
