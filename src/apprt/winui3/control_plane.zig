@@ -485,11 +485,12 @@ pub const ControlPlane = struct {
     /// Called from the UI thread (e.g., drainMailbox). Thread-safe: pushEvent
     /// acquires its own lock on the pipe_server subscriber list.
     pub fn notifyStatus(self: *ControlPlane, status: []const u8) void {
-        const ps = &(self.pipe_server orelse return);
         const ts = std.time.milliTimestamp();
         const line = std.fmt.allocPrint(self.allocator, "EVENT|STATUS|{s}|{d}\n", .{ status, ts }) catch return;
         defer self.allocator.free(line);
-        ps.pushEvent(.status, line);
+        // Capture mutable pointer to the PipeServer inside the optional field.
+        var ps_ptr: *PipeServer = &(self.pipe_server orelse return);
+        ps_ptr.pushEvent(.status, line);
     }
 };
 
