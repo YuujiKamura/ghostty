@@ -38,11 +38,8 @@ LOCAL_APPDATA_FONTCONFIG_CACHE/
 tests/winui3/LOCAL_APPDATA_FONTCONFIG_CACHE/
 
 # Legacy runtimes (kept locally, removed from tracking)
-src/apprt/win32/
-src/apprt/winui3/App.zig
-src/apprt/winui3/Surface.zig
+# Note: com_native.zig, App.zig, Surface.zig, win32/ are tracked (required for build)
 src/apprt/winui3/wndproc.zig
-src/apprt/winui3/com_native.zig
 src/apprt/winui3/drag_bar.zig
 src/apprt/winui3/tab_manager.zig
 src/apprt/winui3/tabview_runtime.zig

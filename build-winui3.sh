@@ -37,8 +37,16 @@ XAML_BIN="$XAML_DIR/bin/x64/$BUILD_CONFIG/net9.0-windows10.0.22621.0"
 
 # Step 1: Build XAML (XBF + PRI) via MSBuild if xaml/ project exists
 if [ -f "$XAML_DIR/ghostty.csproj" ]; then
-    MSBUILD="/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe"
-    if [ -f "$MSBUILD" ]; then
+    MSBUILD=""
+    for candidate in \
+        "/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe" \
+        "/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/MSBuild/Current/Bin/MSBuild.exe" \
+        "/c/Program Files/Microsoft Visual Studio/2022/BuildTools/MSBuild/Current/Bin/MSBuild.exe" \
+        "/c/Program Files/Microsoft Visual Studio/2022/Enterprise/MSBuild/Current/Bin/MSBuild.exe" \
+        "/c/Program Files/Microsoft Visual Studio/2022/Professional/MSBuild/Current/Bin/MSBuild.exe"; do
+        [ -f "$candidate" ] && MSBUILD="$candidate" && break
+    done
+    if [ -n "$MSBUILD" ]; then
         echo "[build-winui3] Building XAML resources ($BUILD_CONFIG)..."
         "$MSBUILD" "$XAML_DIR/ghostty.csproj" -p:Configuration=$BUILD_CONFIG -p:Platform=x64 -restore -nologo -v:minimal
     else
