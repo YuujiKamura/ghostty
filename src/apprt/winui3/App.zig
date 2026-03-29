@@ -439,6 +439,7 @@ fn initXaml(self: *App) !void {
                 @ptrCast(self),
                 controlPlaneCaptureState,
                 controlPlaneCaptureTail,
+                controlPlaneCaptureHistory,
                 controlPlaneCaptureTabList,
             ) catch |err| blk: {
                 log.err("control_plane: create FAILED err={s}", .{@errorName(err)});
@@ -1644,6 +1645,17 @@ fn controlPlaneCaptureTail(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usiz
     return try allocator.dupe(u8, viewport);
 }
 
+fn controlPlaneCaptureHistory(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) !?[]u8 {
+    const self: *App = @ptrCast(@alignCast(ctx));
+    const surface = if (tab_idx) |idx|
+        (if (idx < self.surfaces.items.len) self.surfaces.items[idx] else null)
+    else
+        self.activeSurface();
+    const s = surface orelse return null;
+    const history = try s.historyString(allocator);
+    return try allocator.dupe(u8, history);
+}
+
 fn controlPlaneCaptureTabList(ctx: *anyopaque, allocator: Allocator) !?[]u8 {
     const self: *App = @ptrCast(@alignCast(ctx));
     if (self.surfaces.items.len == 0) return null;
@@ -2478,6 +2490,61 @@ fn handleCpQuery(self: *App, query: *CpQuery) void {
                     query.result_len = copy_len;
                 } else {
                     log.err("capture_snapshot: out_buf is null, viewport data dropped", .{});
+                }
+            }
+            // Capture title.
+            const surface = if (query.tab_index) |idx|
+                (if (idx < self.surfaces.items.len) self.surfaces.items[idx] else null)
+            else
+                self.activeSurface();
+            if (surface) |s| {
+                const title = s.getTitle() orelse "";
+                const copy_len = @min(title.len, query.result_title.len);
+                @memcpy(query.result_title[0..copy_len], title[0..copy_len]);
+                query.result_title_len = copy_len;
+            }
+        },
+        .capture_history => {
+            // Fill state fields (same as capture_snapshot).
+            var snapshot = controlPlaneCaptureState(
+                @ptrCast(self),
+                query.allocator,
+                query.tab_index,
+            ) catch |err| blk: {
+                log.err("capture_history: controlPlaneCaptureState failed: {}", .{err});
+                break :blk null;
+            };
+            if (snapshot) |*s| {
+                defer s.deinit(query.allocator);
+                query.result_tab_count = s.tab_count;
+                query.result_active_tab = s.active_tab;
+                query.result_has_selection = s.has_selection;
+                query.result_at_prompt = s.at_prompt;
+                if (s.pwd) |pwd| {
+                    const copy_len = @min(pwd.len, query.result_pwd.len);
+                    @memcpy(query.result_pwd[0..copy_len], pwd[0..copy_len]);
+                    query.result_pwd_len = copy_len;
+                }
+            } else {
+                log.err("capture_history: no surface for tab_index={?}", .{query.tab_index});
+            }
+            // Capture full scrollback history into out_buf.
+            const history = controlPlaneCaptureHistory(
+                @ptrCast(self),
+                query.allocator,
+                query.tab_index,
+            ) catch |err| blk: {
+                log.err("capture_history: controlPlaneCaptureHistory failed: {}", .{err});
+                break :blk null;
+            };
+            if (history) |h| {
+                defer query.allocator.free(h);
+                if (query.out_buf) |buf| {
+                    const copy_len = @min(h.len, query.out_buf_len);
+                    @memcpy(buf[0..copy_len], h[0..copy_len]);
+                    query.result_len = copy_len;
+                } else {
+                    log.err("capture_history: out_buf is null, history data dropped", .{});
                 }
             }
             // Capture title.

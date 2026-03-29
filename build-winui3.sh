@@ -2,20 +2,22 @@
 # WinUI3 build wrapper — enforces --prefix zig-out-winui3
 set -e
 
-PREFIX="zig-out-winui3"
-PREFIX_ALT="zig-out-winui3-next"
+PREFIX_STABLE="zig-out-winui3"
+PREFIX_STAGING="zig-out-winui3-staging"
+PREFIX_BUILD="zig-out-winui3-build"
+PREFIX="$PREFIX_STABLE"
 XAML_DIR="xaml"
 
-# If the current exe is locked (running), build to alternate prefix.
-# If both are locked, use a third prefix. Windows locks exe for writing while running.
+# If the stable exe is locked (running), build to staging.
+# If both stable and staging are locked, use a third prefix. Windows locks exe for writing while running.
 is_locked() { [ -f "$1/bin/ghostty.exe" ] && ! python -c "open(r'$1/bin/ghostty.exe','r+b').close()" 2>/dev/null; }
-if is_locked "$PREFIX"; then
-    if is_locked "$PREFIX_ALT"; then
-        PREFIX="zig-out-winui3-build"
+if is_locked "$PREFIX_STABLE"; then
+    if is_locked "$PREFIX_STAGING"; then
+        PREFIX="$PREFIX_BUILD"
         echo "[build-winui3] Both prefixes locked, building to $PREFIX"
     else
-        echo "[build-winui3] ghostty.exe locked, building to $PREFIX_ALT"
-        PREFIX="$PREFIX_ALT"
+        echo "[build-winui3] ghostty.exe locked, building to $PREFIX_STAGING"
+        PREFIX="$PREFIX_STAGING"
     fi
 fi
 
@@ -70,4 +72,11 @@ else
         cp -f "$XAML_OBJ_FALLBACK"/*.xbf "$PREFIX/bin/" 2>/dev/null && echo "[build-winui3] Copied XBF files (Debug)"
         cp -f "$XAML_BIN_FALLBACK"/ghostty.pri "$PREFIX/bin/resources.pri" 2>/dev/null && echo "[build-winui3] Copied PRI file (Debug)"
     fi
+fi
+
+# Staging is only a temporary fallback. Once a stable build succeeds again,
+# remove the stale staging directory so external tools always converge on stable.
+if [ "$PREFIX" = "$PREFIX_STABLE" ] && [ -d "$PREFIX_STAGING" ]; then
+    rm -rf "$PREFIX_STAGING"
+    echo "[build-winui3] Removed stale staging output"
 fi

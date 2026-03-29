@@ -684,6 +684,11 @@ pub fn Surface(comptime App: type) type {
             return try self.core_surface.viewportString(alloc);
         }
 
+        pub fn historyString(self: *Self, alloc: std.mem.Allocator) ![]const u8 {
+            if (!self.core_initialized) return alloc.dupe(u8, "");
+            return try self.core_surface.historyString(alloc);
+        }
+
         pub fn getCursorPos(self: *const Self) !apprt.CursorPos {
             return self.cursor_pos;
         }

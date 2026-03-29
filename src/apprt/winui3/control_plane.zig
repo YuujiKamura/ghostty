@@ -30,6 +30,8 @@ pub const QueryKind = enum {
     capture_tab_list,
     /// Issue #142: coalesce multiple provider reads into a single SendMessageW.
     capture_snapshot,
+    /// Full scrollback history capture (HISTORY command).
+    capture_history,
 };
 
 /// Synchronous query struct passed via SendMessageW(WM_APP_CP_QUERY, 0, @intFromPtr(&query)).
@@ -93,6 +95,7 @@ pub const ControlPlane = struct {
 
     pub const CaptureStateFn = *const fn (ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) anyerror!?StateSnapshot;
     pub const CaptureTailFn = *const fn (ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) anyerror!?[]u8;
+    pub const CaptureHistoryFn = *const fn (ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) anyerror!?[]u8;
     pub const CaptureTabListFn = *const fn (ctx: *anyopaque, allocator: Allocator) anyerror!?[]u8;
 
     allocator: Allocator,
@@ -112,6 +115,7 @@ pub const ControlPlane = struct {
 
     capture_state_fn: ?CaptureStateFn = null,
     capture_tail_fn: ?CaptureTailFn = null,
+    capture_history_fn: ?CaptureHistoryFn = null,
     capture_tab_list_fn: ?CaptureTabListFn = null,
 
     pub fn isEnabled(allocator: Allocator) bool {
@@ -133,6 +137,7 @@ pub const ControlPlane = struct {
         callback_ctx: ?*anyopaque,
         capture_state_fn: ?CaptureStateFn,
         capture_tail_fn: ?CaptureTailFn,
+        capture_history_fn: ?CaptureHistoryFn,
         capture_tab_list_fn: ?CaptureTabListFn,
     ) !*ControlPlane {
         const self = try allocator.create(ControlPlane);
@@ -144,6 +149,7 @@ pub const ControlPlane = struct {
             .callback_ctx = callback_ctx,
             .capture_state_fn = capture_state_fn,
             .capture_tail_fn = capture_tail_fn,
+            .capture_history_fn = capture_history_fn,
             .capture_tab_list_fn = capture_tab_list_fn,
         };
 
@@ -172,6 +178,7 @@ pub const ControlPlane = struct {
         self.provider = .{
             .ctx = @ptrCast(self),
             .captureSnapshot = &provCaptureSnapshot,
+            .captureHistory = &provCaptureHistory,
             .sendInput = &provSendInput,
             .newTab = &provNewTab,
             .closeTab = &provCloseTab,
@@ -421,6 +428,38 @@ pub const ControlPlane = struct {
         return true;
     }
 
+    /// Capture full scrollback history via SendMessageW round-trip.
+    /// Same pattern as provCaptureSnapshot but uses capture_history QueryKind.
+    fn provCaptureHistory(ctx: *anyopaque, tab_index: usize, result: *zcp.CombinedSnapshot) bool {
+        const self: *ControlPlane = @ptrCast(@alignCast(ctx));
+        var viewport_buf: [65536]u8 = undefined;
+        var query = CpQuery{
+            .kind = .capture_history,
+            .tab_index = tab_index,
+            .out_buf = &viewport_buf,
+            .out_buf_len = viewport_buf.len,
+            .allocator = self.allocator,
+        };
+        _ = os.SendMessageW(self.hwnd, os.WM_APP_CP_QUERY, 0, @bitCast(@intFromPtr(&query)));
+        // Copy results into the CombinedSnapshot output struct.
+        result.tab_count = query.result_tab_count;
+        result.active_tab = query.result_active_tab;
+        result.pwd_len = query.result_pwd_len;
+        if (query.result_pwd_len > 0) {
+            @memcpy(result.pwd[0..query.result_pwd_len], query.result_pwd[0..query.result_pwd_len]);
+        }
+        result.has_selection = query.result_has_selection;
+        result.viewport_len = query.result_len;
+        if (query.result_len > 0) {
+            @memcpy(result.viewport[0..query.result_len], viewport_buf[0..query.result_len]);
+        }
+        result.title_len = query.result_title_len;
+        if (query.result_title_len > 0) {
+            @memcpy(result.title[0..query.result_title_len], query.result_title[0..query.result_title_len]);
+        }
+        return true;
+    }
+
     fn provNewTab(ctx: *anyopaque) void {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
         _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(Action.new_tab), 0);
@@ -519,12 +558,13 @@ test "QueryKind exhaustive" {
         .tab_has_selection,
         .capture_tab_list,
         .capture_snapshot,
+        .capture_history,
     };
-    try std.testing.expectEqual(@as(usize, 8), kinds.len);
+    try std.testing.expectEqual(@as(usize, 9), kinds.len);
 
     for (kinds) |k| {
         switch (k) {
-            .read_buffer, .tab_count, .active_tab, .tab_title, .tab_working_dir, .tab_has_selection, .capture_tab_list, .capture_snapshot => {},
+            .read_buffer, .tab_count, .active_tab, .tab_title, .tab_working_dir, .tab_has_selection, .capture_tab_list, .capture_snapshot, .capture_history => {},
         }
     }
 }

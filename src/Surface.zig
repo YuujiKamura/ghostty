@@ -2065,6 +2065,13 @@ pub fn viewportString(self: *Surface, alloc: Allocator) ![]const u8 {
     return try self.io.terminal.plainString(alloc);
 }
 
+/// Returns the full scrollback + active area as plain text.
+pub fn historyString(self: *Surface, alloc: Allocator) ![]const u8 {
+    self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+    return try self.io.terminal.screens.active.dumpStringAlloc(alloc, .{ .screen = .{} });
+}
+
 /// Resolves a relative file path to an absolute path using the terminal's pwd.
 fn resolvePathForOpening(
     self: *Surface,
