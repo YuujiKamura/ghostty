@@ -446,18 +446,11 @@ pub const ControlPlane = struct {
         return @intFromPtr(self.hwnd);
     }
 
-    // ── Push notification API ──
-
-    /// Notify all subscribers of a status change (idle/running).
-    /// Called from the UI thread (e.g., drainMailbox). Thread-safe: pushEvent
-    /// acquires its own lock on the pipe_server subscriber list.
+    // Push notification API removed — event threads deleted in zig-control-plane.
+    // Agent-deck polls TAIL/STATE directly; push events are unused.
     pub fn notifyStatus(self: *ControlPlane, status: []const u8) void {
-        const ts = std.time.milliTimestamp();
-        const line = std.fmt.allocPrint(self.allocator, "EVENT|STATUS|{s}|{d}\n", .{ status, ts }) catch return;
-        defer self.allocator.free(line);
-        // Capture mutable pointer to the PipeServer inside the optional field.
-        var ps_ptr: *PipeServer = &(self.pipe_server orelse return);
-        ps_ptr.pushEvent(.status, line);
+        _ = self;
+        _ = status;
     }
 };
 
