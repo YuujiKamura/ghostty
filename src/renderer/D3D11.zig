@@ -413,7 +413,13 @@ pub inline fn fgBufferOptions(self: D3D11) bufferpkg.Options {
 }
 
 pub inline fn bgBufferOptions(self: D3D11) bufferpkg.Options {
-    return self.bufferOptions();
+    return .{
+        .device = self.device,
+        .context = self.context,
+        .bind_flags = com.D3D11_BIND_SHADER_RESOURCE,
+        .dynamic = true,
+        .structured = true,
+    };
 }
 
 pub inline fn instanceBufferOptions(self: D3D11) bufferpkg.Options {

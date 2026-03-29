@@ -77,6 +77,19 @@ fi
 # Staging is only a temporary fallback. Once a stable build succeeds again,
 # remove the stale staging directory so external tools always converge on stable.
 if [ "$PREFIX" = "$PREFIX_STABLE" ] && [ -d "$PREFIX_STAGING" ]; then
-    rm -rf "$PREFIX_STAGING"
-    echo "[build-winui3] Removed stale staging output"
+    rm -r "$PREFIX_STAGING" 2>/dev/null || true
+    [ ! -d "$PREFIX_STAGING" ] && echo "[build-winui3] Removed stale staging output"
 fi
+
+# Clean up orphaned build directories not managed by this script.
+for orphan in zig-out-winui3-next zig-out-winui3-v2 zig-out-winui3-test zig-out-winui3-fast; do
+    if [ -d "$orphan" ]; then
+        # Skip if any running ghostty.exe exists in this directory
+        if [ -f "$orphan/bin/ghostty.exe" ] && is_locked "$orphan"; then
+            echo "[build-winui3] WARNING: $orphan in use by running process, skipping cleanup"
+        else
+            rm -r "$orphan" 2>/dev/null || echo "[build-winui3] WARNING: partial cleanup of $orphan (some files locked)"
+            [ ! -d "$orphan" ] && echo "[build-winui3] Removed orphaned $orphan"
+        fi
+    fi
+done

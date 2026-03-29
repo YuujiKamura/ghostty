@@ -30,6 +30,9 @@ pub const Step = struct {
     pipeline: Pipeline,
     uniforms: ?*com.ID3D11Buffer = null,
     buffers: []const ?*com.ID3D11Buffer = &.{},
+    /// SRVs for structured buffers, bound at t-register slots starting at
+    /// `structured_srv_slot`. Indexed in parallel with `buffers` (index 1+).
+    buffer_srvs: []const ?*com.ID3D11ShaderResourceView = &.{},
     textures: []const ?Texture = &.{},
     samplers: []const ?Sampler = &.{},
     draw: Draw,
@@ -114,7 +117,17 @@ fn bindResources(ctx: *com.ID3D11DeviceContext, s: Step) void {
             const offsets = [1]com.UINT{0};
             ctx.iaSetVertexBuffers(0, &bufs, &strides, &offsets);
         }
-        // Additional buffers as SRVs would need StructuredBuffer support - TODO
+    }
+    // Structured buffer SRVs — bound at register(t2+) matching HLSL layout.
+    // HLSL convention: textures at t0-t1, structured buffers (bg_cells) at t2.
+    const BG_CELLS_SRV_SLOT: com.UINT = 2;
+    for (s.buffer_srvs, 0..) |maybe_srv, i| {
+        if (maybe_srv) |the_srv| {
+            const slot: com.UINT = BG_CELLS_SRV_SLOT + @as(com.UINT, @intCast(i));
+            const srvs = [1]?*com.ID3D11ShaderResourceView{the_srv};
+            ctx.psSetShaderResources(slot, &srvs);
+            ctx.vsSetShaderResources(slot, &srvs);
+        }
     }
 }
 

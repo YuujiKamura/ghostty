@@ -270,7 +270,12 @@ pub const D3D11_SHADER_RESOURCE_VIEW_DESC = extern struct {
             FirstElement: UINT,
             NumElements: UINT,
         },
-        raw: [2]UINT,
+        BufferEx: extern struct {
+            FirstElement: UINT,
+            NumElements: UINT,
+            Flags: UINT,
+        },
+        raw: [4]UINT,
     },
 };
 
@@ -1154,6 +1159,7 @@ pub const D3D11_CREATE_DEVICE_BGRA_SUPPORT: UINT = 0x20;
 /// D3D11_SRV_DIMENSION
 pub const D3D11_SRV_DIMENSION_TEXTURE2D: UINT = 4;
 pub const D3D11_SRV_DIMENSION_BUFFER: UINT = 1;
+pub const D3D11_SRV_DIMENSION_BUFFEREX: UINT = 11;
 
 /// D3D11_RTV_DIMENSION
 pub const D3D11_RTV_DIMENSION_TEXTURE2D: UINT = 4;

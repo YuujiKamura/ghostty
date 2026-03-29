@@ -30,6 +30,7 @@ pub fn Buffer(comptime T: type) type {
         const Self = @This();
 
         buffer: ?*com.ID3D11Buffer = null,
+        srv: ?*com.ID3D11ShaderResourceView = null,
         opts: Options,
         len: usize,
 
@@ -59,7 +60,8 @@ pub fn Buffer(comptime T: type) type {
             }
 
             const buf = device.createBuffer(&desc, null) catch return error.D3D11Failed;
-            return .{ .buffer = buf, .opts = opts, .len = len };
+            const srv = if (opts.structured) createSRV(device, buf, len) else null;
+            return .{ .buffer = buf, .srv = srv, .opts = opts, .len = len };
         }
 
         /// Init the buffer filled with the given data.
@@ -90,10 +92,12 @@ pub fn Buffer(comptime T: type) type {
             };
 
             const buf = device.createBuffer(&desc, &init_data) catch return error.D3D11Failed;
-            return .{ .buffer = buf, .opts = opts, .len = data.len };
+            const srv = if (opts.structured) createSRV(device, buf, data.len) else null;
+            return .{ .buffer = buf, .srv = srv, .opts = opts, .len = data.len };
         }
 
         pub fn deinit(self: Self) void {
+            if (self.srv) |s| s.release();
             if (self.buffer) |buf| buf.release();
         }
 
@@ -108,6 +112,7 @@ pub fn Buffer(comptime T: type) type {
 
             // If we need more space, recreate.
             if (data.len > self.len) {
+                if (self.srv) |s| s.release();
                 if (self.buffer) |buf| buf.release();
                 self.* = try initWithDevice(device, self.opts, data.len * 2);
             }
@@ -138,6 +143,7 @@ pub fn Buffer(comptime T: type) type {
 
             // If we need more space, recreate with double capacity.
             if (total_len > self.len) {
+                if (self.srv) |s| s.release();
                 if (self.buffer) |buf| buf.release();
                 self.* = try initWithDevice(device, self.opts, total_len * 2);
             }
@@ -173,6 +179,23 @@ pub fn Buffer(comptime T: type) type {
             }
 
             return total_len;
+        }
+
+        /// Create a ShaderResourceView for a structured buffer.
+        fn createSRV(device: *com.ID3D11Device, buf: *com.ID3D11Buffer, num_elements: usize) ?*com.ID3D11ShaderResourceView {
+            const desc = com.D3D11_SHADER_RESOURCE_VIEW_DESC{
+                .Format = .UNKNOWN,
+                .ViewDimension = com.D3D11_SRV_DIMENSION_BUFFEREX,
+                .u = .{ .BufferEx = .{
+                    .FirstElement = 0,
+                    .NumElements = @intCast(num_elements),
+                    .Flags = 0,
+                } },
+            };
+            return device.createShaderResourceView(@ptrCast(buf), &desc) catch |err| {
+                log.err("failed to create structured buffer SRV: {}", .{err});
+                return null;
+            };
         }
     };
 }
