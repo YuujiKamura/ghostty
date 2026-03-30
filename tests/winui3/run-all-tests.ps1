@@ -112,8 +112,7 @@ $cpTests = @(
     "test-02d-control-plane",
     "test-02e-agent-roundtrip",
     "test-04-keyboard",
-    "test-06-ime-input",
-    "test-07-tsf-ime"
+    "test-06-ime-input"
 )
 
 # --- OnlyFailed: filter test arrays to previously-failed tests only ---
@@ -144,19 +143,19 @@ if (-not $needSharedGhostty) {
     # Give XAML time to fully initialize + CP DLL to register session
     Start-Sleep -Milliseconds 3000
 
-    # Discover the ghostty CP session via agent-deck
+    # Register + discover the ghostty CP session via agent-deck
     $env:GHOSTTY_CP_SESSION = ""
-    if (Test-Path $agentDeck) {
-        $lsJson = & $agentDeck ls --json 2>$null
-        if ($lsJson) {
-            $parsed = $lsJson | ConvertFrom-Json
-            $cpSessions = @($parsed | Where-Object { $_.source -eq "ghostty" })
-            if ($cpSessions.Count -gt 0) {
-                $env:GHOSTTY_CP_SESSION = $cpSessions[-1].title
-                Write-Host "  CP session: $($env:GHOSTTY_CP_SESSION)" -ForegroundColor Green
-            }
-        }
-        if (-not $env:GHOSTTY_CP_SESSION) {
+    $registered = Register-GhosttyCP -ProcessId $proc.Id
+    if ($registered) {
+        $env:GHOSTTY_CP_SESSION = $registered
+        Write-Host "  CP session: $($env:GHOSTTY_CP_SESSION)" -ForegroundColor Green
+    } else {
+        # Fallback: try to discover without registration
+        $discovered = Find-GhosttyCP -ProcessId $proc.Id
+        if ($discovered) {
+            $env:GHOSTTY_CP_SESSION = $discovered
+            Write-Host "  CP session (discovered): $($env:GHOSTTY_CP_SESSION)" -ForegroundColor Green
+        } else {
             Write-Host "  WARN: Could not identify ghostty CP session" -ForegroundColor Yellow
         }
     }

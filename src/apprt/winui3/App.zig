@@ -45,6 +45,7 @@ const CpQuery = control_plane_mod.CpQuery;
 const nonclient_island_window = @import("nonclient_island_window.zig");
 const NonClientIslandWindow = nonclient_island_window.NonClientIslandWindow;
 const Tsf = @import("tsf.zig");
+const tsf_logic = @import("tsf_logic.zig");
 const IpcServer = @import("ipc.zig");
 
 const log = std.log.scoped(.winui3);
@@ -794,30 +795,17 @@ fn tsfHandleOutput(userdata: ?*anyopaque, utf8: []const u8) void {
 
     // Decode UTF-8 into codepoints and send each as a UTF-16 char event,
     // which follows the same path as IME commit via handleCharEvent.
-    var i: usize = 0;
-    while (i < utf8.len) {
-        const cp_len = std.unicode.utf8ByteSequenceLength(utf8[i]) catch {
-            i += 1;
-            continue;
-        };
-        if (i + cp_len > utf8.len) break;
-        const codepoint = std.unicode.utf8Decode(utf8[i..][0..cp_len]) catch {
-            i += cp_len;
-            continue;
-        };
-        log.debug("TSF tsfHandleOutput: sending codepoint U+{X:0>4}", .{@as(u32, codepoint)});
-        // Encode as UTF-16 and send via handleCharEvent (supports surrogate pairs).
-        if (codepoint <= 0xFFFF) {
-            surface.handleCharEvent(@intCast(codepoint));
-        } else {
-            // Surrogate pair for supplementary planes.
-            const high: u16 = @intCast(((codepoint - 0x10000) >> 10) + 0xD800);
-            const low: u16 = @intCast(((codepoint - 0x10000) & 0x3FF) + 0xDC00);
-            surface.handleCharEvent(high);
-            surface.handleCharEvent(low);
+    // Logic extracted to tsf_logic.decodeAndEmitUtf16 for testability.
+    const emit_fn = struct {
+        // Capture surface via a global — decodeAndEmitUtf16 takes a plain fn ptr.
+        threadlocal var active_surface: ?*Surface = null;
+        fn emit(code_unit: u16) void {
+            if (active_surface) |s| s.handleCharEvent(code_unit);
         }
-        i += cp_len;
-    }
+    };
+    emit_fn.active_surface = surface;
+    _ = tsf_logic.decodeAndEmitUtf16(utf8, &emit_fn.emit);
+    emit_fn.active_surface = null;
     log.debug("TSF tsfHandleOutput: done, pending_keydown={s}", .{@tagName(surface.pending_keydown)});
 }
 

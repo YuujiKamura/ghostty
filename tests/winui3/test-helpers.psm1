@@ -1005,6 +1005,193 @@ function Dump-UIATree {
 }
 
 # ============================================================
+# Control Plane helpers (agent-deck + direct Named Pipe)
+# ============================================================
+
+function Register-GhosttyCP {
+    <#
+    .SYNOPSIS
+        Register a ghostty CP session with agent-deck by PID.
+        Returns the session name (e.g. "ghostty-12345") or $null.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][int]$ProcessId)
+
+    $agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+    if (-not (Test-Path $agentDeck)) { return $null }
+
+    $sessionName = "ghostty-$ProcessId"
+
+    # Register (ignore errors if already registered)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $agentDeck session add $sessionName --tool shell 2>$null | Out-Null
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+    Start-Sleep -Milliseconds 500
+
+    return $sessionName
+}
+
+function Find-GhosttyCP {
+    <#
+    .SYNOPSIS
+        Find a ghostty CP session via agent-deck ls --json.
+        Returns the session title or $null.
+    .PARAMETER ProcessId
+        If provided, prefer session matching this PID.
+    #>
+    [CmdletBinding()]
+    param([int]$ProcessId = 0)
+
+    $agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+    if (-not (Test-Path $agentDeck)) { return $null }
+
+    try {
+        $lsJson = & $agentDeck ls --json 2>$null
+        if (-not $lsJson) { return $null }
+        $parsed = $lsJson | ConvertFrom-Json
+        $cpSessions = @($parsed | Where-Object {
+            $_.PSObject.Properties['tool'] -and $_.tool -eq "ghostty"
+        })
+        # Try matching PID first
+        if ($ProcessId -gt 0) {
+            foreach ($s in $cpSessions) {
+                if ($s.PSObject.Properties['pid'] -and $s.pid -eq $ProcessId) {
+                    return $s.title
+                }
+            }
+        }
+        # Fallback: most recent
+        if ($cpSessions.Count -gt 0) {
+            return $cpSessions[-1].title
+        }
+    } catch {
+        # Silently ignore
+    }
+    return $null
+}
+
+function Send-GhosttyInput {
+    <#
+    .SYNOPSIS
+        Send text input to a ghostty CP session.
+        Tries agent-deck send first, falls back to direct Named Pipe.
+    .PARAMETER SessionName
+        The CP session name (e.g. "ghostty-12345").
+    .PARAMETER Text
+        The text to send (will be followed by Enter/newline).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$SessionName,
+        [Parameter(Mandatory)][string]$Text
+    )
+
+    $agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+
+    # Try agent-deck send first
+    if (Test-Path $agentDeck) {
+        $prev = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        $sendResult = & $agentDeck send $SessionName $Text --no-wait 2>&1
+        $sendExit = $LASTEXITCODE
+        $ErrorActionPreference = $prev
+        if ($sendExit -eq 0) { return $true }
+
+        # Try session send as fallback
+        $ErrorActionPreference = 'Continue'
+        $sendResult = & $agentDeck session send $SessionName $Text --no-wait 2>&1
+        $sendExit = $LASTEXITCODE
+        $ErrorActionPreference = $prev
+        if ($sendExit -eq 0) { return $true }
+    }
+
+    # Fallback: direct Named Pipe INPUT protocol
+    # Extract PID from session name (ghostty-<PID>)
+    if ($SessionName -match 'ghostty-(\d+)') {
+        $pid = $Matches[1]
+        $pipePath = "\\.\pipe\ghostty-winui3-ghostty-${pid}-${pid}"
+        return Send-GhosttyPipeInput -PipePath $pipePath -Text $Text
+    }
+
+    return $false
+}
+
+function Send-GhosttyPipeInput {
+    <#
+    .SYNOPSIS
+        Send text directly to a ghostty CP Named Pipe using the INPUT protocol.
+        Protocol: "INPUT|<from>|<base64-encoded-text-with-newline>"
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$PipePath,
+        [Parameter(Mandatory)][string]$Text
+    )
+
+    try {
+        # Add newline to text (simulates Enter key)
+        $textWithNewline = $Text + "`n"
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($textWithNewline)
+        $b64 = [Convert]::ToBase64String($bytes)
+        $request = "INPUT|test-script|$b64`n"
+        $requestBytes = [System.Text.Encoding]::UTF8.GetBytes($request)
+
+        $pipeName = $PipePath -replace '^\\\\\.\\pipe\\', ''
+        $pipe = [System.IO.Pipes.NamedPipeClientStream]::new(
+            ".",
+            $pipeName,
+            [System.IO.Pipes.PipeDirection]::InOut
+        )
+        $pipe.Connect(3000)  # 3s timeout
+        # Pipe is PIPE_TYPE_BYTE mode — no message framing needed
+
+        # Write request
+        $pipe.Write($requestBytes, 0, $requestBytes.Length)
+        $pipe.Flush()
+
+        # Read response (byte mode: read until newline or buffer full)
+        $buffer = New-Object byte[] 4096
+        $bytesRead = $pipe.Read($buffer, 0, $buffer.Length)
+        $response = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $bytesRead)
+        $pipe.Dispose()
+
+        return ($response -and ($response -match "ACK\|" -or $response -match "QUEUED\|"))
+    } catch {
+        Write-Host "  WARN: Direct pipe send failed: $($_.Exception.Message)" -ForegroundColor Yellow
+        return $false
+    }
+}
+
+function Get-GhosttyOutput {
+    <#
+    .SYNOPSIS
+        Get terminal output from a ghostty CP session via agent-deck session output.
+    .PARAMETER SessionName
+        The CP session name.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$SessionName)
+
+    $agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+    if (-not (Test-Path $agentDeck)) { return "" }
+
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & $agentDeck session output $SessionName -q 2>$null
+        return ($output | Out-String)
+    } catch {
+        return ""
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
+# ============================================================
 # Exports
 # ============================================================
 Export-ModuleMember -Function @(
@@ -1033,4 +1220,9 @@ Export-ModuleMember -Function @(
     'Get-UIAWindowPattern'
     'Get-UIATransformPattern'
     'Dump-UIATree'
+    'Register-GhosttyCP'
+    'Find-GhosttyCP'
+    'Send-GhosttyInput'
+    'Send-GhosttyPipeInput'
+    'Get-GhosttyOutput'
 )

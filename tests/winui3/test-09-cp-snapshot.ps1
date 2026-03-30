@@ -18,7 +18,7 @@ if (-not (Test-Path $agentDeck)) {
 $sessionName = $env:GHOSTTY_CP_SESSION
 if (-not $sessionName) {
     $lsOutput = & $agentDeck ls --json 2>$null | ConvertFrom-Json
-    $cpSessions = @($lsOutput | Where-Object { $_.source -eq "ghostty" -and $_.pid -gt 0 })
+    $cpSessions = @($lsOutput | Where-Object { $_.PSObject.Properties['source'] -and $_.source -eq "ghostty" -and $_.pid -gt 0 })
     if ($cpSessions.Count -gt 0) {
         $sessionName = $cpSessions[0].title
     }

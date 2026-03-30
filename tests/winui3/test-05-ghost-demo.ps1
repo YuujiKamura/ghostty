@@ -13,7 +13,6 @@ if (-not (Test-Path $exePath)) {
     throw "$testName FAIL: ghostty.exe not found at $exePath"
 }
 
-$agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
 $logPath = Join-Path $env:TEMP "ghostty_debug.log"
 
 # Kill any existing ghostty
@@ -37,17 +36,10 @@ Start-Sleep -Seconds 6
 $proc.Refresh()
 Test-Assert -Condition (-not $proc.HasExited) -Message "$testName - process alive after 6s"
 
-# Find CP session via agent-deck
-$sessionName = ""
-if (Test-Path $agentDeck) {
-    $lsJson = & $agentDeck ls --json 2>$null
-    if ($lsJson) {
-        $parsed = $lsJson | ConvertFrom-Json
-        $cpSessions = @($parsed | Where-Object { $_.source -eq "ghostty" -and $_.pid -eq $procId })
-        if ($cpSessions.Count -gt 0) {
-            $sessionName = $cpSessions[0].title
-        }
-    }
+# Register + find CP session via agent-deck
+$sessionName = Register-GhosttyCP -ProcessId $procId
+if (-not $sessionName) {
+    $sessionName = Find-GhosttyCP -ProcessId $procId
 }
 
 if ($sessionName) {
@@ -55,11 +47,12 @@ if ($sessionName) {
 
     # Send play.py — it auto-scales to fit any terminal size
     $playPy = "C:\Users\yuuji\ghostty-win\tools\ghost-demo\play.py"
-    $prev = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    & $agentDeck session send $sessionName "python `"$playPy`" --fps 60" --no-wait 2>$null
-    $ErrorActionPreference = $prev
-    Write-Host "  Sent play.py --fps 60 (auto-scale)" -ForegroundColor DarkGray
+    $sendOk = Send-GhosttyInput -SessionName $sessionName -Text "python `"$playPy`" --fps 60"
+    if ($sendOk) {
+        Write-Host "  Sent play.py --fps 60 (auto-scale)" -ForegroundColor DarkGray
+    } else {
+        Write-Host "  WARN: Could not send play.py (send unavailable)" -ForegroundColor Yellow
+    }
 
     # Let animation play (~4s for 235 frames at 60fps, plus margin)
     Start-Sleep -Seconds 8
@@ -99,7 +92,11 @@ Test-Assert -Condition $hasProvider -Message "$testName - activateXamlType uses 
 
 # Verify CP DLL loaded
 $hasCpOk = $logContent -match "control plane DLL started"
-Test-Assert -Condition $hasCpOk -Message "$testName - Control plane DLL loaded"
+if (-not $hasCpOk) {
+    # Also check for the zig-native CP (newer builds may not use DLL)
+    $hasCpOk = $logContent -match "control plane started"
+}
+Test-Assert -Condition $hasCpOk -Message "$testName - Control plane loaded"
 
 # Frame profiler check
 $profileLines = ($logContent -split "`n") | Where-Object { $_ -match "frame-profile:" }
