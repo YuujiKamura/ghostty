@@ -1,3 +1,39 @@
+## This Fork: WinUI3 Native Windows GUI
+
+This is a fork of [Ghostty](https://github.com/ghostty-org/ghostty) that adds a **native Windows GUI** using WinUI3 XAML Islands.
+
+**What makes this different:**
+
+- **Pure Zig, no C++/WinRT** — COM vtables are generated directly from WinMD metadata via [win-zig-bindgen](https://github.com/YuujiKamura/win-zig-bindgen), bypassing the C++/WinRT projection entirely
+- **XAML Islands architecture** — follows the same `CreateWindowEx` + `DesktopWindowXamlSource` pattern as [Windows Terminal](https://github.com/microsoft/terminal), not the packaged WinUI3 app model
+- **D3D11 rendering** — GPU-accelerated terminal rendering through D3D11 swap chains hosted in XAML `SwapChainPanel`
+- **Control Plane IPC** — Named Pipe server ([zig-control-plane](https://github.com/YuujiKamura/zig-control-plane)) enabling AI agents to programmatically interact with terminal sessions
+- **10/10 UIA tests** — automated UI testing via PowerShell UIA + control plane
+
+### Build
+
+```bash
+# WinUI3 (requires Windows App SDK + .NET 9)
+./build-winui3.sh
+
+# Win32 (minimal, no XAML)
+zig build -Dapp-runtime=win32 --prefix zig-out-win32
+```
+
+### Related Repositories
+
+| Repo | Description |
+|------|-------------|
+| [win-zig-bindgen](https://github.com/YuujiKamura/win-zig-bindgen) | WinMD to Zig COM vtable generator |
+| [zig-control-plane](https://github.com/YuujiKamura/zig-control-plane) | Named Pipe control plane library |
+| [agent-deck](https://github.com/YuujiKamura/agent-deck) | Multi-session AI agent orchestrator (fork of [asheshgoplani/agent-deck](https://github.com/asheshgoplani/agent-deck)) |
+
+---
+
+*Upstream README follows below.*
+
+---
+
 <!-- LOGO -->
 <h1>
 <p align="center">
