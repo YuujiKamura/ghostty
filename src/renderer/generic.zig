@@ -427,60 +427,6 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             }
         };
 
-        /// Build a RenderPass Step for the bg_color fullscreen pass.
-        /// On D3D11, includes the structured buffer SRV for bg_cells.
-        fn bgColorStep(shaders: *const Shaders, frame: *FrameState) RenderPass.Step {
-            var step: RenderPass.Step = .{
-                .pipeline = shaders.pipelines.bg_color,
-                .uniforms = frame.uniforms.buffer,
-                .buffers = &.{ null, frame.cells_bg.buffer },
-                .draw = .{ .type = .triangle, .vertex_count = 3 },
-            };
-            if (@hasField(RenderPass.Step, "buffer_srvs")) {
-                step.buffer_srvs = &.{frame.cells_bg.srv};
-            }
-            return step;
-        }
-
-        /// Build a RenderPass Step for the cell_bg pass.
-        fn cellBgStep(shaders: *const Shaders, frame: *FrameState) RenderPass.Step {
-            var step: RenderPass.Step = .{
-                .pipeline = shaders.pipelines.cell_bg,
-                .uniforms = frame.uniforms.buffer,
-                .buffers = &.{ null, frame.cells_bg.buffer },
-                .draw = .{ .type = .triangle, .vertex_count = 3 },
-            };
-            if (@hasField(RenderPass.Step, "buffer_srvs")) {
-                step.buffer_srvs = &.{frame.cells_bg.srv};
-            }
-            return step;
-        }
-
-        /// Build a RenderPass Step for the cell_text pass.
-        fn cellTextStep(shaders: *const Shaders, frame: *FrameState, fg_count: usize) RenderPass.Step {
-            var step: RenderPass.Step = .{
-                .pipeline = shaders.pipelines.cell_text,
-                .uniforms = frame.uniforms.buffer,
-                .buffers = &.{
-                    frame.cells.buffer,
-                    frame.cells_bg.buffer,
-                },
-                .textures = &.{
-                    frame.grayscale,
-                    frame.color,
-                },
-                .draw = .{
-                    .type = .triangle_strip,
-                    .vertex_count = 4,
-                    .instance_count = fg_count,
-                },
-            };
-            if (@hasField(RenderPass.Step, "buffer_srvs")) {
-                step.buffer_srvs = &.{frame.cells_bg.srv};
-            }
-            return step;
-        }
-
         /// State relevant to our custom shaders if we have any.
         const CustomShaderState = struct {
             /// When we have a custom shader state, we maintain a front
@@ -1612,7 +1558,12 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     }),
                     else => {},
                 } else {
-                    pass.step(bgColorStep(&self.shaders, frame));
+                    pass.step(.{
+                        .pipeline = self.shaders.pipelines.bg_color,
+                        .uniforms = frame.uniforms.buffer,
+                        .buffers = &.{ null, frame.cells_bg.buffer },
+                        .draw = .{ .type = .triangle, .vertex_count = 3 },
+                    });
                 }
 
                 // Then we draw any kitty images that need
@@ -1625,7 +1576,12 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 );
 
                 // Then we draw any opaque cell backgrounds.
-                pass.step(cellBgStep(&self.shaders, frame));
+                pass.step(.{
+                    .pipeline = self.shaders.pipelines.cell_bg,
+                    .uniforms = frame.uniforms.buffer,
+                    .buffers = &.{ null, frame.cells_bg.buffer },
+                    .draw = .{ .type = .triangle, .vertex_count = 3 },
+                });
 
                 // Kitty images between cell backgrounds and text.
                 self.images.draw(
@@ -1636,7 +1592,23 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 );
 
                 // Text.
-                pass.step(cellTextStep(&self.shaders, frame, fg_count));
+                pass.step(.{
+                    .pipeline = self.shaders.pipelines.cell_text,
+                    .uniforms = frame.uniforms.buffer,
+                    .buffers = &.{
+                        frame.cells.buffer,
+                        frame.cells_bg.buffer,
+                    },
+                    .textures = &.{
+                        frame.grayscale,
+                        frame.color,
+                    },
+                    .draw = .{
+                        .type = .triangle_strip,
+                        .vertex_count = 4,
+                        .instance_count = fg_count,
+                    },
+                });
 
                 // Kitty images in front of text.
                 self.images.draw(
