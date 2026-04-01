@@ -364,10 +364,15 @@ pub const ControlPlane = struct {
     // (WM_APP_CP_QUERY) to execute on the UI thread, avoiding data races
     // with App state (Issue #139 H1 fix).
 
-    fn provSendInput(ctx: *anyopaque, text: []const u8, raw: bool, tab_index: ?usize) void {
+    /// Atomic cmd_id counter for ACK tracking.
+    var next_cmd_id: u32 = 1;
+
+    fn provSendInput(ctx: *anyopaque, text: []const u8, raw: bool, tab_index: ?usize) u32 {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
         _ = tab_index; // TODO: route to specific tab
-        log.info("provSendInput hwnd=0x{x} len={} raw={}", .{ @intFromPtr(self.hwnd), text.len, raw });
+
+        const cmd_id = @atomicRmw(u32, &next_cmd_id, .Add, 1, .monotonic);
+        log.info("provSendInput hwnd=0x{x} len={} raw={} cmd_id={}", .{ @intFromPtr(self.hwnd), text.len, raw, cmd_id });
 
         // Special prefix "\x1b[TSF:" routes text through the TSF commit path
         const tsf_prefix = "\x1b[TSF:";
@@ -379,7 +384,7 @@ pub const ControlPlane = struct {
             if (tsf_result == 0) {
                 log.warn("provSendInput PostMessageW(WM_APP_TSF_INJECT) failed err={}", .{os.GetLastError()});
             }
-            return;
+            return cmd_id;
         }
 
         self.enqueueInput("zig-cp", text, raw);
@@ -388,6 +393,7 @@ pub const ControlPlane = struct {
         if (result == 0) {
             log.warn("provSendInput PostMessageW(WM_APP_CONTROL_INPUT) failed err={}", .{os.GetLastError()});
         }
+        return cmd_id;
     }
 
     /// Issue #142: capture all tab state in a single SendMessageW round-trip.
