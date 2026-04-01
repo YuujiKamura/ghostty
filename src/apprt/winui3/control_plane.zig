@@ -17,6 +17,7 @@ const PendingInput = struct {
     from: []u8,
     text: []u8,
     raw: bool = false,
+    cmd_id: u32 = 0,
 };
 
 /// Query kind for CpQuery — dispatched via WM_APP_CP_QUERY (SendMessageW).
@@ -104,6 +105,9 @@ pub const ControlPlane = struct {
     session_name: ?[:0]const u8 = null,
     pending_inputs_lock: std.Thread.Mutex = .{},
     pending_inputs: std.ArrayListUnmanaged(PendingInput) = .{},
+    /// Drained cmd_ids — set by drainPendingInputs, read by ACK_POLL.
+    drained_lock: std.Thread.Mutex = .{},
+    last_drained_cmd_id: u32 = 0,
     pending_ime_injects_lock: std.Thread.Mutex = .{},
     pending_ime_injects: std.ArrayListUnmanaged([]u8) = .{},
     callback_ctx: ?*anyopaque = null,
@@ -180,6 +184,7 @@ pub const ControlPlane = struct {
             .captureSnapshot = &provCaptureSnapshot,
             .captureHistory = &provCaptureHistory,
             .sendInput = &provSendInput,
+            .ackPoll = &provAckPoll,
             .newTab = &provNewTab,
             .closeTab = &provCloseTab,
             .switchTab = &provSwitchTab,
@@ -271,7 +276,7 @@ pub const ControlPlane = struct {
         self.pending_ime_injects = .{};
     }
 
-    fn enqueueInput(self: *ControlPlane, from: []const u8, text: []const u8, raw: bool) void {
+    fn enqueueInput(self: *ControlPlane, from: []const u8, text: []const u8, raw: bool, cmd_id: u32) void {
         const owned_from = self.allocator.dupe(u8, from) catch return;
         const owned_text = self.allocator.dupe(u8, text) catch {
             self.allocator.free(owned_from);
@@ -284,6 +289,7 @@ pub const ControlPlane = struct {
             .from = owned_from,
             .text = owned_text,
             .raw = raw,
+            .cmd_id = cmd_id,
         }) catch {
             self.allocator.free(owned_from);
             self.allocator.free(owned_text);
@@ -301,9 +307,12 @@ pub const ControlPlane = struct {
 
         const termio = @import("../../termio.zig");
 
+        var max_cmd_id: u32 = 0;
         for (pending.items) |entry| {
             defer self.allocator.free(entry.from);
             defer self.allocator.free(entry.text);
+
+            if (entry.cmd_id > max_cmd_id) max_cmd_id = entry.cmd_id;
 
             if (entry.raw) {
                 const msg = termio.Message.writeReq(self.allocator, entry.text) catch |err| {
@@ -316,6 +325,16 @@ pub const ControlPlane = struct {
                     log.warn("failed to apply control-plane input: {}", .{err});
                     continue;
                 };
+            }
+        }
+
+        // Update last drained cmd_id for ACK polling
+        if (max_cmd_id > 0) {
+            self.drained_lock.lock();
+            defer self.drained_lock.unlock();
+            if (max_cmd_id > self.last_drained_cmd_id) {
+                self.last_drained_cmd_id = max_cmd_id;
+                log.info("drainPendingInputs: ack cmd_id={}", .{max_cmd_id});
             }
         }
     }
@@ -387,13 +406,20 @@ pub const ControlPlane = struct {
             return cmd_id;
         }
 
-        self.enqueueInput("zig-cp", text, raw);
+        self.enqueueInput("zig-cp", text, raw, cmd_id);
         const result = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0);
         log.info("provSendInput PostMessageW(WM_APP_CONTROL_INPUT) result={}", .{result});
         if (result == 0) {
             log.warn("provSendInput PostMessageW(WM_APP_CONTROL_INPUT) failed err={}", .{os.GetLastError()});
         }
         return cmd_id;
+    }
+
+    fn provAckPoll(ctx: *anyopaque, cmd_id: u32) bool {
+        const self: *ControlPlane = @ptrCast(@alignCast(ctx));
+        self.drained_lock.lock();
+        defer self.drained_lock.unlock();
+        return cmd_id <= self.last_drained_cmd_id;
     }
 
     /// Issue #142: capture all tab state in a single SendMessageW round-trip.
