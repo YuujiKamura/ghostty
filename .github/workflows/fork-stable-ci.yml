@@ -1,4 +1,4 @@
-name: Fork Stable CI (Multi-Platform)
+name: Fork Stable CI (Windows-Only)
 
 on:
   push:
@@ -35,44 +35,7 @@ jobs:
           $env:GHOSTTY_WINUI3_PREBUILT_ONLY = "1"
           bash ./build-winui3.sh --release=fast
 
-  # --- Linux Build (GTK/Headless) ---
-  build-linux:
-    name: Linux (Ubuntu)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-
-      - name: Install Linux Dependencies
+      - name: List Artifacts
+        shell: pwsh
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-4-dev \
-            libadwaita-1-dev \
-            libfontconfig1-dev \
-            libharfbuzz-dev \
-            libpixman-1-dev \
-            libonig-dev \
-            libxkbcommon-dev
-
-      - name: Zig Build (Headless/No Runtime)
-        run: zig build -Dapp-runtime=none --release=fast
-
-  # --- macOS Build (Native) ---
-  build-macos:
-    name: macOS (Native)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-
-      - name: Zig Build (GhosttyKit)
-        run: zig build -Dapp-runtime=none --release=fast
+          ls zig-out-winui3/bin | Select-Object Name, Length

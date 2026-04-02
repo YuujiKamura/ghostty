@@ -142,16 +142,19 @@ zig build -Dapp-runtime=winui3 -Dslow-safety=false --prefix "$PREFIX" "${ZIG_ARG
 # Step 3: Copy XBF and PRI to bin directory
 if pick_xaml_asset_dirs; then
     [ "$COPY_LABEL" = "$BUILD_CONFIG" ] || echo "[build-winui3] WARNING: $BUILD_CONFIG XAML not found, falling back to $COPY_LABEL"
-    cp -f "$COPY_OBJ"/*.xbf "$PREFIX/bin/" 2>/dev/null && echo "[build-winui3] Copied XBF files ($COPY_LABEL)"
-    cp -f "$COPY_BIN"/ghostty.pri "$PREFIX/bin/resources.pri" 2>/dev/null && echo "[build-winui3] Copied PRI file ($COPY_LABEL)"
-
     # Copy WinUI 3 runtime DLLs if available in prebuilt/runtime
     if [ -d "$XAML_RUNTIME" ]; then
         cp -f "$XAML_RUNTIME"/*.dll "$PREFIX/bin/" 2>/dev/null
-        # Framework resources.pri (if renamed for avoid collision with app's resources.pri)
-        [ -f "$XAML_RUNTIME/Microsoft.WindowsAppRuntime.pri" ] && cp -f "$XAML_RUNTIME/Microsoft.WindowsAppRuntime.pri" "$PREFIX/bin/"
+        # Framework resources.pri (renamed to Microsoft.WindowsAppRuntime.pri to avoid collision)
+        if [ -f "$XAML_RUNTIME/Microsoft.WindowsAppRuntime.pri" ]; then
+            cp -f "$XAML_RUNTIME/Microsoft.WindowsAppRuntime.pri" "$PREFIX/bin/"
+        fi
         echo "[build-winui3] Copied WinUI 3 runtime DLLs from $XAML_RUNTIME"
     fi
+
+    # Copy App's XBF and PRI (Must be resources.pri for WinUI3 to find them)
+    cp -f "$COPY_OBJ"/*.xbf "$PREFIX/bin/" 2>/dev/null && echo "[build-winui3] Copied XBF files ($COPY_LABEL)"
+    cp -f "$COPY_BIN"/ghostty.pri "$PREFIX/bin/resources.pri" 2>/dev/null && echo "[build-winui3] Copied PRI file ($COPY_LABEL)"
 
     # Stale detection for prebuilt mode / no-MSBuild mode.
     xbf_sample="$(ls -1 "$COPY_OBJ"/*.xbf 2>/dev/null | head -n1 || true)"
