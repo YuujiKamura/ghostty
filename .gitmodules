@@ -1,0 +1,3 @@
+[submodule "vendor/zig-control-plane"]
+	path = vendor/zig-control-plane
+	url = https://github.com/YuujiKamura/zig-control-plane.git
