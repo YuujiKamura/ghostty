@@ -876,6 +876,16 @@ fn testBackend(ctx: ?*anyopaque, request: []const u8, allocator: Allocator) ![]c
     return try std.fmt.allocPrint(allocator, "OK|calls={d}|req={s}", .{ tb.calls, request });
 }
 
+fn contractBackend(_: ?*anyopaque, request: []const u8, allocator: Allocator) ![]const u8 {
+    const cmd = commandName(std.mem.trim(u8, request, " \r\n\t"));
+    if (std.mem.eql(u8, cmd, "PING")) return try allocator.dupe(u8, "OK|PONG\n");
+    if (std.mem.eql(u8, cmd, "STATE")) return try allocator.dupe(u8, "OK|state\n");
+    if (std.mem.eql(u8, cmd, "TAIL")) return try allocator.dupe(u8, "OK|tail\n");
+    if (std.mem.eql(u8, cmd, "INPUT")) return try allocator.dupe(u8, "OK|input\n");
+    if (std.mem.eql(u8, cmd, "ACK_POLL")) return try allocator.dupe(u8, "OK|ack\n");
+    return try std.fmt.allocPrint(allocator, "ERR|UNSUPPORTED|{s}\n", .{cmd});
+}
+
 test "handleRequestWith caches read commands and invalidates on mutating command" {
     var cp = ControlPlane{
         .allocator = std.testing.allocator,
@@ -955,4 +965,42 @@ test "handleRequestWith serves CAPABILITIES without backend call" {
     try std.testing.expect(std.mem.indexOf(u8, resp, "reads=STATE,TAIL,HISTORY,LIST_TABS") != null);
     try std.testing.expect(std.mem.indexOf(u8, resp, "writes=INPUT,RAW_INPUT,PASTE,ACK_POLL") != null);
     try std.testing.expect(std.mem.indexOf(u8, resp, "control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS") != null);
+}
+
+test "handleRequestWith keeps legacy commands working without CAPABILITIES query" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(0),
+    };
+
+    const ping = cp.handleRequestWith("PING", std.testing.allocator, null, contractBackend);
+    defer std.testing.allocator.free(ping);
+    try std.testing.expectEqualStrings("OK|PONG\n", ping);
+
+    const state = cp.handleRequestWith("STATE|agent-deck|0", std.testing.allocator, null, contractBackend);
+    defer std.testing.allocator.free(state);
+    try std.testing.expectEqualStrings("OK|state\n", state);
+
+    const tail = cp.handleRequestWith("TAIL|agent-deck|20", std.testing.allocator, null, contractBackend);
+    defer std.testing.allocator.free(tail);
+    try std.testing.expectEqualStrings("OK|tail\n", tail);
+
+    const input = cp.handleRequestWith("INPUT|agent-deck|echo hi", std.testing.allocator, null, contractBackend);
+    defer std.testing.allocator.free(input);
+    try std.testing.expectEqualStrings("OK|input\n", input);
+
+    const ack = cp.handleRequestWith("ACK_POLL|agent-deck", std.testing.allocator, null, contractBackend);
+    defer std.testing.allocator.free(ack);
+    try std.testing.expectEqualStrings("OK|ack\n", ack);
+}
+
+test "handleRequestWith returns deterministic ERR for unsupported command" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(0),
+    };
+
+    const resp = cp.handleRequestWith("RAW_INPUT|agent-deck|hello", std.testing.allocator, null, contractBackend);
+    defer std.testing.allocator.free(resp);
+    try std.testing.expectEqualStrings("ERR|UNSUPPORTED|RAW_INPUT\n", resp);
 }
