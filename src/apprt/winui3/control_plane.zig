@@ -22,7 +22,7 @@ const PendingInput = struct {
 };
 
 const default_max_pending_inputs: usize = 128;
-const default_max_inflight_data_requests: u32 = 8;
+const default_max_inflight_data_requests: u32 = 1;
 
 const ResponseCache = struct {
     req: ?[]u8 = null,
