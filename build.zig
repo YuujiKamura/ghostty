@@ -70,19 +70,18 @@ pub fn build(b: *std.Build) !void {
 
     // Zig-native control plane (WinUI3 only)
     if (config.target.result.os.tag == .windows and config.app_runtime == .winui3) {
-        // Only add dependency if the directory exists (it might be missing in CI)
-        const zcp_path = b.path("../zig-control-plane").getPath(b);
-        const zcp_exists = if (std.fs.cwd().access(zcp_path, .{})) |_| true else |_| false;
+        // Use a relative path string directly to check existence before telling Zig about it.
+        const zcp_rel_path = "../zig-control-plane";
+        const zcp_exists = if (std.fs.cwd().access(zcp_rel_path, .{})) |_| true else |_| false;
 
         if (zcp_exists) {
-            const zcp_dep = b.dependency("zig_control_plane", .{
+            const zcp_dep = b.lazyDependency("zig_control_plane", .{
                 .target = config.target,
                 .optimize = config.optimize,
-            });
+            }) orelse return;
             exe.exe.root_module.addImport("zig-control-plane", zcp_dep.module("zig-control-plane"));
         } else {
-            // Provide a dummy module if missing, or handle in code via build_options
-            std.debug.print("Warning: zig-control-plane not found at {s}, skipping import.\n", .{zcp_path});
+            std.debug.print("Warning: {s} not found, skipping zig-control-plane import.\n", .{zcp_rel_path});
         }
     }
 
@@ -443,11 +442,16 @@ pub fn build(b: *std.Build) !void {
         if (config.emit_test_exe) b.installArtifact(test_exe);
         _ = try deps.add(test_exe);
         if (config.target.result.os.tag == .windows and config.app_runtime == .winui3) {
-            const zcp_dep = b.dependency("zig_control_plane", .{
-                .target = config.target,
-                .optimize = config.optimize,
-            });
-            test_exe.root_module.addImport("zig-control-plane", zcp_dep.module("zig-control-plane"));
+            const zcp_rel_path = "../zig-control-plane";
+            const zcp_exists = if (std.fs.cwd().access(zcp_rel_path, .{})) |_| true else |_| false;
+
+            if (zcp_exists) {
+                const zcp_dep = b.lazyDependency("zig_control_plane", .{
+                    .target = config.target,
+                    .optimize = config.optimize,
+                }) orelse return;
+                test_exe.root_module.addImport("zig-control-plane", zcp_dep.module("zig-control-plane"));
+            }
         }
 
         // Verify our internal libghostty header.
