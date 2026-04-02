@@ -13,6 +13,22 @@ const profiles = @import("profiles.zig"); // Added import for profiles
 
 const log = std.log.scoped(.winui3);
 
+const DeferredSurfaceClose = struct {
+    alloc: std.mem.Allocator,
+    surface: *Surface,
+    had_core_initialized: bool,
+
+    fn run(self: DeferredSurfaceClose) void {
+        if (self.had_core_initialized) {
+            self.surface.app.core_app.deleteSurface(self.surface);
+            self.surface.core_surface.deinit();
+        }
+
+        self.surface.deinit();
+        self.alloc.destroy(self.surface);
+    }
+};
+
 pub fn closeActiveTab(self: anytype) bool {
     if (self.surfaces.items.len == 0) return false;
     return closeTab(self, self.active_surface_idx);
@@ -118,19 +134,16 @@ pub fn closeTab(self: anytype, idx: usize) bool {
     if (idx >= self.surfaces.items.len) return false;
 
     const surface = self.surfaces.items[idx];
+    const had_core_initialized = surface.core_initialized;
 
-    // 1. Deinit the surface (stops threads, unregisters XAML event handlers,
-    //    sets core_initialized=false). Do NOT free memory yet — XAML may still
-    //    dispatch pending events to our delegates during the TabView operations
-    //    below. The core_initialized=false guard in each callback will cause
-    //    them to no-op safely.
+    // 1. Remove from the model first, then immediately gate callbacks so any
+    //    pending XAML delegates become no-ops during the UI-thread TabView work.
+    _ = self.surfaces.orderedRemove(idx);
+    surface.core_initialized = false;
 
     // No need to remove panel from tab_content_grid here —
     // updateSelectedTab() uses Clear+Append (WT pattern), so the next
     // tab switch will replace the grid's children entirely.
-
-    surface.deinit();
-    _ = self.surfaces.orderedRemove(idx);
 
     // 2. Adjust active index before TabView triggers SelectionChanged.
     if (self.surfaces.items.len == 0) {
@@ -141,15 +154,28 @@ pub fn closeTab(self: anytype, idx: usize) bool {
         // Remove from TabView last (triggers SelectionChanged with -1).
         if (self.tab_view) |tv| {
             const tab_items_raw = tv.TabItems() catch {
-                self.core_app.alloc.destroy(surface);
+                DeferredSurfaceClose.run(.{
+                    .alloc = self.core_app.alloc,
+                    .surface = surface,
+                    .had_core_initialized = had_core_initialized,
+                });
                 return true;
             };
             const tab_items: *com.IVector = @ptrCast(@alignCast(tab_items_raw));
             defer tab_items.release();
             tab_items.removeAt(@intCast(idx)) catch {};
         }
-        // Now safe to free — XAML operations complete.
-        self.core_app.alloc.destroy(surface);
+        const args = DeferredSurfaceClose{
+            .alloc = self.core_app.alloc,
+            .surface = surface,
+            .had_core_initialized = had_core_initialized,
+        };
+        var cleanup_thread = std.Thread.spawn(.{}, DeferredSurfaceClose.run, .{args}) catch |err| {
+            log.warn("closeTab: async cleanup spawn failed: {}", .{err});
+            DeferredSurfaceClose.run(args);
+            return true;
+        };
+        cleanup_thread.detach();
         return true;
     }
 
@@ -166,7 +192,11 @@ pub fn closeTab(self: anytype, idx: usize) bool {
 
     if (self.tab_view) |tv| {
         const tab_items_raw2 = tv.TabItems() catch {
-            self.core_app.alloc.destroy(surface);
+            DeferredSurfaceClose.run(.{
+                .alloc = self.core_app.alloc,
+                .surface = surface,
+                .had_core_initialized = had_core_initialized,
+            });
             return false;
         };
         const tab_items: *com.IVector = @ptrCast(@alignCast(tab_items_raw2));
@@ -182,10 +212,19 @@ pub fn closeTab(self: anytype, idx: usize) bool {
         input_runtime.focusKeyboardTarget(self);
     }
 
-    // 5. Free surface memory AFTER all XAML operations. Any pending delegate
-    //    callbacks that fired during steps 2-4 saw core_initialized=false
-    //    and returned immediately without accessing freed memory.
-    self.core_app.alloc.destroy(surface);
+    // 5. Finish teardown off the UI thread. Core shutdown still runs, but the
+    //    expensive thread joins no longer block XAML message processing.
+    const args2 = DeferredSurfaceClose{
+        .alloc = self.core_app.alloc,
+        .surface = surface,
+        .had_core_initialized = had_core_initialized,
+    };
+    var cleanup_thread = std.Thread.spawn(.{}, DeferredSurfaceClose.run, .{args2}) catch |err| {
+        log.warn("closeTab: async cleanup spawn failed: {}", .{err});
+        DeferredSurfaceClose.run(args2);
+        return false;
+    };
+    cleanup_thread.detach();
 
     log.info("closeTab: closed idx={}, active now={}, total={}", .{ idx, self.active_surface_idx, self.surfaces.items.len });
     return false;
