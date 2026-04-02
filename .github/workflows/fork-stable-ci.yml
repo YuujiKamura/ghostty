@@ -1,0 +1,78 @@
+name: Fork Stable CI (Multi-Platform)
+
+on:
+  push:
+    branches: [ main, winui3-apprt ]
+  pull_request:
+    branches: [ main, winui3-apprt ]
+  workflow_dispatch: {}
+
+jobs:
+  # --- Windows Build (WinUI3 Focus) ---
+  build-windows:
+    name: Windows (WinUI3)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify Manifest
+        shell: pwsh
+        run: python xaml/prebuilt/manage_manifest.py --verify
+
+      - name: Zig Build (Prebuilt Mode)
+        shell: pwsh
+        run: |
+          $env:GHOSTTY_WINUI3_PREBUILT_ONLY = "1"
+          bash ./build-winui3.sh --release=fast
+
+  # --- Linux Build (GTK/Headless) ---
+  build-linux:
+    name: Linux (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-4-dev \
+            libadwaita-1-dev \
+            libfontconfig1-dev \
+            libharfbuzz-dev \
+            libpixman-1-dev \
+            libonig-dev \
+            libxkbcommon-dev
+
+      - name: Zig Build (Headless/No Runtime)
+        run: zig build -Dapp-runtime=none --release=fast
+
+  # --- macOS Build (Native) ---
+  build-macos:
+    name: macOS (Native)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Zig Build (GhosttyKit)
+        run: zig build -Dapp-runtime=none --release=fast
