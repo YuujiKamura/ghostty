@@ -21,6 +21,21 @@ const PendingInput = struct {
     cmd_id: u32 = 0,
 };
 
+const ResponseCache = struct {
+    req: ?[]u8 = null,
+    resp: ?[]u8 = null,
+    ts_ns: i128 = 0,
+    ttl_ns: i128 = 150 * std.time.ns_per_ms,
+
+    fn clear(self: *ResponseCache, allocator: Allocator) void {
+        if (self.req) |v| allocator.free(v);
+        if (self.resp) |v| allocator.free(v);
+        self.req = null;
+        self.resp = null;
+        self.ts_ns = 0;
+    }
+};
+
 /// Query kind for CpQuery — dispatched via WM_APP_CP_QUERY (SendMessageW).
 pub const QueryKind = enum {
     read_buffer,
@@ -118,6 +133,9 @@ pub const ControlPlane = struct {
     pipe_server: ?PipeServer = null,
     provider: ?Provider = null,
 
+    cache_lock: std.Thread.Mutex = .{},
+    cache: ResponseCache = .{},
+
     capture_state_fn: ?CaptureStateFn = null,
     capture_tail_fn: ?CaptureTailFn = null,
     capture_history_fn: ?CaptureHistoryFn = null,
@@ -157,6 +175,7 @@ pub const ControlPlane = struct {
             .capture_history_fn = capture_history_fn,
             .capture_tab_list_fn = capture_tab_list_fn,
         };
+        self.cache.ttl_ns = self.loadCacheTtlNs();
 
         // Initialize the Zig-native control plane
         self.initControlPlane() catch |err| {
@@ -226,6 +245,7 @@ pub const ControlPlane = struct {
     fn pipeHandler(request: []const u8, ctx: *anyopaque, allocator: Allocator) []const u8 {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
         const req = std.mem.trim(u8, request, " \r\n\t");
+        const cmd = commandName(req);
         if (std.mem.indexOf(u8, req, "BGTRACE_STATE") != null) {
             const diag = D3D11RenderPass.traceDiagnostics();
             return std.fmt.allocPrint(
@@ -238,11 +258,22 @@ pub const ControlPlane = struct {
                 },
             ) catch return "ERR|oom\n";
         }
+        if (isCacheableCommand(cmd)) {
+            if (self.tryGetCachedResponse(req, allocator)) |cached| {
+                return cached;
+            }
+        } else {
+            self.clearResponseCache();
+        }
         if (self.cp) |*cp| {
-            return cp.handleRequest(request) catch |err| {
+            const resp = cp.handleRequest(request) catch |err| {
                 log.warn("handleRequest error: {}", .{err});
                 return allocator.dupe(u8, "ERR|internal_error\n") catch return "ERR|internal_error\n";
             };
+            if (isCacheableCommand(cmd) and !std.mem.startsWith(u8, std.mem.trim(u8, resp, " \r\n\t"), "ERR|")) {
+                self.updateCachedResponse(req, resp);
+            }
+            return resp;
         }
         return allocator.dupe(u8, "ERR|not_initialized\n") catch return "ERR|not_initialized\n";
     }
@@ -262,6 +293,7 @@ pub const ControlPlane = struct {
         }
 
         self.clearPendingInputs();
+        self.clearResponseCache();
         if (self.session_name) |sn| {
             self.allocator.free(sn);
             self.session_name = null;
@@ -288,6 +320,47 @@ pub const ControlPlane = struct {
         }
         self.pending_ime_injects.deinit(self.allocator);
         self.pending_ime_injects = .{};
+    }
+
+    fn loadCacheTtlNs(self: *ControlPlane) i128 {
+        const raw = std.process.getEnvVarOwned(self.allocator, "GHOSTTY_CP_CACHE_MS") catch return 150 * std.time.ns_per_ms;
+        defer self.allocator.free(raw);
+        const parsed = std.fmt.parseInt(u64, raw, 10) catch return 150 * std.time.ns_per_ms;
+        if (parsed == 0) return 0;
+        // Hard cap to keep staleness bounded.
+        const bounded = @min(parsed, 2000);
+        return @as(i128, @intCast(bounded)) * std.time.ns_per_ms;
+    }
+
+    fn clearResponseCache(self: *ControlPlane) void {
+        self.cache_lock.lock();
+        defer self.cache_lock.unlock();
+        self.cache.clear(self.allocator);
+    }
+
+    fn tryGetCachedResponse(self: *ControlPlane, req: []const u8, allocator: Allocator) ?[]u8 {
+        self.cache_lock.lock();
+        defer self.cache_lock.unlock();
+        if (self.cache.ttl_ns <= 0) return null;
+        const cached_req = self.cache.req orelse return null;
+        const cached_resp = self.cache.resp orelse return null;
+        if (!std.mem.eql(u8, cached_req, req)) return null;
+        const now = std.time.nanoTimestamp();
+        if (now - self.cache.ts_ns > self.cache.ttl_ns) return null;
+        return allocator.dupe(u8, cached_resp) catch null;
+    }
+
+    fn updateCachedResponse(self: *ControlPlane, req: []const u8, resp: []const u8) void {
+        const req_copy = self.allocator.dupe(u8, req) catch return;
+        errdefer self.allocator.free(req_copy);
+        const resp_copy = self.allocator.dupe(u8, resp) catch return;
+        self.cache_lock.lock();
+        defer self.cache_lock.unlock();
+        if (self.cache.req) |old| self.allocator.free(old);
+        if (self.cache.resp) |old| self.allocator.free(old);
+        self.cache.req = req_copy;
+        self.cache.resp = resp_copy;
+        self.cache.ts_ns = std.time.nanoTimestamp();
     }
 
     fn enqueueInput(self: *ControlPlane, from: []const u8, text: []const u8, raw: bool, cmd_id: u32) void {
@@ -539,6 +612,19 @@ pub const ControlPlane = struct {
     }
 };
 
+fn commandName(req: []const u8) []const u8 {
+    const ws = std.mem.indexOfAny(u8, req, " \t\r\n") orelse req.len;
+    const pipe = std.mem.indexOfScalar(u8, req, '|') orelse req.len;
+    return req[0..@min(ws, pipe)];
+}
+
+fn isCacheableCommand(cmd: []const u8) bool {
+    return std.mem.eql(u8, cmd, "STATE") or
+        std.mem.eql(u8, cmd, "TAIL") or
+        std.mem.eql(u8, cmd, "HISTORY") or
+        std.mem.eql(u8, cmd, "LIST_TABS");
+}
+
 fn loadSessionName(allocator: Allocator, pid: u32) ![]u8 {
     const env_name = std.process.getEnvVarOwned(allocator, "GHOSTTY_SESSION_NAME") catch null;
     if (env_name) |value| {
@@ -613,4 +699,19 @@ test "QueryKind exhaustive" {
             .read_buffer, .tab_count, .active_tab, .tab_title, .tab_working_dir, .tab_has_selection, .capture_tab_list, .capture_snapshot, .capture_history => {},
         }
     }
+}
+
+test "commandName parses up to delimiter" {
+    try std.testing.expectEqualStrings("STATE", commandName("STATE"));
+    try std.testing.expectEqualStrings("TAIL", commandName("TAIL|1"));
+    try std.testing.expectEqualStrings("LIST_TABS", commandName("LIST_TABS \r\n"));
+}
+
+test "isCacheableCommand classification" {
+    try std.testing.expect(isCacheableCommand("STATE"));
+    try std.testing.expect(isCacheableCommand("TAIL"));
+    try std.testing.expect(isCacheableCommand("HISTORY"));
+    try std.testing.expect(isCacheableCommand("LIST_TABS"));
+    try std.testing.expect(!isCacheableCommand("INPUT"));
+    try std.testing.expect(!isCacheableCommand("RAW_INPUT"));
 }
