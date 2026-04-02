@@ -260,6 +260,10 @@ function Get-GhosttyHwnd {
 
 function Test-ProcessAlive {
     if ($script:GhosttyProc -and $script:GhosttyProc.HasExited) { return $false }
+    return $true
+}
+
+function Test-ControlPlaneResponsive {
     $ping = Send-CP $script:PipeName "PING" 3000
     return ($ping -match "PONG")
 }
@@ -327,12 +331,17 @@ function Run-Test1 {
     # Monitor process health while jobs run
     $monitorEnd = (Get-Date).AddSeconds($Duration + 5)
     $crashed = $false
+    $cpUnresponsiveCount = 0
     while ((Get-Date) -lt $monitorEnd) {
         if (-not (Test-ProcessAlive)) {
             $crashed = $true
             Log "*** CRASH: ghostty process died during concurrent TAIL/PING ***"
             Collect-CrashEvidence "test1_concurrent_tail_ping"
             break
+        }
+        if (-not (Test-ControlPlaneResponsive)) {
+            $cpUnresponsiveCount++
+            Log "*** WARN: CP unresponsive while process alive (count=$cpUnresponsiveCount) ***"
         }
         $doneCount = @($jobs | Where-Object { $_.State -eq 'Completed' }).Count
         if ($doneCount -eq $Threads) { break }
@@ -351,7 +360,10 @@ function Run-Test1 {
     # Collect results without per-job indefinite waits.
     $totalOK = 0; $totalFail = 0; $totalCorrupt = 0
     foreach ($job in $jobs) {
-        $result = Receive-Job $job -ErrorAction SilentlyContinue
+        $result = $null
+        if ($job.State -in @('Completed', 'Failed', 'Stopped')) {
+            $result = Receive-Job $job -ErrorAction SilentlyContinue
+        }
         if ($result) {
             $totalOK += $result.OK
             $totalFail += $result.Fail
@@ -372,6 +384,7 @@ function Run-Test1 {
     Log "  Total: OK=$totalOK Fail=$totalFail Corrupt=$totalCorrupt"
 
     Test-Result "No crash during concurrent access" (-not $crashed)
+    Test-Result "CP remained responsive" ($cpUnresponsiveCount -eq 0) "(unresponsive_count=$cpUnresponsiveCount)"
     Test-Result "No corrupted responses" ($totalCorrupt -eq 0)
     Test-Result "Majority of requests succeeded" ($totalOK -gt ($totalFail * 2)) "($totalOK OK vs $totalFail fail)"
     Test-Result "Process still alive after test" (Test-ProcessAlive)
@@ -433,6 +446,7 @@ function Run-Test2 {
     $resizeSlow = 0
     $worstResizeMs = 0
     $hangDetected = $false
+    $cpUnresponsiveCount = 0
     $endTime = (Get-Date).AddSeconds($Duration)
     $toggle = $true
 
@@ -442,6 +456,10 @@ function Run-Test2 {
             $hangDetected = $true
             Collect-CrashEvidence "test2_resize_tail"
             break
+        }
+        if (-not (Test-ControlPlaneResponsive)) {
+            $cpUnresponsiveCount++
+            Log "*** WARN: CP unresponsive while process alive (count=$cpUnresponsiveCount) ***"
         }
 
         $rect = New-Object Win32TS+RECT
@@ -500,11 +518,12 @@ public class SWP2 {
     Remove-Job $tailJob -Force -ErrorAction SilentlyContinue
 
     if ($tailResult) {
-        Log "  TAIL: OK=$($tailResult.OK) Fail=$($tailResult.Fail) SlowestMs=$($tailResult.SlowestMs)"
+    Log "  TAIL: OK=$($tailResult.OK) Fail=$($tailResult.Fail) SlowestMs=$($tailResult.SlowestMs)"
     }
     Log "  Resize: OK=$resizeOK Slow(>3s)=$resizeSlow WorstMs=$worstResizeMs"
 
     Test-Result "No UI hang during TAIL+resize" (-not $hangDetected)
+    Test-Result "CP remained responsive during resize+TAIL" ($cpUnresponsiveCount -eq 0) "(unresponsive_count=$cpUnresponsiveCount)"
     Test-Result "SetWindowPos worst < 3000ms" ($worstResizeMs -lt 3000) "(${worstResizeMs}ms)"
     Test-Result "TAIL requests succeeded" ($tailResult -and $tailResult.OK -gt 0) "($($tailResult.OK) OK)"
     Test-Result "Process still alive" (Test-ProcessAlive)
