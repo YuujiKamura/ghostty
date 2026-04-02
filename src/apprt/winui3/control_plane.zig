@@ -284,7 +284,7 @@ pub const ControlPlane = struct {
         if (std.mem.eql(u8, cmd, "CAPABILITIES")) {
             return std.fmt.allocPrint(
                 allocator,
-                "OK|{s}|CAPABILITIES|transport=polling|reads=STATE,CAPTURE_PANE,TAIL,HISTORY,LIST_TABS|writes=INPUT,RAW_INPUT,PASTE,ACK_POLL|control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS\n",
+                "OK|{s}|CAPABILITIES|transport=polling|reads=STATE,CAPTURE_PANE,TAIL,HISTORY,LIST_TABS|writes=INPUT,RAW_INPUT,PASTE,SEND_KEYS,ACK_POLL|control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS\n",
                 .{self.session_name orelse "ghostty"},
             ) catch "ERR|oom\n";
         }
@@ -963,7 +963,7 @@ test "handleRequestWith serves CAPABILITIES without backend call" {
     try std.testing.expectEqual(@as(usize, 0), tb.calls);
     try std.testing.expect(std.mem.startsWith(u8, resp, "OK|ghostty-test|CAPABILITIES|"));
     try std.testing.expect(std.mem.indexOf(u8, resp, "reads=STATE,CAPTURE_PANE,TAIL,HISTORY,LIST_TABS") != null);
-    try std.testing.expect(std.mem.indexOf(u8, resp, "writes=INPUT,RAW_INPUT,PASTE,ACK_POLL") != null);
+    try std.testing.expect(std.mem.indexOf(u8, resp, "writes=INPUT,RAW_INPUT,PASTE,SEND_KEYS,ACK_POLL") != null);
     try std.testing.expect(std.mem.indexOf(u8, resp, "control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS") != null);
 }
 
