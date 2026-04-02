@@ -281,6 +281,13 @@ pub const ControlPlane = struct {
     ) []const u8 {
         const req = std.mem.trim(u8, request, " \r\n\t");
         const cmd = commandName(req);
+        if (std.mem.eql(u8, cmd, "CAPABILITIES")) {
+            return std.fmt.allocPrint(
+                allocator,
+                "OK|{s}|CAPABILITIES|transport=polling|reads=STATE,TAIL,HISTORY,LIST_TABS|writes=INPUT,RAW_INPUT,PASTE,ACK_POLL|control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS\n",
+                .{self.session_name orelse "ghostty"},
+            ) catch "ERR|oom\n";
+        }
         if (isBackpressureCommand(cmd) and self.pendingInputLen() >= self.max_pending_inputs) {
             return allocator.dupe(u8, "ERR|BUSY|input_queue_full\n") catch "ERR|BUSY|input_queue_full\n";
         }
@@ -930,4 +937,22 @@ test "handleRequestWith limits data lane but allows control lane" {
     const ping_resp = cp.handleRequestWith("PING", std.testing.allocator, &tb, testBackend);
     defer std.testing.allocator.free(ping_resp);
     try std.testing.expectEqual(@as(usize, 1), tb.calls);
+}
+
+test "handleRequestWith serves CAPABILITIES without backend call" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(0),
+        .session_name = "ghostty-test",
+    };
+
+    var tb = TestBackendCtx{};
+    const resp = cp.handleRequestWith("CAPABILITIES", std.testing.allocator, &tb, testBackend);
+    defer std.testing.allocator.free(resp);
+
+    try std.testing.expectEqual(@as(usize, 0), tb.calls);
+    try std.testing.expect(std.mem.startsWith(u8, resp, "OK|ghostty-test|CAPABILITIES|"));
+    try std.testing.expect(std.mem.indexOf(u8, resp, "reads=STATE,TAIL,HISTORY,LIST_TABS") != null);
+    try std.testing.expect(std.mem.indexOf(u8, resp, "writes=INPUT,RAW_INPUT,PASTE,ACK_POLL") != null);
+    try std.testing.expect(std.mem.indexOf(u8, resp, "control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS") != null);
 }
