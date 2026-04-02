@@ -1,0 +1,3 @@
+*.xaml text eol=crlf
+*.resw text eol=crlf
+*.csproj text eol=crlf
