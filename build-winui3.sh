@@ -25,6 +25,7 @@ fi
 
 # Detect Release mode from args
 BUILD_CONFIG="Debug"
+UPDATE_PREBUILT="0"
 for arg in "$@"; do
     case "$arg" in
         -Doptimize=ReleaseFast|-Doptimize=ReleaseSafe|-Doptimize=ReleaseSmall)
@@ -33,6 +34,9 @@ for arg in "$@"; do
         --release|--release=*)
             BUILD_CONFIG="Release"
             ;;
+        --update-prebuilt)
+            UPDATE_PREBUILT="1"
+            ;;
     esac
 done
 
@@ -40,8 +44,17 @@ XAML_OBJ="$XAML_DIR/obj/x64/$BUILD_CONFIG/net9.0-windows10.0.22621.0"
 XAML_BIN="$XAML_DIR/bin/x64/$BUILD_CONFIG/net9.0-windows10.0.22621.0"
 XAML_OBJ_FALLBACK="$XAML_DIR/obj/x64/Debug/net9.0-windows10.0.22621.0"
 XAML_BIN_FALLBACK="$XAML_DIR/bin/x64/Debug/net9.0-windows10.0.22621.0"
+XAML_PREBUILT="$XAML_DIR/prebuilt"
 
 pick_xaml_asset_dirs() {
+    # If explicit prebuilt mode is requested, check the prebuilt directory first.
+    if [ "$PREBUILT_ONLY" = "1" ] && [ -d "$XAML_PREBUILT" ] && [ -f "$XAML_PREBUILT/ghostty.pri" ]; then
+        COPY_OBJ="$XAML_PREBUILT"
+        COPY_BIN="$XAML_PREBUILT"
+        COPY_LABEL="Prebuilt"
+        return 0
+    fi
+
     if [ -d "$XAML_OBJ" ] && [ -f "$XAML_BIN/ghostty.pri" ]; then
         COPY_OBJ="$XAML_OBJ"
         COPY_BIN="$XAML_BIN"
@@ -54,13 +67,30 @@ pick_xaml_asset_dirs() {
         COPY_LABEL="Debug(fallback)"
         return 0
     fi
+
+    # Final fallback to tracked prebuilt assets if MSBuild outputs are missing.
+    if [ -d "$XAML_PREBUILT" ] && [ -f "$XAML_PREBUILT/ghostty.pri" ]; then
+        COPY_OBJ="$XAML_PREBUILT"
+        COPY_BIN="$XAML_PREBUILT"
+        COPY_LABEL="Prebuilt(fallback)"
+        return 0
+    fi
     return 1
 }
 
 check_prebuilt_stale() {
+    # If python3 is available, use manifest-based verification.
+    if command -v python >/dev/null 2>&1; then
+        if python xaml/prebuilt/manage_manifest.py --verify >/dev/null 2>&1; then
+            return 1 # Not stale
+        else
+            return 0 # Stale
+        fi
+    fi
+
+    # Fallback to simple timestamp check if python3 is missing.
     local pri_file="$1"
     local xbf_file="$2"
-    # If any XAML source is newer than prebuilt assets, consider it stale.
     if find "$XAML_DIR" -type f \( -name "*.xaml" -o -name "*.resw" -o -name "*.csproj" \) -newer "$pri_file" -print -quit 2>/dev/null | grep -q .; then
         return 0
     fi
@@ -112,6 +142,18 @@ if pick_xaml_asset_dirs; then
             exit 2
         fi
         echo "$msg"
+    fi
+
+    # Step 4: Update prebuilt if requested (Developer mode)
+    if [ "$UPDATE_PREBUILT" = "1" ] && [ "$COPY_LABEL" != "Prebuilt" ]; then
+        echo "[build-winui3] Updating $XAML_PREBUILT assets from $COPY_LABEL..."
+        mkdir -p "$XAML_PREBUILT"
+        cp -v "$COPY_OBJ"/*.xbf "$XAML_PREBUILT/"
+        cp -v "$COPY_BIN"/ghostty.pri "$XAML_PREBUILT/ghostty.pri"
+        if command -v python >/dev/null 2>&1; then
+            python xaml/prebuilt/manage_manifest.py
+        fi
+        echo "[build-winui3] Update complete. Commit these changes to track new assets."
     fi
 else
     echo "[build-winui3] WARNING: No XBF/PRI assets found under $XAML_DIR"
