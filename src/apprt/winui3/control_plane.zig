@@ -262,7 +262,7 @@ pub const ControlPlane = struct {
             if (self.tryGetCachedResponse(req, allocator)) |cached| {
                 return cached;
             }
-        } else {
+        } else if (isMutatingCommand(cmd)) {
             self.clearResponseCache();
         }
         if (self.cp) |*cp| {
@@ -625,6 +625,16 @@ fn isCacheableCommand(cmd: []const u8) bool {
         std.mem.eql(u8, cmd, "LIST_TABS");
 }
 
+fn isMutatingCommand(cmd: []const u8) bool {
+    return std.mem.eql(u8, cmd, "INPUT") or
+        std.mem.eql(u8, cmd, "RAW_INPUT") or
+        std.mem.eql(u8, cmd, "PASTE") or
+        std.mem.eql(u8, cmd, "NEW_TAB") or
+        std.mem.eql(u8, cmd, "CLOSE_TAB") or
+        std.mem.eql(u8, cmd, "SWITCH_TAB") or
+        std.mem.eql(u8, cmd, "FOCUS");
+}
+
 fn loadSessionName(allocator: Allocator, pid: u32) ![]u8 {
     const env_name = std.process.getEnvVarOwned(allocator, "GHOSTTY_SESSION_NAME") catch null;
     if (env_name) |value| {
@@ -714,4 +724,32 @@ test "isCacheableCommand classification" {
     try std.testing.expect(isCacheableCommand("LIST_TABS"));
     try std.testing.expect(!isCacheableCommand("INPUT"));
     try std.testing.expect(!isCacheableCommand("RAW_INPUT"));
+}
+
+test "isMutatingCommand classification" {
+    try std.testing.expect(isMutatingCommand("INPUT"));
+    try std.testing.expect(isMutatingCommand("RAW_INPUT"));
+    try std.testing.expect(isMutatingCommand("PASTE"));
+    try std.testing.expect(isMutatingCommand("NEW_TAB"));
+    try std.testing.expect(isMutatingCommand("CLOSE_TAB"));
+    try std.testing.expect(isMutatingCommand("SWITCH_TAB"));
+    try std.testing.expect(isMutatingCommand("FOCUS"));
+    try std.testing.expect(!isMutatingCommand("PING"));
+    try std.testing.expect(!isMutatingCommand("STATE"));
+    try std.testing.expect(!isMutatingCommand("TAIL"));
+}
+
+test "ResponseCache clear keeps ttl" {
+    var cache = ResponseCache{
+        .req = try std.testing.allocator.dupe(u8, "TAIL|x|40"),
+        .resp = try std.testing.allocator.dupe(u8, "OK|cached"),
+        .ts_ns = 123,
+        .ttl_ns = 777,
+    };
+    defer cache.clear(std.testing.allocator);
+    cache.clear(std.testing.allocator);
+    try std.testing.expect(cache.req == null);
+    try std.testing.expect(cache.resp == null);
+    try std.testing.expectEqual(@as(i128, 0), cache.ts_ns);
+    try std.testing.expectEqual(@as(i128, 777), cache.ttl_ns);
 }

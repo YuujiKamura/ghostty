@@ -227,6 +227,7 @@ function Run-Test1 {
     for ($i = 0; $i -lt $Threads; $i++) {
         $jobs += Start-Job -ScriptBlock $jobScript -ArgumentList $pipeName, $Duration, $i
     }
+    $jobs = @($jobs)
 
     Log "Launched $Threads background jobs. Waiting ${Duration}s..."
 
@@ -239,15 +240,23 @@ function Run-Test1 {
             Log "*** CRASH: ghostty process died during concurrent TAIL/PING ***"
             break
         }
-        $doneCount = ($jobs | Where-Object { $_.State -eq 'Completed' }).Count
+        $doneCount = @($jobs | Where-Object { $_.State -eq 'Completed' }).Count
         if ($doneCount -eq $Threads) { break }
         Start-Sleep -Seconds 2
     }
 
-    # Collect results
+    # Collect results (bounded wait to avoid hanging forever if a job wedges)
     $totalOK = 0; $totalFail = 0; $totalCorrupt = 0
     foreach ($job in $jobs) {
-        $result = Receive-Job $job -Wait -ErrorAction SilentlyContinue
+        $completed = Wait-Job $job -Timeout 10
+        if (-not $completed) {
+            Log "  Thread job timeout: Id=$($job.Id) State=$($job.State)"
+            Stop-Job $job -ErrorAction SilentlyContinue
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
+            $totalFail += 1
+            continue
+        }
+        $result = Receive-Job $job -ErrorAction SilentlyContinue
         if ($result) {
             $totalOK += $result.OK
             $totalFail += $result.Fail
