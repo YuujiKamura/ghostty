@@ -3,5 +3,19 @@
     "Surface.xaml": "c6d5e66f305f768bac7c3780e9b5b884eab809124ff634146654802cd6cdbb22",
     "TabViewRoot.xaml": "d014e1b81f8063a3f83cd6899a6975b4bd5be371793cb847c7ebdf373c142d94",
     "ghostty.csproj": "0d160c7db3ef0d27df0250cd2b06a9e41bbe5e2e0ca549b60593be14b7d40d7b"
+  },
+  "prebuilt": {
+    "Surface.xbf": {
+      "sha256": "f95602e6205da19d45d0de74ffea620ae869fd971a254be8a69e7efabe25d0d5",
+      "size": 658
+    },
+    "TabViewRoot.xbf": {
+      "sha256": "ca1e57a1cbb1b3953aacdf8e0a992887f27e4eee3492acdf4b88cfbe68b36b18",
+      "size": 1192
+    },
+    "ghostty.pri": {
+      "sha256": "3d985c7746ce212fef24e3777c2f578d200bc3b58ed3b70f07b7342979cec92c",
+      "size": 2936
+    }
   }
 }

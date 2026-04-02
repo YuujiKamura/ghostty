@@ -96,6 +96,22 @@ pub fn build(b: *std.Build) !void {
     const bench = try buildpkg.GhosttyBench.init(b, &deps);
     if (config.emit_bench) bench.install();
 
+    // WinUI3 resource binding unit test
+    if (config.target.result.os.tag == .windows and config.app_runtime == .winui3) {
+        const binding_test = b.addTest(.{
+            .name = "winui3-resource-binding-test",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/apprt/winui3/resource_binding_test.zig"),
+                .target = config.target,
+                .optimize = config.optimize,
+            }),
+        });
+        _ = try deps.add(binding_test);
+        const binding_test_run = b.addRunArtifact(binding_test);
+        const binding_test_step = b.step("test-winui3-binding", "Run WinUI3 resource binding unit tests");
+        binding_test_step.dependOn(&binding_test_run.step);
+    }
+
     // Ghostty dist tarball
     const dist = try buildpkg.GhosttyDist.init(b, &config);
     {

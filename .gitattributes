@@ -1,6 +1,9 @@
 build.zig.zon.nix linguist-generated=true
 build.zig.zon.txt linguist-generated=true
 build.zig.zon.json linguist-generated=true
+*.xaml text eol=lf
+*.csproj text eol=lf
+*.json text eol=lf
 vendor/** linguist-vendored
 website/** linguist-documentation
 pkg/breakpad/vendor/** linguist-vendored

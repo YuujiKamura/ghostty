@@ -107,6 +107,18 @@ pub fn hstringSliceRaw(str: ?*anyopaque) []const u16 {
     return ptr[0..len];
 }
 
+const HStringDebugName = struct {
+    slice: []const u8,
+    owned: bool,
+};
+
+fn hstringDebugName(class_name: HSTRING) HStringDebugName {
+    const utf16 = hstringSliceRaw(@ptrCast(class_name));
+    const slice = std.unicode.utf16LeToUtf8Alloc(std.heap.page_allocator, utf16) catch
+        return .{ .slice = "<utf16-conversion-failed>", .owned = false };
+    return .{ .slice = slice, .owned = true };
+}
+
 /// Helper: create HSTRING from comptime UTF-8 literal.
 /// The returned HSTRING must be freed with deleteHString.
 pub fn hstring(comptime utf8: []const u8) WinRTError!HSTRING {
@@ -224,14 +236,32 @@ pub const IActivationFactory = extern struct {
 /// Get an activation factory for a WinRT class.
 pub fn getActivationFactory(comptime T: type, class_name: HSTRING) WinRTError!*T {
     var factory: ?*anyopaque = null;
-    try hrCheck(RoGetActivationFactory(class_name, &T.IID, &factory));
+    const hr = RoGetActivationFactory(class_name, &T.IID, &factory);
+    if (hr < 0) {
+        const class_utf8 = hstringDebugName(class_name);
+        defer if (class_utf8.owned) std.heap.page_allocator.free(class_utf8.slice);
+        log.err(
+            "RoGetActivationFactory failed class={s} hr=0x{x:0>8}",
+            .{ class_utf8.slice, @as(u32, @bitCast(hr)) },
+        );
+    }
+    try hrCheck(hr);
     return @ptrCast(@alignCast(factory orelse return error.WinRTFailed));
 }
 
 /// Activate a default instance of a WinRT class by name.
 pub fn activateInstance(class_name: HSTRING) WinRTError!*IInspectable {
     var instance: ?*IInspectable = null;
-    try hrCheck(RoActivateInstance(class_name, &instance));
+    const hr = RoActivateInstance(class_name, &instance);
+    if (hr < 0) {
+        const class_utf8 = hstringDebugName(class_name);
+        defer if (class_utf8.owned) std.heap.page_allocator.free(class_utf8.slice);
+        log.err(
+            "RoActivateInstance failed class={s} hr=0x{x:0>8}",
+            .{ class_utf8.slice, @as(u32, @bitCast(hr)) },
+        );
+    }
+    try hrCheck(hr);
     return instance orelse error.WinRTFailed;
 }
 
