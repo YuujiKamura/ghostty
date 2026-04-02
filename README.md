@@ -20,6 +20,32 @@ This is a fork of [Ghostty](https://github.com/ghostty-org/ghostty) that adds a 
 zig build -Dapp-runtime=win32 --prefix zig-out-win32
 ```
 
+### WinUI3 Prebuilt Fallback (No MSBuild)
+
+For environments where MSBuild is unavailable, you can force prebuilt XBF/PRI usage:
+
+```bash
+GHOSTTY_WINUI3_PREBUILT_ONLY=1 ./build-winui3.sh
+```
+
+Behavior:
+
+- Uses prebuilt `xaml/obj/.../*.xbf` and `xaml/bin/.../ghostty.pri` if present
+- Falls back to Debug assets when the selected configuration assets are missing
+- Warns when XAML sources are newer than copied XBF/PRI (possible stale assets)
+
+Strict mode (fail on stale/missing assets):
+
+```bash
+GHOSTTY_WINUI3_PREBUILT_ONLY=1 GHOSTTY_WINUI3_PREBUILT_STRICT=1 ./build-winui3.sh
+```
+
+Recommended update flow for prebuilt assets:
+
+1. Run normal `./build-winui3.sh` once on a machine with MSBuild to refresh XBF/PRI.
+2. Re-run in strict prebuilt mode to verify fallback viability.
+3. Keep strict mode in CI/local checks when validating MSBuild-independent operation.
+
 ### Windows Bootstrap (WinGet DSC)
 
 For reproducible Windows setup, apply the DSC profile in this repo:

@@ -7,6 +7,8 @@ PREFIX_STAGING="zig-out-winui3-staging"
 PREFIX_BUILD="zig-out-winui3-build"
 PREFIX="$PREFIX_STABLE"
 XAML_DIR="xaml"
+PREBUILT_ONLY="${GHOSTTY_WINUI3_PREBUILT_ONLY:-0}"
+PREBUILT_STRICT="${GHOSTTY_WINUI3_PREBUILT_STRICT:-0}"
 
 # If the stable exe is locked (running), build to staging.
 # If both stable and staging are locked, use a third prefix. Windows locks exe for writing while running.
@@ -36,23 +38,58 @@ done
 
 XAML_OBJ="$XAML_DIR/obj/x64/$BUILD_CONFIG/net9.0-windows10.0.22621.0"
 XAML_BIN="$XAML_DIR/bin/x64/$BUILD_CONFIG/net9.0-windows10.0.22621.0"
+XAML_OBJ_FALLBACK="$XAML_DIR/obj/x64/Debug/net9.0-windows10.0.22621.0"
+XAML_BIN_FALLBACK="$XAML_DIR/bin/x64/Debug/net9.0-windows10.0.22621.0"
+
+pick_xaml_asset_dirs() {
+    if [ -d "$XAML_OBJ" ] && [ -f "$XAML_BIN/ghostty.pri" ]; then
+        COPY_OBJ="$XAML_OBJ"
+        COPY_BIN="$XAML_BIN"
+        COPY_LABEL="$BUILD_CONFIG"
+        return 0
+    fi
+    if [ -d "$XAML_OBJ_FALLBACK" ] && [ -f "$XAML_BIN_FALLBACK/ghostty.pri" ]; then
+        COPY_OBJ="$XAML_OBJ_FALLBACK"
+        COPY_BIN="$XAML_BIN_FALLBACK"
+        COPY_LABEL="Debug(fallback)"
+        return 0
+    fi
+    return 1
+}
+
+check_prebuilt_stale() {
+    local pri_file="$1"
+    local xbf_file="$2"
+    # If any XAML source is newer than prebuilt assets, consider it stale.
+    if find "$XAML_DIR" -type f \( -name "*.xaml" -o -name "*.resw" -o -name "*.csproj" \) -newer "$pri_file" -print -quit 2>/dev/null | grep -q .; then
+        return 0
+    fi
+    if find "$XAML_DIR" -type f \( -name "*.xaml" -o -name "*.resw" -o -name "*.csproj" \) -newer "$xbf_file" -print -quit 2>/dev/null | grep -q .; then
+        return 0
+    fi
+    return 1
+}
 
 # Step 1: Build XAML (XBF + PRI) via MSBuild if xaml/ project exists
 if [ -f "$XAML_DIR/ghostty.csproj" ]; then
-    MSBUILD=""
-    for candidate in \
-        "/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe" \
-        "/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/MSBuild/Current/Bin/MSBuild.exe" \
-        "/c/Program Files/Microsoft Visual Studio/2022/BuildTools/MSBuild/Current/Bin/MSBuild.exe" \
-        "/c/Program Files/Microsoft Visual Studio/2022/Enterprise/MSBuild/Current/Bin/MSBuild.exe" \
-        "/c/Program Files/Microsoft Visual Studio/2022/Professional/MSBuild/Current/Bin/MSBuild.exe"; do
-        [ -f "$candidate" ] && MSBUILD="$candidate" && break
-    done
-    if [ -n "$MSBUILD" ]; then
-        echo "[build-winui3] Building XAML resources ($BUILD_CONFIG)..."
-        "$MSBUILD" "$XAML_DIR/ghostty.csproj" -p:Configuration=$BUILD_CONFIG -p:Platform=x64 -restore -nologo -v:minimal
+    if [ "$PREBUILT_ONLY" = "1" ]; then
+        echo "[build-winui3] PREBUILT_ONLY=1: skipping MSBuild and using prebuilt XBF/PRI"
     else
-        echo "[build-winui3] WARNING: MSBuild not found, skipping XAML build"
+        MSBUILD=""
+        for candidate in \
+            "/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe" \
+            "/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/MSBuild/Current/Bin/MSBuild.exe" \
+            "/c/Program Files/Microsoft Visual Studio/2022/BuildTools/MSBuild/Current/Bin/MSBuild.exe" \
+            "/c/Program Files/Microsoft Visual Studio/2022/Enterprise/MSBuild/Current/Bin/MSBuild.exe" \
+            "/c/Program Files/Microsoft Visual Studio/2022/Professional/MSBuild/Current/Bin/MSBuild.exe"; do
+            [ -f "$candidate" ] && MSBUILD="$candidate" && break
+        done
+        if [ -n "$MSBUILD" ]; then
+            echo "[build-winui3] Building XAML resources ($BUILD_CONFIG)..."
+            "$MSBUILD" "$XAML_DIR/ghostty.csproj" -p:Configuration=$BUILD_CONFIG -p:Platform=x64 -restore -nologo -v:minimal
+        else
+            echo "[build-winui3] WARNING: MSBuild not found, skipping XAML build"
+        fi
     fi
 fi
 
@@ -60,17 +97,27 @@ fi
 zig build -Dapp-runtime=winui3 -Dslow-safety=false --prefix "$PREFIX" "$@"
 
 # Step 3: Copy XBF and PRI to bin directory
-if [ -d "$XAML_OBJ" ]; then
-    cp -f "$XAML_OBJ"/*.xbf "$PREFIX/bin/" 2>/dev/null && echo "[build-winui3] Copied XBF files"
-    cp -f "$XAML_BIN"/ghostty.pri "$PREFIX/bin/resources.pri" 2>/dev/null && echo "[build-winui3] Copied PRI file"
+if pick_xaml_asset_dirs; then
+    [ "$COPY_LABEL" = "$BUILD_CONFIG" ] || echo "[build-winui3] WARNING: $BUILD_CONFIG XAML not found, falling back to $COPY_LABEL"
+    cp -f "$COPY_OBJ"/*.xbf "$PREFIX/bin/" 2>/dev/null && echo "[build-winui3] Copied XBF files ($COPY_LABEL)"
+    cp -f "$COPY_BIN"/ghostty.pri "$PREFIX/bin/resources.pri" 2>/dev/null && echo "[build-winui3] Copied PRI file ($COPY_LABEL)"
+
+    # Stale detection for prebuilt mode / no-MSBuild mode.
+    xbf_sample="$(ls -1 "$COPY_OBJ"/*.xbf 2>/dev/null | head -n1 || true)"
+    pri_file="$COPY_BIN/ghostty.pri"
+    if [ -n "$xbf_sample" ] && [ -f "$pri_file" ] && check_prebuilt_stale "$pri_file" "$xbf_sample"; then
+        msg="[build-winui3] WARNING: prebuilt XBF/PRI may be stale against current xaml/ sources"
+        if [ "$PREBUILT_STRICT" = "1" ]; then
+            echo "$msg (strict mode: failing)"
+            exit 2
+        fi
+        echo "$msg"
+    fi
 else
-    # Fallback: try Debug paths if Release not available
-    XAML_OBJ_FALLBACK="$XAML_DIR/obj/x64/Debug/net9.0-windows10.0.22621.0"
-    XAML_BIN_FALLBACK="$XAML_DIR/bin/x64/Debug/net9.0-windows10.0.22621.0"
-    if [ -d "$XAML_OBJ_FALLBACK" ]; then
-        echo "[build-winui3] WARNING: $BUILD_CONFIG XAML not found, falling back to Debug"
-        cp -f "$XAML_OBJ_FALLBACK"/*.xbf "$PREFIX/bin/" 2>/dev/null && echo "[build-winui3] Copied XBF files (Debug)"
-        cp -f "$XAML_BIN_FALLBACK"/ghostty.pri "$PREFIX/bin/resources.pri" 2>/dev/null && echo "[build-winui3] Copied PRI file (Debug)"
+    echo "[build-winui3] WARNING: No XBF/PRI assets found under $XAML_DIR"
+    if [ "$PREBUILT_ONLY" = "1" ] || [ "$PREBUILT_STRICT" = "1" ]; then
+        echo "[build-winui3] ERROR: prebuilt mode requested but assets are missing"
+        exit 2
     fi
 fi
 
