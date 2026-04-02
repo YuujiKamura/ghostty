@@ -2,9 +2,11 @@ name: WinUI3 Light Check
 
 on:
   push:
+    branches: [ main, winui3-apprt ]
     paths:
       - "scripts/winui3-*.ps1"
       - "src/apprt/winui3/**"
+      - "xaml/prebuilt/**"
       - ".github/workflows/winui3-light-check.yml"
   pull_request:
     paths:
@@ -25,44 +27,15 @@ jobs:
         with:
           version: 0.15.2
 
-      - name: Clone win-zig repos as siblings
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify Prebuilt Manifest Consistency
         shell: pwsh
         run: |
-          $workspaceParent = Split-Path -Parent $env:GITHUB_WORKSPACE
-          git clone --depth 1 https://github.com/YuujiKamura/win-zig-metadata.git (Join-Path $workspaceParent "win-zig-metadata")
-          git clone --depth 1 https://github.com/YuujiKamura/win-zig-bindgen.git (Join-Path $workspaceParent "win-zig-bindgen")
-
-      - name: Install WindowsAppSDK winmd into user NuGet cache
-        shell: pwsh
-        run: |
-          $pkg = "microsoft.windowsappsdk"
-          $indexUrl = "https://api.nuget.org/v3-flatcontainer/$pkg/index.json"
-          $index = Invoke-RestMethod -Uri $indexUrl
-          $version = $index.versions[-1]
-          $pkgRoot = Join-Path $env:USERPROFILE ".nuget\packages\$pkg\$version"
-          $winmd = Join-Path $pkgRoot "lib\uap10.0\Microsoft.UI.Xaml.winmd"
-          if (-not (Test-Path -LiteralPath $winmd)) {
-            New-Item -ItemType Directory -Path $pkgRoot -Force | Out-Null
-            $nupkg = Join-Path $env:RUNNER_TEMP "$pkg.$version.nupkg"
-            Invoke-WebRequest -Uri "https://api.nuget.org/v3-flatcontainer/$pkg/$version/$pkg.$version.nupkg" -OutFile $nupkg
-            Expand-Archive -Path $nupkg -DestinationPath $pkgRoot -Force
-          }
-          if (-not (Test-Path -LiteralPath $winmd)) {
-            throw "Microsoft.UI.Xaml.winmd not found: $winmd"
-          }
-          Write-Host "Using WindowsAppSDK version: $version"
-
-      - name: Delegate IID check
-        shell: pwsh
-        run: ./scripts/winui3-delegate-iid-check.ps1 -RepoRoot $env:GITHUB_WORKSPACE
-
-      - name: Inspect-event-params smoke
-        shell: pwsh
-        run: ./scripts/winui3-inspect-event-params.ps1 -RepoRoot $env:GITHUB_WORKSPACE
-
-      - name: WinMD IID parity check (no manual drift)
-        shell: pwsh
-        run: ./scripts/winui3-winmd-iid-check.ps1 -RepoRoot $env:GITHUB_WORKSPACE
+          python xaml/prebuilt/manage_manifest.py --verify
 
       - name: COM runtime ABI tests
         shell: pwsh
@@ -70,4 +43,12 @@ jobs:
 
       - name: WinUI3 runtime contract (strict)
         shell: pwsh
-        run: ./scripts/test-winui3-runtime-contract.ps1 -Strict
+        run: |
+          $env:GHOSTTY_WINUI3_PREBUILT_ONLY = "1"
+          ./scripts/test-winui3-runtime-contract.ps1 -Strict
+
+      - name: Light Build Check (Prebuilt Mode)
+        shell: pwsh
+        run: |
+          $env:GHOSTTY_WINUI3_PREBUILT_ONLY = "1"
+          bash ./build-winui3.sh --release=fast
