@@ -14,6 +14,15 @@ extern "kernel32" fn GetCurrentProcessId() callconv(.winapi) u32;
 
 const log = std.log.scoped(.winui3_control_plane);
 
+fn postMessageWarn(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM, msg_name: []const u8) bool {
+    const result = os.PostMessageW(hwnd, msg, wparam, lparam);
+    if (result == 0) {
+        log.warn("PostMessageW failed msg={s} err={}", .{ msg_name, os.GetLastError() });
+        return false;
+    }
+    return true;
+}
+
 const PendingInput = struct {
     from: []u8,
     text: []u8,
@@ -572,11 +581,8 @@ pub const ControlPlane = struct {
         if (text.len > tsf_prefix.len and std.mem.startsWith(u8, text, tsf_prefix)) {
             const payload = text[tsf_prefix.len..];
             self.enqueueImeInject(payload);
-            const tsf_result = os.PostMessageW(self.hwnd, os.WM_APP_TSF_INJECT, 0, 0);
+            const tsf_result = if (postMessageWarn(self.hwnd, os.WM_APP_TSF_INJECT, 0, 0, "WM_APP_TSF_INJECT")) @as(os.BOOL, 1) else 0;
             log.info("provSendInput PostMessageW(WM_APP_TSF_INJECT) result={}", .{tsf_result});
-            if (tsf_result == 0) {
-                log.warn("provSendInput PostMessageW(WM_APP_TSF_INJECT) failed err={}", .{os.GetLastError()});
-            }
             return cmd_id;
         }
 
@@ -584,10 +590,10 @@ pub const ControlPlane = struct {
             log.warn("provSendInput dropped input due to full queue (max={})", .{self.max_pending_inputs});
             return cmd_id;
         }
-        const result = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0);
+        const result = if (postMessageWarn(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0, "WM_APP_CONTROL_INPUT")) @as(os.BOOL, 1) else 0;
         log.info("provSendInput PostMessageW(WM_APP_CONTROL_INPUT) result={}", .{result});
         if (result == 0) {
-            log.warn("provSendInput PostMessageW(WM_APP_CONTROL_INPUT) failed err={}", .{os.GetLastError()});
+            return 0;
         }
         return cmd_id;
     }
@@ -710,22 +716,22 @@ pub const ControlPlane = struct {
 
     fn provNewTab(ctx: *anyopaque) void {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(Action.new_tab), 0);
+        _ = postMessageWarn(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(Action.new_tab), 0, "WM_APP_CONTROL_ACTION");
     }
 
     fn provCloseTab(ctx: *anyopaque, index: usize) void {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(Action.close_tab), @bitCast(index));
+        _ = postMessageWarn(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(Action.close_tab), @bitCast(index), "WM_APP_CONTROL_ACTION");
     }
 
     fn provSwitchTab(ctx: *anyopaque, index: usize) void {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(Action.switch_tab), @bitCast(index));
+        _ = postMessageWarn(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(Action.switch_tab), @bitCast(index), "WM_APP_CONTROL_ACTION");
     }
 
     fn provFocus(ctx: *anyopaque) void {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(Action.focus_window), 0);
+        _ = postMessageWarn(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(Action.focus_window), 0, "WM_APP_CONTROL_ACTION");
     }
 
     fn provHwnd(ctx: *anyopaque) usize {

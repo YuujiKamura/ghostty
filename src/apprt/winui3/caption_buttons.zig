@@ -14,6 +14,15 @@ const gen = @import("com_generated.zig");
 
 const log = std.log.scoped(.winui3_caption);
 
+fn postMessageWarn(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM, msg_name: []const u8) bool {
+    const result = os.PostMessageW(hwnd, msg, wparam, lparam);
+    if (result == 0) {
+        log.warn("PostMessageW failed msg={s} err={}", .{ msg_name, os.GetLastError() });
+        return false;
+    }
+    return true;
+}
+
 /// Module-level HWND for event callbacks.
 var g_hwnd: ?os.HWND = null;
 
@@ -76,16 +85,16 @@ fn onCaptionTapped(ctx: *CaptionContext, _: ?*anyopaque, _: ?*anyopaque) void {
     switch (ctx.action) {
         .minimize => {
             log.info("caption: minimize clicked", .{});
-            _ = os.PostMessageW(hwnd, os.WM_SYSCOMMAND, os.SC_MINIMIZE, 0);
+            _ = postMessageWarn(hwnd, os.WM_SYSCOMMAND, os.SC_MINIMIZE, 0, "WM_SYSCOMMAND");
         },
         .maximize => {
             const sc = if (os.IsZoomed(hwnd) != 0) os.SC_RESTORE else os.SC_MAXIMIZE;
             log.info("caption: maximize/restore clicked (zoomed={})", .{os.IsZoomed(hwnd) != 0});
-            _ = os.PostMessageW(hwnd, os.WM_SYSCOMMAND, sc, 0);
+            _ = postMessageWarn(hwnd, os.WM_SYSCOMMAND, sc, 0, "WM_SYSCOMMAND");
         },
         .close => {
             log.info("caption: close clicked", .{});
-            _ = os.PostMessageW(hwnd, os.WM_SYSCOMMAND, os.SC_CLOSE, 0);
+            _ = postMessageWarn(hwnd, os.WM_SYSCOMMAND, os.SC_CLOSE, 0, "WM_SYSCOMMAND");
         },
     }
 }

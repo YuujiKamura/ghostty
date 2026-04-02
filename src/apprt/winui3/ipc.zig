@@ -20,6 +20,15 @@ const ControlPlaneNative = @import("control_plane.zig").ControlPlane;
 
 const log = std.log.scoped(.ipc);
 
+fn postMessageWarn(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM, msg_name: []const u8) bool {
+    const result = os.PostMessageW(hwnd, msg, wparam, lparam);
+    if (result == 0) {
+        log.warn("PostMessageW failed msg={s} err={}", .{ msg_name, os.GetLastError() });
+        return false;
+    }
+    return true;
+}
+
 // --- Win32 Named Pipe constants and externs ---
 const PIPE_ACCESS_DUPLEX: u32 = 0x00000003;
 const PIPE_TYPE_BYTE: u32 = 0x00000000;
@@ -245,7 +254,9 @@ fn dispatchAction(self: *IpcServer, action_str: []const u8) !void {
     };
 
     log.info("IPC dispatch: {s} -> PostMessageW WM_APP_CONTROL_ACTION({d})", .{ action_str, @intFromEnum(action) });
-    _ = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(action), 0);
+    if (!postMessageWarn(self.hwnd, os.WM_APP_CONTROL_ACTION, @intFromEnum(action), 0, "WM_APP_CONTROL_ACTION")) {
+        return error.POST_FAILED;
+    }
 }
 
 fn writeResponse(pipe: windows.HANDLE, success: bool, err_msg: ?[]const u8) void {

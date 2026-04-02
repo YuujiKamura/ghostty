@@ -50,6 +50,15 @@ const IpcServer = @import("ipc.zig");
 
 const log = std.log.scoped(.winui3);
 
+fn postMessageWarn(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM, msg_name: []const u8) bool {
+    const result = os.PostMessageW(hwnd, msg, wparam, lparam);
+    if (result == 0) {
+        log.warn("PostMessageW failed msg={s} err={}", .{ msg_name, os.GetLastError() });
+        return false;
+    }
+    return true;
+}
+
 /// Timer ID for live resize preview.
 const RESIZE_TIMER_ID: usize = 1;
 const TAB_CLOSE_POLL_INTERVAL_MS: u32 = 500;
@@ -714,7 +723,7 @@ fn scheduleDebugActions(self: *App) !void {
             _ = os.GetClientRect(self.hwnd.?, &rect);
             const new_w: u32 = @intCast(rect.right - rect.left + 10);
             const new_h: u32 = @intCast(rect.bottom - rect.top + 10);
-            _ = os.PostMessageW(self.hwnd.?, os.WM_SIZE, 0, @bitCast(@as(usize, (new_h << 16) | new_w)));
+            _ = postMessageWarn(self.hwnd.?, os.WM_SIZE, 0, @bitCast(@as(usize, (new_h << 16) | new_w)), "WM_SIZE");
         }
 
         if (self.debug_cfg.close_after_ms) |ms| {
@@ -1289,10 +1298,10 @@ pub fn wakeup(self: *App) void {
     if (self.dispatcher_queue) |dq| {
         WakeupHandler.g_app.store(self, .release);
         _ = dq.tryEnqueue(@ptrCast(&WakeupHandler.instance)) catch {
-            if (self.hwnd) |hwnd| _ = os.PostMessageW(hwnd, os.WM_USER, 0, 0);
+            if (self.hwnd) |hwnd| _ = postMessageWarn(hwnd, os.WM_USER, 0, 0, "WM_USER");
         };
     } else {
-        if (self.hwnd) |hwnd| _ = os.PostMessageW(hwnd, os.WM_USER, 0, 0);
+        if (self.hwnd) |hwnd| _ = postMessageWarn(hwnd, os.WM_USER, 0, 0, "WM_USER");
     }
 }
 
@@ -1579,7 +1588,7 @@ pub fn closeSurface(self: *App, surface: *Surface) void {
     }
     // Fallback: close the app if surface not found
     if (self.hwnd) |hwnd| {
-        _ = os.PostMessageW(hwnd, os.WM_CLOSE, 0, 0);
+        _ = postMessageWarn(hwnd, os.WM_CLOSE, 0, 0, "WM_CLOSE");
     }
 }
 

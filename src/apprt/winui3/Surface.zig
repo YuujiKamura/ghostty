@@ -1882,12 +1882,15 @@ pub fn Surface(comptime App: type) type {
             }
 
             if (self.app.hwnd) |hwnd| {
-                _ = os.PostMessageW(
+                const result = os.PostMessageW(
                     hwnd,
                     os.WM_APP_BIND_SWAP_CHAIN,
                     @bitCast(@intFromPtr(swap_chain)),
                     @bitCast(@intFromPtr(self)),
                 );
+                if (result == 0) {
+                    log.warn("PostMessageW failed msg=WM_APP_BIND_SWAP_CHAIN err={}", .{os.GetLastError()});
+                }
             }
         }
 
@@ -1904,12 +1907,15 @@ pub fn Surface(comptime App: type) type {
             }
 
             if (self.app.hwnd) |hwnd| {
-                _ = os.PostMessageW(
+                const result = os.PostMessageW(
                     hwnd,
                     os.WM_APP_BIND_SWAP_CHAIN_HANDLE,
                     @bitCast(swap_chain_handle),
                     @bitCast(@intFromPtr(self)),
                 );
+                if (result == 0) {
+                    log.warn("PostMessageW failed msg=WM_APP_BIND_SWAP_CHAIN_HANDLE err={}", .{os.GetLastError()});
+                }
             }
         }
 
@@ -2237,6 +2243,21 @@ pub fn Surface(comptime App: type) type {
             const pos = pointerToCursorPos(20.75, 11.25, 1.5, 0.5);
             try std.testing.expectApproxEqAbs(@as(f32, 19.25), pos.x, 0.0001);
             try std.testing.expectApproxEqAbs(@as(f32, 10.75), pos.y, 0.0001);
+        }
+
+        test "pointerToCursorPos does not apply implicit DPI scaling" {
+            // Contract: pointer coordinates are already in DIP space at this layer.
+            // We only normalize by origin; no hidden scale/divide/multiply occurs.
+            const pos = pointerToCursorPos(150.0, 90.0, 50.0, 30.0);
+            try std.testing.expectEqual(@as(f32, 100.0), pos.x);
+            try std.testing.expectEqual(@as(f32, 60.0), pos.y);
+        }
+
+        test "pointerToCursorPos is translation invariant" {
+            const a = pointerToCursorPos(320.5, 200.25, 17.25, 9.75);
+            const b = pointerToCursorPos(420.5, 260.25, 117.25, 69.75);
+            try std.testing.expectApproxEqAbs(a.x, b.x, 0.0001);
+            try std.testing.expectApproxEqAbs(a.y, b.y, 0.0001);
         }
 
         fn cursorIdForShape(shape: terminal.MouseShape) os.LPCWSTR {

@@ -5137,9 +5137,13 @@ pub fn colorSchemeCallback(self: *Surface, scheme: apprt.ColorScheme) !void {
 }
 
 pub fn posToViewport(self: Surface, xpos: f64, ypos: f64) terminal.point.Coordinate {
+    return posToViewportForSize(self.size, xpos, ypos);
+}
+
+fn posToViewportForSize(size: rendererpkg.Size, xpos: f64, ypos: f64) terminal.point.Coordinate {
     // Get our grid cell
     const coord: rendererpkg.Coordinate = .{ .surface = .{ .x = xpos, .y = ypos } };
-    const grid = coord.convert(.grid, self.size).grid;
+    const grid = coord.convert(.grid, size).grid;
     return .{ .x = grid.x, .y = grid.y };
 }
 
@@ -6906,4 +6910,42 @@ test "Surface: selection threshold boundary at 0.6 cell" {
         true,
     );
     // zig fmt: on
+}
+
+test "Surface: posToViewport mapping contract" {
+    const size: rendererpkg.Size = .{
+        .cell = .{ .width = 10, .height = 20 },
+        .padding = .{ .left = 5, .top = 5, .right = 5, .bottom = 5 },
+        .screen = .{ .width = 110, .height = 110 },
+    };
+
+    // Padding edge should map to first cell.
+    try std.testing.expectEqualDeep(
+        terminal.point.Coordinate{ .x = 0, .y = 0 },
+        posToViewportForSize(size, 5.0, 5.0),
+    );
+
+    // One full cell from padding maps to cell (1, 1).
+    try std.testing.expectEqualDeep(
+        terminal.point.Coordinate{ .x = 1, .y = 1 },
+        posToViewportForSize(size, 15.0, 25.0),
+    );
+
+    // Fractional coordinates inside a cell map to that cell.
+    try std.testing.expectEqualDeep(
+        terminal.point.Coordinate{ .x = 3, .y = 2 },
+        posToViewportForSize(size, 39.9, 59.9),
+    );
+
+    // Out-of-bounds low coordinates clamp to origin.
+    try std.testing.expectEqualDeep(
+        terminal.point.Coordinate{ .x = 0, .y = 0 },
+        posToViewportForSize(size, -100.0, -100.0),
+    );
+
+    // Out-of-bounds high coordinates clamp to last visible cell.
+    try std.testing.expectEqualDeep(
+        terminal.point.Coordinate{ .x = 9, .y = 4 },
+        posToViewportForSize(size, 10_000.0, 10_000.0),
+    );
 }

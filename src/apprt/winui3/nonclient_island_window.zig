@@ -8,13 +8,19 @@
 ///   - Dark mode + caption color via DWM attributes
 ///
 /// Ref: github.com/microsoft/terminal/blob/main/src/cascadia/WindowsTerminal/NonClientIslandWindow.cpp
-
 const std = @import("std");
 const os = @import("os.zig");
 const IslandWindow = @import("island_window.zig");
 const log = std.log.scoped(.winui3);
 
-
+fn postMessageWarn(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM, msg_name: []const u8) bool {
+    const result = os.PostMessageW(hwnd, msg, wparam, lparam);
+    if (result == 0) {
+        log.warn("PostMessageW failed msg={s} err={}", .{ msg_name, os.GetLastError() });
+        return false;
+    }
+    return true;
+}
 
 pub const NonClientIslandWindow = @This();
 
@@ -76,8 +82,7 @@ pub fn createDragBarIfNeeded(self: *NonClientIslandWindow) void {
     if (self.drag_bar_hwnd != null) {
         // Force interop HWND to BOTTOM so drag bar receives mouse events.
         if (self.island.interop_hwnd) |ih| {
-            _ = os.SetWindowPos(ih, os.HWND_BOTTOM, 0, 0, 0, 0,
-                os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOACTIVATE);
+            _ = os.SetWindowPos(ih, os.HWND_BOTTOM, 0, 0, 0, 0, os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOACTIVATE);
         }
         // Show the drag bar at the correct position.
         var rect: os.RECT = .{};
@@ -383,7 +388,10 @@ fn createDragBarWindow(self: *NonClientIslandWindow) ?os.HWND {
         DRAG_BAR_CLASS_NAME,
         EMPTY_WINDOW_NAME,
         os.WS_CHILD | os.WS_VISIBLE,
-        0, 0, 0, 0,
+        0,
+        0,
+        0,
+        0,
         self.island.hwnd,
         null,
         hinstance,
@@ -465,16 +473,16 @@ fn inputSinkMessageHandler(self: *NonClientIslandWindow, hwnd: os.HWND, msg: os.
                 // WT: _titlebar.ReleaseButtons() + _titlebar.ClickButton()
                 // We use WM_SYSCOMMAND since we don't have XAML titlebar buttons yet.
                 os.HTMINBUTTON => blk: {
-                    _ = os.PostMessageW(parent, os.WM_SYSCOMMAND, os.SC_MINIMIZE, 0);
+                    _ = postMessageWarn(parent, os.WM_SYSCOMMAND, os.SC_MINIMIZE, 0, "WM_SYSCOMMAND");
                     break :blk 0;
                 },
                 os.HTMAXBUTTON => blk: {
                     const sc: usize = if (os.IsZoomed(parent) != 0) os.SC_RESTORE else os.SC_MAXIMIZE;
-                    _ = os.PostMessageW(parent, os.WM_SYSCOMMAND, sc, 0);
+                    _ = postMessageWarn(parent, os.WM_SYSCOMMAND, sc, 0, "WM_SYSCOMMAND");
                     break :blk 0;
                 },
                 os.HTCLOSE => blk: {
-                    _ = os.PostMessageW(parent, os.WM_SYSCOMMAND, os.SC_CLOSE, 0);
+                    _ = postMessageWarn(parent, os.WM_SYSCOMMAND, os.SC_CLOSE, 0, "WM_SYSCOMMAND");
                     break :blk 0;
                 },
                 else => 0,
