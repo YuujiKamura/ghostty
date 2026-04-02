@@ -14,9 +14,17 @@ PREBUILT_OUTPUTS = ("ghostty.pri", "Surface.xbf", "TabViewRoot.xbf")
 
 def calculate_sha256(file_path):
     sha256_hash = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        for byte_block in iter(lambda: f.read(4096), b""):
-            sha256_hash.update(byte_block)
+    # Read in text mode with newline=None to normalize line endings internally
+    # This ensures consistent hashes regardless of disk format (LF vs CRLF)
+    try:
+        with open(file_path, "r", newline=None, encoding="utf-8") as f:
+            content = f.read()
+            sha256_hash.update(content.encode("utf-8"))
+    except UnicodeDecodeError:
+        # Fallback to binary for binary files (e.g. .xbf, .pri)
+        with open(file_path, "rb") as f:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
 
 
