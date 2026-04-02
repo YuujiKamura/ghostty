@@ -1,0 +1,15 @@
+properties:
+  resources:
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        allowPrerelease: true
+      settings:
+        id: zig.zig
+        version: 0.15.2
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      settings:
+        id: Microsoft.DotNet.SDK.9
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      settings:
+        id: Microsoft.VisualStudio.2022.BuildTools
+

@@ -10,7 +10,7 @@ XAML_DIR="xaml"
 
 # If the stable exe is locked (running), build to staging.
 # If both stable and staging are locked, use a third prefix. Windows locks exe for writing while running.
-is_locked() { [ -f "$1/bin/ghostty.exe" ] && ! python -c "open(r'$1/bin/ghostty.exe','r+b').close()" 2>/dev/null; }
+is_locked() { [ -f "$1/bin/ghostty.exe" ] && ! (exec 3<> "$1/bin/ghostty.exe") 2>/dev/null; }
 if is_locked "$PREFIX_STABLE"; then
     if is_locked "$PREFIX_STAGING"; then
         PREFIX="$PREFIX_BUILD"

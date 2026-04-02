@@ -20,6 +20,16 @@ This is a fork of [Ghostty](https://github.com/ghostty-org/ghostty) that adds a 
 zig build -Dapp-runtime=win32 --prefix zig-out-win32
 ```
 
+### Windows Bootstrap (WinGet DSC)
+
+For reproducible Windows setup, apply the DSC profile in this repo:
+
+```powershell
+winget configure .config\windows.dsc.yaml
+```
+
+This installs the baseline toolchain used by this fork (`zig`, `.NET 9 SDK`, `VS2022 BuildTools`).
+
 ### Related Repositories
 
 | Repo | Description |

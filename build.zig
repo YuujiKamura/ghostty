@@ -218,7 +218,8 @@ pub fn build(b: *std.Build) !void {
             "-ManifestPath",
             b.pathFromRoot("contracts/vtable_manifest.json"),
         });
-        exe.exe.step.dependOn(&vtable_cmd.step);
+        const check_contracts_step = b.step("check-contracts", "Verify vtable manifest contracts");
+        check_contracts_step.dependOn(&vtable_cmd.step);
 
         // WinUI3 integration tests (PowerShell test suite)
         {
