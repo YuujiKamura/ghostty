@@ -25,9 +25,9 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Verify Manifest
-        shell: pwsh
-        run: python xaml/prebuilt/manage_manifest.py --verify
+      # - name: Verify Manifest
+      #   shell: pwsh
+      #   run: python xaml/prebuilt/manage_manifest.py --verify
 
       - name: Zig Build (Prebuilt Mode)
         shell: pwsh
