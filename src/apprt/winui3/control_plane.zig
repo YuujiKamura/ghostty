@@ -21,6 +21,8 @@ const PendingInput = struct {
     cmd_id: u32 = 0,
 };
 
+const default_max_pending_inputs: usize = 128;
+
 const ResponseCache = struct {
     req: ?[]u8 = null,
     resp: ?[]u8 = null,
@@ -141,6 +143,7 @@ pub const ControlPlane = struct {
     capture_tail_fn: ?CaptureTailFn = null,
     capture_history_fn: ?CaptureHistoryFn = null,
     capture_tab_list_fn: ?CaptureTabListFn = null,
+    max_pending_inputs: usize = default_max_pending_inputs,
 
     pub fn isEnabled(allocator: Allocator) bool {
         return checkEnvFlag(allocator, "GHOSTTY_CONTROL_PLANE") or
@@ -177,6 +180,7 @@ pub const ControlPlane = struct {
             .capture_tab_list_fn = capture_tab_list_fn,
         };
         self.cache.ttl_ns = self.loadCacheTtlNs();
+        self.max_pending_inputs = self.loadMaxPendingInputs();
 
         // Initialize the Zig-native control plane
         self.initControlPlane() catch |err| {
@@ -273,6 +277,9 @@ pub const ControlPlane = struct {
     ) []const u8 {
         const req = std.mem.trim(u8, request, " \r\n\t");
         const cmd = commandName(req);
+        if (isBackpressureCommand(cmd) and self.pendingInputLen() >= self.max_pending_inputs) {
+            return allocator.dupe(u8, "ERR|BUSY|input_queue_full\n") catch "ERR|BUSY|input_queue_full\n";
+        }
         if (isCacheableCommand(cmd)) {
             if (self.tryGetCachedResponse(req, allocator)) |cached| {
                 return cached;
@@ -351,6 +358,14 @@ pub const ControlPlane = struct {
         return @as(i128, @intCast(bounded)) * std.time.ns_per_ms;
     }
 
+    fn loadMaxPendingInputs(self: *ControlPlane) usize {
+        const raw = std.process.getEnvVarOwned(self.allocator, "GHOSTTY_CP_MAX_PENDING") catch return default_max_pending_inputs;
+        defer self.allocator.free(raw);
+        const parsed = std.fmt.parseInt(u32, raw, 10) catch return default_max_pending_inputs;
+        if (parsed == 0) return default_max_pending_inputs;
+        return @as(usize, @intCast(@min(parsed, 4096)));
+    }
+
     fn clearResponseCache(self: *ControlPlane) void {
         self.cache_lock.lock();
         defer self.cache_lock.unlock();
@@ -369,6 +384,12 @@ pub const ControlPlane = struct {
         return allocator.dupe(u8, cached_resp) catch null;
     }
 
+    fn pendingInputLen(self: *ControlPlane) usize {
+        self.pending_inputs_lock.lock();
+        defer self.pending_inputs_lock.unlock();
+        return self.pending_inputs.items.len;
+    }
+
     fn updateCachedResponse(self: *ControlPlane, req: []const u8, resp: []const u8) void {
         const req_copy = self.allocator.dupe(u8, req) catch return;
         errdefer self.allocator.free(req_copy);
@@ -382,15 +403,20 @@ pub const ControlPlane = struct {
         self.cache.ts_ns = std.time.nanoTimestamp();
     }
 
-    fn enqueueInput(self: *ControlPlane, from: []const u8, text: []const u8, raw: bool, cmd_id: u32) void {
-        const owned_from = self.allocator.dupe(u8, from) catch return;
+    fn enqueueInput(self: *ControlPlane, from: []const u8, text: []const u8, raw: bool, cmd_id: u32) bool {
+        const owned_from = self.allocator.dupe(u8, from) catch return false;
         const owned_text = self.allocator.dupe(u8, text) catch {
             self.allocator.free(owned_from);
-            return;
+            return false;
         };
 
         self.pending_inputs_lock.lock();
         defer self.pending_inputs_lock.unlock();
+        if (self.pending_inputs.items.len >= self.max_pending_inputs) {
+            self.allocator.free(owned_from);
+            self.allocator.free(owned_text);
+            return false;
+        }
         self.pending_inputs.append(self.allocator, .{
             .from = owned_from,
             .text = owned_text,
@@ -399,7 +425,9 @@ pub const ControlPlane = struct {
         }) catch {
             self.allocator.free(owned_from);
             self.allocator.free(owned_text);
+            return false;
         };
+        return true;
     }
 
     pub fn drainPendingInputs(self: *ControlPlane, surface: anytype) void {
@@ -512,7 +540,10 @@ pub const ControlPlane = struct {
             return cmd_id;
         }
 
-        self.enqueueInput("zig-cp", text, raw, cmd_id);
+        if (!self.enqueueInput("zig-cp", text, raw, cmd_id)) {
+            log.warn("provSendInput dropped input due to full queue (max={})", .{self.max_pending_inputs});
+            return cmd_id;
+        }
         const result = os.PostMessageW(self.hwnd, os.WM_APP_CONTROL_INPUT, 0, 0);
         log.info("provSendInput PostMessageW(WM_APP_CONTROL_INPUT) result={}", .{result});
         if (result == 0) {
@@ -654,6 +685,12 @@ fn isMutatingCommand(cmd: []const u8) bool {
         std.mem.eql(u8, cmd, "FOCUS");
 }
 
+fn isBackpressureCommand(cmd: []const u8) bool {
+    return std.mem.eql(u8, cmd, "INPUT") or
+        std.mem.eql(u8, cmd, "RAW_INPUT") or
+        std.mem.eql(u8, cmd, "PASTE");
+}
+
 fn loadSessionName(allocator: Allocator, pid: u32) ![]u8 {
     const env_name = std.process.getEnvVarOwned(allocator, "GHOSTTY_SESSION_NAME") catch null;
     if (env_name) |value| {
@@ -758,6 +795,14 @@ test "isMutatingCommand classification" {
     try std.testing.expect(!isMutatingCommand("TAIL"));
 }
 
+test "isBackpressureCommand classification" {
+    try std.testing.expect(isBackpressureCommand("INPUT"));
+    try std.testing.expect(isBackpressureCommand("RAW_INPUT"));
+    try std.testing.expect(isBackpressureCommand("PASTE"));
+    try std.testing.expect(!isBackpressureCommand("TAIL"));
+    try std.testing.expect(!isBackpressureCommand("STATE"));
+}
+
 test "ResponseCache clear keeps ttl" {
     var cache = ResponseCache{
         .req = try std.testing.allocator.dupe(u8, "TAIL|x|40"),
@@ -809,4 +854,19 @@ test "handleRequestWith caches read commands and invalidates on mutating command
     const r4 = cp.handleRequestWith("TAIL|agent-deck|20", std.testing.allocator, &tb, testBackend);
     defer std.testing.allocator.free(r4);
     try std.testing.expectEqual(@as(usize, 3), tb.calls);
+}
+
+test "handleRequestWith rejects input when queue is full" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(0),
+        .max_pending_inputs = 1,
+    };
+    defer cp.clearPendingInputs();
+
+    try std.testing.expect(cp.enqueueInput("zig-cp", "echo hi", false, 1));
+
+    const resp = cp.handleRequestWith("INPUT|agent-deck|echo again", std.testing.allocator, null, testBackend);
+    defer std.testing.allocator.free(resp);
+    try std.testing.expectEqualStrings("ERR|BUSY|input_queue_full\n", resp);
 }
