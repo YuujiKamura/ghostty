@@ -177,6 +177,8 @@ function Send-CP([string]$pipeName, [string]$cmd, [int]$timeoutMs = 5000) {
         $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(
             ".", $pipeName, [System.IO.Pipes.PipeDirection]::InOut)
         $pipe.Connect($timeoutMs)
+        $pipe.ReadTimeout = $timeoutMs
+        $pipe.WriteTimeout = $timeoutMs
         $writer = New-Object System.IO.StreamWriter($pipe)
         $reader = New-Object System.IO.StreamReader($pipe)
         $writer.AutoFlush = $true
@@ -191,7 +193,9 @@ function Send-CP([string]$pipeName, [string]$cmd, [int]$timeoutMs = 5000) {
 
 function Find-Session {
     if (-not (Test-Path $script:SessionDir)) { return $false }
-    $sessions = Get-ChildItem $script:SessionDir -Filter "*.session" -ErrorAction SilentlyContinue
+    $sessions = Get-ChildItem $script:SessionDir -Filter "*.session" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 8
     foreach ($s in $sessions) {
         try {
             $kv = @{}
@@ -203,9 +207,36 @@ function Find-Session {
             if ($pipePath) {
                 # Strip \\.\pipe\ prefix for NamedPipeClientStream
                 $script:PipeName = $pipePath -replace '^\\\\\.\\pipe\\', ''
-                $ping = Send-CP $script:PipeName "PING"
+                $ping = Send-CP $script:PipeName "PING" 800
                 if ($ping -match "PONG") { return $true }
             }
+        } catch { }
+    }
+    return $false
+}
+
+function Find-SessionForPid([int]$procId) {
+    if (-not (Test-Path $script:SessionDir)) { return $false }
+    $sessions = Get-ChildItem $script:SessionDir -Filter "*.session" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 12
+
+    foreach ($s in $sessions) {
+        try {
+            $kv = @{}
+            foreach ($line in (Get-Content $s.FullName -ErrorAction SilentlyContinue)) {
+                if ($line -match '^(\w+)=(.*)$') { $kv[$Matches[1]] = $Matches[2] }
+            }
+            $pipePath = $kv['pipe_path']
+            if (-not $pipePath) { $pipePath = $kv['pipe_name'] }
+            if (-not $pipePath) { continue }
+
+            # Session files are per-process; prefer entries containing the launched PID.
+            if ($pipePath -notmatch "$procId") { continue }
+
+            $candidate = $pipePath -replace '^\\\\\.\\pipe\\', ''
+            $script:PipeName = $candidate
+            return $true
         } catch { }
     }
     return $false
@@ -230,14 +261,19 @@ function Start-Ghostty {
     $script:Launched = $true
     Start-Sleep -Seconds 3
 
-    for ($i = 0; $i -lt 15; $i++) {
-        if (Find-Session) {
+    for ($i = 0; $i -lt 20; $i++) {
+        if (Find-SessionForPid $script:GhosttyProc.Id) {
             Log "Ghostty started (PID=$($script:GhosttyProc.Id), pipe: $script:PipeName)"
             return $true
         }
         Start-Sleep -Seconds 1
     }
-    Log "FAIL: Ghostty started but no CP session found after 15s"
+    if (Find-Session) {
+        Log "Ghostty started (PID=$($script:GhosttyProc.Id), fallback pipe: $script:PipeName)"
+        return $true
+    }
+
+    Log "FAIL: Ghostty started but no CP session found for PID=$($script:GhosttyProc.Id) after 20s"
     return $false
 }
 
@@ -290,6 +326,8 @@ function Run-Test1 {
                     $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(
                         ".", $pipeName, [System.IO.Pipes.PipeDirection]::InOut)
                     $pipe.Connect(3000)
+                    $pipe.ReadTimeout = 3000
+                    $pipe.WriteTimeout = 3000
                     $w = New-Object System.IO.StreamWriter($pipe)
                     $r = New-Object System.IO.StreamReader($pipe)
                     $w.AutoFlush = $true
@@ -418,6 +456,8 @@ function Run-Test2 {
                 $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(
                     ".", $pipeName, [System.IO.Pipes.PipeDirection]::InOut)
                 $pipe.Connect(5000)
+                $pipe.ReadTimeout = 5000
+                $pipe.WriteTimeout = 5000
                 $w = New-Object System.IO.StreamWriter($pipe)
                 $r = New-Object System.IO.StreamReader($pipe)
                 $w.AutoFlush = $true
