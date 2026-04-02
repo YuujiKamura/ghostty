@@ -9,6 +9,28 @@ const std = @import("std");
 const com = @import("com.zig");
 
 const log = std.log.scoped(.d3d11);
+var trace_bg_loaded: bool = false;
+var trace_bg_enabled: bool = false;
+var buffer_trace_counter: u64 = 0;
+
+fn traceBgEnabled() bool {
+    if (!trace_bg_loaded) {
+        trace_bg_loaded = true;
+        const value = std.process.getEnvVarOwned(
+            std.heap.page_allocator,
+            "GHOSTTY_TRACE_BG_CELLS",
+        ) catch {
+            trace_bg_enabled = false;
+            return false;
+        };
+        defer std.heap.page_allocator.free(value);
+
+        trace_bg_enabled = value.len == 0 or
+            (!std.ascii.eqlIgnoreCase(value, "0") and
+                !std.ascii.eqlIgnoreCase(value, "false"));
+    }
+    return trace_bg_enabled;
+}
 
 /// Options for initializing a buffer.
 pub const Options = struct {
@@ -30,13 +52,14 @@ pub fn Buffer(comptime T: type) type {
         const Self = @This();
 
         buffer: ?*com.ID3D11Buffer = null,
+        srv: ?*com.ID3D11ShaderResourceView = null,
         opts: Options,
         len: usize,
 
         /// Initialize a buffer with the given length pre-allocated.
         /// Matches OpenGL's Buffer.init(opts, len) signature.
         pub fn init(opts: Options, len: usize) !Self {
-            if (len == 0) return .{ .buffer = null, .opts = opts, .len = 0 };
+            if (len == 0) return .{ .buffer = null, .srv = null, .opts = opts, .len = 0 };
             const device = opts.device orelse return error.D3D11Failed;
             return initWithDevice(device, opts, len);
         }
@@ -58,14 +81,35 @@ pub fn Buffer(comptime T: type) type {
                 desc.StructureByteStride = @sizeOf(T);
             }
 
+            if (traceBgEnabled()) {
+                buffer_trace_counter += 1;
+                const sample = buffer_trace_counter <= 64 or (buffer_trace_counter % 64) == 0;
+                if (sample) {
+                    log.info(
+                        "buffer.init type_size={} len={} byte_width={} bind=0x{x} dynamic={} structured={} stride={}",
+                        .{
+                            @sizeOf(T),
+                            len,
+                            desc.ByteWidth,
+                            desc.BindFlags,
+                            opts.dynamic,
+                            opts.structured,
+                            desc.StructureByteStride,
+                        },
+                    );
+                }
+            }
+
             const buf = device.createBuffer(&desc, null) catch return error.D3D11Failed;
-            return .{ .buffer = buf, .opts = opts, .len = len };
+            errdefer buf.release();
+            const srv = try createStructuredSrvIfNeeded(device, opts, buf, len);
+            return .{ .buffer = buf, .srv = srv, .opts = opts, .len = len };
         }
 
         /// Init the buffer filled with the given data.
         /// Matches OpenGL's Buffer.initFill(opts, data) signature.
         pub fn initFill(opts: Options, data: []const T) !Self {
-            if (data.len == 0) return .{ .buffer = null, .opts = opts, .len = 0 };
+            if (data.len == 0) return .{ .buffer = null, .srv = null, .opts = opts, .len = 0 };
             const device = opts.device orelse return error.D3D11Failed;
 
             var byte_width: com.UINT = @intCast(data.len * @sizeOf(T));
@@ -84,16 +128,38 @@ pub fn Buffer(comptime T: type) type {
                 desc.StructureByteStride = @sizeOf(T);
             }
 
+            if (traceBgEnabled()) {
+                buffer_trace_counter += 1;
+                const sample = buffer_trace_counter <= 64 or (buffer_trace_counter % 64) == 0;
+                if (sample) {
+                    log.info(
+                        "buffer.initFill type_size={} len={} byte_width={} bind=0x{x} dynamic={} structured={} stride={}",
+                        .{
+                            @sizeOf(T),
+                            data.len,
+                            desc.ByteWidth,
+                            desc.BindFlags,
+                            opts.dynamic,
+                            opts.structured,
+                            desc.StructureByteStride,
+                        },
+                    );
+                }
+            }
+
             const init_data = com.D3D11_SUBRESOURCE_DATA{
                 .pSysMem = @ptrCast(data.ptr),
                 .SysMemPitch = byte_width,
             };
 
             const buf = device.createBuffer(&desc, &init_data) catch return error.D3D11Failed;
-            return .{ .buffer = buf, .opts = opts, .len = data.len };
+            errdefer buf.release();
+            const srv = try createStructuredSrvIfNeeded(device, opts, buf, data.len);
+            return .{ .buffer = buf, .srv = srv, .opts = opts, .len = data.len };
         }
 
         pub fn deinit(self: Self) void {
+            if (self.srv) |srv| srv.release();
             if (self.buffer) |buf| buf.release();
         }
 
@@ -108,6 +174,13 @@ pub fn Buffer(comptime T: type) type {
 
             // If we need more space, recreate.
             if (data.len > self.len) {
+                if (traceBgEnabled()) {
+                    log.info(
+                        "buffer.sync grow type_size={} old_len={} requested_len={}",
+                        .{ @sizeOf(T), self.len, data.len },
+                    );
+                }
+                if (self.srv) |srv| srv.release();
                 if (self.buffer) |buf| buf.release();
                 self.* = try initWithDevice(device, self.opts, data.len * 2);
             }
@@ -138,6 +211,7 @@ pub fn Buffer(comptime T: type) type {
 
             // If we need more space, recreate with double capacity.
             if (total_len > self.len) {
+                if (self.srv) |srv| srv.release();
                 if (self.buffer) |buf| buf.release();
                 self.* = try initWithDevice(device, self.opts, total_len * 2);
             }
@@ -173,6 +247,35 @@ pub fn Buffer(comptime T: type) type {
             }
 
             return total_len;
+        }
+
+        fn createStructuredSrvIfNeeded(
+            device: *com.ID3D11Device,
+            opts: Options,
+            buf: *com.ID3D11Buffer,
+            len: usize,
+        ) !?*com.ID3D11ShaderResourceView {
+            if (!opts.structured) return null;
+            if ((opts.bind_flags & com.D3D11_BIND_SHADER_RESOURCE) == 0) return null;
+
+            var desc = com.D3D11_SHADER_RESOURCE_VIEW_DESC{
+                .Format = .UNKNOWN,
+                .ViewDimension = com.D3D11_SRV_DIMENSION_BUFFER,
+                .u = .{
+                    .Buffer = .{
+                        .FirstElement = 0,
+                        .NumElements = @intCast(len),
+                    },
+                },
+            };
+
+            return device.createShaderResourceView(@ptrCast(buf), &desc) catch {
+                log.err(
+                    "buffer: createShaderResourceView failed structured={} bind=0x{x} len={} elem_size={}",
+                    .{ opts.structured, opts.bind_flags, len, @sizeOf(T) },
+                );
+                return error.D3D11Failed;
+            };
         }
     };
 }

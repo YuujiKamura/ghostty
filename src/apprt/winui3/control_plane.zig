@@ -1,5 +1,6 @@
 const std = @import("std");
 const os = @import("os.zig");
+const D3D11RenderPass = @import("../../renderer/d3d11/RenderPass.zig");
 
 const zcp = @import("zig-control-plane");
 const ControlPlaneLib = zcp.ControlPlane;
@@ -224,6 +225,19 @@ pub const ControlPlane = struct {
     /// Pipe server handler — called from the pipe server thread.
     fn pipeHandler(request: []const u8, ctx: *anyopaque, allocator: Allocator) []const u8 {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
+        const req = std.mem.trim(u8, request, " \r\n\t");
+        if (std.mem.indexOf(u8, req, "BGTRACE_STATE") != null) {
+            const diag = D3D11RenderPass.traceDiagnostics();
+            return std.fmt.allocPrint(
+                allocator,
+                "OK|enabled={d}|bind_counter={d}|sentinel={d}\n",
+                .{
+                    if (diag.enabled) @as(u8, 1) else @as(u8, 0),
+                    diag.bind_counter,
+                    if (diag.sentinel_emitted) @as(u8, 1) else @as(u8, 0),
+                },
+            ) catch return "ERR|oom\n";
+        }
         if (self.cp) |*cp| {
             return cp.handleRequest(request) catch |err| {
                 log.warn("handleRequest error: {}", .{err});

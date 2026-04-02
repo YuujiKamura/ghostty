@@ -1558,12 +1558,16 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     }),
                     else => {},
                 } else {
-                    pass.step(.{
+                    var bg_color_step: @TypeOf(pass).Step = .{
                         .pipeline = self.shaders.pipelines.bg_color,
                         .uniforms = frame.uniforms.buffer,
                         .buffers = &.{ null, frame.cells_bg.buffer },
                         .draw = .{ .type = .triangle, .vertex_count = 3 },
-                    });
+                    };
+                    if (@hasField(@TypeOf(bg_color_step), "buffer_srvs") and @hasField(@TypeOf(frame.cells_bg), "srv")) {
+                        bg_color_step.buffer_srvs = &.{frame.cells_bg.srv};
+                    }
+                    pass.step(bg_color_step);
                 }
 
                 // Then we draw any kitty images that need
@@ -1576,12 +1580,16 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 );
 
                 // Then we draw any opaque cell backgrounds.
-                pass.step(.{
+                var cell_bg_step: @TypeOf(pass).Step = .{
                     .pipeline = self.shaders.pipelines.cell_bg,
                     .uniforms = frame.uniforms.buffer,
                     .buffers = &.{ null, frame.cells_bg.buffer },
                     .draw = .{ .type = .triangle, .vertex_count = 3 },
-                });
+                };
+                if (@hasField(@TypeOf(cell_bg_step), "buffer_srvs") and @hasField(@TypeOf(frame.cells_bg), "srv")) {
+                    cell_bg_step.buffer_srvs = &.{frame.cells_bg.srv};
+                }
+                pass.step(cell_bg_step);
 
                 // Kitty images between cell backgrounds and text.
                 self.images.draw(
@@ -1592,7 +1600,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 );
 
                 // Text.
-                pass.step(.{
+                var cell_text_step: @TypeOf(pass).Step = .{
                     .pipeline = self.shaders.pipelines.cell_text,
                     .uniforms = frame.uniforms.buffer,
                     .buffers = &.{
@@ -1608,7 +1616,11 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                         .vertex_count = 4,
                         .instance_count = fg_count,
                     },
-                });
+                };
+                if (@hasField(@TypeOf(cell_text_step), "buffer_srvs") and @hasField(@TypeOf(frame.cells_bg), "srv")) {
+                    cell_text_step.buffer_srvs = &.{frame.cells_bg.srv};
+                }
+                pass.step(cell_text_step);
 
                 // Kitty images in front of text.
                 self.images.draw(
