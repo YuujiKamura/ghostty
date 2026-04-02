@@ -43,3 +43,7 @@ pub const pixelStore = draw.pixelStore;
 pub const viewport = draw.viewport;
 pub const flush = draw.flush;
 pub const finish = draw.finish;
+pub const GLsync = draw.GLsync;
+pub const fenceSync = draw.fenceSync;
+pub const clientWaitSync = draw.clientWaitSync;
+pub const deleteSync = draw.deleteSync;

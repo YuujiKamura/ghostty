@@ -1,0 +1,16 @@
+pre-commit:
+  parallel: true
+  commands:
+    zig-fmt:
+      glob: "*.zig"
+      run: zig fmt --check {staged_files}
+    vtable-manifest:
+      run: bash -c "./build-winui3.sh 2>&1 | grep -q 'VTABLE MANIFEST OK'"
+      skip:
+        - merge
+        - rebase
+
+pre-push:
+  commands:
+    build-check:
+      run: ./build-winui3.sh

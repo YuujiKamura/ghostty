@@ -23,7 +23,10 @@ pub fn main() !void {
     try genConfig(alloc, writer);
     try genActions(alloc, writer);
     try genKeybindActions(alloc, writer);
-    try stdout.end();
+    stdout.end() catch |err| switch (err) {
+        error.FileTooBig => {}, // ftruncate not supported on Windows stdout
+        else => return err,
+    };
 }
 
 fn genConfig(alloc: std.mem.Allocator, writer: *std.Io.Writer) !void {

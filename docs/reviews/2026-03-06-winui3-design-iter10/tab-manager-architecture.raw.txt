@@ -1,0 +1,32 @@
+## Analyze: tab_manager.zig
+
+`tab_manager.zig` の分析結果を簡潔にまとめます。
+
+### 1. 目的と責務
+*   **目的**: WinUI 3 の `TabView` コントロールと、Zig 側のデータ構造（`Surface`）のライフサイクルを同期・管理するブリッジ。
+*   **責務**:
+    *   新しいタブの生成（`Surface` の初期化、WinRT `TabViewItem` の作成とプロパティ設定）。
+    *   タブの破棄（WinRT コレクションからの削除、メモリ解放、インデックスの再計算）。
+    *   UI（WinRT）とロジック（Zig）の状態整合性の維持。
+
+### 2. 依存関係
+*   **内部 (Zig)**:
+    *   `Surface.zig`: タブの内容（ターミナル等）の実体。
+    *   `winrt.zig` / `com.zig`: WinRT API 呼び出しの抽象化レイヤー。
+    *   `input_runtime.zig`: フォーカス制御。
+    *   `config.zig`: タブ生成時の設定取得。
+*   **外部 (WinRT/COM)**:
+    *   `Microsoft.UI.Xaml.Controls.TabView`, `TabViewItem`, `IContentControl` 等の WinUI 3 コンポーネント。
+*   **利用者**:
+    *   主に `App.zig` から呼び出される（`self: anytype` を通じたミックスイン的な利用）。
+
+### 3. 設計パターン
+*   **Logic Partitioning (分離)**: `App.zig` が巨大化するのを防ぐため、タブ操作ロジックを別ファイルに抽出。
+*   **Duck Typing (`anytype`)**: `self` に特定の構造を期待するダックタイピングを採用し、柔軟なメソッド注入を実現。
+*   **RAII/Guard パターン**: `winrt.ComRef` と `defer/errdefer` を組み合わせた確実な COM 参照カウント管理。
+
+### 4. 改善点
+*   **ハードコードの排除**: タイトル（"Terminal"）が固定されている。引数化または `Surface` からの取得が望ましい。
+*   **Config ロードの効率化**: `newTab` のたびに `Config.load` している。親（`App`）で保持したインスタンスを再利用すべき。
+*   **型安全性の強化**: `anytype` は柔軟だが、インターフェースを定義するか、特定のメンバ（`surfaces`, `core_app` 等）の存在をコンパイル時に検証するコードを追加すると堅牢になる。
+*   **エラーハンドリングの粒度**: `attachSurfaceToTabItem` が失敗してもログ出力のみで続行している。UI の不整合に繋がる可能性があるため、リカバリ策が必要。

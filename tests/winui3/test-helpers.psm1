@@ -1,0 +1,1228 @@
+# test-helpers.psm1 — Shared PowerShell module for winui3 GUI tests
+# Usage: Import-Module .\test-helpers.psm1 -Force
+
+Set-StrictMode -Version Latest
+
+# ============================================================
+# Win32 P/Invoke
+# ============================================================
+Add-Type @"
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public class Win32 {
+    [DllImport("user32.dll")]
+    public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+
+    // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
+    public static void EnablePerMonitorDpiAwareness() {
+        SetProcessDpiAwarenessContext(new IntPtr(-4));
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr FindWindowW(string className, string windowName);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsWindowVisible(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsZoomed(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsIconic(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetClientRect(IntPtr hwnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    public static extern int GetWindowLong(IntPtr hwnd, int nIndex);
+
+    [DllImport("user32.dll")]
+    public static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hwnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetWindow(IntPtr hwnd, uint cmd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetClassNameW(IntPtr hwnd, StringBuilder buf, int maxCount);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetWindowTextW(IntPtr hwnd, StringBuilder buf, int maxCount);
+
+    [DllImport("user32.dll")]
+    public static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern bool MoveWindow(IntPtr hwnd, int x, int y, int w, int h, bool repaint);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern bool PostMessageW(IntPtr hwnd, uint msg, IntPtr wparam, IntPtr lparam);
+
+    [DllImport("user32.dll")]
+    public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern short VkKeyScanW(char ch);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetCursorPos(out POINT pt);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr SetFocus(IntPtr hwnd);
+
+    [DllImport("imm32.dll")]
+    public static extern IntPtr ImmGetContext(IntPtr hwnd);
+
+    [DllImport("imm32.dll")]
+    public static extern bool ImmReleaseContext(IntPtr hwnd, IntPtr himc);
+
+    [DllImport("imm32.dll")]
+    public static extern bool ImmGetOpenStatus(IntPtr himc);
+
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+
+    public delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
+
+    // GetWindowLong indices
+    public const int GWL_STYLE   = -16;
+    public const int GWL_EXSTYLE = -20;
+
+    // GetWindow commands
+    public const uint GW_CHILD    = 5;
+    public const uint GW_HWNDNEXT = 2;
+
+    // Window styles
+    public const int WS_OVERLAPPEDWINDOW     = 0x00CF0000;
+    public const int WS_VISIBLE              = 0x10000000;
+    public const int WS_EX_NOREDIRECTIONBITMAP = 0x00200000;
+
+    // ShowWindow commands
+    public const int SW_RESTORE  = 9;
+    public const int SW_MINIMIZE = 6;
+
+    // Messages
+    public const uint WM_CLOSE   = 0x0010;
+    public const uint WM_KEYDOWN = 0x0100;
+    public const uint WM_KEYUP   = 0x0101;
+    public const uint WM_CHAR    = 0x0102;
+
+    // SendInput constants
+    public const uint INPUT_MOUSE    = 0;
+    public const uint INPUT_KEYBOARD = 1;
+    public const uint MOUSEEVENTF_LEFTDOWN  = 0x0002;
+    public const uint MOUSEEVENTF_LEFTUP    = 0x0004;
+    public const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
+    public const uint MOUSEEVENTF_RIGHTUP   = 0x0010;
+    public const uint MOUSEEVENTF_MOVE      = 0x0001;
+    public const uint MOUSEEVENTF_ABSOLUTE  = 0x8000;
+
+    public const uint KEYEVENTF_KEYUP       = 0x0002;
+    public const uint KEYEVENTF_UNICODE     = 0x0004;
+
+    // ----- Managed helpers (avoid marshaling headaches) -----
+
+    public static string GetClassName(IntPtr hwnd) {
+        var sb = new StringBuilder(256);
+        GetClassNameW(hwnd, sb, sb.Capacity);
+        return sb.ToString();
+    }
+
+    public static string GetWindowText(IntPtr hwnd) {
+        var sb = new StringBuilder(256);
+        GetWindowTextW(hwnd, sb, sb.Capacity);
+        return sb.ToString();
+    }
+
+    /// Return all child HWNDs with their class names.
+    public static List<Tuple<IntPtr, string>> GetChildWindows(IntPtr parent) {
+        var list = new List<Tuple<IntPtr, string>>();
+        EnumChildWindows(parent, (h, _) => {
+            list.Add(Tuple.Create(h, GetClassName(h)));
+            return true;
+        }, IntPtr.Zero);
+        return list;
+    }
+
+    /// Find a top-level window by PID.
+    public static IntPtr FindWindowByPid(uint pid) {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows((h, _) => {
+            uint wpid;
+            GetWindowThreadProcessId(h, out wpid);
+            if (wpid == pid && IsWindowVisible(h)) {
+                found = h;
+                return false; // stop enumeration
+            }
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct RECT {
+    public int Left, Top, Right, Bottom;
+    public int Width  { get { return Right - Left; } }
+    public int Height { get { return Bottom - Top; } }
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct POINT { public int X, Y; }
+
+[StructLayout(LayoutKind.Explicit)]
+public struct INPUT {
+    [FieldOffset(0)] public uint Type;
+    [FieldOffset(8)] public MOUSEINPUT    mi;
+    [FieldOffset(8)] public KEYBDINPUT    ki;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct MOUSEINPUT {
+    public int    dx, dy;
+    public uint   mouseData, dwFlags, time;
+    public IntPtr dwExtraInfo;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct KEYBDINPUT {
+    public ushort wVk, wScan;
+    public uint   dwFlags, time;
+    public IntPtr dwExtraInfo;
+}
+"@ -ErrorAction SilentlyContinue   # Ignore if already loaded in session
+
+# Enable per-monitor DPI awareness so GetWindowRect returns physical pixels.
+[Win32]::EnablePerMonitorDpiAwareness()
+
+# ============================================================
+# Constants
+# ============================================================
+$script:GHOSTTY_CLASS_PRIMARY  = "GhosttyWindow"
+$script:GHOSTTY_WINDOW_TITLE   = "Ghostty"
+$script:DEFAULT_TIMEOUT_MS     = 10000
+$script:POLL_INTERVAL_MS       = 200
+
+# ============================================================
+# Process management
+# ============================================================
+
+function Start-Ghostty {
+    <#
+    .SYNOPSIS
+        Launch ghostty.exe and return the Process object.
+    .PARAMETER ExePath
+        Full path to ghostty.exe. Defaults to zig-out-winui3\bin\ghostty.exe
+        relative to the repo root.
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$ExePath
+    )
+
+    if (-not $ExePath) {
+        $ExePath = Join-Path $PSScriptRoot "..\..\zig-out-winui3\bin\ghostty.exe"
+    }
+    $ExePath = (Resolve-Path $ExePath -ErrorAction Stop).Path
+
+    if (-not (Test-Path $ExePath)) {
+        throw "ghostty.exe not found at $ExePath — build first with ./build-winui3.sh"
+    }
+
+    Write-Host "  Launching $ExePath ..." -ForegroundColor DarkGray
+    $proc = Start-Process -FilePath $ExePath -PassThru
+    return $proc
+}
+
+function Stop-Ghostty {
+    <#
+    .SYNOPSIS
+        Kill the ghostty process (and children) gracefully.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Diagnostics.Process]$Process
+    )
+
+    if (-not $Process.HasExited) {
+        # Try graceful close first
+        $hwnd = Find-GhosttyWindow -ProcessId $Process.Id -TimeoutMs 1000 -NoThrow
+        if ($hwnd -and $hwnd -ne [IntPtr]::Zero) {
+            [Win32]::PostMessageW($hwnd, [Win32]::WM_CLOSE, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+            $Process | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
+        }
+        if (-not $Process.HasExited) {
+            $Process | Stop-Process -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Write-Host "  Ghostty process stopped." -ForegroundColor DarkGray
+}
+
+# ============================================================
+# Window discovery
+# ============================================================
+
+function Find-GhosttyWindow {
+    <#
+    .SYNOPSIS
+        Find the Ghostty top-level HWND. Tries class name first, then falls back
+        to searching by window title, then by PID.
+    .PARAMETER ProcessId
+        If specified, restrict search to this PID.
+    .PARAMETER TimeoutMs
+        How long to wait for the window to appear.
+    .PARAMETER NoThrow
+        Return $null instead of throwing on timeout.
+    #>
+    [CmdletBinding()]
+    param(
+        [uint32]$ProcessId = 0,
+        [int]$TimeoutMs = $script:DEFAULT_TIMEOUT_MS,
+        [switch]$NoThrow
+    )
+
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMs)
+
+    while ([DateTime]::UtcNow -lt $deadline) {
+        # Strategy 1: FindWindowW by known class name
+        $hwnd = [Win32]::FindWindowW($script:GHOSTTY_CLASS_PRIMARY, $null)
+        if ($hwnd -ne [IntPtr]::Zero -and [Win32]::IsWindowVisible($hwnd)) {
+            if ($ProcessId -eq 0 -or (Test-WindowBelongsToPid $hwnd $ProcessId)) {
+                Write-Host "  Found window via class '$script:GHOSTTY_CLASS_PRIMARY' -> 0x$($hwnd.ToString('X'))" -ForegroundColor DarkGray
+                return $hwnd
+            }
+        }
+
+        # Strategy 2: FindWindowW by title (class name might differ in future builds)
+        $hwnd = [Win32]::FindWindowW($null, $script:GHOSTTY_WINDOW_TITLE)
+        if ($hwnd -ne [IntPtr]::Zero -and [Win32]::IsWindowVisible($hwnd)) {
+            if ($ProcessId -eq 0 -or (Test-WindowBelongsToPid $hwnd $ProcessId)) {
+                $cls = [Win32]::GetClassName($hwnd)
+                Write-Host "  Found window via title '$script:GHOSTTY_WINDOW_TITLE' (class='$cls') -> 0x$($hwnd.ToString('X'))" -ForegroundColor DarkGray
+                return $hwnd
+            }
+        }
+
+        # Strategy 3: Enumerate by PID (catches renamed class+title)
+        if ($ProcessId -ne 0) {
+            $hwnd = [Win32]::FindWindowByPid($ProcessId)
+            if ($hwnd -ne [IntPtr]::Zero) {
+                $cls = [Win32]::GetClassName($hwnd)
+                $ttl = [Win32]::GetWindowText($hwnd)
+                Write-Host "  Found window via PID $ProcessId (class='$cls', title='$ttl') -> 0x$($hwnd.ToString('X'))" -ForegroundColor DarkGray
+                return $hwnd
+            }
+        }
+
+        Start-Sleep -Milliseconds $script:POLL_INTERVAL_MS
+    }
+
+    if ($NoThrow) { return [IntPtr]::Zero }
+    throw "Timed out waiting for Ghostty window (${TimeoutMs}ms)"
+}
+
+function Test-WindowBelongsToPid {
+    [CmdletBinding()]
+    param(
+        [IntPtr]$Hwnd,
+        [uint32]$Pid
+    )
+    $wpid = [uint32]0
+    [Win32]::GetWindowThreadProcessId($Hwnd, [ref]$wpid) | Out-Null
+    return ($wpid -eq $Pid)
+}
+
+# ============================================================
+# Window inspection
+# ============================================================
+
+function Get-WindowPosition {
+    <#
+    .SYNOPSIS
+        Return window RECT (screen coordinates).
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][IntPtr]$Hwnd)
+    $r = New-Object RECT
+    if (-not [Win32]::GetWindowRect($Hwnd, [ref]$r)) {
+        throw "GetWindowRect failed for 0x$($Hwnd.ToString('X'))"
+    }
+    return $r
+}
+
+function Get-ClientPosition {
+    <#
+    .SYNOPSIS
+        Return client-area RECT.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][IntPtr]$Hwnd)
+    $r = New-Object RECT
+    if (-not [Win32]::GetClientRect($Hwnd, [ref]$r)) {
+        throw "GetClientRect failed for 0x$($Hwnd.ToString('X'))"
+    }
+    return $r
+}
+
+function Get-ChildWindows {
+    <#
+    .SYNOPSIS
+        Return list of [Tuple[IntPtr, string]] for all child windows.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][IntPtr]$Hwnd)
+    return [Win32]::GetChildWindows($Hwnd)
+}
+
+function Get-ChildWindowByClass {
+    <#
+    .SYNOPSIS
+        Return the first child HWND whose class name matches ClassName.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][IntPtr]$Hwnd,
+        [Parameter(Mandatory)][string]$ClassName
+    )
+
+    foreach ($child in [Win32]::GetChildWindows($Hwnd)) {
+        if ($child.Item2 -eq $ClassName) {
+            return $child.Item1
+        }
+    }
+
+    return [IntPtr]::Zero
+}
+
+# ============================================================
+# Assertions
+# ============================================================
+
+function Test-Assert {
+    <#
+    .SYNOPSIS
+        Assert a condition. Throws on failure (caught by runner as FAIL).
+    .PARAMETER Condition
+        Boolean expression result.
+    .PARAMETER Message
+        Description of what is being tested.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][bool]$Condition,
+        [Parameter(Mandatory)][string]$Message
+    )
+
+    if ($Condition) {
+        Write-Host "  PASS: $Message" -ForegroundColor Green
+    } else {
+        Write-Host "  FAIL: $Message" -ForegroundColor Red
+        throw "Assertion failed: $Message"
+    }
+}
+
+function Test-AssertEqual {
+    <#
+    .SYNOPSIS
+        Assert two values are equal.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Expected,
+        [Parameter(Mandatory)]$Actual,
+        [Parameter(Mandatory)][string]$Message
+    )
+    if ($Expected -eq $Actual) {
+        Write-Host "  PASS: $Message (=$Actual)" -ForegroundColor Green
+    } else {
+        Write-Host "  FAIL: $Message (expected=$Expected, actual=$Actual)" -ForegroundColor Red
+        throw "Assertion failed: $Message (expected=$Expected, actual=$Actual)"
+    }
+}
+
+function Test-AssertInRange {
+    <#
+    .SYNOPSIS
+        Assert a numeric value is within [Min, Max].
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][double]$Value,
+        [Parameter(Mandatory)][double]$Min,
+        [Parameter(Mandatory)][double]$Max,
+        [Parameter(Mandatory)][string]$Message
+    )
+    $ok = ($Value -ge $Min -and $Value -le $Max)
+    if ($ok) {
+        Write-Host "  PASS: $Message ($Value in [$Min, $Max])" -ForegroundColor Green
+    } else {
+        Write-Host "  FAIL: $Message ($Value not in [$Min, $Max])" -ForegroundColor Red
+        throw "Assertion failed: $Message ($Value not in [$Min, $Max])"
+    }
+}
+
+# ============================================================
+# Input simulation
+# ============================================================
+
+function Send-MouseClick {
+    <#
+    .SYNOPSIS
+        Click at absolute screen coordinates.
+    .PARAMETER X
+        Screen X.
+    .PARAMETER Y
+        Screen Y.
+    .PARAMETER Button
+        "Left" or "Right".
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][int]$X,
+        [Parameter(Mandatory)][int]$Y,
+        [string]$Button = "Left"
+    )
+
+    [Win32]::SetCursorPos($X, $Y) | Out-Null
+    Start-Sleep -Milliseconds 50
+
+    $downFlag = if ($Button -eq "Right") { [Win32]::MOUSEEVENTF_RIGHTDOWN } else { [Win32]::MOUSEEVENTF_LEFTDOWN }
+    $upFlag   = if ($Button -eq "Right") { [Win32]::MOUSEEVENTF_RIGHTUP   } else { [Win32]::MOUSEEVENTF_LEFTUP   }
+
+    $down = New-Object INPUT
+    $down.Type = [Win32]::INPUT_MOUSE
+    $down.mi.dwFlags = $downFlag
+
+    $up = New-Object INPUT
+    $up.Type = [Win32]::INPUT_MOUSE
+    $up.mi.dwFlags = $upFlag
+
+    [Win32]::SendInput(2, @($down, $up), [System.Runtime.InteropServices.Marshal]::SizeOf([type][INPUT])) | Out-Null
+}
+
+function Send-MouseDrag {
+    <#
+    .SYNOPSIS
+        Drag from (X1,Y1) to (X2,Y2).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][int]$X1,
+        [Parameter(Mandatory)][int]$Y1,
+        [Parameter(Mandatory)][int]$X2,
+        [Parameter(Mandatory)][int]$Y2,
+        [int]$Steps = 10,
+        [int]$StepDelayMs = 10
+    )
+
+    [Win32]::SetCursorPos($X1, $Y1) | Out-Null
+    Start-Sleep -Milliseconds 50
+
+    # Mouse down
+    $down = New-Object INPUT
+    $down.Type = [Win32]::INPUT_MOUSE
+    $down.mi.dwFlags = [Win32]::MOUSEEVENTF_LEFTDOWN
+    [Win32]::SendInput(1, @($down), [System.Runtime.InteropServices.Marshal]::SizeOf([type][INPUT])) | Out-Null
+
+    # Interpolate
+    for ($i = 1; $i -le $Steps; $i++) {
+        $t = $i / $Steps
+        $cx = [int]($X1 + ($X2 - $X1) * $t)
+        $cy = [int]($Y1 + ($Y2 - $Y1) * $t)
+        [Win32]::SetCursorPos($cx, $cy) | Out-Null
+        Start-Sleep -Milliseconds $StepDelayMs
+    }
+
+    # Mouse up
+    $up = New-Object INPUT
+    $up.Type = [Win32]::INPUT_MOUSE
+    $up.mi.dwFlags = [Win32]::MOUSEEVENTF_LEFTUP
+    [Win32]::SendInput(1, @($up), [System.Runtime.InteropServices.Marshal]::SizeOf([type][INPUT])) | Out-Null
+}
+
+function Send-KeyPress {
+    <#
+    .SYNOPSIS
+        Send a key press via SendInput.
+    .PARAMETER VirtualKey
+        Virtual key code (e.g. 0x0D for Enter, 0x1B for Escape).
+    .PARAMETER Char
+        Alternatively, send a Unicode character.
+    #>
+    [CmdletBinding()]
+    param(
+        [uint16]$VirtualKey = 0,
+        [char]$Char = [char]0
+    )
+
+    $down = New-Object INPUT
+    $down.Type = [Win32]::INPUT_KEYBOARD
+
+    $up = New-Object INPUT
+    $up.Type = [Win32]::INPUT_KEYBOARD
+
+    if ($VirtualKey -ne 0) {
+        $down.ki.wVk = $VirtualKey
+        $up.ki.wVk   = $VirtualKey
+        $up.ki.dwFlags = [Win32]::KEYEVENTF_KEYUP
+    } elseif ($Char -ne [char]0) {
+        # Use VkKeyScanW to get the VK code — XAML needs real VK, not UNICODE scan.
+        $vks = [Win32]::VkKeyScanW($Char)
+        $vk = [uint16]($vks -band 0xFF)
+        $modState = ($vks -shr 8) -band 0xFF
+        # Handle Shift modifier if needed
+        if ($modState -band 1) {
+            $shiftDown = New-Object INPUT
+            $shiftDown.Type = [Win32]::INPUT_KEYBOARD
+            $shiftDown.ki.wVk = 0x10  # VK_SHIFT
+            [Win32]::SendInput(1, @($shiftDown), [System.Runtime.InteropServices.Marshal]::SizeOf([type][INPUT])) | Out-Null
+        }
+        $down.ki.wVk = $vk
+        $up.ki.wVk   = $vk
+        $up.ki.dwFlags = [Win32]::KEYEVENTF_KEYUP
+    } else {
+        throw "Send-KeyPress: specify -VirtualKey or -Char"
+    }
+
+    [Win32]::SendInput(2, @($down, $up), [System.Runtime.InteropServices.Marshal]::SizeOf([type][INPUT])) | Out-Null
+
+    # Release Shift if we pressed it for -Char mode
+    if ($Char -ne [char]0 -and $VirtualKey -eq 0) {
+        $vks2 = [Win32]::VkKeyScanW($Char)
+        $modState2 = ($vks2 -shr 8) -band 0xFF
+        if ($modState2 -band 1) {
+            $shiftUp = New-Object INPUT
+            $shiftUp.Type = [Win32]::INPUT_KEYBOARD
+            $shiftUp.ki.wVk = 0x10
+            $shiftUp.ki.dwFlags = [Win32]::KEYEVENTF_KEYUP
+            [Win32]::SendInput(1, @($shiftUp), [System.Runtime.InteropServices.Marshal]::SizeOf([type][INPUT])) | Out-Null
+        }
+    }
+}
+
+# ============================================================
+# Utility
+# ============================================================
+
+function Wait-Condition {
+    <#
+    .SYNOPSIS
+        Poll a scriptblock until it returns $true, or throw on timeout.
+    .PARAMETER ScriptBlock
+        The condition to evaluate. Must return $true/$false.
+    .PARAMETER TimeoutMs
+        Maximum wait time.
+    .PARAMETER PollMs
+        Interval between checks.
+    .PARAMETER Description
+        What we are waiting for (used in timeout error message).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][scriptblock]$ScriptBlock,
+        [int]$TimeoutMs = $script:DEFAULT_TIMEOUT_MS,
+        [int]$PollMs = $script:POLL_INTERVAL_MS,
+        [string]$Description = "condition"
+    )
+
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMs)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        if (& $ScriptBlock) { return }
+        Start-Sleep -Milliseconds $PollMs
+    }
+    throw "Timed out waiting for: $Description (${TimeoutMs}ms)"
+}
+
+function Capture-ScreenRegion {
+    <#
+    .SYNOPSIS
+        Capture a screen region into a System.Drawing.Bitmap.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][int]$X,
+        [Parameter(Mandatory)][int]$Y,
+        [Parameter(Mandatory)][int]$Width,
+        [Parameter(Mandatory)][int]$Height
+    )
+
+    Add-Type -AssemblyName System.Drawing
+
+    $bmp = New-Object System.Drawing.Bitmap($Width, $Height)
+    $graphics = [System.Drawing.Graphics]::FromImage($bmp)
+    try {
+        $graphics.CopyFromScreen($X, $Y, 0, 0, $bmp.Size)
+        return $bmp
+    } finally {
+        $graphics.Dispose()
+    }
+}
+
+function Get-BitmapSampleSignature {
+    <#
+    .SYNOPSIS
+        Produce a compact signature of sampled bitmap pixels.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Bitmap,
+        [int]$Columns = 8,
+        [int]$Rows = 4
+    )
+
+    $samples = [System.Collections.Generic.List[string]]::new()
+    $stepX = [Math]::Max(1, [int]($Bitmap.Width / ($Columns + 1)))
+    $stepY = [Math]::Max(1, [int]($Bitmap.Height / ($Rows + 1)))
+
+    for ($row = 1; $row -le $Rows; $row++) {
+        for ($col = 1; $col -le $Columns; $col++) {
+            $x = [Math]::Min($Bitmap.Width - 1, $col * $stepX)
+            $y = [Math]::Min($Bitmap.Height - 1, $row * $stepY)
+            $px = $Bitmap.GetPixel($x, $y)
+            $samples.Add(("{0:X2}{1:X2}{2:X2}" -f $px.R, $px.G, $px.B)) | Out-Null
+        }
+    }
+
+    return ($samples -join ",")
+}
+
+function Get-BitmapUniqueColorCount {
+    <#
+    .SYNOPSIS
+        Count unique sampled colors in a bitmap.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Bitmap,
+        [int]$Columns = 12,
+        [int]$Rows = 6
+    )
+
+    $set = [System.Collections.Generic.HashSet[string]]::new()
+    $stepX = [Math]::Max(1, [int]($Bitmap.Width / ($Columns + 1)))
+    $stepY = [Math]::Max(1, [int]($Bitmap.Height / ($Rows + 1)))
+
+    for ($row = 1; $row -le $Rows; $row++) {
+        for ($col = 1; $col -le $Columns; $col++) {
+            $x = [Math]::Min($Bitmap.Width - 1, $col * $stepX)
+            $y = [Math]::Min($Bitmap.Height - 1, $row * $stepY)
+            $px = $Bitmap.GetPixel($x, $y)
+            $null = $set.Add(("{0:X2}{1:X2}{2:X2}" -f $px.R, $px.G, $px.B))
+        }
+    }
+
+    return $set.Count
+}
+
+function Get-BitmapSampleDiffCount {
+    <#
+    .SYNOPSIS
+        Compare two bitmaps via dense sampled pixels and count differing samples.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$BitmapA,
+        [Parameter(Mandatory)]$BitmapB,
+        [int]$Columns = 20,
+        [int]$Rows = 10
+    )
+
+    if ($BitmapA.Width -ne $BitmapB.Width -or $BitmapA.Height -ne $BitmapB.Height) {
+        throw "Bitmap size mismatch: $($BitmapA.Width)x$($BitmapA.Height) vs $($BitmapB.Width)x$($BitmapB.Height)"
+    }
+
+    $diffCount = 0
+    $stepX = [Math]::Max(1, [int]($BitmapA.Width / ($Columns + 1)))
+    $stepY = [Math]::Max(1, [int]($BitmapA.Height / ($Rows + 1)))
+
+    for ($row = 1; $row -le $Rows; $row++) {
+        for ($col = 1; $col -le $Columns; $col++) {
+            $x = [Math]::Min($BitmapA.Width - 1, $col * $stepX)
+            $y = [Math]::Min($BitmapA.Height - 1, $row * $stepY)
+            $pxA = $BitmapA.GetPixel($x, $y)
+            $pxB = $BitmapB.GetPixel($x, $y)
+            if ($pxA.ToArgb() -ne $pxB.ToArgb()) {
+                $diffCount++
+            }
+        }
+    }
+
+    return $diffCount
+}
+
+# ============================================================
+# UI Automation (UIA) helpers
+# ============================================================
+Add-Type -AssemblyName UIAutomationClient  -ErrorAction SilentlyContinue
+Add-Type -AssemblyName UIAutomationTypes   -ErrorAction SilentlyContinue
+
+function Find-GhosttyUIAElement {
+    <#
+    .SYNOPSIS
+        Find the Ghostty main window as a UIA AutomationElement by PID.
+    .PARAMETER ProcessId
+        Target process ID.
+    .PARAMETER TimeoutMs
+        How long to wait for the element to appear.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][int]$ProcessId,
+        [int]$TimeoutMs = $script:DEFAULT_TIMEOUT_MS
+    )
+
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $pidCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $ProcessId)
+
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMs)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        # Fast path: direct child of RootElement (works for traditional windows)
+        $elem = $root.FindFirst(
+            [System.Windows.Automation.TreeScope]::Children, $pidCond)
+        if ($elem -ne $null) {
+            Write-Host "  UIA: Found element via RootElement.Children for PID $ProcessId" -ForegroundColor DarkGray
+            return $elem
+        }
+
+        # Fallback: XAML Islands apps nest UIA elements under a SiteBridge child HWND,
+        # so RootElement.Children won't find them. Use Win32 to locate the top-level
+        # HWND and build the AutomationElement from its handle instead.
+        $hwnd = [Win32]::FindWindowByPid([uint32]$ProcessId)
+        if ($hwnd -ne [IntPtr]::Zero) {
+            try {
+                $elem = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+                if ($elem -ne $null) {
+                    Write-Host "  UIA: Found element via FromHandle(0x$($hwnd.ToString('X'))) for PID $ProcessId" -ForegroundColor DarkGray
+                    return $elem
+                }
+            } catch {
+                # FromHandle can throw if the window is not yet ready; keep polling.
+            }
+        }
+
+        Start-Sleep -Milliseconds $script:POLL_INTERVAL_MS
+    }
+    throw "UIA: Timed out finding AutomationElement for PID $ProcessId (${TimeoutMs}ms)"
+}
+
+function Find-UIAChild {
+    <#
+    .SYNOPSIS
+        Find a single descendant element by ControlType and/or Name.
+    .PARAMETER Element
+        Parent AutomationElement to search from.
+    .PARAMETER ControlType
+        UIA ControlType (e.g. [System.Windows.Automation.ControlType]::Button).
+    .PARAMETER Name
+        UIA Name property to match.
+    .PARAMETER AutomationId
+        UIA AutomationId property to match.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Element,
+        [System.Windows.Automation.ControlType]$ControlType,
+        [string]$Name,
+        [string]$AutomationId
+    )
+
+    $conditions = @()
+    if ($ControlType) {
+        $conditions += New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty, $ControlType)
+    }
+    if ($Name) {
+        $conditions += New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::NameProperty, $Name)
+    }
+    if ($AutomationId) {
+        $conditions += New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::AutomationIdProperty, $AutomationId)
+    }
+
+    if ($conditions.Count -eq 0) {
+        throw "Find-UIAChild: specify at least one of -ControlType, -Name, -AutomationId"
+    }
+
+    $cond = if ($conditions.Count -eq 1) {
+        $conditions[0]
+    } else {
+        New-Object System.Windows.Automation.AndCondition($conditions)
+    }
+
+    return $Element.FindFirst(
+        [System.Windows.Automation.TreeScope]::Descendants, $cond)
+}
+
+function Find-UIAChildren {
+    <#
+    .SYNOPSIS
+        Find all descendant elements by ControlType and/or Name.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Element,
+        [System.Windows.Automation.ControlType]$ControlType,
+        [string]$Name
+    )
+
+    $conditions = @()
+    if ($ControlType) {
+        $conditions += New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty, $ControlType)
+    }
+    if ($Name) {
+        $conditions += New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::NameProperty, $Name)
+    }
+
+    if ($conditions.Count -eq 0) {
+        $cond = [System.Windows.Automation.Condition]::TrueCondition
+    } elseif ($conditions.Count -eq 1) {
+        $cond = $conditions[0]
+    } else {
+        $cond = New-Object System.Windows.Automation.AndCondition($conditions)
+    }
+
+    return $Element.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants, $cond)
+}
+
+function Invoke-UIAButton {
+    <#
+    .SYNOPSIS
+        Invoke a button element via UIA InvokePattern.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Button
+    )
+
+    $pattern = $null
+    if ($Button.TryGetCurrentPattern(
+        [System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) {
+        $pattern.Invoke()
+    } else {
+        throw "UIA: Element '$($Button.Current.Name)' does not support InvokePattern"
+    }
+}
+
+function Get-UIAWindowPattern {
+    <#
+    .SYNOPSIS
+        Get the WindowPattern from an AutomationElement.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Element
+    )
+
+    $pattern = $null
+    if ($Element.TryGetCurrentPattern(
+        [System.Windows.Automation.WindowPattern]::Pattern, [ref]$pattern)) {
+        return $pattern
+    }
+    throw "UIA: Element does not support WindowPattern"
+}
+
+function Get-UIATransformPattern {
+    <#
+    .SYNOPSIS
+        Get the TransformPattern from an AutomationElement.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Element
+    )
+
+    $pattern = $null
+    if ($Element.TryGetCurrentPattern(
+        [System.Windows.Automation.TransformPattern]::Pattern, [ref]$pattern)) {
+        return $pattern
+    }
+    throw "UIA: Element does not support TransformPattern"
+}
+
+function Dump-UIATree {
+    <#
+    .SYNOPSIS
+        Debug helper: print the UIA tree from an element.
+    .PARAMETER Element
+        Root AutomationElement to dump from.
+    .PARAMETER MaxDepth
+        Maximum depth to traverse.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Element,
+        [int]$MaxDepth = 5,
+        [int]$Indent = 0
+    )
+
+    $prefix = "  " * $Indent
+    $ct = $Element.Current.ControlType.ProgrammaticName
+    $name = $Element.Current.Name
+    $aid = $Element.Current.AutomationId
+    $cls = $Element.Current.ClassName
+    $rect = $Element.Current.BoundingRectangle
+    $rectStr = "{0},{1} {2}x{3}" -f [int]$rect.X, [int]$rect.Y, [int]$rect.Width, [int]$rect.Height
+    Write-Host "${prefix}[$ct] Name='$name' AId='$aid' Class='$cls' Rect=$rectStr" -ForegroundColor DarkGray
+
+    if ($Indent -ge $MaxDepth) {
+        Write-Host "${prefix}  ... (max depth)" -ForegroundColor DarkYellow
+        return
+    }
+
+    $children = $Element.FindAll(
+        [System.Windows.Automation.TreeScope]::Children,
+        [System.Windows.Automation.Condition]::TrueCondition)
+
+    foreach ($child in $children) {
+        Dump-UIATree -Element $child -MaxDepth $MaxDepth -Indent ($Indent + 1)
+    }
+}
+
+# ============================================================
+# Control Plane helpers (agent-deck + direct Named Pipe)
+# ============================================================
+
+function Register-GhosttyCP {
+    <#
+    .SYNOPSIS
+        Register a ghostty CP session with agent-deck by PID.
+        Returns the session name (e.g. "ghostty-12345") or $null.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][int]$ProcessId)
+
+    $agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+    if (-not (Test-Path $agentDeck)) { return $null }
+
+    $sessionName = "ghostty-$ProcessId"
+
+    # Register (ignore errors if already registered)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $agentDeck session add $sessionName --tool shell 2>$null | Out-Null
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+    Start-Sleep -Milliseconds 500
+
+    return $sessionName
+}
+
+function Find-GhosttyCP {
+    <#
+    .SYNOPSIS
+        Find a ghostty CP session via agent-deck ls --json.
+        Returns the session title or $null.
+    .PARAMETER ProcessId
+        If provided, prefer session matching this PID.
+    #>
+    [CmdletBinding()]
+    param([int]$ProcessId = 0)
+
+    $agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+    if (-not (Test-Path $agentDeck)) { return $null }
+
+    try {
+        $lsJson = & $agentDeck ls --json 2>$null
+        if (-not $lsJson) { return $null }
+        $parsed = $lsJson | ConvertFrom-Json
+        $cpSessions = @($parsed | Where-Object {
+            $_.PSObject.Properties['tool'] -and $_.tool -eq "ghostty"
+        })
+        # Try matching PID first
+        if ($ProcessId -gt 0) {
+            foreach ($s in $cpSessions) {
+                if ($s.PSObject.Properties['pid'] -and $s.pid -eq $ProcessId) {
+                    return $s.title
+                }
+            }
+        }
+        # Fallback: most recent
+        if ($cpSessions.Count -gt 0) {
+            return $cpSessions[-1].title
+        }
+    } catch {
+        # Silently ignore
+    }
+    return $null
+}
+
+function Send-GhosttyInput {
+    <#
+    .SYNOPSIS
+        Send text input to a ghostty CP session.
+        Tries agent-deck send first, falls back to direct Named Pipe.
+    .PARAMETER SessionName
+        The CP session name (e.g. "ghostty-12345").
+    .PARAMETER Text
+        The text to send (will be followed by Enter/newline).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$SessionName,
+        [Parameter(Mandatory)][string]$Text
+    )
+
+    $agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+
+    # Try agent-deck send first
+    if (Test-Path $agentDeck) {
+        $prev = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        $sendResult = & $agentDeck send $SessionName $Text --no-wait 2>&1
+        $sendExit = $LASTEXITCODE
+        $ErrorActionPreference = $prev
+        if ($sendExit -eq 0) { return $true }
+
+        # Try session send as fallback
+        $ErrorActionPreference = 'Continue'
+        $sendResult = & $agentDeck session send $SessionName $Text --no-wait 2>&1
+        $sendExit = $LASTEXITCODE
+        $ErrorActionPreference = $prev
+        if ($sendExit -eq 0) { return $true }
+    }
+
+    # Fallback: direct Named Pipe INPUT protocol
+    # Extract PID from session name (ghostty-<PID>)
+    if ($SessionName -match 'ghostty-(\d+)') {
+        $pid = $Matches[1]
+        $pipePath = "\\.\pipe\ghostty-winui3-ghostty-${pid}-${pid}"
+        return Send-GhosttyPipeInput -PipePath $pipePath -Text $Text
+    }
+
+    return $false
+}
+
+function Send-GhosttyPipeInput {
+    <#
+    .SYNOPSIS
+        Send text directly to a ghostty CP Named Pipe using the INPUT protocol.
+        Protocol: "INPUT|<from>|<base64-encoded-text-with-newline>"
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$PipePath,
+        [Parameter(Mandatory)][string]$Text
+    )
+
+    try {
+        # Add newline to text (simulates Enter key)
+        $textWithNewline = $Text + "`n"
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($textWithNewline)
+        $b64 = [Convert]::ToBase64String($bytes)
+        $request = "INPUT|test-script|$b64`n"
+        $requestBytes = [System.Text.Encoding]::UTF8.GetBytes($request)
+
+        $pipeName = $PipePath -replace '^\\\\\.\\pipe\\', ''
+        $pipe = [System.IO.Pipes.NamedPipeClientStream]::new(
+            ".",
+            $pipeName,
+            [System.IO.Pipes.PipeDirection]::InOut
+        )
+        $pipe.Connect(3000)  # 3s timeout
+        # Pipe is PIPE_TYPE_BYTE mode — no message framing needed
+
+        # Write request
+        $pipe.Write($requestBytes, 0, $requestBytes.Length)
+        $pipe.Flush()
+
+        # Read response (byte mode: read until newline or buffer full)
+        $buffer = New-Object byte[] 4096
+        $bytesRead = $pipe.Read($buffer, 0, $buffer.Length)
+        $response = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $bytesRead)
+        $pipe.Dispose()
+
+        return ($response -and ($response -match "ACK\|" -or $response -match "QUEUED\|"))
+    } catch {
+        Write-Host "  WARN: Direct pipe send failed: $($_.Exception.Message)" -ForegroundColor Yellow
+        return $false
+    }
+}
+
+function Get-GhosttyOutput {
+    <#
+    .SYNOPSIS
+        Get terminal output from a ghostty CP session via agent-deck session output.
+    .PARAMETER SessionName
+        The CP session name.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$SessionName)
+
+    $agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+    if (-not (Test-Path $agentDeck)) { return "" }
+
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & $agentDeck session output $SessionName -q 2>$null
+        return ($output | Out-String)
+    } catch {
+        return ""
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
+# ============================================================
+# Exports
+# ============================================================
+Export-ModuleMember -Function @(
+    'Start-Ghostty'
+    'Stop-Ghostty'
+    'Find-GhosttyWindow'
+    'Get-WindowPosition'
+    'Get-ClientPosition'
+    'Get-ChildWindows'
+    'Get-ChildWindowByClass'
+    'Test-Assert'
+    'Test-AssertEqual'
+    'Test-AssertInRange'
+    'Send-MouseClick'
+    'Send-MouseDrag'
+    'Send-KeyPress'
+    'Wait-Condition'
+    'Capture-ScreenRegion'
+    'Get-BitmapSampleSignature'
+    'Get-BitmapUniqueColorCount'
+    'Get-BitmapSampleDiffCount'
+    'Find-GhosttyUIAElement'
+    'Find-UIAChild'
+    'Find-UIAChildren'
+    'Invoke-UIAButton'
+    'Get-UIAWindowPattern'
+    'Get-UIATransformPattern'
+    'Dump-UIATree'
+    'Register-GhosttyCP'
+    'Find-GhosttyCP'
+    'Send-GhosttyInput'
+    'Send-GhosttyPipeInput'
+    'Get-GhosttyOutput'
+)

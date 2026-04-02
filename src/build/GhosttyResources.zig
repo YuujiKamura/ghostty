@@ -125,6 +125,16 @@ pub fn init(b: *std.Build, cfg: *const Config, deps: *const SharedDeps) !Ghostty
         try steps.append(b.allocator, &install_step.step);
     }
 
+    // Bundled Fontconfig defaults for Windows runtime.
+    if (cfg.target.result.os.tag == .windows) {
+        const install_step = b.addInstallDirectory(.{
+            .source_dir = b.path("src/fontconfig/windows"),
+            .install_dir = .{ .custom = "share" },
+            .install_subdir = b.pathJoin(&.{ "ghostty", "fontconfig" }),
+        });
+        try steps.append(b.allocator, &install_step.step);
+    }
+
     // Themes
     if (cfg.emit_themes) {
         if (b.lazyDependency("iterm2_themes", .{})) |upstream| {

@@ -1,0 +1,22 @@
+## Analyze: com_aggregation.zig
+
+`com_aggregation.zig` の分析結果を簡潔にまとめます。
+
+### 1. 目的と責務
+*   **WinUI 3 起動の橋渡し**: `Application.Start` に必要なデリゲート（`InitCallback`）を実装し、Zig側の初期化処理（`initXaml`）を呼び出す。
+*   **COM集約 (Aggregation) の手動実装**: XAMLコンパイラがない環境で、WinUI 3ランタイムの `Application` オブジェクトに `IXamlMetadataProvider` インターフェースを「注入」するためのラッパー（`AppOuter`）を提供する。これにより、カスタムコントロールやリソースの動的ロードを可能にする。
+
+### 2. 依存関係
+*   **内部依存**: `winrt.zig` (GUID/HRESULT等の基盤), `com.zig` (インターフェース定義), `App.zig` (アプリのロジック)。
+*   **外部からの利用**: `os.zig` や `App.zig` などのアプリ起動シーケンス（ブートストラップ層）から利用される。
+
+### 3. 設計パターン
+*   **COM Aggregation**: 既存のWinRTオブジェクト（Inner）を包み込み、特定のインターフェース要求をインターセプトして自身の実装（Outer）へ、それ以外をインナーへ委譲する標準的なCOMパターン。
+*   **Delegating/Non-delegating IUnknown**: オブジェクトの同一性を保つため、QI/AddRef/Releaseを適切にアウターに集約させる実装。
+*   **VTable Mapping**: Zigの `extern struct` を用いて、COMの関数テーブル（VTable）をメモリレイアウトレベルで正確に再現。
+
+### 4. 改善点
+*   **メモリ管理の整合性**: `AppOuter` が「スタック所有（stack-owned）」とされているが、COMの性質上、参照カウントが0になった際に自身を破壊（`free`）するヒープ所有モデルの方が安全。現状は手動の `deinit` に依存しており、WinUI側が予期せず参照を保持し続けた場合に脆弱。
+*   **共通ユーティリティの抽出**: `guidEql` や GUID の定義がローカルに散在している。`winrt.zig` 等の共通基盤に集約すべき。
+*   **エラーハンドリング**: `invokeFn` などで失敗時に一律 `E_FAIL` を返しているが、Zigの `Error` を適切な `HRESULT` に変換するマッピングがあるとデバッグが容易になる。
+*   **アライメントとキャスト**: `@ptrCast` と `@alignCast` が多用されている。Zig 0.11+ の安全なキャストや、COMポインタ専用のラッパー型を導入することで可読性と安全性を向上できる。

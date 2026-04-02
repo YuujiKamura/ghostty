@@ -51,10 +51,12 @@ pub inline fn renderPass(
 ///
 /// If `sync` is true, this will block until the frame is presented.
 ///
-/// NOTE: For OpenGL, `sync` is ignored and we always block.
+/// NOTE: For OpenGL, `sync` is ignored. We use flush() instead of finish()
+/// to avoid blocking the CPU while the GPU processes commands. The subsequent
+/// SwapBuffers call provides an implicit sync point.
 pub fn complete(self: *const Self, sync: bool) void {
     _ = sync;
-    gl.finish();
+    gl.flush();
 
     // If there are any GL errors, consider the frame unhealthy.
     const health: Health = if (gl.errors.getError()) .healthy else |_| .unhealthy;

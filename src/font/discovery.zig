@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const assert = @import("../quirks.zig").inlineAssert;
 const fontconfig = @import("fontconfig");
@@ -11,9 +12,14 @@ const Variation = @import("main.zig").face.Variation;
 
 const log = std.log.scoped(.discovery);
 
+/// DirectWrite module, only available on Windows.
+/// The imported file IS the DirectWrite struct (uses @This() pattern).
+pub const directwrite = if (builtin.os.tag == .windows) @import("directwrite.zig") else struct {};
+pub const DirectWrite = if (builtin.os.tag == .windows) directwrite else void;
+
 /// Discover implementation for the compile options.
 pub const Discover = switch (options.backend) {
-    .freetype => void, // no discovery
+    .freetype => if (builtin.os.tag == .windows) DirectWrite else void,
     .fontconfig_freetype => Fontconfig,
     .web_canvas => void, // no discovery
     .coretext,

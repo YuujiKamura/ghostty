@@ -1,0 +1,27 @@
+## Analyze: App.zig
+
+GhosttyのWinUI 3ランタイムにおける「オーケストレーター」である`App.zig`の分析結果を報告します。
+
+### 1. 目的と責務
+GhosttyをWindows上で動作させるための**WinUI 3アプリケーション・ライフサイクル管理**が主目的です。
+- **ブートストラップ**: Windows App SDKの初期化とWinRTランタイムの起動。
+- **UI基盤構築**: WinUI 3の`Window`と`TabView`（多タブ管理）の生成、およびネイティブHWNDの管理。
+- **ブリッジ**: Ghosttyコア（Zig）とWinRT/XAML（COM）の相互運用。特にCOM集約（Aggregation）を用いたメタデータプロバイダーの実装。
+- **入力制御**: WinUI 3の入力層をバイパスし、IMEやキーボードイベントを直接処理するための専用HWND（input_overlay）の管理。
+
+### 2. 依存関係
+- **Core (Ghostty本体)**: `../../App.zig`, `../../Surface.zig` 等に依存し、ターミナルとしての共通ロジックを呼び出す。
+- **WinUI 3 サブシステム**: 同ディレクトリ内の `winrt.zig`, `com.zig`, `os.zig` 等を多用し、Windows APIとWinRT ABIを直接操作する。
+- **ランタイム委譲**: `tabview_runtime`, `window_runtime`, `input_runtime` 等に具体的なUI操作を委譲し、自身のコード肥大化を抑制している。
+
+### 3. 設計パターン
+- **COM Aggregation**: `IApplication`を拡張して`IXamlMetadataProvider`を注入するために使用。
+- **State Machine**: `StartupStage`により、非同期・多段階なXAML初期化プロセスを管理。
+- **Runtime Module Separation**: `window_runtime`や`tab_manager`など、責務ごとにファイルを分離して`App`に機能注入する構成。
+- **Subclassing**: Win32 `SetWindowSubclass` を使用し、WinUI 3が隠蔽する低レベルメッセージ（WM_SIZE, WM_CLOSE等）を直接捕捉。
+
+### 4. 改善点
+- **リソース管理の自動化**: 現状は `fullCleanup` での手動 `release()` 呼び出しに依存している。スマートポインタ（RAII）的なラッパーを導入し、COMオブジェクトの解放漏れリスクを低減すべき。
+- **God Object化の懸念**: 委譲は進んでいるが、依然として `App` 構造体に非常に多くのフィールド（状態）が集中している。タブ管理状態やウィンドウ状態をさらにカプセル化したサブ構造体への分離が可能。
+- **エラー伝播の厳密化**: `initXaml` などのUIスレッド内処理で `log.warn` に留めている箇所がある。致命的な初期化失敗をより確実に `CoreApp` へ伝え、クリーンなクラッシュやエラーダイアログ表示に繋げる余地がある。
+- **Win32/WinRTの混在**: HWND操作とXAML操作が密結合している。これらを仲介する薄い抽象化レイヤーを設けると、将来的なWinUIのバージョン変更に対する耐性が高まる。

@@ -1,3 +1,75 @@
+## This Fork: WinUI3 Native Windows GUI
+
+This is a fork of [Ghostty](https://github.com/ghostty-org/ghostty) that adds a **native Windows GUI** using WinUI3 XAML Islands.
+
+**What makes this different:**
+
+- **Pure Zig, no C++/WinRT** — COM vtables are generated directly from WinMD metadata via [win-zig-bindgen](https://github.com/YuujiKamura/win-zig-bindgen), bypassing the C++/WinRT projection entirely
+- **XAML Islands architecture** — follows the same `CreateWindowEx` + `DesktopWindowXamlSource` pattern as [Windows Terminal](https://github.com/microsoft/terminal), not the packaged WinUI3 app model
+- **D3D11 rendering** — GPU-accelerated terminal rendering through D3D11 swap chains hosted in XAML `SwapChainPanel`
+- **Control Plane IPC** — Named Pipe server ([zig-control-plane](https://github.com/YuujiKamura/zig-control-plane)) enabling AI agents to programmatically interact with terminal sessions
+- **10/10 UIA tests** — automated UI testing via PowerShell UIA + control plane
+
+### Build
+
+```bash
+# WinUI3 (requires Windows App SDK + .NET 9)
+./build-winui3.sh
+
+# Win32 (minimal, no XAML)
+zig build -Dapp-runtime=win32 --prefix zig-out-win32
+```
+
+### WinUI3 Prebuilt Fallback (No MSBuild)
+
+For environments where MSBuild is unavailable, you can force prebuilt XBF/PRI usage:
+
+```bash
+GHOSTTY_WINUI3_PREBUILT_ONLY=1 ./build-winui3.sh
+```
+
+Behavior:
+
+- Uses prebuilt `xaml/obj/.../*.xbf` and `xaml/bin/.../ghostty.pri` if present
+- Falls back to Debug assets when the selected configuration assets are missing
+- Warns when XAML sources are newer than copied XBF/PRI (possible stale assets)
+
+Strict mode (fail on stale/missing assets):
+
+```bash
+GHOSTTY_WINUI3_PREBUILT_ONLY=1 GHOSTTY_WINUI3_PREBUILT_STRICT=1 ./build-winui3.sh
+```
+
+Recommended update flow for prebuilt assets:
+
+1. Run normal `./build-winui3.sh` once on a machine with MSBuild to refresh XBF/PRI.
+2. Re-run in strict prebuilt mode to verify fallback viability.
+3. Keep strict mode in CI/local checks when validating MSBuild-independent operation.
+
+### Windows Bootstrap (WinGet DSC)
+
+For reproducible Windows setup, apply the DSC profile in this repo:
+
+```powershell
+winget configure .config\windows.dsc.yaml
+```
+
+This installs the baseline toolchain used by this fork (`zig`, `.NET 9 SDK`, `VS2022 BuildTools`).
+
+### Related Repositories
+
+| Repo | Description |
+|------|-------------|
+| [win-zig-bindgen](https://github.com/YuujiKamura/win-zig-bindgen) | WinMD to Zig COM vtable generator |
+| [zig-control-plane](https://github.com/YuujiKamura/zig-control-plane) | Named Pipe control plane library |
+| [agent-deck](https://github.com/YuujiKamura/agent-deck) | Multi-session AI agent orchestrator (fork of [asheshgoplani/agent-deck](https://github.com/asheshgoplani/agent-deck)) |
+
+---
+
+*Upstream README follows below.*
+
+---
+
 <!-- LOGO -->
 <h1>
 <p align="center">
@@ -50,6 +122,22 @@ See the [download page](https://ghostty.org/download) on the Ghostty website.
 ## Documentation
 
 See the [documentation](https://ghostty.org/docs) on the Ghostty website.
+
+## WinUI3 Verification Order (fork workflow)
+
+For this fork's WinUI3 workflow, use this order across sibling repos:
+
+1. `win-zig-bindgen`: `zig build gate`
+2. `ghostty-win`: `pwsh -File .\scripts\winui3-contract-check.ps1 -Build`
+3. `win-zig-core`: `pwsh -File .\scripts\winui3-verify-all.ps1`
+
+One-command orchestration:
+
+```powershell
+pwsh -File ..\win-zig-core\scripts\winui3-verify-all.ps1
+```
+
+Treat `winui3-verify-all.ps1` as the cross-repo acceptance SSOT. A standalone app build is not a completion signal.
 
 ## Contributing and Developing
 

@@ -1,0 +1,45 @@
+warning: function `get_staged_diff` is never used
+  --> src\git.rs:52:8
+   |
+52 | pub fn get_staged_diff(repo_dir: &Path) -> Option<String> {
+   |        ^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `get_staged_files` is never used
+  --> src\git.rs:69:8
+   |
+69 | pub fn get_staged_files(repo_dir: &Path) -> Vec<PathBuf> {
+   |        ^^^^^^^^^^^^^^^^
+
+warning: `ai-code-review` (lib) generated 2 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running `C:\Users\yuuji\ai-code-review\target\debug\review.exe --analyze 'C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig' --prompt architecture --backend gemini`
+## Analyze: Surface.zig
+
+`Surface.zig` の分析結果を簡潔にまとめます。
+
+### 1. このコードは何をしているか（目的と責務）
+Ghostty 端末の **WinUI 3 バックエンドにおける描画・入力の実装** を担っています。
+*   **描画のブリッジ:** Ghostty コア（`CoreSurface`）と WinUI 3 の `SwapChainPanel` を接続し、レンダラースレッドで生成された DirectX スワップチェーンを UI スレッドにバインドします。
+*   **タブ管理:** `TabViewItem` 内のコンテンツとして動作し、タブタイトルの更新などを制御します。
+*   **入力処理:** Win32 の `WM_KEYDOWN`/`WM_CHAR` を Ghostty 共通の `KeyEvent` に変換し、IME やサロゲートペアを考慮したステートマシンで管理します。
+*   **OS 連携:** クリップボード操作、DPI スケール対応、マウスカーソル制御などの Windows 固有機能を提供します。
+
+### 2. 依存関係
+*   **Ghostty コア:** `../../Surface.zig` (コア状態), `../../App.zig`, `../../input.zig` (入力定義)。
+*   **WinUI 3 / COM:** `winrt.zig`, `com.zig`, `native_interop.zig` を介して Microsoft.UI.Xaml や COM インターフェース（`ISwapChainPanelNative` 等）を操作。
+*   **Windows API:** `os.zig` を介してクリップボード、メッセージング、DPI 取得などの Win32 関数を使用。
+*   **サブコンポーネント:** `search_overlay.zig` (検索 UI), `key.zig` (キーマッピング)。
+
+### 3. 設計パターン
+*   **Proxy / Bridge パターン:** プラットフォーム抽象化レイヤー（`apprt`）の要求を、WinUI 3 固有の実装へ橋渡ししています。
+*   **Deferred Initialization (遅延初期化):** `Loaded` イベントを待ち、コントロールが視覚ツリーに入ってから描画リソースをバインドするガードロジック。
+*   **State Machine (状態管理):** `pending_keydown` により、非同期に発生するキーダウンと文字入力を正しくマージしています。
+*   **COM インタラクション:** 手動参照カウント（`AddRef`/`Release`）によるリソース管理。
+
+### 4. 改善点
+*   **COM 管理の安全性:** `release()` の呼び出しが手動であり、複雑な `errdefer` 網に頼っています。Zig の `defer` を活用したスマートポインタ的な抽象化があると、リソースリークや二重解放を防ぎやすくなります。
+*   **未実装（TODO）の解消:** `setMouseShape`, `setProgressReport`, `commandFinished` 等がスタブ（No-op）のままであり、WinUI 3 特有の機能（タスクバー進捗表示など）の追加余地があります。
+*   **エラーハンドリングの徹底:** `catch {}` や `log.warn` で握りつぶしている箇所（`addSizeChanged` 等）があり、致命的な失敗に対する回復戦略の検討が必要です。
+*   **入力ロジックの分離:** `handleKeyEvent` と `handleCharEvent` のロジックが肥大化しているため、専用の `InputProcessor` 等に抽出するとテストが容易になります。

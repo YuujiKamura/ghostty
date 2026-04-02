@@ -172,7 +172,16 @@ pub const Page = struct {
         // anonymous mmap is guaranteed on Linux and macOS to be zeroed,
         // which is a critical property for us.
         assert(l.total_size % std.heap.page_size_min == 0);
-        const backing = try posix.mmap(
+        const backing = if (comptime builtin.os.tag == .windows) blk: {
+            const win = std.os.windows;
+            const ptr = win.kernel32.VirtualAlloc(
+                null,
+                l.total_size,
+                win.MEM_COMMIT | win.MEM_RESERVE,
+                win.PAGE_READWRITE,
+            ) orelse return error.SystemResources;
+            break :blk @as([*]align(std.heap.page_size_min) u8, @ptrCast(@alignCast(ptr)))[0..l.total_size];
+        } else try posix.mmap(
             null,
             l.total_size,
             posix.PROT.READ | posix.PROT.WRITE,
@@ -180,7 +189,11 @@ pub const Page = struct {
             -1,
             0,
         );
-        errdefer posix.munmap(backing);
+        errdefer if (comptime builtin.os.tag == .windows) {
+            _ = std.os.windows.kernel32.VirtualFree(backing.ptr, 0, std.os.windows.MEM_RELEASE);
+        } else {
+            posix.munmap(backing);
+        };
 
         const buf = OffsetBuf.init(backing);
         return initBuf(buf, l);
@@ -245,7 +258,11 @@ pub const Page = struct {
     /// this if you allocated the backing memory yourself (i.e. you used
     /// initBuf).
     pub inline fn deinit(self: *Page) void {
-        posix.munmap(self.memory);
+        if (comptime builtin.os.tag == .windows) {
+            _ = std.os.windows.kernel32.VirtualFree(self.memory.ptr, 0, std.os.windows.MEM_RELEASE);
+        } else {
+            posix.munmap(self.memory);
+        }
         self.* = undefined;
     }
 
@@ -578,7 +595,16 @@ pub const Page = struct {
     /// using the page allocator. If you want to manage memory manually,
     /// use cloneBuf.
     pub inline fn clone(self: *const Page) !Page {
-        const backing = try posix.mmap(
+        const backing = if (comptime builtin.os.tag == .windows) blk: {
+            const win = std.os.windows;
+            const ptr = win.kernel32.VirtualAlloc(
+                null,
+                self.memory.len,
+                win.MEM_COMMIT | win.MEM_RESERVE,
+                win.PAGE_READWRITE,
+            ) orelse return error.SystemResources;
+            break :blk @as([*]align(std.heap.page_size_min) u8, @ptrCast(@alignCast(ptr)))[0..self.memory.len];
+        } else try posix.mmap(
             null,
             self.memory.len,
             posix.PROT.READ | posix.PROT.WRITE,
@@ -586,7 +612,11 @@ pub const Page = struct {
             -1,
             0,
         );
-        errdefer posix.munmap(backing);
+        errdefer if (comptime builtin.os.tag == .windows) {
+            _ = std.os.windows.kernel32.VirtualFree(backing.ptr, 0, std.os.windows.MEM_RELEASE);
+        } else {
+            posix.munmap(backing);
+        };
         return self.cloneBuf(backing);
     }
 

@@ -1,0 +1,30 @@
+## Analyze: App.zig
+
+`App.zig` の分析結果を簡潔にまとめます。
+
+### 1. 目的と責務
+Ghostty ターミナルの **WinUI 3 バックエンド実装の本体** です。
+*   **ランタイムの起動:** Windows App SDK のブートストラップ、WinRT の初期化、DispatcherQueue のセットアップ。
+*   **UI ツリー管理:** WinUI 3 の `Application`, `Window`, `TabView` の生成と、`Surface` (SwapChainPanel) のライフサイクル管理。
+*   **Win32/WinRT の橋渡し:** `IWindowNative` を介した HWND の取得と、サブクラス化による低レベルメッセージのインターセプト。
+*   **アクションのルーティング:** コアロジックからの指示（新規タブ、タイトル変更、終了など）を WinUI 3 の操作に変換。
+
+### 2. 依存関係
+*   **コア (Ghostty):** `CoreApp`, `CoreSurface`, `config`, `input` など、OS 不依存のコアロジック。
+*   **プラットフォーム層:**
+    *   `winrt.zig`, `com.zig`, `os.zig`: Win32/WinRT API の Zig ラッパー。
+    *   `com_aggregation.zig`: WinUI 3 `Application` オブジェクトを拡張するための COM 集約実装。
+    *   `hacks.zig`: `subclassProc` など、WinUI 3 の制約を回避するための低レベルフック。
+*   **機能モジュール:** `tab_manager`, `input_runtime`, `window_runtime` などのヘルパーに処理を委譲。
+
+### 3. 設計パターン
+*   **COM Aggregation (集約):** `IXamlMetadataProvider` を実装するために、標準の `Application` クラスをラップ・拡張するパターン。
+*   **Delegate/Runtime Helpers:** `window_runtime` や `tab_manager` など、特定の責務を別ファイルに切り出し、`App` 構造体はオーケストレーションに専念。
+*   **State Machine:** `StartupStage` を用いて、非同期・多段階な WinUI の初期化プロセスを管理。
+*   **Subclassing:** WinUI 3 のメッセージループに Win32 プロシージャを割り込ませるフックパターン。
+
+### 4. 改善点
+*   **巨大な構造体:** `App` 構造体が多くの状態を保持しすぎています。タブ管理やウィンドウ管理の状態を、より自律的なサブコンポーネントへさらに分離する余地があります。
+*   **エラー伝搬の不均一性:** UI コールバック内（`onTabCloseRequested` 等）でエラーをログ出力して握り潰している箇所があり、致命的な状況でのリカバリが不明確です。
+*   **手動のクリーンアップ:** `fullCleanup` での COM 解放順序が非常にデリケートです。Zig の `errdefer` や `defer` を活用した、より宣言的なリソース管理への移行が望まれます。
+*   **同期/非同期の混在:** WinUI 3 は本質的に非同期ですが、コードは同期的な動作を期待している箇所（`init` 内の処理など）があり、将来的なデッドロックやレースコンディションのリスクがあります。

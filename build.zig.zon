@@ -113,6 +113,9 @@
             .lazy = true,
         },
 
+        // Zig-native control plane (replaces Rust DLL)
+        .zig_control_plane = .{ .path = "../zig-control-plane" },
+
         // Other
         .apple_sdk = .{ .path = "./pkg/apple-sdk" },
         .android_ndk = .{ .path = "./pkg/android-ndk" },

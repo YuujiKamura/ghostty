@@ -1,22 +1,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <dirent.h>
-#include <sys/stat.h>
 #include <errno.h>
 #include <zlib.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dirent.h>
+#include <sys/stat.h>
+#endif
+
 #define SEPARATOR '\x01'
 #define CHUNK_SIZE 16384
+#define MAX_FRAMES 4096
 
-static int filter_frames(const struct dirent *entry) {
-    const char *name = entry->d_name;
-    size_t len = strlen(name);
-    return len > 4 && strcmp(name + len - 4, ".txt") == 0;
-}
-
-static int compare_frames(const struct dirent **a, const struct dirent **b) {
-    return strcmp((*a)->d_name, (*b)->d_name);
+static int compare_strings(const void *a, const void *b) {
+    return strcmp(*(const char **)a, *(const char **)b);
 }
 
 static char *read_file(const char *path, size_t *out_size) {
@@ -32,17 +32,67 @@ static char *read_file(const char *path, size_t *out_size) {
 
     char *buf = malloc(size);
     if (!buf) {
+        fclose(f);
         return NULL;
     }
 
     if (fread(buf, 1, size, f) != (size_t)size) {
         fprintf(stderr, "Failed to read %s\n", path);
+        free(buf);
+        fclose(f);
         return NULL;
     }
 
     fclose(f);
     *out_size = size;
     return buf;
+}
+
+static int list_txt_files(const char *dir, char ***out_names, int *out_count) {
+    char **names = calloc(MAX_FRAMES, sizeof(char*));
+    int count = 0;
+
+#ifdef _WIN32
+    char pattern[4096];
+    snprintf(pattern, sizeof(pattern), "%s\\*.txt", dir);
+
+    WIN32_FIND_DATAA fdata;
+    HANDLE hFind = FindFirstFileA(pattern, &fdata);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        free(names);
+        return -1;
+    }
+    do {
+        if (!(fdata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            names[count] = strdup(fdata.cFileName);
+            count++;
+            if (count >= MAX_FRAMES) break;
+        }
+    } while (FindNextFileA(hFind, &fdata));
+    FindClose(hFind);
+#else
+    struct dirent *entry;
+    DIR *d = opendir(dir);
+    if (!d) {
+        free(names);
+        return -1;
+    }
+    while ((entry = readdir(d)) != NULL) {
+        const char *name = entry->d_name;
+        size_t len = strlen(name);
+        if (len > 4 && strcmp(name + len - 4, ".txt") == 0) {
+            names[count] = strdup(name);
+            count++;
+            if (count >= MAX_FRAMES) break;
+        }
+    }
+    closedir(d);
+#endif
+
+    qsort(names, count, sizeof(char*), compare_strings);
+    *out_names = names;
+    *out_count = count;
+    return 0;
 }
 
 int main(int argc, char **argv) {
@@ -54,9 +104,9 @@ int main(int argc, char **argv) {
     const char *frames_dir = argv[1];
     const char *output_file = argv[2];
 
-    struct dirent **namelist;
-    int n = scandir(frames_dir, &namelist, filter_frames, compare_frames);
-    if (n < 0) {
+    char **namelist;
+    int n;
+    if (list_txt_files(frames_dir, &namelist, &n) < 0) {
         fprintf(stderr, "Failed to scan directory %s: %s\n", frames_dir, strerror(errno));
         return 1;
     }
@@ -72,13 +122,13 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < n; i++) {
         char path[4096];
-        snprintf(path, sizeof(path), "%s/%s", frames_dir, namelist[i]->d_name);
-        
+        snprintf(path, sizeof(path), "%s/%s", frames_dir, namelist[i]);
+
         frame_contents[i] = read_file(path, &frame_sizes[i]);
         if (!frame_contents[i]) {
             return 1;
         }
-        
+
         total_size += frame_sizes[i];
         if (i < n - 1) total_size++;
     }
@@ -127,7 +177,7 @@ int main(int argc, char **argv) {
 
     compressed_size = stream.total_out;
     deflateEnd(&stream);
-    
+
     FILE *out = fopen(output_file, "wb");
     if (!out) {
         fprintf(stderr, "Failed to create %s: %s\n", output_file, strerror(errno));

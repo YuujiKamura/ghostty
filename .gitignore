@@ -2,6 +2,7 @@
 .*.swp
 .swp
 *.log
+.last-results.json
 .DS_Store
 .vscode/
 .direnv/
@@ -25,3 +26,36 @@ glad.zip
 /ghostty.qcow2
 
 vgcore.*
+
+tmp/procdumps/*.dmp
+tmp/bin/
+
+# Build outputs
+zig-out-*/
+
+# Local caches
+LOCAL_APPDATA_FONTCONFIG_CACHE/
+tests/winui3/LOCAL_APPDATA_FONTCONFIG_CACHE/
+
+# Legacy runtimes (kept locally, removed from tracking)
+# Note: com_native.zig, App.zig, Surface.zig, win32/ are tracked (required for build)
+src/apprt/winui3/wndproc.zig
+src/apprt/winui3/drag_bar.zig
+src/apprt/winui3/tab_manager.zig
+src/apprt/winui3/tabview_runtime.zig
+src/apprt/winui3/surface_binding.zig
+src/apprt/winui3/com_runtime.zig
+src/apprt/winui3/marshaler_runtime.zig
+src/apprt/winui3/window_runtime.zig
+src/apprt/winui3/basal_test.zig
+src/apprt/winui3/search_overlay.zig
+
+# Temp files
+tmp/
+nul
+*.pdb
+*.png
+test_resize_caption.ps1
+tmp_estimate_note.txt
+logs/
+tools/ghost-demo/ghost_demo.exe

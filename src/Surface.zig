@@ -39,6 +39,8 @@ const SurfaceMouse = @import("surface_mouse.zig");
 
 const log = std.log.scoped(.surface);
 
+extern "kernel32" fn GetProcessId(process: internal_os.windows.HANDLE) callconv(.winapi) u32;
+
 // The renderer implementation to use.
 const Renderer = rendererpkg.Renderer;
 
@@ -167,6 +169,9 @@ search: ?Search = null,
 
 /// Used to rate limit BEL handling.
 last_bell_time: ?std.time.Instant = null,
+
+/// Used to rate limit scrollbar update notifications.
+last_scrollbar_notify: ?std.time.Instant = null,
 
 /// The effect of an input event. This can be used by callers to take
 /// the appropriate action after an input event. For example, key
@@ -836,7 +841,7 @@ inline fn surfaceMailbox(self: *Surface) Mailbox {
 ///
 /// We centralize all our logic into this spot so we can intercept
 /// messages for example in readonly mode.
-fn queueIo(
+pub fn queueIo(
     self: *Surface,
     msg: termio.Message,
     mutex: termio.Termio.MutexState,
@@ -1177,6 +1182,12 @@ fn selectionScrollTick(self: *Surface) !void {
 
     // Scroll the viewport as required
     t.scrollViewport(.{ .delta = delta });
+
+    // Notify scrollbar immediately for user-initiated scrolls (WT-style callback).
+    {
+        const scrollbar = t.screens.active.pages.scrollbar();
+        self.updateScrollbar(scrollbar);
+    }
 
     // Next, trigger our drag behavior
     const pin = t.screens.active.pages.pin(.{
@@ -1661,6 +1672,12 @@ fn updateRendererHealth(self: *Surface, health: rendererpkg.Health) void {
 
 /// Called when the scrollbar state changes.
 fn updateScrollbar(self: *Surface, scrollbar: terminal.Scrollbar) void {
+    const now = std.time.Instant.now() catch unreachable;
+    if (self.last_scrollbar_notify) |last| {
+        if (now.since(last) < 16 * std.time.ns_per_ms) return;
+    }
+    self.last_scrollbar_notify = now;
+
     _ = self.rt_app.performAction(
         .{ .surface = self },
         .scrollbar,
@@ -2034,6 +2051,50 @@ pub fn pwd(
     defer self.renderer_state.mutex.unlock();
     const terminal_pwd = self.io.terminal.getPwd() orelse return null;
     return try alloc.dupe(u8, terminal_pwd);
+}
+
+/// Returns true when the terminal cursor is currently at a shell prompt.
+pub fn cursorIsAtPrompt(self: *Surface) bool {
+    self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+    return self.io.terminal.cursorIsAtPrompt();
+}
+
+/// Returns the current pane process ID if available.
+pub fn panePid(self: *const Surface) ?u32 {
+    self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+
+    return switch (self.io.backend) {
+        .exec => |*exec| switch (exec.subprocess.process orelse return null) {
+            .fork_exec => |cmd| {
+                const raw = cmd.pid orelse return null;
+                if (comptime builtin.os.tag == .windows) {
+                    const hproc: internal_os.windows.HANDLE = raw;
+                    const pid = GetProcessId(hproc);
+                    if (pid == 0) return null;
+                    return @intCast(pid);
+                }
+                if (raw <= 0) return null;
+                return @intCast(raw);
+            },
+            .flatpak => return null,
+        },
+    };
+}
+
+/// Returns the current viewport contents as plain text.
+pub fn viewportString(self: *Surface, alloc: Allocator) ![]const u8 {
+    self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+    return try self.io.terminal.plainString(alloc);
+}
+
+/// Returns the full scrollback + active area as plain text.
+pub fn historyString(self: *Surface, alloc: Allocator) ![]const u8 {
+    self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+    return try self.io.terminal.screens.active.dumpStringAlloc(alloc, .{ .screen = .{} });
 }
 
 /// Resolves a relative file path to an absolute path using the terminal's pwd.
@@ -2496,6 +2557,7 @@ pub fn preeditCallback(self: *Surface, preedit_: ?[]const u8) !void {
     }
 
     // We always clear our prior preedit
+    const had_preedit = self.renderer_state.preedit != null;
     if (self.renderer_state.preedit) |p| {
         self.alloc.free(p.codepoints);
         self.renderer_state.preedit = null;
@@ -2503,6 +2565,14 @@ pub fn preeditCallback(self: *Surface, preedit_: ?[]const u8) !void {
 
     // Mark preedit dirty flag
     self.io.terminal.flags.dirty.preedit = true;
+
+    // If we had a preedit and now it's being cleared (composition ended),
+    // explicitly mark the cursor row dirty so the committed character
+    // is rendered even if the PTY output hasn't arrived yet.
+    // This fixes the "first character disappearing" issue (#133).
+    if (had_preedit) {
+        self.io.terminal.screens.active.cursorMarkDirty();
+    }
 
     // If we have no text, we're done. We queue a render in case we cleared
     // a prior preedit (likely).
@@ -2781,7 +2851,13 @@ pub fn keyCallback(
             try self.setSelection(null);
         }
 
-        if (self.config.scroll_to_bottom.keystroke) self.io.terminal.scrollViewport(.bottom);
+        if (self.config.scroll_to_bottom.keystroke) {
+            self.io.terminal.scrollViewport(.bottom);
+
+            // Notify scrollbar immediately for user-initiated scrolls (WT-style callback).
+            const scrollbar = self.io.terminal.screens.active.pages.scrollbar();
+            self.updateScrollbar(scrollbar);
+        }
 
         try self.queueRender();
     }
@@ -3538,6 +3614,12 @@ pub fn scrollCallback(
             // rendering. We have to switch signs here because our delta
             // is negative down but our viewport is positive down.
             self.io.terminal.scrollViewport(.{ .delta = y.delta * -1 });
+
+            // Notify scrollbar immediately for user-initiated scrolls (WT-style callback).
+            {
+                const scrollbar = self.io.terminal.screens.active.pages.scrollbar();
+                self.updateScrollbar(scrollbar);
+            }
         }
     }
 
@@ -5058,9 +5140,13 @@ pub fn colorSchemeCallback(self: *Surface, scheme: apprt.ColorScheme) !void {
 }
 
 pub fn posToViewport(self: Surface, xpos: f64, ypos: f64) terminal.point.Coordinate {
+    return posToViewportForSize(self.size, xpos, ypos);
+}
+
+fn posToViewportForSize(size: rendererpkg.Size, xpos: f64, ypos: f64) terminal.point.Coordinate {
     // Get our grid cell
     const coord: rendererpkg.Coordinate = .{ .surface = .{ .x = xpos, .y = ypos } };
-    const grid = coord.convert(.grid, self.size).grid;
+    const grid = coord.convert(.grid, size).grid;
     return .{ .x = grid.x, .y = grid.y };
 }
 
@@ -6766,5 +6852,103 @@ test "Surface: rectangle selection logic" {
         0, 4, // expected start
         9, 2, // expected end
         true, //rectangle selection
+    );
+}
+
+test "Surface: selection threshold boundary at 0.6 cell" {
+    // cell width is 10px in test helper, so threshold is round(10 * 0.6) = 6px.
+    // Therefore 3.5 cell (frac=5) and 3.6 cell (frac=6) straddle the boundary.
+    // zig fmt: off
+
+    // LTR: click just left of threshold includes click cell.
+    try testMouseSelection(
+        3.5, 2, // click (frac=5)
+        4.6, 2, // drag  (frac=6)
+        3, 2, // expected start
+        4, 2, // expected end
+        false,
+    );
+
+    // LTR: click exactly at threshold excludes click cell.
+    try testMouseSelection(
+        3.6, 2, // click (frac=6)
+        4.6, 2, // drag  (frac=6)
+        4, 2, // expected start
+        4, 2, // expected end
+        false,
+    );
+
+    // RTL: click just right of threshold includes click cell.
+    try testMouseSelection(
+        4.6, 2, // click (frac=6)
+        3.5, 2, // drag  (frac=5)
+        4, 2, // expected start
+        3, 2, // expected end
+        false,
+    );
+
+    // RTL: click just left of threshold excludes click cell.
+    try testMouseSelection(
+        4.5, 2, // click (frac=5)
+        3.5, 2, // drag  (frac=5)
+        3, 2, // expected start
+        3, 2, // expected end
+        false,
+    );
+
+    // Rectangular LTR: same threshold behavior must hold column-wise.
+    try testMouseSelection(
+        3.5, 1, // click (frac=5)
+        4.6, 3, // drag  (frac=6)
+        3, 1, // expected start
+        4, 3, // expected end
+        true,
+    );
+
+    try testMouseSelection(
+        3.6, 1, // click (frac=6)
+        4.6, 3, // drag  (frac=6)
+        4, 1, // expected start
+        4, 3, // expected end
+        true,
+    );
+    // zig fmt: on
+}
+
+test "Surface: posToViewport mapping contract" {
+    const size: rendererpkg.Size = .{
+        .cell = .{ .width = 10, .height = 20 },
+        .padding = .{ .left = 5, .top = 5, .right = 5, .bottom = 5 },
+        .screen = .{ .width = 110, .height = 110 },
+    };
+
+    // Padding edge should map to first cell.
+    try std.testing.expectEqualDeep(
+        terminal.point.Coordinate{ .x = 0, .y = 0 },
+        posToViewportForSize(size, 5.0, 5.0),
+    );
+
+    // One full cell from padding maps to cell (1, 1).
+    try std.testing.expectEqualDeep(
+        terminal.point.Coordinate{ .x = 1, .y = 1 },
+        posToViewportForSize(size, 15.0, 25.0),
+    );
+
+    // Fractional coordinates inside a cell map to that cell.
+    try std.testing.expectEqualDeep(
+        terminal.point.Coordinate{ .x = 3, .y = 2 },
+        posToViewportForSize(size, 39.9, 59.9),
+    );
+
+    // Out-of-bounds low coordinates clamp to origin.
+    try std.testing.expectEqualDeep(
+        terminal.point.Coordinate{ .x = 0, .y = 0 },
+        posToViewportForSize(size, -100.0, -100.0),
+    );
+
+    // Out-of-bounds high coordinates clamp to last visible cell.
+    try std.testing.expectEqualDeep(
+        terminal.point.Coordinate{ .x = 9, .y = 4 },
+        posToViewportForSize(size, 10_000.0, 10_000.0),
     );
 }

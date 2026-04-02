@@ -1,0 +1,23 @@
+## Analyze: tab_manager.zig
+
+`tab_manager.zig` の分析結果を簡潔にまとめます。
+
+### 1. 目的と責務
+WinUI 3 を使用したアプリケーションにおける**タブのライフサイクル管理**を担っています。
+- **タブ作成 (`newTab`)**: 新しい `Surface`（描画領域）の初期化、WinUI 3 の `TabViewItem` 生成、UIツリーへの追加、およびフォーカス制御。
+- **タブ削除 (`closeTab`, `closeActiveTab`)**: WinUI 3 コレクションからの削除、メモリ解放（`Surface` の deinit）、およびアクティブなインデックスの再計算。
+
+### 2. 依存関係
+- **内部モジュール**: `Surface` (タブ内容), `winrt`/`com` (Windows APIブリッジ), `os` (HWND/RECT操作), `input_runtime` (入力制御)。
+- **外部からの利用**: `App.zig` などのメインロジックから `anytype` (Duck Typing) を通じてミックスインのように呼び出される設計です。
+- **データ構造**: `self.surfaces` (ArrayList) および `self.tab_view` (WinRT オブジェクト) に強く依存しています。
+
+### 3. 設計パターン
+- **Mixin (Duck Typing)**: `self: anytype` を引数に取ることで、特定の構造体に縛られず、必要なフィールド（`surfaces`, `tab_view` 等）を持つ任意のコンテキストで動作するように設計されています。
+- **Resource Acquisition Is Initialization (RAII) 風の構成**: `errdefer` を多用し、WinRT オブジェクトの参照カウント管理（`ComRef`）とメモリ確保の原子性を確保しています。
+
+### 4. 改善点
+- **型の明示化**: `anytype` は柔軟ですが、`self` が要求するフィールド（`hwnd`, `core_app`, `tab_view` 等）が暗黙的です。インターフェース用の構造体を定義するか、ドキュメント化が必要です。
+- **WinRT ユーティリティの抽象化**: `newTab` 内の `IInspectable` への Boxing や `QueryInterface` の定型処理が長く、可読性を下げています。これらを `winrt.zig` 側にヘルパーとして抽出する余地があります。
+- **エラーハンドリングの不一致**: `newTab` 内の `attachSurfaceToTabItem` が失敗した際、警告ログのみで処理を続行していますが、不整合な状態（タブはあるが中身がアタッチされていない）を避けるためのロールバック検討が必要です。
+- **マジックナンバー**: `self.active_surface_idx - 1` などのインデックス操作が、タブの追加順序や選択ロジックに強く依存しており、境界条件での脆弱性を生む可能性があります。

@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# gcp - Ghostty Control Plane CLI wrapper
+# Usage:
+#   gcp start          Launch ghostty with control plane enabled
+#   gcp list           List active sessions
+#   gcp ping           Ping the first active session
+#   gcp state          Get session state
+#   gcp tail [N]       Get last N lines (default 20)
+#   gcp tabs           List tabs
+#   gcp send "cmd"     Send command via INPUT (paste-encoded)
+#   gcp raw "text"     Send raw text directly to PTY stdin
+#   gcp newtab         Open a new tab
+#   gcp closetab [N]   Close tab N
+#   gcp switchtab N    Switch to tab N
+#   gcp focus          Bring window to foreground
+
+set -euo pipefail
+
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+GHOSTTY_DIR="$(dirname "$SCRIPTS_DIR")"
+SESSIONS_DIR="$LOCALAPPDATA/ghostty/control-plane/winui3/sessions"
+
+# Convert MSYS paths to Windows paths for PowerShell -File
+WIN_SCRIPTS_DIR="$(cygpath -w "$SCRIPTS_DIR")"
+PS_SEND="$WIN_SCRIPTS_DIR\\winui3-control-send.ps1"
+PS_LIST="$WIN_SCRIPTS_DIR\\winui3-control-list.ps1"
+
+# Auto-discover the first active session's pipe name
+find_session() {
+    if [[ ! -d "$SESSIONS_DIR" ]]; then
+        echo "No control-plane sessions directory found." >&2
+        return 1
+    fi
+    local session_file
+    session_file=$(ls -t "$SESSIONS_DIR"/*.session 2>/dev/null | head -1)
+    if [[ -z "$session_file" ]]; then
+        echo "No active sessions found. Run 'gcp start' first." >&2
+        return 1
+    fi
+    grep -m1 '^session_name=' "$session_file" | sed 's/^session_name=//' | tr -d '\r\n'
+}
+
+case "${1:-help}" in
+    start)
+        echo "Starting ghostty with control plane..."
+        GHOSTTY_CONTROL_PLANE=1 "$GHOSTTY_DIR/zig-out-winui3-islands/bin/ghostty.exe" &
+        disown
+        echo "PID=$! — waiting for session..."
+        for i in {1..10}; do
+            sleep 1
+            if ls "$SESSIONS_DIR"/*.session &>/dev/null; then
+                echo "Session ready:"
+                cat "$SESSIONS_DIR"/*.session
+                exit 0
+            fi
+        done
+        echo "Timeout waiting for session file." >&2
+        exit 1
+        ;;
+    list)
+        MSYS_NO_PATHCONV=1 powershell.exe -ExecutionPolicy Bypass -File "$PS_LIST"
+        ;;
+    ping|state|tabs|newtab|focus)
+        SESSION=$(find_session)
+        TYPE=$(echo "${1}" | tr '[:lower:]' '[:upper:]')
+        [[ "$TYPE" == "TABS" ]] && TYPE="LIST_TABS"
+        [[ "$TYPE" == "NEWTAB" ]] && TYPE="NEW_TAB"
+        MSYS_NO_PATHCONV=1 powershell.exe -ExecutionPolicy Bypass -File "$PS_SEND" \
+            -SessionName "$SESSION" -Type "$TYPE"
+        ;;
+    tail)
+        SESSION=$(find_session)
+        LINES="${2:-20}"
+        MSYS_NO_PATHCONV=1 powershell.exe -ExecutionPolicy Bypass -File "$PS_SEND" \
+            -SessionName "$SESSION" -Type TAIL -Lines "$LINES"
+        ;;
+    send)
+        SESSION=$(find_session)
+        TEXT="${2:?Usage: gcp send \"command\"}"
+        # Append CRLF so the command executes
+        MSYS_NO_PATHCONV=1 powershell.exe -ExecutionPolicy Bypass -File "$PS_SEND" \
+            -SessionName "$SESSION" -Type INPUT -From claude -Text "${TEXT}
+"
+        ;;
+    raw)
+        SESSION=$(find_session)
+        TEXT="${2:?Usage: gcp raw \"text\"}"
+        MSYS_NO_PATHCONV=1 powershell.exe -ExecutionPolicy Bypass -File "$PS_SEND" \
+            -SessionName "$SESSION" -Type RAW_INPUT -From claude -Text "$TEXT"
+        ;;
+    closetab)
+        SESSION=$(find_session)
+        IDX="${2:--1}"
+        MSYS_NO_PATHCONV=1 powershell.exe -ExecutionPolicy Bypass -File "$PS_SEND" \
+            -SessionName "$SESSION" -Type CLOSE_TAB -TabIndex "$IDX"
+        ;;
+    switchtab)
+        SESSION=$(find_session)
+        IDX="${2:?Usage: gcp switchtab N}"
+        MSYS_NO_PATHCONV=1 powershell.exe -ExecutionPolicy Bypass -File "$PS_SEND" \
+            -SessionName "$SESSION" -Type SWITCH_TAB -TabIndex "$IDX"
+        ;;
+    help|--help|-h)
+        echo "gcp - Ghostty Control Plane CLI"
+        echo ""
+        echo "Commands:"
+        echo "  start          Launch ghostty with control plane"
+        echo "  list           List active sessions"
+        echo "  ping           Ping session"
+        echo "  state          Get session state (pwd, prompt, tabs)"
+        echo "  tail [N]       Last N lines of terminal output (default 20)"
+        echo "  tabs           List tabs"
+        echo "  send \"cmd\"     Execute command in terminal"
+        echo "  raw \"text\"     Send raw text to PTY"
+        echo "  newtab         Open new tab"
+        echo "  closetab [N]   Close tab (current or index N)"
+        echo "  switchtab N    Switch to tab N"
+        echo "  focus          Bring window to foreground"
+        ;;
+    *)
+        echo "Unknown command: $1. Run 'gcp help' for usage." >&2
+        exit 1
+        ;;
+esac

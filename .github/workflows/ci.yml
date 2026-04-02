@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [winui3-apprt]
+    paths:
+      - "src/**/*.zig"
+      - "build.zig"
+      - "build.zig.zon"
+      - ".github/workflows/ci.yml"
+      - "lefthook.yml"
+  pull_request:
+    paths:
+      - "src/**/*.zig"
+      - "build.zig"
+      - "build.zig.zon"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch: {}
+
+jobs:
+  zig-fmt:
+    name: zig fmt check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Check formatting
+        run: |
+          find src -name '*.zig' | head -500 | xargs zig fmt --check
+
+  vtable-manifest:
+    name: vtable manifest verification
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Clone win-zig repos as siblings
+        shell: pwsh
+        run: |
+          $workspaceParent = Split-Path -Parent $env:GITHUB_WORKSPACE
+          git clone --depth 1 https://github.com/YuujiKamura/win-zig-metadata.git (Join-Path $workspaceParent "win-zig-metadata")
+          git clone --depth 1 https://github.com/YuujiKamura/win-zig-bindgen.git (Join-Path $workspaceParent "win-zig-bindgen")
+
+      - name: WinUI3 runtime contract (strict)
+        shell: pwsh
+        run: ./scripts/test-winui3-runtime-contract.ps1 -Strict
+
+  static-tests:
+    name: static analysis tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Touch scroll test
+        shell: pwsh
+        run: ./tests/self_diagnosis/test_touch_scroll.ps1
+
+      - name: CRD IME passthrough test
+        shell: pwsh
+        run: ./tests/self_diagnosis/test_crd_ime_passthrough.ps1
+
+      - name: Cursor blink test
+        shell: pwsh
+        run: ./tests/self_diagnosis/test_cursor_blink.ps1
+
+      - name: Text selection test
+        shell: pwsh
+        run: ./tests/self_diagnosis/test_text_selection.ps1
+
+      - name: Resize crash test
+        shell: pwsh
+        run: ./tests/self_diagnosis/test_resize_crash.ps1
+
+      - name: EraseLine first-char test
+        shell: pwsh
+        run: ./tests/self_diagnosis/test_eraseline_firstchar.ps1

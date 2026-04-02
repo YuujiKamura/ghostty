@@ -5,6 +5,7 @@ const buildpkg = @import("src/build/main.zig");
 
 const appVersion = @import("build.zig.zon").version;
 const minimumZigVersion = @import("build.zig.zon").minimum_zig_version;
+const default_winappsdk_version = "1.4.230822000";
 
 comptime {
     buildpkg.requireZig(minimumZigVersion);
@@ -21,6 +22,11 @@ pub fn build(b: *std.Build) !void {
         "test-filter",
         "Filter for test. Only applies to Zig tests.",
     ) orelse &[0][]const u8{};
+    const winappsdk_version = b.option(
+        []const u8,
+        "winappsdk-version",
+        "Version of Microsoft.WindowsAppSDK package used to locate Bootstrap DLL.",
+    ) orelse default_winappsdk_version;
 
     // Ghostty dependencies used by many artifacts.
     const deps = try buildpkg.SharedDeps.init(b, &config);
@@ -61,6 +67,15 @@ pub fn build(b: *std.Build) !void {
 
     // Ghostty executable, the actual runnable Ghostty program.
     const exe = try buildpkg.GhosttyExe.init(b, &config, &deps);
+
+    // Zig-native control plane (WinUI3 only)
+    if (config.target.result.os.tag == .windows and config.app_runtime == .winui3) {
+        const zcp_dep = b.dependency("zig_control_plane", .{
+            .target = config.target,
+            .optimize = config.optimize,
+        });
+        exe.exe.root_module.addImport("zig-control-plane", zcp_dep.module("zig-control-plane"));
+    }
 
     // Ghostty docs
     const docs = try buildpkg.GhosttyDocs.init(b, &deps);
@@ -121,6 +136,41 @@ pub fn build(b: *std.Build) !void {
     // Helpgen
     if (config.emit_helpgen) deps.help_strings.install();
 
+    // Basal Test (WinUI 3)
+    if (builtin.os.tag == .windows) {
+        const basal_test_exe = b.addExecutable(.{
+            .name = "basal_test",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/basal_test.zig"),
+                .target = config.target,
+                .optimize = config.optimize,
+            }),
+        });
+        _ = try deps.add(basal_test_exe);
+        basal_test_exe.root_module.addImport("build_config", b.createModule(.{
+            .root_source_file = b.path("src/build/uucode_config.zig"),
+        }));
+        // Note: deps.add already adds build_options, so we don't need to add it manually here.
+        const basal_test_install = b.addInstallArtifact(basal_test_exe, .{});
+        const basal_test_step = b.step("basal-test", "Build WinUI 3 basal infrastructure test");
+        basal_test_step.dependOn(&basal_test_install.step);
+
+        const win32_replacement_exe = b.addExecutable(.{
+            .name = "ghostty-win32-replacement",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/apprt/win32_replacement/main.zig"),
+                .target = config.target,
+                .optimize = config.optimize,
+            }),
+        });
+        const win32_replacement_install = b.addInstallArtifact(win32_replacement_exe, .{});
+        const win32_replacement_step = b.step(
+            "win32-replacement-bootstrap",
+            "Build replacement Win32 app-layer bootstrap",
+        );
+        win32_replacement_step.dependOn(&win32_replacement_install.step);
+    }
+
     // Runtime "none" is libghostty, anything else is an executable.
     if (config.app_runtime != .none) {
         if (config.emit_exe) {
@@ -142,6 +192,83 @@ pub fn build(b: *std.Build) !void {
             libghostty_shared.installHeader(); // Only need one header
             libghostty_shared.install("libghostty.so");
             libghostty_static.install("libghostty.a");
+        }
+    }
+
+    if (config.target.result.os.tag == .windows and (config.app_runtime == .winui3)) {
+        // Stage the Windows App SDK bootstrap DLL next to the exe so LoadLibraryW finds it.
+        const default_user_profile = std.process.getEnvVarOwned(b.allocator, "USERPROFILE") catch ".";
+        const default_bootstrap_path = std.fs.path.join(b.allocator, &.{ default_user_profile, ".nuget", "packages", "microsoft.windowsappsdk", winappsdk_version, "runtimes", "win10-x64", "native", "Microsoft.WindowsAppRuntime.Bootstrap.dll" }) catch unreachable;
+        const bootstrap_dll_path = b.option([]const u8, "winappsdk-bootstrap-dll", "Path to Microsoft.WindowsAppRuntime.Bootstrap.dll") orelse default_bootstrap_path;
+
+        {
+            const src: std.Build.LazyPath = .{ .cwd_relative = bootstrap_dll_path };
+            const cp = b.addInstallBinFile(src, "Microsoft.WindowsAppRuntime.Bootstrap.dll");
+            b.getInstallStep().dependOn(&cp.step);
+        }
+
+        // Vtable manifest verification: structural check against known-good slot ordering.
+        const vtable_cmd = b.addSystemCommand(&.{
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            b.pathFromRoot("scripts/verify-vtable-manifest.ps1"),
+            "-ComGenPath",
+            b.pathFromRoot("src/apprt/winui3/com_generated.zig"),
+            "-ManifestPath",
+            b.pathFromRoot("contracts/vtable_manifest.json"),
+        });
+        const check_contracts_step = b.step("check-contracts", "Verify vtable manifest contracts");
+        check_contracts_step.dependOn(&vtable_cmd.step);
+
+        // WinUI3 integration tests (PowerShell test suite)
+        {
+            const exe_install = b.addInstallArtifact(exe.exe, .{});
+
+            // "test-winui3" runs the full test suite
+            const run_all = b.addSystemCommand(&.{
+                "powershell.exe",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                b.pathFromRoot("tests/winui3/run-all-tests.ps1"),
+            });
+            run_all.step.dependOn(&exe_install.step);
+
+            const test_winui3_step = b.step("test-winui3", "Run all WinUI3 integration tests");
+            test_winui3_step.dependOn(&run_all.step);
+
+            // Individual test steps: "test-winui3-<name>" for each test-*.ps1
+            // run-single-test.ps1 expects -TestName (base name without .ps1)
+            const individual_tests = .{
+                .{ "test-winui3-lifecycle", "test-01-lifecycle", "Run WinUI3 lifecycle test" },
+                .{ "test-winui3-tabview", "test-02a-tabview", "Run WinUI3 tabview test" },
+                .{ "test-winui3-ime-overlay", "test-02b-ime-overlay", "Run WinUI3 IME overlay test" },
+                .{ "test-winui3-drag-bar", "test-02c-drag-bar", "Run WinUI3 drag bar test" },
+                .{ "test-winui3-control-plane", "test-02d-control-plane", "Run WinUI3 control plane test" },
+                .{ "test-winui3-agent-roundtrip", "test-02e-agent-roundtrip", "Run WinUI3 agent roundtrip test" },
+                .{ "test-winui3-window-ops", "test-03-window-ops", "Run WinUI3 window ops test" },
+                .{ "test-winui3-keyboard", "test-04-keyboard", "Run WinUI3 keyboard test" },
+                .{ "test-winui3-ghost-demo", "test-05-ghost-demo", "Run WinUI3 ghost demo test" },
+                .{ "test-winui3-ime-input", "test-06-ime-input", "Run WinUI3 IME input test" },
+                .{ "test-winui3-tsf-ime", "test-07-tsf-ime", "Run WinUI3 TSF IME test" },
+            };
+
+            inline for (individual_tests) |entry| {
+                const cmd = b.addSystemCommand(&.{
+                    "powershell.exe",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    b.pathFromRoot("tests/winui3/run-single-test.ps1"),
+                    "-TestName",
+                    entry[1],
+                });
+                cmd.step.dependOn(&exe_install.step);
+
+                const step = b.step(entry[0], entry[2]);
+                step.dependOn(&cmd.step);
+            }
         }
     }
 
@@ -290,6 +417,13 @@ pub fn build(b: *std.Build) !void {
         });
         if (config.emit_test_exe) b.installArtifact(test_exe);
         _ = try deps.add(test_exe);
+        if (config.target.result.os.tag == .windows and config.app_runtime == .winui3) {
+            const zcp_dep = b.dependency("zig_control_plane", .{
+                .target = config.target,
+                .optimize = config.optimize,
+            });
+            test_exe.root_module.addImport("zig-control-plane", zcp_dep.module("zig-control-plane"));
+        }
 
         // Verify our internal libghostty header.
         const ghostty_h = b.addTranslateC(.{

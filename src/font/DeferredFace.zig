@@ -7,6 +7,7 @@
 const DeferredFace = @This();
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const fontconfig = @import("fontconfig");
 const macos = @import("macos");
@@ -15,8 +16,11 @@ const options = @import("main.zig").options;
 const Library = @import("main.zig").Library;
 const Face = @import("main.zig").Face;
 const Presentation = @import("main.zig").Presentation;
+const discovery = @import("discovery.zig");
 
 const log = std.log.scoped(.deferred_face);
+
+const has_directwrite = (discovery.DirectWrite != void);
 
 /// Fontconfig
 fc: if (options.backend == .fontconfig_freetype) ?Fontconfig else void =
@@ -25,6 +29,10 @@ fc: if (options.backend == .fontconfig_freetype) ?Fontconfig else void =
 /// CoreText
 ct: if (font.Discover == font.discovery.CoreText) ?CoreText else void =
     if (font.Discover == font.discovery.CoreText) null else {},
+
+/// DirectWrite (Windows + freetype backend)
+dw: if (has_directwrite) ?discovery.directwrite.DirectWriteFace else void =
+    if (has_directwrite) null else {},
 
 /// Canvas
 wc: if (options.backend == .web_canvas) ?WebCanvas else void =
@@ -87,7 +95,11 @@ pub const WebCanvas = struct {
 pub fn deinit(self: *DeferredFace) void {
     switch (options.backend) {
         .fontconfig_freetype => if (self.fc) |*fc| fc.deinit(),
-        .freetype => {},
+        .freetype => {
+            if (comptime has_directwrite) {
+                if (self.dw) |*dw| dw.deinit();
+            }
+        },
         .web_canvas => if (self.wc) |*wc| wc.deinit(),
         .coretext,
         .coretext_freetype,
@@ -101,7 +113,11 @@ pub fn deinit(self: *DeferredFace) void {
 /// Returns the family name of the font.
 pub fn familyName(self: DeferredFace, buf: []u8) ![]const u8 {
     switch (options.backend) {
-        .freetype => {},
+        .freetype => {
+            if (comptime has_directwrite) {
+                if (self.dw) |dw| return dw.familyName(buf);
+            }
+        },
 
         .fontconfig_freetype => if (self.fc) |fc|
             return (try fc.pattern.get(.family, 0)).string,
@@ -129,7 +145,11 @@ pub fn familyName(self: DeferredFace, buf: []u8) ![]const u8 {
 /// face so it doesn't have to be freed.
 pub fn name(self: DeferredFace, buf: []u8) ![]const u8 {
     switch (options.backend) {
-        .freetype => {},
+        .freetype => {
+            if (comptime has_directwrite) {
+                if (self.dw) |dw| return dw.name(buf);
+            }
+        },
 
         .fontconfig_freetype => if (self.fc) |fc|
             return (try fc.pattern.get(.fullname, 0)).string,
@@ -168,9 +188,14 @@ pub fn load(
         .coretext_freetype => try self.loadCoreTextFreetype(lib, opts),
         .web_canvas => try self.loadWebCanvas(opts),
 
-        // Unreachable because we must be already loaded or have the
-        // proper configuration for one of the other deferred mechanisms.
-        .freetype => unreachable,
+        .freetype => {
+            if (comptime has_directwrite) {
+                if (self.dw) |*dw| return try dw.load(lib, opts);
+            }
+            // Unreachable because we must be already loaded or have the
+            // proper configuration for one of the other deferred mechanisms.
+            unreachable;
+        },
     };
 }
 
@@ -344,7 +369,11 @@ pub fn hasCodepoint(self: DeferredFace, cp: u32, p: ?Presentation) bool {
             return face.glyphIndex(cp) != null;
         },
 
-        .freetype => {},
+        .freetype => {
+            if (comptime has_directwrite) {
+                if (self.dw) |dw| return dw.hasCodepoint(cp);
+            }
+        },
     }
 
     // This is unreachable because discovery mechanisms terminate, and
@@ -401,7 +430,7 @@ pub const Wasm = struct {
 test "fontconfig" {
     if (options.backend != .fontconfig_freetype) return error.SkipZigTest;
 
-    const discovery = @import("main.zig").discovery;
+    const disco = @import("main.zig").discovery;
     const testing = std.testing;
     const alloc = testing.allocator;
 
@@ -411,7 +440,7 @@ test "fontconfig" {
 
     // Get a deferred face from fontconfig
     var def = def: {
-        var fc = discovery.Fontconfig.init();
+        var fc = disco.Fontconfig.init();
         defer fc.deinit();
         var it = try fc.discover(alloc, .{ .family = "monospace", .size = 12 });
         defer it.deinit();
@@ -433,7 +462,7 @@ test "fontconfig" {
 test "coretext" {
     if (options.backend != .coretext) return error.SkipZigTest;
 
-    const discovery = @import("main.zig").discovery;
+    const disco = @import("main.zig").discovery;
     const testing = std.testing;
     const alloc = testing.allocator;
 
@@ -443,7 +472,7 @@ test "coretext" {
 
     // Get a deferred face from fontconfig
     var def = def: {
-        var fc = discovery.CoreText.init();
+        var fc = disco.CoreText.init();
         var it = try fc.discover(alloc, .{ .family = "Monaco", .size = 12 });
         defer it.deinit();
         break :def (try it.next()).?;

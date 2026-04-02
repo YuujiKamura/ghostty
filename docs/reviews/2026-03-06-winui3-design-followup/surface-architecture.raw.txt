@@ -1,0 +1,28 @@
+## Analyze: Surface.zig
+
+`Surface.zig`の分析結果を以下にまとめます。
+
+### 1. 目的と責務
+Ghosttyのコアエンジン（`CoreSurface`）とWinUI 3フレームワークを橋渡しする**サーフェス実装**です。
+- **レンダリング制御**: `SwapChainPanel`を管理し、レンダラースレッドから届くDXGIスワップチェインをUIスレッドでバインドする。
+- **入力変換**: Win32の`WM_KEYDOWN`/`WM_CHAR`をGhostty共通の`KeyEvent`へ変換・統合（サロゲートペア対応含む）。
+- **OS連携**: クリップボード（Win32 API）、DPIスケール、タブタイトルのWinRTプロパティ更新を担当。
+- **ライフサイクル管理**: WinUIコントロールの`Loaded`/`SizeChanged`イベントに応じた描画領域の初期化と破棄。
+
+### 2. 依存関係
+- **内部コア**: `CoreSurface`, `CoreApp` (Ghostty本体のロジック), `input`, `terminal`。
+- **WinUI 3 / WinRT**: `winrt`, `com`, `native_interop` (COMインターフェース), `delegate_runtime` (イベントコールバック)。
+- **OS**: `os.zig` (Win32 APIの実装)。
+- **使用元**: `App.zig` (WinUI版) が各タブのSurfaceを保持・管理します。
+
+### 3. 設計パターン
+- **Adapter/Wrapper パターン**: クロスプラットフォームな`CoreSurface`をWinUI 3の`SwapChainPanel`に適合させています。
+- **状態マシン**: `pending_keydown`を使用して、`WM_KEYDOWN`（物理キー情報）と`WM_CHAR`（文字情報）を1つのイベントに合成する非同期入力を制御しています。
+- **Delegate パターン**: WinRTのイベントハンドラをZigの関数に結びつけるために`TypedDelegate`を使用。
+- **スレッド間通信**: レンダラースレッドからUIスレッドへのバインド要求に`PostMessageW`（Win32メッセージキュー）を利用。
+
+### 4. 改善点
+- **クリップボード処理の抽象化**: `OpenClipboard`等の生Win32 API呼び出しが直接書かれており、`os.zig`内にもう一段抽象化されたユーティリティがあると見通しが良くなります。
+- **TODOの未実装**: `setMouseShape`や`setProgressReport`、セキュリティ上の理由でブロックされているクリップボード確認ダイアログが未実装（MVP段階のNo-op）です。
+- **COM管理の冗長性**: `QueryInterface`や`HString`の生成・破棄が手動で記述されており、エラーハンドリングを含めたボイラープレートを簡略化するマクロやヘルパーの余地があります。
+- **メモリ安全性の不確実性**: `setTabTitle`でOOM（メモリ不足）時に`catch null`でタイトル更新を静かに諦めていますが、ログ出力以外のフォールバック戦略があるとより堅牢です。

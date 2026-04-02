@@ -1,0 +1,24 @@
+## Analyze: com_aggregation.zig
+
+`com_aggregation.zig` の分析結果を簡潔にまとめます。
+
+### 1. このコードは何をしているか（目的と責務）
+WinUI 3 において、**XAMLコンパイラ（C++/WinRT等）が自動生成する「COM集約」の仕組みを手動で実装**しています。
+*   **`InitCallback`**: `Application.Start` 時に呼ばれるデリゲート。Zig側の `App.initXaml()` をキックします。
+*   **`AppOuter`**: Application オブジェクトをラップする「外側（Outer）」のCOMオブジェクト。WinUIのカスタムコントロール（TabView等）に必要な `IXamlMetadataProvider` インターフェースをApplicationに「注入」し、それ以外の呼び出しはApplication本体（Inner）へ委譲します。
+
+### 2. 依存関係
+*   **内部**: `winrt.zig` (GUID/HRESULT), `com.zig` (インターフェース定義), `App.zig` (初期化ロジック)。
+*   **外部**: WinUI 3 ランタイム（Microsoft.ProjectReunion / Microsoft.WindowsAppSDK）。
+*   **使用元**: 起動シーケンスを司る `App.zig` や `com_runtime.zig` から、Application インスタンス生成時に使用されます。
+
+### 3. 設計パターン
+*   **COM Aggregation (集約)**: `AppOuter` が Controlling Unknown として振る舞い、内部オブジェクト（Application）とインターフェースを合成します。
+*   **Delegation (委譲)**: 未知の IID に対する `QueryInterface` や、特定のメソッド呼び出しを `inner` または `provider` へ転送します。
+*   **VTable Manual Implementation**: Zig の `extern struct` を用いて、C++/WinRT が生成するバイナリ互換な仮想関数テーブルを手動構築しています。
+
+### 4. 改善点
+*   **ライフサイクル管理**: `InitCallback` の `AddRef`/`Release` が固定値 `1` を返しており、寿命管理をランタイム側に完全に依存しています。複雑な非同期初期化を行う場合は、`AppOuter` 同様に原子変数を導入すべきです。
+*   **VTable定義の冗長性**: `IMetadataVtbl` 内に `IUnknown` や `IInspectable` のスロットが重複して定義されています。共通の構造体として分離・埋め込みを行うことで、ボイラープレートを削減できます。
+*   **ログの制御**: `outerQI` のログが非常に詳細（毎回の問い合わせを出力）であるため、開発時以外は `std.log.Level` で抑制できるようにすべきです。
+*   **エラーハンドリング**: `metadataGetXamlType2` で `provider` が `E_NOINTERFACE` を返した際のフォールバックは適切ですが、他のメソッドでも同様の堅牢なエラー処理（例外を伝播させない）の検討余地があります。

@@ -1,0 +1,28 @@
+## Analyze: App.zig
+
+提供された `App.zig` の分析結果を簡潔にまとめます。
+
+### 1. 目的と責務
+Ghostty ターミナルの **WinUI 3 アプリケーションランタイムの核** です。
+*   **初期化:** Windows App SDK のブートストラップ、WinRT/COM の初期化、DispatcherQueue のセットアップ。
+*   **UI管理:** WinUI 3 の `Window` および `TabView` の生成、リソース（XamlControlsResources）のロード。
+*   **相互運用 (Interop):** WinUI 3 階層とネイティブ HWND の紐付け、メッセージループの制御（Subclassing）。
+*   **ライフサイクル:** アプリの起動ステージ管理、終了処理（クリーンアップ）、タブの追加・削除・切り替えの統括。
+
+### 2. 依存関係
+*   **Ghostty Core:** `../../App.zig` (CoreApp) や `../../config.zig` と密に結合し、プラットフォーム共通ロジックを WinUI 3 実装へ橋渡しします。
+*   **WinRT/COM:** `winrt.zig`, `com.zig` を介して Windows Runtime API を多用します。
+*   **内部モジュール:** `tab_manager`, `tabview_runtime`, `window_runtime`, `input_runtime` などに機能（タブ操作、ウィンドウ操作、入力）を委譲しています。
+*   **Hacks:** WinUI 3 の標準的な挙動をバイパスするため、`hacks.zig` (subclassProc) に依存しています。
+
+### 3. 設計パターン
+*   **COM Aggregation:** `IXamlMetadataProvider` を実装するために `com_aggregation.zig` を使用。WinUI 3 カスタムコントロールを動作させるための必須パターンです。
+*   **Delegation (委譲):** `initXaml` 内の各工程やタブ管理を専用の `runtime` モジュールに逃がし、`App.zig` の肥大化を抑制しています。
+*   **State Machine:** `StartupStage` と `ExitIntent` エナムにより、非同期・複雑な初期化/終了フローを同期的に管理しています。
+*   **Subclassing:** Win32 メッセージを直接処理するため、HWND サブクラス化パターンを採用しています。
+
+### 4. 改善点
+*   **リソース管理の自動化:** 大量の `release()` 呼び出しが手動で行われており、リークの危険があります。Zig の `errdefer` や専用の `SmartPtr` / `ComPtr` パターンをより徹底することで、`fullCleanup` を簡略化できます。
+*   **文字列処理の重複:** `winrt.hstring(XamlClass.Application)` などの呼び出しが頻出しています。これらをキャッシュするか、定数として管理することでオーバーヘッドを削減できます。
+*   **エラーハンドリングの統一:** `log.err` して `return error` するパターンと、`try` のみが混在しています。エラーの種類に応じた一貫した報告戦略が望まれます。
+*   **God Object 化の懸念:** 委譲は進んでいますが、依然として `App.zig` が「何でも知っている」状態です。特にデバッグ用タイマーやリソースの動的書き換えロジックは、さらに分離を検討しても良いでしょう。

@@ -9,9 +9,21 @@ const assert = std.debug.assert;
 const apprt = @import("apprt.zig");
 const font = @import("font/main.zig");
 const rendererpkg = @import("renderer.zig");
-const BuildConfig = @import("build/Config.zig");
 
-pub const ReleaseChannel = BuildConfig.ReleaseChannel;
+pub const ReleaseChannel = enum {
+    tip,
+    stable,
+};
+
+pub const ExeEntrypoint = enum {
+    ghostty,
+    helpgen,
+    mdgen_ghostty_1,
+    mdgen_ghostty_5,
+    webgen_config,
+    webgen_actions,
+    webgen_commands,
+};
 
 /// The semantic version of this build.
 pub const version = options.app_version;
@@ -32,16 +44,14 @@ pub const mode_string = mode: {
 pub const artifact = Artifact.detect();
 
 /// Our build configuration. We re-export a lot of these back at the
-/// top-level so its a bit cleaner to use throughout the code. See the doc
-/// comments in BuildConfig for details on each.
-const config = BuildConfig.fromOptions();
-pub const exe_entrypoint = config.exe_entrypoint;
+/// top-level so its a bit cleaner to use throughout the code.
+pub const exe_entrypoint: ExeEntrypoint = std.meta.stringToEnum(ExeEntrypoint, @tagName(options.exe_entrypoint)).?;
 pub const flatpak = options.flatpak;
 pub const snap = options.snap;
-pub const app_runtime: apprt.Runtime = config.app_runtime;
-pub const font_backend: font.Backend = config.font_backend;
-pub const renderer: rendererpkg.Backend = config.renderer;
-pub const i18n: bool = config.i18n;
+pub const app_runtime: apprt.Runtime = std.meta.stringToEnum(apprt.Runtime, @tagName(options.app_runtime)).?;
+pub const font_backend: font.Backend = std.meta.stringToEnum(font.Backend, @tagName(options.font_backend)).?;
+pub const renderer: rendererpkg.Backend = std.meta.stringToEnum(rendererpkg.Backend, @tagName(options.renderer)).?;
+pub const i18n: bool = options.i18n;
 
 /// The bundle ID for the app. This is used in many places and is currently
 /// hardcoded here. We could make this configurable in the future if there
@@ -57,18 +67,8 @@ pub const i18n: bool = config.i18n;
 /// avoid it in Zig coe as much as possible.
 pub const bundle_id = "com.mitchellh.ghostty";
 
-/// True if we should have "slow" runtime safety checks. The initial motivation
-/// for this was terminal page/pagelist integrity checks. These were VERY
-/// slow but very thorough. But they made it so slow that the terminal couldn't
-/// be used for real work. We'd love to have an option to run a build with
-/// safety checks that could be used for real work. This lets us do that.
-pub const slow_runtime_safety = std.debug.runtime_safety and switch (builtin.mode) {
-    .Debug => true,
-    .ReleaseSafe,
-    .ReleaseSmall,
-    .ReleaseFast,
-    => false,
-};
+/// slow_runtime_safety is now controlled via -Dslow-safety build option.
+/// See src/terminal/build_options.zig (terminal_options.slow_runtime_safety).
 
 pub const Artifact = enum {
     /// Standalone executable
