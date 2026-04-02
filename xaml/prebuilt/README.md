@@ -25,3 +25,6 @@ To update:
 ## Files
 - `*.xbf`: Compiled XAML files.
 - `ghostty.pri`: Compiled resource index.
+- `runtime/x64/`: Essential Windows App SDK (WinUI 3) runtime DLLs.
+  - This allows the app to run on machines where the Windows App SDK Runtime is not installed.
+  - `Microsoft.WindowsAppRuntime.pri` is the framework's resource index, renamed to avoid collision with the app's `resources.pri`.

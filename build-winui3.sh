@@ -45,6 +45,7 @@ XAML_BIN="$XAML_DIR/bin/x64/$BUILD_CONFIG/net9.0-windows10.0.22621.0"
 XAML_OBJ_FALLBACK="$XAML_DIR/obj/x64/Debug/net9.0-windows10.0.22621.0"
 XAML_BIN_FALLBACK="$XAML_DIR/bin/x64/Debug/net9.0-windows10.0.22621.0"
 XAML_PREBUILT="$XAML_DIR/prebuilt"
+XAML_RUNTIME="$XAML_DIR/prebuilt/runtime/x64"
 
 pick_xaml_asset_dirs() {
     # If explicit prebuilt mode is requested, check the prebuilt directory first.
@@ -131,6 +132,14 @@ if pick_xaml_asset_dirs; then
     [ "$COPY_LABEL" = "$BUILD_CONFIG" ] || echo "[build-winui3] WARNING: $BUILD_CONFIG XAML not found, falling back to $COPY_LABEL"
     cp -f "$COPY_OBJ"/*.xbf "$PREFIX/bin/" 2>/dev/null && echo "[build-winui3] Copied XBF files ($COPY_LABEL)"
     cp -f "$COPY_BIN"/ghostty.pri "$PREFIX/bin/resources.pri" 2>/dev/null && echo "[build-winui3] Copied PRI file ($COPY_LABEL)"
+
+    # Copy WinUI 3 runtime DLLs if available in prebuilt/runtime
+    if [ -d "$XAML_RUNTIME" ]; then
+        cp -f "$XAML_RUNTIME"/*.dll "$PREFIX/bin/" 2>/dev/null
+        # Framework resources.pri (if renamed for avoid collision with app's resources.pri)
+        [ -f "$XAML_RUNTIME/Microsoft.WindowsAppRuntime.pri" ] && cp -f "$XAML_RUNTIME/Microsoft.WindowsAppRuntime.pri" "$PREFIX/bin/"
+        echo "[build-winui3] Copied WinUI 3 runtime DLLs from $XAML_RUNTIME"
+    fi
 
     # Stale detection for prebuilt mode / no-MSBuild mode.
     xbf_sample="$(ls -1 "$COPY_OBJ"/*.xbf 2>/dev/null | head -n1 || true)"
