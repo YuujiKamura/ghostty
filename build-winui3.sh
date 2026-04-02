@@ -125,7 +125,19 @@ if [ -f "$XAML_DIR/ghostty.csproj" ]; then
 fi
 
 # Step 2: Build Zig
-zig build -Dapp-runtime=winui3 -Dslow-safety=false --prefix "$PREFIX" "$@"
+ZIG_ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --update-prebuilt)
+            # Filter out shell-only flag
+            ;;
+        *)
+            ZIG_ARGS+=("$arg")
+            ;;
+    esac
+done
+
+zig build -Dapp-runtime=winui3 -Dslow-safety=false --prefix "$PREFIX" "${ZIG_ARGS[@]}"
 
 # Step 3: Copy XBF and PRI to bin directory
 if pick_xaml_asset_dirs; then
