@@ -26,7 +26,9 @@
 param(
     [switch]$Attach,
     [int]$Threads = 4,
-    [int]$Duration = 30
+    [int]$Duration = 30,
+    [ValidateSet('all', 'test1', 'test2')]
+    [string]$Mode = 'all'
 )
 
 Set-StrictMode -Version Latest
@@ -276,6 +278,7 @@ function Run-Test1 {
     $jobScript = {
         param($pipeName, $durationSec, $threadId)
         $ok = 0; $fail = 0; $corrupt = 0
+        $unexpected = [System.Collections.Generic.List[string]]::new()
         $end = (Get-Date).AddSeconds($durationSec)
         while ((Get-Date) -lt $end) {
             foreach ($cmd in @("PING", "TAIL|agent-deck|20")) {
@@ -295,9 +298,14 @@ function Run-Test1 {
                         else { $fail++ }
                     } else {
                         # TAIL: expect OK| or ERR| prefix
-                        if ($resp -match "^(OK|ERR)\|") { $ok++ }
+                        if ($resp -match "^(OK|ERR|TAIL)\|") { $ok++ }
                         elseif ($resp -eq $null) { $fail++ }
-                        else { $corrupt++ }
+                        else {
+                            $corrupt++
+                            if ($unexpected.Count -lt 5) {
+                                $unexpected.Add("cmd=$cmd resp=[$resp]")
+                            }
+                        }
                     }
                 } catch {
                     $fail++
@@ -305,7 +313,7 @@ function Run-Test1 {
             }
             Start-Sleep -Milliseconds 50
         }
-        return @{ ThreadId = $threadId; OK = $ok; Fail = $fail; Corrupt = $corrupt }
+        return @{ ThreadId = $threadId; OK = $ok; Fail = $fail; Corrupt = $corrupt; Unexpected = @($unexpected) }
     }
 
     $jobs = @()
@@ -349,6 +357,9 @@ function Run-Test1 {
             $totalFail += $result.Fail
             $totalCorrupt += $result.Corrupt
             Log "  Thread $($result.ThreadId): OK=$($result.OK) Fail=$($result.Fail) Corrupt=$($result.Corrupt)"
+            foreach ($u in @($result.Unexpected)) {
+                Log "    Unexpected: $u"
+            }
         } else {
             if ($job.State -ne 'Completed') {
                 Log "  Thread job incomplete: Id=$($job.Id) State=$($job.State)"
@@ -402,7 +413,7 @@ function Run-Test2 {
                 $pipe.Close()
                 $sw.Stop()
 
-                if ($resp -match "^(OK|ERR)\|") {
+                if ($resp -match "^(OK|ERR|TAIL)\|") {
                     $ok++
                     if ($sw.ElapsedMilliseconds -gt $slowMs) {
                         $slowMs = $sw.ElapsedMilliseconds
@@ -505,7 +516,7 @@ public class SWP2 {
 
 try {
     Log "=== CP Thread Safety Test (Issue #139 H1 fix) ==="
-    Log "Threads: $Threads  Duration: ${Duration}s  Log: $script:LogFile"
+    Log "Threads: $Threads  Duration: ${Duration}s  Mode: $Mode  Log: $script:LogFile"
     Log ""
 
     if (-not (Test-Path $script:GhosttyExe)) {
@@ -518,8 +529,14 @@ try {
         exit 1
     }
 
-    Run-Test1
-    Run-Test2
+    switch ($Mode) {
+        'test1' { Run-Test1 }
+        'test2' { Run-Test2 }
+        default {
+            Run-Test1
+            Run-Test2
+        }
+    }
 
     Log ""
     Log "=== Summary ==="
