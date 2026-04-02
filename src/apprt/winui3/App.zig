@@ -1619,6 +1619,7 @@ fn controlPlaneCaptureState(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usi
         .at_prompt = s.cursorIsAtPrompt(),
         .tab_count = self.surfaces.items.len,
         .active_tab = self.active_surface_idx,
+        .pane_pid = s.panePid() orelse 0,
     };
 }
 
@@ -2451,6 +2452,7 @@ fn handleCpQuery(self: *App, query: *CpQuery) void {
                 defer s.deinit(query.allocator);
                 query.result_tab_count = s.tab_count;
                 query.result_active_tab = s.active_tab;
+                query.result_pane_pid = s.pane_pid;
                 query.result_has_selection = s.has_selection;
                 query.result_at_prompt = s.at_prompt;
                 if (s.pwd) |pwd| {
@@ -2506,6 +2508,7 @@ fn handleCpQuery(self: *App, query: *CpQuery) void {
                 defer s.deinit(query.allocator);
                 query.result_tab_count = s.tab_count;
                 query.result_active_tab = s.active_tab;
+                query.result_pane_pid = s.pane_pid;
                 query.result_has_selection = s.has_selection;
                 query.result_at_prompt = s.at_prompt;
                 if (s.pwd) |pwd| {

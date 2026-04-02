@@ -73,6 +73,7 @@ pub const CpQuery = struct {
     /// Issue #142: combined snapshot result fields (capture_snapshot).
     result_tab_count: usize = 0,
     result_active_tab: usize = 0,
+    result_pane_pid: u32 = 0,
     result_pwd: [4096]u8 = undefined,
     result_pwd_len: usize = 0,
     result_has_selection: bool = false,
@@ -107,6 +108,7 @@ pub const ControlPlane = struct {
         at_prompt: bool = false,
         tab_count: usize = 0,
         active_tab: usize = 0,
+        pane_pid: u32 = 0,
 
         pub fn deinit(self: *StateSnapshot, allocator: Allocator) void {
             if (self.pwd) |pwd| allocator.free(pwd);
@@ -284,7 +286,7 @@ pub const ControlPlane = struct {
         if (std.mem.eql(u8, cmd, "CAPABILITIES")) {
             return std.fmt.allocPrint(
                 allocator,
-                "OK|{s}|CAPABILITIES|transport=polling|reads=STATE,CAPTURE_PANE,TAIL,HISTORY,WAIT_FOR,CURSOR_POS,PANE_TITLE,LIST_TABS|writes=INPUT,RAW_INPUT,PASTE,SEND_KEYS,ACK_POLL|control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS\n",
+                "OK|{s}|CAPABILITIES|transport=polling|reads=STATE,CAPTURE_PANE,TAIL,HISTORY,WAIT_FOR,PANE_PID,CURSOR_POS,PANE_TITLE,LIST_TABS|writes=INPUT,RAW_INPUT,PASTE,SEND_KEYS,ACK_POLL|control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS\n",
                 .{self.session_name orelse "ghostty"},
             ) catch "ERR|oom\n";
         }
@@ -613,6 +615,7 @@ pub const ControlPlane = struct {
         // Copy results into the CombinedSnapshot output struct.
         result.tab_count = query.result_tab_count;
         result.active_tab = query.result_active_tab;
+        result.pane_pid = query.result_pane_pid;
         result.pwd_len = query.result_pwd_len;
         if (query.result_pwd_len > 0) {
             @memcpy(result.pwd[0..query.result_pwd_len], query.result_pwd[0..query.result_pwd_len]);
@@ -645,6 +648,7 @@ pub const ControlPlane = struct {
         // Copy results into the CombinedSnapshot output struct.
         result.tab_count = query.result_tab_count;
         result.active_tab = query.result_active_tab;
+        result.pane_pid = query.result_pane_pid;
         result.pwd_len = query.result_pwd_len;
         if (query.result_pwd_len > 0) {
             @memcpy(result.pwd[0..query.result_pwd_len], query.result_pwd[0..query.result_pwd_len]);
@@ -962,7 +966,7 @@ test "handleRequestWith serves CAPABILITIES without backend call" {
 
     try std.testing.expectEqual(@as(usize, 0), tb.calls);
     try std.testing.expect(std.mem.startsWith(u8, resp, "OK|ghostty-test|CAPABILITIES|"));
-    try std.testing.expect(std.mem.indexOf(u8, resp, "reads=STATE,CAPTURE_PANE,TAIL,HISTORY,WAIT_FOR,CURSOR_POS,PANE_TITLE,LIST_TABS") != null);
+    try std.testing.expect(std.mem.indexOf(u8, resp, "reads=STATE,CAPTURE_PANE,TAIL,HISTORY,WAIT_FOR,PANE_PID,CURSOR_POS,PANE_TITLE,LIST_TABS") != null);
     try std.testing.expect(std.mem.indexOf(u8, resp, "writes=INPUT,RAW_INPUT,PASTE,SEND_KEYS,ACK_POLL") != null);
     try std.testing.expect(std.mem.indexOf(u8, resp, "control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS") != null);
 }

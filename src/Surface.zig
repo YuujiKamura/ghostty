@@ -39,6 +39,8 @@ const SurfaceMouse = @import("surface_mouse.zig");
 
 const log = std.log.scoped(.surface);
 
+extern "kernel32" fn GetProcessId(process: internal_os.windows.HANDLE) callconv(.winapi) u32;
+
 // The renderer implementation to use.
 const Renderer = rendererpkg.Renderer;
 
@@ -2056,6 +2058,29 @@ pub fn cursorIsAtPrompt(self: *Surface) bool {
     self.renderer_state.mutex.lock();
     defer self.renderer_state.mutex.unlock();
     return self.io.terminal.cursorIsAtPrompt();
+}
+
+/// Returns the current pane process ID if available.
+pub fn panePid(self: *const Surface) ?u32 {
+    self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+
+    return switch (self.io.backend) {
+        .exec => |*exec| switch (exec.subprocess.process orelse return null) {
+            .fork_exec => |cmd| {
+                const raw = cmd.pid orelse return null;
+                if (comptime builtin.os.tag == .windows) {
+                    const hproc: internal_os.windows.HANDLE = raw;
+                    const pid = GetProcessId(hproc);
+                    if (pid == 0) return null;
+                    return @intCast(pid);
+                }
+                if (raw <= 0) return null;
+                return @intCast(raw);
+            },
+            .flatpak => return null,
+        },
+    };
 }
 
 /// Returns the current viewport contents as plain text.

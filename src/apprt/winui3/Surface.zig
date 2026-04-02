@@ -680,6 +680,11 @@ pub fn Surface(comptime App: type) type {
             return self.core_surface.cursorIsAtPrompt();
         }
 
+        pub fn panePid(self: *const Self) ?u32 {
+            if (!self.core_initialized) return null;
+            return self.core_surface.panePid();
+        }
+
         pub fn viewportString(self: *Self, alloc: std.mem.Allocator) ![]const u8 {
             if (!self.core_initialized) return alloc.dupe(u8, "");
             return try self.core_surface.viewportString(alloc);
