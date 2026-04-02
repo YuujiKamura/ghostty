@@ -2457,6 +2457,9 @@ fn handleCpQuery(self: *App, query: *CpQuery) void {
                 query.result_at_prompt = s.at_prompt;
                 if (s.pwd) |pwd| {
                     const copy_len = @min(pwd.len, query.result_pwd.len);
+                    if (pwd.len > query.result_pwd.len) {
+                        log.warn("capture_snapshot: truncating pwd from {d} to {d} bytes", .{ pwd.len, query.result_pwd.len });
+                    }
                     @memcpy(query.result_pwd[0..copy_len], pwd[0..copy_len]);
                     query.result_pwd_len = copy_len;
                 }
@@ -2490,6 +2493,9 @@ fn handleCpQuery(self: *App, query: *CpQuery) void {
             if (surface) |s| {
                 const title = s.getTitle() orelse "";
                 const copy_len = @min(title.len, query.result_title.len);
+                if (title.len > query.result_title.len) {
+                    log.warn("capture_snapshot: truncating title from {d} to {d} bytes", .{ title.len, query.result_title.len });
+                }
                 @memcpy(query.result_title[0..copy_len], title[0..copy_len]);
                 query.result_title_len = copy_len;
             }
@@ -2513,6 +2519,9 @@ fn handleCpQuery(self: *App, query: *CpQuery) void {
                 query.result_at_prompt = s.at_prompt;
                 if (s.pwd) |pwd| {
                     const copy_len = @min(pwd.len, query.result_pwd.len);
+                    if (pwd.len > query.result_pwd.len) {
+                        log.warn("capture_history: truncating pwd from {d} to {d} bytes", .{ pwd.len, query.result_pwd.len });
+                    }
                     @memcpy(query.result_pwd[0..copy_len], pwd[0..copy_len]);
                     query.result_pwd_len = copy_len;
                 }
@@ -2546,6 +2555,9 @@ fn handleCpQuery(self: *App, query: *CpQuery) void {
             if (surface) |s| {
                 const title = s.getTitle() orelse "";
                 const copy_len = @min(title.len, query.result_title.len);
+                if (title.len > query.result_title.len) {
+                    log.warn("capture_history: truncating title from {d} to {d} bytes", .{ title.len, query.result_title.len });
+                }
                 @memcpy(query.result_title[0..copy_len], title[0..copy_len]);
                 query.result_title_len = copy_len;
             }

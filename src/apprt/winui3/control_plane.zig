@@ -641,18 +641,26 @@ pub const ControlPlane = struct {
         result.tab_count = query.result_tab_count;
         result.active_tab = query.result_active_tab;
         result.pane_pid = query.result_pane_pid;
-        result.pwd_len = query.result_pwd_len;
-        if (query.result_pwd_len > 0) {
-            @memcpy(result.pwd[0..query.result_pwd_len], query.result_pwd[0..query.result_pwd_len]);
+        const pwd_copy_len = @min(query.result_pwd_len, result.pwd.len);
+        if (query.result_pwd_len > result.pwd.len) {
+            log.warn("provCaptureSnapshot: truncating pwd from {d} to {d} bytes", .{ query.result_pwd_len, result.pwd.len });
+        }
+        result.pwd_len = pwd_copy_len;
+        if (pwd_copy_len > 0) {
+            @memcpy(result.pwd[0..pwd_copy_len], query.result_pwd[0..pwd_copy_len]);
         }
         result.has_selection = query.result_has_selection;
         result.viewport_len = query.result_len;
         if (query.result_len > 0) {
             @memcpy(result.viewport[0..query.result_len], viewport_buf[0..query.result_len]);
         }
-        result.title_len = query.result_title_len;
-        if (query.result_title_len > 0) {
-            @memcpy(result.title[0..query.result_title_len], query.result_title[0..query.result_title_len]);
+        const title_copy_len = @min(query.result_title_len, result.title.len);
+        if (query.result_title_len > result.title.len) {
+            log.warn("provCaptureSnapshot: truncating title from {d} to {d} bytes", .{ query.result_title_len, result.title.len });
+        }
+        result.title_len = title_copy_len;
+        if (title_copy_len > 0) {
+            @memcpy(result.title[0..title_copy_len], query.result_title[0..title_copy_len]);
         }
         return true;
     }
@@ -676,18 +684,26 @@ pub const ControlPlane = struct {
         result.tab_count = query.result_tab_count;
         result.active_tab = query.result_active_tab;
         result.pane_pid = query.result_pane_pid;
-        result.pwd_len = query.result_pwd_len;
-        if (query.result_pwd_len > 0) {
-            @memcpy(result.pwd[0..query.result_pwd_len], query.result_pwd[0..query.result_pwd_len]);
+        const pwd_copy_len = @min(query.result_pwd_len, result.pwd.len);
+        if (query.result_pwd_len > result.pwd.len) {
+            log.warn("provCaptureHistory: truncating pwd from {d} to {d} bytes", .{ query.result_pwd_len, result.pwd.len });
+        }
+        result.pwd_len = pwd_copy_len;
+        if (pwd_copy_len > 0) {
+            @memcpy(result.pwd[0..pwd_copy_len], query.result_pwd[0..pwd_copy_len]);
         }
         result.has_selection = query.result_has_selection;
         result.viewport_len = query.result_len;
         if (query.result_len > 0) {
             @memcpy(result.viewport[0..query.result_len], viewport_buf[0..query.result_len]);
         }
-        result.title_len = query.result_title_len;
-        if (query.result_title_len > 0) {
-            @memcpy(result.title[0..query.result_title_len], query.result_title[0..query.result_title_len]);
+        const title_copy_len = @min(query.result_title_len, result.title.len);
+        if (query.result_title_len > result.title.len) {
+            log.warn("provCaptureHistory: truncating title from {d} to {d} bytes", .{ query.result_title_len, result.title.len });
+        }
+        result.title_len = title_copy_len;
+        if (title_copy_len > 0) {
+            @memcpy(result.title[0..title_copy_len], query.result_title[0..title_copy_len]);
         }
         return true;
     }

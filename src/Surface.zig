@@ -6847,3 +6847,63 @@ test "Surface: rectangle selection logic" {
         true, //rectangle selection
     );
 }
+
+test "Surface: selection threshold boundary at 0.6 cell" {
+    // cell width is 10px in test helper, so threshold is round(10 * 0.6) = 6px.
+    // Therefore 3.5 cell (frac=5) and 3.6 cell (frac=6) straddle the boundary.
+    // zig fmt: off
+
+    // LTR: click just left of threshold includes click cell.
+    try testMouseSelection(
+        3.5, 2, // click (frac=5)
+        4.6, 2, // drag  (frac=6)
+        3, 2, // expected start
+        4, 2, // expected end
+        false,
+    );
+
+    // LTR: click exactly at threshold excludes click cell.
+    try testMouseSelection(
+        3.6, 2, // click (frac=6)
+        4.6, 2, // drag  (frac=6)
+        4, 2, // expected start
+        4, 2, // expected end
+        false,
+    );
+
+    // RTL: click just right of threshold includes click cell.
+    try testMouseSelection(
+        4.6, 2, // click (frac=6)
+        3.5, 2, // drag  (frac=5)
+        4, 2, // expected start
+        3, 2, // expected end
+        false,
+    );
+
+    // RTL: click just left of threshold excludes click cell.
+    try testMouseSelection(
+        4.5, 2, // click (frac=5)
+        3.5, 2, // drag  (frac=5)
+        3, 2, // expected start
+        3, 2, // expected end
+        false,
+    );
+
+    // Rectangular LTR: same threshold behavior must hold column-wise.
+    try testMouseSelection(
+        3.5, 1, // click (frac=5)
+        4.6, 3, // drag  (frac=6)
+        3, 1, // expected start
+        4, 3, // expected end
+        true,
+    );
+
+    try testMouseSelection(
+        3.6, 1, // click (frac=6)
+        4.6, 3, // drag  (frac=6)
+        4, 1, // expected start
+        4, 3, // expected end
+        true,
+    );
+    // zig fmt: on
+}
