@@ -70,11 +70,20 @@ pub fn build(b: *std.Build) !void {
 
     // Zig-native control plane (WinUI3 only)
     if (config.target.result.os.tag == .windows and config.app_runtime == .winui3) {
-        const zcp_dep = b.dependency("zig_control_plane", .{
-            .target = config.target,
-            .optimize = config.optimize,
-        });
-        exe.exe.root_module.addImport("zig-control-plane", zcp_dep.module("zig-control-plane"));
+        // Only add dependency if the directory exists (it might be missing in CI)
+        const zcp_path = b.path("../zig-control-plane").getPath(b);
+        const zcp_exists = if (std.fs.cwd().access(zcp_path, .{})) |_| true else |_| false;
+
+        if (zcp_exists) {
+            const zcp_dep = b.dependency("zig_control_plane", .{
+                .target = config.target,
+                .optimize = config.optimize,
+            });
+            exe.exe.root_module.addImport("zig-control-plane", zcp_dep.module("zig-control-plane"));
+        } else {
+            // Provide a dummy module if missing, or handle in code via build_options
+            std.debug.print("Warning: zig-control-plane not found at {s}, skipping import.\n", .{zcp_path});
+        }
     }
 
     // Ghostty docs
