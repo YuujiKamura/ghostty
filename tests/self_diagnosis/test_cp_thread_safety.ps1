@@ -36,11 +36,15 @@ $script:RepoRoot   = (Resolve-Path "$PSScriptRoot\..\..").Path
 $script:GhosttyExe = Join-Path $RepoRoot "zig-out-winui3\bin\ghostty.exe"
 $script:SessionDir = Join-Path $env:LOCALAPPDATA "ghostty\control-plane\winui3\sessions"
 $script:LogFile    = Join-Path $PSScriptRoot "cp_thread_safety_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+$script:RunStartedAt = Get-Date
+$script:ArtifactsDir = Join-Path $PSScriptRoot "artifacts\cp-thread-safety\$($script:RunStartedAt.ToString('yyyyMMdd-HHmmss'))"
 $script:Passed     = 0
 $script:Failed     = 0
 $script:GhosttyProc = $null
 $script:PipeName   = $null
 $script:Launched   = $false
+
+New-Item -ItemType Directory -Path $script:ArtifactsDir -Force | Out-Null
 
 Add-Type @"
 using System;
@@ -83,6 +87,87 @@ function Test-Result([string]$name, [bool]$pass, [string]$detail = "") {
         Write-Host "  FAIL: $name $detail" -ForegroundColor Red
     }
     Add-Content -Path $script:LogFile -Value "$(if ($pass) {'PASS'} else {'FAIL'}): $name $detail"
+}
+
+function Collect-CrashEvidence([string]$reason) {
+    $safeReason = ($reason -replace '[^a-zA-Z0-9_-]', '_')
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $evidencePath = Join-Path $script:ArtifactsDir "crash-evidence-${safeReason}-${stamp}.log"
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("reason=$reason")
+    $lines.Add("time=$(Get-Date -Format o)")
+    $lines.Add("run_started=$(Get-Date $script:RunStartedAt -Format o)")
+    $lines.Add("pipe_name=$($script:PipeName)")
+    if ($script:GhosttyProc) {
+        $lines.Add("ghostty_pid=$($script:GhosttyProc.Id)")
+        $lines.Add("ghostty_has_exited=$($script:GhosttyProc.HasExited)")
+        if ($script:GhosttyProc.HasExited) {
+            $lines.Add("ghostty_exit_code=$($script:GhosttyProc.ExitCode)")
+        }
+    }
+
+    $lines.Add("")
+    $lines.Add("== recent_application_events ==")
+    try {
+        $events = Get-WinEvent -FilterHashtable @{
+            LogName = 'Application'
+            StartTime = $script:RunStartedAt.AddMinutes(-1)
+        } -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.ProviderName -in @('Application Error', 'Windows Error Reporting') -or
+                $_.Message -match 'ghostty(\.exe)?'
+            } |
+            Select-Object -First 20
+
+        if ($events) {
+            foreach ($ev in $events) {
+                $lines.Add("--- event ---")
+                $lines.Add("time=$($ev.TimeCreated.ToString('o')) provider=$($ev.ProviderName) id=$($ev.Id) level=$($ev.LevelDisplayName)")
+                $msg = ($ev.Message -replace "`r?`n", " ")
+                $lines.Add("message=$msg")
+            }
+        } else {
+            $lines.Add("no matching events")
+        }
+    } catch {
+        $lines.Add("event_query_error=$($_.Exception.Message)")
+    }
+
+    $debugLog = Join-Path $env:USERPROFILE "ghostty_debug.log"
+    $lines.Add("")
+    $lines.Add("== ghostty_debug_tail ==")
+    if (Test-Path $debugLog) {
+        try {
+            $tail = Get-Content $debugLog -Tail 200 -ErrorAction SilentlyContinue
+            if ($tail) {
+                foreach ($t in $tail) { $lines.Add($t) }
+            } else {
+                $lines.Add("debug log exists but tail empty")
+            }
+        } catch {
+            $lines.Add("debug_tail_error=$($_.Exception.Message)")
+        }
+    } else {
+        $lines.Add("no ghostty_debug.log")
+    }
+
+    $lines.Add("")
+    $lines.Add("== powershell_jobs ==")
+    try {
+        $jobs = Get-Job -ErrorAction SilentlyContinue
+        if ($jobs) {
+            foreach ($j in $jobs) {
+                $lines.Add("job id=$($j.Id) state=$($j.State) has_more_data=$($j.HasMoreData)")
+            }
+        } else {
+            $lines.Add("no jobs")
+        }
+    } catch {
+        $lines.Add("job_query_error=$($_.Exception.Message)")
+    }
+
+    Set-Content -Path $evidencePath -Value $lines -Encoding UTF8
+    Log "Crash evidence written: $evidencePath"
 }
 
 function Send-CP([string]$pipeName, [string]$cmd, [int]$timeoutMs = 5000) {
@@ -238,6 +323,7 @@ function Run-Test1 {
         if (-not (Test-ProcessAlive)) {
             $crashed = $true
             Log "*** CRASH: ghostty process died during concurrent TAIL/PING ***"
+            Collect-CrashEvidence "test1_concurrent_tail_ping"
             break
         }
         $doneCount = @($jobs | Where-Object { $_.State -eq 'Completed' }).Count
@@ -245,23 +331,29 @@ function Run-Test1 {
         Start-Sleep -Seconds 2
     }
 
-    # Collect results (bounded wait to avoid hanging forever if a job wedges)
+    # Fast-stop any lingering jobs to keep L3 turnaround short.
+    $runningJobs = @($jobs | Where-Object { $_.State -eq 'Running' })
+    if ($runningJobs.Count -gt 0) {
+        foreach ($j in $runningJobs) {
+            Stop-Job $j -ErrorAction SilentlyContinue
+        }
+    }
+    $null = Wait-Job -Job $jobs -Timeout 3
+
+    # Collect results without per-job indefinite waits.
     $totalOK = 0; $totalFail = 0; $totalCorrupt = 0
     foreach ($job in $jobs) {
-        $completed = Wait-Job $job -Timeout 10
-        if (-not $completed) {
-            Log "  Thread job timeout: Id=$($job.Id) State=$($job.State)"
-            Stop-Job $job -ErrorAction SilentlyContinue
-            Remove-Job $job -Force -ErrorAction SilentlyContinue
-            $totalFail += 1
-            continue
-        }
         $result = Receive-Job $job -ErrorAction SilentlyContinue
         if ($result) {
             $totalOK += $result.OK
             $totalFail += $result.Fail
             $totalCorrupt += $result.Corrupt
             Log "  Thread $($result.ThreadId): OK=$($result.OK) Fail=$($result.Fail) Corrupt=$($result.Corrupt)"
+        } else {
+            if ($job.State -ne 'Completed') {
+                Log "  Thread job incomplete: Id=$($job.Id) State=$($job.State)"
+                $totalFail += 1
+            }
         }
         Remove-Job $job -Force -ErrorAction SilentlyContinue
     }
@@ -337,6 +429,7 @@ function Run-Test2 {
         if (-not (Test-ProcessAlive)) {
             Log "*** CRASH: ghostty died during resize+TAIL stress ***"
             $hangDetected = $true
+            Collect-CrashEvidence "test2_resize_tail"
             break
         }
 
@@ -387,7 +480,12 @@ public class SWP2 {
     }
 
     # Collect TAIL job results
-    $tailResult = Receive-Job $tailJob -Wait -ErrorAction SilentlyContinue
+    $tailDone = Wait-Job $tailJob -Timeout 5
+    if (-not $tailDone) {
+        Log "  Tail job timeout: Id=$($tailJob.Id) State=$($tailJob.State)"
+        Stop-Job $tailJob -ErrorAction SilentlyContinue
+    }
+    $tailResult = Receive-Job $tailJob -ErrorAction SilentlyContinue
     Remove-Job $tailJob -Force -ErrorAction SilentlyContinue
 
     if ($tailResult) {
