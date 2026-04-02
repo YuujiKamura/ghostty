@@ -23,6 +23,7 @@ const PendingInput = struct {
 
 const default_max_pending_inputs: usize = 128;
 const default_max_inflight_data_requests: u32 = 1;
+const cp_query_timeout_ms: os.UINT = 5000;
 
 const ResponseCache = struct {
     req: ?[]u8 = null,
@@ -149,6 +150,7 @@ pub const ControlPlane = struct {
     max_pending_inputs: usize = default_max_pending_inputs,
     max_inflight_data_requests: u32 = default_max_inflight_data_requests,
     inflight_data_requests: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
+    last_provider_timeout: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 
     pub fn isEnabled(allocator: Allocator) bool {
         return checkEnvFlag(allocator, "GHOSTTY_CONTROL_PLANE") or
@@ -318,6 +320,10 @@ pub const ControlPlane = struct {
             log.warn("handleRequest error: {}", .{err});
             return allocator.dupe(u8, "ERR|internal_error\n") catch return "ERR|internal_error\n";
         };
+        if (self.last_provider_timeout.swap(false, .acq_rel)) {
+            allocator.free(resp);
+            return allocator.dupe(u8, "ERR|TIMEOUT|ui_thread_busy\n") catch return "ERR|TIMEOUT|ui_thread_busy\n";
+        }
         if (isCacheableCommand(cmd) and !std.mem.startsWith(u8, std.mem.trim(u8, resp, " \r\n\t"), "ERR|")) {
             self.updateCachedResponse(req, resp);
         }
@@ -593,6 +599,28 @@ pub const ControlPlane = struct {
         return cmd_id <= self.last_drained_cmd_id;
     }
 
+    fn sendCpQueryWithTimeout(self: *ControlPlane, query: *CpQuery, op_name: []const u8) bool {
+        var message_result: usize = 0;
+        os.SetLastError(0);
+        const ok = os.SendMessageTimeoutW(
+            self.hwnd,
+            os.WM_APP_CP_QUERY,
+            0,
+            @bitCast(@intFromPtr(query)),
+            os.SMTO_ABORTIFHUNG,
+            cp_query_timeout_ms,
+            &message_result,
+        );
+        if (ok != 0) return true;
+
+        const last_error = os.GetLastError();
+        if (last_error == os.ERROR_TIMEOUT) {
+            log.warn("{s}: WM_APP_CP_QUERY timed out after {d}ms; returning ui_thread_busy", .{ op_name, cp_query_timeout_ms });
+            self.last_provider_timeout.store(true, .release);
+        }
+        return false;
+    }
+
     /// Issue #142: capture all tab state in a single SendMessageW round-trip.
     /// Called from zig-control-plane when captureSnapshot is wired into Provider.
     fn provCaptureSnapshot(ctx: *anyopaque, tab_index: usize, result: *zcp.CombinedSnapshot) bool {
@@ -606,12 +634,9 @@ pub const ControlPlane = struct {
             .out_buf_len = viewport_buf.len,
             .allocator = self.allocator,
         };
-        const send_result = os.SendMessageW(self.hwnd, os.WM_APP_CP_QUERY, 0, @bitCast(@intFromPtr(&query)));
-        // SendMessageW returns 0 if the window was destroyed or the message was not handled.
-        // Our WndProc returns 0 on success for WM_APP_CP_QUERY, so we check if the query
-        // was actually filled by looking at result fields. A tab_count of 0 with no viewport
-        // is still valid (empty state), so we always copy.
-        _ = send_result;
+        if (!self.sendCpQueryWithTimeout(&query, "provCaptureSnapshot")) {
+            return false;
+        }
         // Copy results into the CombinedSnapshot output struct.
         result.tab_count = query.result_tab_count;
         result.active_tab = query.result_active_tab;
@@ -644,7 +669,9 @@ pub const ControlPlane = struct {
             .out_buf_len = viewport_buf.len,
             .allocator = self.allocator,
         };
-        _ = os.SendMessageW(self.hwnd, os.WM_APP_CP_QUERY, 0, @bitCast(@intFromPtr(&query)));
+        if (!self.sendCpQueryWithTimeout(&query, "provCaptureHistory")) {
+            return false;
+        }
         // Copy results into the CombinedSnapshot output struct.
         result.tab_count = query.result_tab_count;
         result.active_tab = query.result_active_tab;

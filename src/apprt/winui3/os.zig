@@ -151,6 +151,13 @@ pub const QS_ALLINPUT: DWORD = 0x04FF;
 pub const MWMO_INPUTAVAILABLE: DWORD = 0x0004;
 pub const WAIT_TIMEOUT: DWORD = 0x00000102;
 pub const INFINITE: DWORD = 0xFFFFFFFF;
+pub const ERROR_TIMEOUT: DWORD = 1460;
+
+// --- SendMessageTimeoutW flags ---
+pub const SMTO_NORMAL: UINT = 0x0000;
+pub const SMTO_BLOCK: UINT = 0x0001;
+pub const SMTO_ABORTIFHUNG: UINT = 0x0002;
+pub const SMTO_NOTIMEOUTIFNOTHUNG: UINT = 0x0008;
 
 // --- MapVirtualKeyW ---
 pub const MAPVK_VK_TO_CHAR: UINT = 2;
@@ -321,6 +328,15 @@ pub const GW_HWNDNEXT: UINT = 2;
 pub const GA_PARENT: UINT = 1;
 pub const GA_ROOT: UINT = 2;
 pub extern "user32" fn SendMessageW(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.winapi) LRESULT;
+pub extern "user32" fn SendMessageTimeoutW(
+    hWnd: HWND,
+    Msg: UINT,
+    wParam: WPARAM,
+    lParam: LPARAM,
+    fuFlags: UINT,
+    uTimeout: UINT,
+    lpdwResult: ?*usize,
+) callconv(.winapi) LRESULT;
 pub extern "user32" fn SetLayeredWindowAttributes(hWnd: HWND, crKey: DWORD, bAlpha: u8, dwFlags: DWORD) callconv(.winapi) BOOL;
 pub const LWA_ALPHA: DWORD = 0x00000002;
 pub extern "user32" fn UnregisterClassW(lpClassName: LPCWSTR, hInstance: ?HINSTANCE) callconv(.winapi) BOOL;

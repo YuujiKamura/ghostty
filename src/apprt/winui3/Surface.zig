@@ -1055,7 +1055,7 @@ pub fn Surface(comptime App: type) type {
 
         pub fn handleMouseMove(self: *Self, x: f64, y: f64) void {
             if (!self.core_initialized) return;
-            const pos: apprt.CursorPos = .{ .x = @floatCast(x), .y = @floatCast(y) };
+            const pos = pointerToCursorPos(x, y, 0, 0);
             self.cursor_pos = pos;
             const mods = key.getModifiers();
             self.core_surface.cursorPosCallback(pos, mods) catch |err| {
@@ -1114,13 +1114,40 @@ pub fn Surface(comptime App: type) type {
             return out;
         }
 
+        /// Convert pointer coordinates to surface-local cursor coordinates.
+        ///
+        /// Coordinates are expected to be in DIP space. If the caller obtained
+        /// pointer coordinates from a root-relative space, pass the surface's
+        /// root-space origin as `surface_origin_*` to normalize.
+        fn pointerToCursorPos(raw_x: f64, raw_y: f64, surface_origin_x: f64, surface_origin_y: f64) apprt.CursorPos {
+            return .{
+                .x = @floatCast(raw_x - surface_origin_x),
+                .y = @floatCast(raw_y - surface_origin_y),
+            };
+        }
+
+        /// Resolve the current pointer point using the surface grid as the
+        /// preferred coordinate space (surface-local). Falls back to root space.
+        fn getCurrentPointerPoint(self: *Self, ea: *com.IPointerRoutedEventArgs) ?*com.IPointerPoint {
+            if (self.surface_grid) |grid| {
+                if (grid.queryInterface(com.IUIElement)) |grid_ue| {
+                    defer grid_ue.release();
+                    if (ea.getCurrentPoint(grid_ue)) |point| {
+                        return point;
+                    } else |_| {}
+                } else |_| {}
+            }
+
+            return ea.getCurrentPoint(null) catch null;
+        }
+
         // --- XAML event callbacks ---
 
         fn onXamlPointerPressed(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
             log.debug("onXamlPointerPressed: core_initialized={}", .{self.core_initialized});
             if (!self.core_initialized) return;
             const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
-            const point = ea.getCurrentPoint(null) catch return;
+            const point = getCurrentPointerPoint(self, ea) orelse return;
             defer point.release();
             const pos = point.Position() catch return;
 
@@ -1144,7 +1171,8 @@ pub fn Surface(comptime App: type) type {
             }
 
             // Mouse or Pen: existing behavior
-            self.handleMouseMove(@floatCast(pos.X), @floatCast(pos.Y));
+            const cursor = pointerToCursorPos(@floatCast(pos.X), @floatCast(pos.Y), 0, 0);
+            self.handleMouseMove(cursor.x, cursor.y);
             const props = point.Properties() catch return;
             defer props.release();
             const update_kind = props.PointerUpdateKind() catch return;
@@ -1171,7 +1199,7 @@ pub fn Surface(comptime App: type) type {
         fn onXamlPointerMoved(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
             if (!self.core_initialized) return;
             const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
-            const point = ea.getCurrentPoint(null) catch return;
+            const point = getCurrentPointerPoint(self, ea) orelse return;
             defer point.release();
             const pos = point.Position() catch return;
 
@@ -1196,14 +1224,15 @@ pub fn Surface(comptime App: type) type {
             }
 
             // Mouse or Pen: existing behavior
-            self.handleMouseMove(@floatCast(pos.X), @floatCast(pos.Y));
+            const cursor = pointerToCursorPos(@floatCast(pos.X), @floatCast(pos.Y), 0, 0);
+            self.handleMouseMove(cursor.x, cursor.y);
             ea.SetHandled(true) catch {};
         }
 
         fn onXamlPointerReleased(self: *Self, _: ?*anyopaque, args: ?*anyopaque) void {
             if (!self.core_initialized) return;
             const ea: *com.IPointerRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
-            const point = ea.getCurrentPoint(null) catch return;
+            const point = getCurrentPointerPoint(self, ea) orelse return;
             defer point.release();
             const pos = point.Position() catch return;
 
@@ -1219,7 +1248,8 @@ pub fn Surface(comptime App: type) type {
             }
 
             // Mouse or Pen: existing behavior
-            self.handleMouseMove(@floatCast(pos.X), @floatCast(pos.Y));
+            const cursor = pointerToCursorPos(@floatCast(pos.X), @floatCast(pos.Y), 0, 0);
+            self.handleMouseMove(cursor.x, cursor.y);
             const props = point.Properties() catch return;
             defer props.release();
             const update_kind = props.PointerUpdateKind() catch return;
@@ -2189,6 +2219,24 @@ pub fn Surface(comptime App: type) type {
             try std.testing.expectEqual(@as(f64, 1.0), computeFraction(255));
             try std.testing.expectEqual(@as(f64, 0.0), computeFraction(0));
             try std.testing.expectEqual(@as(f64, 0.5), computeFraction(50));
+        }
+
+        test "pointerToCursorPos applies surface origin offset" {
+            const pos = pointerToCursorPos(128.0, 96.0, 8.0, 12.0);
+            try std.testing.expectEqual(@as(f32, 120.0), pos.x);
+            try std.testing.expectEqual(@as(f32, 84.0), pos.y);
+        }
+
+        test "pointerToCursorPos allows out-of-bounds negative coordinates" {
+            const pos = pointerToCursorPos(4.0, 2.0, 10.0, 6.0);
+            try std.testing.expectEqual(@as(f32, -6.0), pos.x);
+            try std.testing.expectEqual(@as(f32, -4.0), pos.y);
+        }
+
+        test "pointerToCursorPos keeps fractional DIP precision" {
+            const pos = pointerToCursorPos(20.75, 11.25, 1.5, 0.5);
+            try std.testing.expectApproxEqAbs(@as(f32, 19.25), pos.x, 0.0001);
+            try std.testing.expectApproxEqAbs(@as(f32, 10.75), pos.y, 0.0001);
         }
 
         fn cursorIdForShape(shape: terminal.MouseShape) os.LPCWSTR {

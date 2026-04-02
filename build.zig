@@ -417,6 +417,13 @@ pub fn build(b: *std.Build) !void {
         });
         if (config.emit_test_exe) b.installArtifact(test_exe);
         _ = try deps.add(test_exe);
+        if (config.target.result.os.tag == .windows and config.app_runtime == .winui3) {
+            const zcp_dep = b.dependency("zig_control_plane", .{
+                .target = config.target,
+                .optimize = config.optimize,
+            });
+            test_exe.root_module.addImport("zig-control-plane", zcp_dep.module("zig-control-plane"));
+        }
 
         // Verify our internal libghostty header.
         const ghostty_h = b.addTranslateC(.{
