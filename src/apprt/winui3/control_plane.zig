@@ -22,6 +22,7 @@ const PendingInput = struct {
 };
 
 const default_max_pending_inputs: usize = 128;
+const default_max_inflight_data_requests: u32 = 8;
 
 const ResponseCache = struct {
     req: ?[]u8 = null,
@@ -144,6 +145,8 @@ pub const ControlPlane = struct {
     capture_history_fn: ?CaptureHistoryFn = null,
     capture_tab_list_fn: ?CaptureTabListFn = null,
     max_pending_inputs: usize = default_max_pending_inputs,
+    max_inflight_data_requests: u32 = default_max_inflight_data_requests,
+    inflight_data_requests: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
 
     pub fn isEnabled(allocator: Allocator) bool {
         return checkEnvFlag(allocator, "GHOSTTY_CONTROL_PLANE") or
@@ -181,6 +184,7 @@ pub const ControlPlane = struct {
         };
         self.cache.ttl_ns = self.loadCacheTtlNs();
         self.max_pending_inputs = self.loadMaxPendingInputs();
+        self.max_inflight_data_requests = self.loadMaxInflightDataRequests();
 
         // Initialize the Zig-native control plane
         self.initControlPlane() catch |err| {
@@ -288,6 +292,19 @@ pub const ControlPlane = struct {
             self.clearResponseCache();
         }
 
+        var data_lane_token = false;
+        if (isDataLaneCommand(cmd)) {
+            const prev = self.inflight_data_requests.fetchAdd(1, .acq_rel);
+            if (prev >= self.max_inflight_data_requests) {
+                _ = self.inflight_data_requests.fetchSub(1, .acq_rel);
+                return allocator.dupe(u8, "ERR|BUSY|data_lane_full\n") catch "ERR|BUSY|data_lane_full\n";
+            }
+            data_lane_token = true;
+        }
+        defer if (data_lane_token) {
+            _ = self.inflight_data_requests.fetchSub(1, .acq_rel);
+        };
+
         const resp = backend_fn(backend_ctx, request, allocator) catch |err| {
             log.warn("handleRequest error: {}", .{err});
             return allocator.dupe(u8, "ERR|internal_error\n") catch return "ERR|internal_error\n";
@@ -364,6 +381,14 @@ pub const ControlPlane = struct {
         const parsed = std.fmt.parseInt(u32, raw, 10) catch return default_max_pending_inputs;
         if (parsed == 0) return default_max_pending_inputs;
         return @as(usize, @intCast(@min(parsed, 4096)));
+    }
+
+    fn loadMaxInflightDataRequests(self: *ControlPlane) u32 {
+        const raw = std.process.getEnvVarOwned(self.allocator, "GHOSTTY_CP_MAX_INFLIGHT_DATA") catch return default_max_inflight_data_requests;
+        defer self.allocator.free(raw);
+        const parsed = std.fmt.parseInt(u32, raw, 10) catch return default_max_inflight_data_requests;
+        if (parsed == 0) return default_max_inflight_data_requests;
+        return @max(@as(u32, 1), @min(parsed, 1024));
     }
 
     fn clearResponseCache(self: *ControlPlane) void {
@@ -691,6 +716,13 @@ fn isBackpressureCommand(cmd: []const u8) bool {
         std.mem.eql(u8, cmd, "PASTE");
 }
 
+fn isDataLaneCommand(cmd: []const u8) bool {
+    return std.mem.eql(u8, cmd, "STATE") or
+        std.mem.eql(u8, cmd, "TAIL") or
+        std.mem.eql(u8, cmd, "HISTORY") or
+        std.mem.eql(u8, cmd, "LIST_TABS");
+}
+
 fn loadSessionName(allocator: Allocator, pid: u32) ![]u8 {
     const env_name = std.process.getEnvVarOwned(allocator, "GHOSTTY_SESSION_NAME") catch null;
     if (env_name) |value| {
@@ -803,6 +835,15 @@ test "isBackpressureCommand classification" {
     try std.testing.expect(!isBackpressureCommand("STATE"));
 }
 
+test "isDataLaneCommand classification" {
+    try std.testing.expect(isDataLaneCommand("STATE"));
+    try std.testing.expect(isDataLaneCommand("TAIL"));
+    try std.testing.expect(isDataLaneCommand("HISTORY"));
+    try std.testing.expect(isDataLaneCommand("LIST_TABS"));
+    try std.testing.expect(!isDataLaneCommand("PING"));
+    try std.testing.expect(!isDataLaneCommand("INPUT"));
+}
+
 test "ResponseCache clear keeps ttl" {
     var cache = ResponseCache{
         .req = try std.testing.allocator.dupe(u8, "TAIL|x|40"),
@@ -869,4 +910,24 @@ test "handleRequestWith rejects input when queue is full" {
     const resp = cp.handleRequestWith("INPUT|agent-deck|echo again", std.testing.allocator, null, testBackend);
     defer std.testing.allocator.free(resp);
     try std.testing.expectEqualStrings("ERR|BUSY|input_queue_full\n", resp);
+}
+
+test "handleRequestWith limits data lane but allows control lane" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(0),
+        .max_inflight_data_requests = 1,
+    };
+    cp.inflight_data_requests.store(1, .release);
+
+    var tb = TestBackendCtx{};
+
+    const data_resp = cp.handleRequestWith("TAIL|agent-deck|20", std.testing.allocator, &tb, testBackend);
+    defer std.testing.allocator.free(data_resp);
+    try std.testing.expectEqualStrings("ERR|BUSY|data_lane_full\n", data_resp);
+    try std.testing.expectEqual(@as(usize, 0), tb.calls);
+
+    const ping_resp = cp.handleRequestWith("PING", std.testing.allocator, &tb, testBackend);
+    defer std.testing.allocator.free(ping_resp);
+    try std.testing.expectEqual(@as(usize, 1), tb.calls);
 }
