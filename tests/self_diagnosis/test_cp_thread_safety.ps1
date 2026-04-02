@@ -177,8 +177,6 @@ function Send-CP([string]$pipeName, [string]$cmd, [int]$timeoutMs = 5000) {
         $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(
             ".", $pipeName, [System.IO.Pipes.PipeDirection]::InOut)
         $pipe.Connect($timeoutMs)
-        $pipe.ReadTimeout = $timeoutMs
-        $pipe.WriteTimeout = $timeoutMs
         $writer = New-Object System.IO.StreamWriter($pipe)
         $reader = New-Object System.IO.StreamReader($pipe)
         $writer.AutoFlush = $true
@@ -326,8 +324,6 @@ function Run-Test1 {
                     $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(
                         ".", $pipeName, [System.IO.Pipes.PipeDirection]::InOut)
                     $pipe.Connect(3000)
-                    $pipe.ReadTimeout = 3000
-                    $pipe.WriteTimeout = 3000
                     $w = New-Object System.IO.StreamWriter($pipe)
                     $r = New-Object System.IO.StreamReader($pipe)
                     $w.AutoFlush = $true
@@ -456,8 +452,6 @@ function Run-Test2 {
                 $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(
                     ".", $pipeName, [System.IO.Pipes.PipeDirection]::InOut)
                 $pipe.Connect(5000)
-                $pipe.ReadTimeout = 5000
-                $pipe.WriteTimeout = 5000
                 $w = New-Object System.IO.StreamWriter($pipe)
                 $r = New-Object System.IO.StreamReader($pipe)
                 $w.AutoFlush = $true
