@@ -87,6 +87,7 @@ pub const CpQuery = struct {
 /// - Mutations (newTab, closeTab, etc.) via PostMessageW (async).
 /// - Reads (readBuffer, tabCount, etc.) via SendMessageW (sync).
 pub const ControlPlane = struct {
+    const BackendFn = *const fn (ctx: ?*anyopaque, request: []const u8, allocator: Allocator) anyerror![]const u8;
     /// Action codes posted via WM_APP_CONTROL_ACTION (wparam).
     /// Wire-compatible action codes used by ipc.zig PostMessageW dispatch.
     pub const Action = enum(usize) {
@@ -245,7 +246,6 @@ pub const ControlPlane = struct {
     fn pipeHandler(request: []const u8, ctx: *anyopaque, allocator: Allocator) []const u8 {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
         const req = std.mem.trim(u8, request, " \r\n\t");
-        const cmd = commandName(req);
         if (std.mem.indexOf(u8, req, "BGTRACE_STATE") != null) {
             const diag = D3D11RenderPass.traceDiagnostics();
             return std.fmt.allocPrint(
@@ -258,6 +258,21 @@ pub const ControlPlane = struct {
                 },
             ) catch return "ERR|oom\n";
         }
+        if (self.cp) |*cp| {
+            return self.handleRequestWith(request, allocator, cp, cpBackend);
+        }
+        return allocator.dupe(u8, "ERR|not_initialized\n") catch return "ERR|not_initialized\n";
+    }
+
+    fn handleRequestWith(
+        self: *ControlPlane,
+        request: []const u8,
+        allocator: Allocator,
+        backend_ctx: ?*anyopaque,
+        backend_fn: BackendFn,
+    ) []const u8 {
+        const req = std.mem.trim(u8, request, " \r\n\t");
+        const cmd = commandName(req);
         if (isCacheableCommand(cmd)) {
             if (self.tryGetCachedResponse(req, allocator)) |cached| {
                 return cached;
@@ -265,17 +280,21 @@ pub const ControlPlane = struct {
         } else if (isMutatingCommand(cmd)) {
             self.clearResponseCache();
         }
-        if (self.cp) |*cp| {
-            const resp = cp.handleRequest(request) catch |err| {
-                log.warn("handleRequest error: {}", .{err});
-                return allocator.dupe(u8, "ERR|internal_error\n") catch return "ERR|internal_error\n";
-            };
-            if (isCacheableCommand(cmd) and !std.mem.startsWith(u8, std.mem.trim(u8, resp, " \r\n\t"), "ERR|")) {
-                self.updateCachedResponse(req, resp);
-            }
-            return resp;
+
+        const resp = backend_fn(backend_ctx, request, allocator) catch |err| {
+            log.warn("handleRequest error: {}", .{err});
+            return allocator.dupe(u8, "ERR|internal_error\n") catch return "ERR|internal_error\n";
+        };
+        if (isCacheableCommand(cmd) and !std.mem.startsWith(u8, std.mem.trim(u8, resp, " \r\n\t"), "ERR|")) {
+            self.updateCachedResponse(req, resp);
         }
-        return allocator.dupe(u8, "ERR|not_initialized\n") catch return "ERR|not_initialized\n";
+        return resp;
+    }
+
+    fn cpBackend(ctx: ?*anyopaque, request: []const u8, allocator: Allocator) ![]const u8 {
+        _ = allocator;
+        const cp: *ControlPlaneLib = @ptrCast(@alignCast(ctx orelse return error.InvalidContext));
+        return cp.handleRequest(request);
     }
 
     pub fn destroy(self: *ControlPlane) void {
@@ -752,4 +771,42 @@ test "ResponseCache clear keeps ttl" {
     try std.testing.expect(cache.resp == null);
     try std.testing.expectEqual(@as(i128, 0), cache.ts_ns);
     try std.testing.expectEqual(@as(i128, 777), cache.ttl_ns);
+}
+
+const TestBackendCtx = struct {
+    calls: usize = 0,
+};
+
+fn testBackend(ctx: ?*anyopaque, request: []const u8, allocator: Allocator) ![]const u8 {
+    const tb: *TestBackendCtx = @ptrCast(@alignCast(ctx orelse return error.InvalidContext));
+    tb.calls += 1;
+    return try std.fmt.allocPrint(allocator, "OK|calls={d}|req={s}", .{ tb.calls, request });
+}
+
+test "handleRequestWith caches read commands and invalidates on mutating command" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(0),
+    };
+    cp.cache.ttl_ns = 5 * std.time.ns_per_s;
+    defer cp.cache.clear(std.testing.allocator);
+
+    var tb = TestBackendCtx{};
+
+    const r1 = cp.handleRequestWith("TAIL|agent-deck|20", std.testing.allocator, &tb, testBackend);
+    defer std.testing.allocator.free(r1);
+    try std.testing.expectEqual(@as(usize, 1), tb.calls);
+
+    const r2 = cp.handleRequestWith("TAIL|agent-deck|20", std.testing.allocator, &tb, testBackend);
+    defer std.testing.allocator.free(r2);
+    try std.testing.expectEqual(@as(usize, 1), tb.calls);
+    try std.testing.expectEqualStrings(r1, r2);
+
+    const r3 = cp.handleRequestWith("INPUT|agent-deck|echo hi", std.testing.allocator, &tb, testBackend);
+    defer std.testing.allocator.free(r3);
+    try std.testing.expectEqual(@as(usize, 2), tb.calls);
+
+    const r4 = cp.handleRequestWith("TAIL|agent-deck|20", std.testing.allocator, &tb, testBackend);
+    defer std.testing.allocator.free(r4);
+    try std.testing.expectEqual(@as(usize, 3), tb.calls);
 }
