@@ -8,7 +8,7 @@
 /// Version passed to MddBootstrapInitialize.
 /// This determines which DDLM package is required on the user's machine.
 /// Keep this at the lowest version whose DDLM is widely installed.
-pub const bootstrap_majorminor: u32 = 0x00010004; // 1.4
+pub const bootstrap_majorminor: u32 = 0x00010006; // 1.6
 
 /// Version tag for MddBootstrapInitialize (empty = stable release).
 pub const bootstrap_version_tag = [_:0]u16{};
