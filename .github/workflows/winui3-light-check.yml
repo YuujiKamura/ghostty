@@ -37,9 +37,9 @@ jobs:
         run: |
           python xaml/prebuilt/manage_manifest.py --verify
 
-      - name: COM runtime ABI tests
+      - name: Resource binding tests
         shell: pwsh
-        run: zig test ./src/apprt/winui3/com_runtime.zig
+        run: zig test ./src/apprt/winui3/resource_binding_test.zig
 
       - name: WinUI3 runtime contract (strict)
         shell: pwsh
