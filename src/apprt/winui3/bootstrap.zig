@@ -8,7 +8,7 @@ const HRESULT = winrt.HRESULT;
 extern "kernel32" fn SetDllDirectoryW(lpPathName: ?[*:0]const u16) callconv(.winapi) std.os.windows.BOOL;
 
 /// Windows App SDK version constants.
-const WINDOWSAPPSDK_RELEASE_MAJORMINOR: u32 = 0x00010004; // 1.4
+const WINDOWSAPPSDK_RELEASE_MAJORMINOR: u32 = 0x00010006; // 1.6
 const WINDOWSAPPSDK_RELEASE_VERSION_TAG_W = [_:0]u16{}; // stable
 const WINDOWSAPPSDK_RUNTIME_VERSION_UINT64: u64 = 0;
 
