@@ -53,6 +53,10 @@ pub fn init() winrt.WinRTError!void {
     const hr = init_fn(WINDOWSAPPSDK_RELEASE_MAJORMINOR, &WINDOWSAPPSDK_RELEASE_VERSION_TAG_W, WINDOWSAPPSDK_RUNTIME_VERSION_UINT64);
     if (hr < 0) {
         log.err("MddBootstrapInitialize failed: 0x{x:0>8}", .{@as(u32, @bitCast(hr))});
+        if (@as(u32, @bitCast(hr)) == 0x80670016) {
+            log.err("Windows App SDK Runtime is not installed or incomplete.", .{});
+            log.err("Download and run: https://aka.ms/windowsappsdk/1.6/latest/windowsappruntimeinstall-x64.exe", .{});
+        }
         return error.WinRTFailed;
     }
 
