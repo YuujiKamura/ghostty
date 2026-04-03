@@ -217,10 +217,13 @@ pub fn build(b: *std.Build) !void {
         const default_bootstrap_path = std.fs.path.join(b.allocator, &.{ default_user_profile, ".nuget", "packages", "microsoft.windowsappsdk", winappsdk_version, "runtimes", "win10-x64", "native", "Microsoft.WindowsAppRuntime.Bootstrap.dll" }) catch unreachable;
         const bootstrap_dll_path = b.option([]const u8, "winappsdk-bootstrap-dll", "Path to Microsoft.WindowsAppRuntime.Bootstrap.dll") orelse default_bootstrap_path;
 
-        {
+        const has_bootstrap = if (std.fs.accessAbsolute(bootstrap_dll_path, .{})) |_| true else |_| false;
+        if (has_bootstrap) {
             const src: std.Build.LazyPath = .{ .cwd_relative = bootstrap_dll_path };
             const cp = b.addInstallBinFile(src, "Microsoft.WindowsAppRuntime.Bootstrap.dll");
             b.getInstallStep().dependOn(&cp.step);
+        } else {
+            std.debug.print("Warning: Windows App SDK bootstrap DLL not found at {s}, skipping staging.\n", .{bootstrap_dll_path});
         }
 
         // Vtable manifest verification: structural check against known-good slot ordering.
