@@ -56,10 +56,13 @@ pub fn ensureLocale(alloc: std.mem.Allocator) !void {
         }
     }
 
-    // Failure again... fallback to en_US.UTF-8
-    log.warn("setlocale failed with LANG and system default. Falling back to en_US.UTF-8", .{});
-    if (setlocale(LC_ALL, "en_US.UTF-8")) |v| {
-        _ = internal_os.setenv("LANG", "en_US.UTF-8");
+    // Failure again... fallback to a UTF-8 locale.
+    // On Windows (MSVC), "en_US.UTF-8" is not recognized by setlocale;
+    // use ".UTF-8" which lets the OS pick the default language with UTF-8 encoding.
+    const fallback_locale = if (builtin.os.tag == .windows) ".UTF-8" else "en_US.UTF-8";
+    log.warn("setlocale failed with LANG and system default. Falling back to {s}", .{fallback_locale});
+    if (setlocale(LC_ALL, fallback_locale)) |v| {
+        _ = internal_os.setenv("LANG", fallback_locale);
         log.info("setlocale default result={s}", .{v});
         return;
     } else log.warn("setlocale failed even with the fallback, uncertain results", .{});
