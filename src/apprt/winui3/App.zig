@@ -864,6 +864,13 @@ fn createInitialSurfaceContent(self: *App, tab_view: ?*com.ITabView) !void {
     var config = try configpkg.Config.load(alloc);
     defer config.deinit();
 
+    // Windows freetype backend has no font discovery, so CJK glyphs fall back
+    // to Chinese typefaces. Add a Japanese-capable font when none is specified.
+    if (config.@"font-family".list.items.len == 0) {
+        const name = try alloc.dupeZ(u8, "Yu Gothic");
+        try config.@"font-family".list.append(alloc, name);
+    }
+
     var surface = try alloc.create(Surface);
     errdefer alloc.destroy(surface);
     try surface.init(self, self.core_app, &config, null);
@@ -1415,6 +1422,11 @@ pub fn performAction(
             const alloc = self.core_app.alloc;
             var config = try configpkg.Config.load(alloc);
             defer config.deinit();
+
+            if (config.@"font-family".list.items.len == 0) {
+                const name = try alloc.dupeZ(u8, "Yu Gothic");
+                try config.@"font-family".list.append(alloc, name);
+            }
 
             switch (target) {
                 .app => try self.core_app.updateConfig(self, &config),
