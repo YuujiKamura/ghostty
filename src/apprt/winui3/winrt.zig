@@ -267,18 +267,38 @@ pub fn getActivationFactory(comptime T: type, class_name: HSTRING) WinRTError!*T
                 std.os.windows.kernel32.LoadLibraryW(name);
 
             if (module) |mod| {
-                const DllGetActivationFactoryFn = *const fn (HSTRING, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT;
+                // DllGetActivationFactory signature: (HSTRING, IActivationFactory**) -> HRESULT
+                // Returns a generic IActivationFactory; caller must QI for the specific interface.
+                const DllGetActivationFactoryFn = *const fn (HSTRING, *?*anyopaque) callconv(.winapi) HRESULT;
                 const get_factory_fn: ?DllGetActivationFactoryFn = @ptrCast(std.os.windows.kernel32.GetProcAddress(mod, "DllGetActivationFactory"));
 
                 if (get_factory_fn) |f| {
-                    var manual_factory: ?*anyopaque = null;
-                    const mhr = f(class_name, &T.IID, &manual_factory);
-                    log.debug("Manual DllGetActivationFactory hr=0x{x:0>8} factory=0x{x}", .{ @as(u32, @bitCast(mhr)), @intFromPtr(manual_factory) });
-                    if (mhr >= 0) {
-                        log.info("Manual activation success for class={s}", .{class_utf8.slice});
-                        return @ptrCast(@alignCast(manual_factory orelse return error.WinRTFailed));
+                    var activation_factory: ?*anyopaque = null;
+                    const mhr = f(class_name, &activation_factory);
+                    log.debug("DllGetActivationFactory hr=0x{x:0>8} factory=0x{x}", .{ @as(u32, @bitCast(mhr)), @intFromPtr(activation_factory) });
+                    if (mhr >= 0 and activation_factory != null) {
+                        // DllGetActivationFactory returns IActivationFactory.
+                        // Its vtable starts with IUnknown (QI/AddRef/Release).
+                        // Call QueryInterface to get the specific interface T.
+                        const VTable = extern struct {
+                            QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+                            AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+                            Release: *const fn (*anyopaque) callconv(.winapi) u32,
+                        };
+                        const obj: *const *const VTable = @ptrCast(@alignCast(activation_factory.?));
+                        var specific: ?*anyopaque = null;
+                        const qhr = obj.*.QueryInterface(activation_factory.?, &T.IID, &specific);
+                        if (qhr >= 0 and specific != null) {
+                            log.info("Self-contained activation success for class={s}", .{class_utf8.slice});
+                            // Release the activation factory, keep the specific interface
+                            _ = obj.*.Release(activation_factory.?);
+                            return @ptrCast(@alignCast(specific.?));
+                        }
+                        _ = obj.*.Release(activation_factory.?);
                     }
                 }
+            } else {
+                log.warn("LoadLibraryW failed for DLL, self-contained fallback unavailable", .{});
             }
         }
 
@@ -318,16 +338,17 @@ pub fn activateInstance(class_name: HSTRING) WinRTError!*IInspectable {
                 std.os.windows.kernel32.LoadLibraryW(name);
 
             if (module) |mod| {
-                const DllGetActivationFactoryFn = *const fn (HSTRING, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT;
+                const DllGetActivationFactoryFn = *const fn (HSTRING, *?*anyopaque) callconv(.winapi) HRESULT;
                 const get_factory_fn: ?DllGetActivationFactoryFn = @ptrCast(std.os.windows.kernel32.GetProcAddress(mod, "DllGetActivationFactory"));
 
                 if (get_factory_fn) |f| {
-                    var factory: ?*anyopaque = null;
-                    if (f(class_name, &IActivationFactory.IID, &factory) >= 0) {
-                        if (factory) |fac| {
+                    var raw_factory: ?*anyopaque = null;
+                    if (f(class_name, &raw_factory) >= 0) {
+                        if (raw_factory) |fac| {
+                            // DllGetActivationFactory returns IActivationFactory
                             const act_factory: *IActivationFactory = @ptrCast(@alignCast(fac));
                             defer act_factory.release();
-                            log.info("Manual activation success for class={s}", .{class_utf8.slice});
+                            log.info("Self-contained activation success for class={s}", .{class_utf8.slice});
                             return act_factory.activateInstance();
                         }
                     }
