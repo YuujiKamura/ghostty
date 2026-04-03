@@ -1,16 +1,12 @@
 const std = @import("std");
 const log = std.log.scoped(.winui3);
 const winrt = @import("winrt.zig");
+const sdk = @import("sdk_version.zig");
 
 const HRESULT = winrt.HRESULT;
 
 // Dynamic DLL directory registration to avoid manifest SxS hell.
 extern "kernel32" fn SetDllDirectoryW(lpPathName: ?[*:0]const u16) callconv(.winapi) std.os.windows.BOOL;
-
-/// Windows App SDK version constants.
-const WINDOWSAPPSDK_RELEASE_MAJORMINOR: u32 = 0x00010006; // 1.6
-const WINDOWSAPPSDK_RELEASE_VERSION_TAG_W = [_:0]u16{}; // stable
-const WINDOWSAPPSDK_RUNTIME_VERSION_UINT64: u64 = 0;
 
 const MddBootstrapInitializeFn = *const fn (u32, [*:0]const u16, u64) callconv(.winapi) HRESULT;
 const MddBootstrapShutdownFn = *const fn () callconv(.winapi) void;
@@ -50,12 +46,12 @@ pub fn init() winrt.WinRTError!void {
 
     shutdown_fn = @ptrCast(std.os.windows.kernel32.GetProcAddress(module, "MddBootstrapShutdown") orelse return error.WinRTFailed);
 
-    const hr = init_fn(WINDOWSAPPSDK_RELEASE_MAJORMINOR, &WINDOWSAPPSDK_RELEASE_VERSION_TAG_W, WINDOWSAPPSDK_RUNTIME_VERSION_UINT64);
+    const hr = init_fn(sdk.bootstrap_majorminor, &sdk.bootstrap_version_tag, sdk.runtime_version);
     if (hr < 0) {
         log.err("MddBootstrapInitialize failed: 0x{x:0>8}", .{@as(u32, @bitCast(hr))});
         if (@as(u32, @bitCast(hr)) == 0x80670016) {
             log.err("Windows App SDK Runtime is not installed or incomplete.", .{});
-            log.err("Download and run: https://aka.ms/windowsappsdk/1.6/latest/windowsappruntimeinstall-x64.exe", .{});
+            log.err("Download and run: https://aka.ms/windowsappsdk/{s}/latest/windowsappruntimeinstall-x64.exe", .{sdk.display_version});
         }
         return error.WinRTFailed;
     }
