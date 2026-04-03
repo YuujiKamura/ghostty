@@ -14,6 +14,11 @@
 #define SEPARATOR '\x01'
 #define CHUNK_SIZE 16384
 #define MAX_FRAMES 4096
+#ifdef _WIN32
+#define PATH_SEP '\\'
+#else
+#define PATH_SEP '/'
+#endif
 
 static int compare_strings(const void *a, const void *b) {
     return strcmp(*(const char **)a, *(const char **)b);
@@ -122,8 +127,7 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < n; i++) {
         char path[4096];
-        snprintf(path, sizeof(path), "%s/%s", frames_dir, namelist[i]);
-
+        snprintf(path, sizeof(path), "%s%c%s", frames_dir, PATH_SEP, namelist[i]);
         frame_contents[i] = read_file(path, &frame_sizes[i]);
         if (!frame_contents[i]) {
             return 1;

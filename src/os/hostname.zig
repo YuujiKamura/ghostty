@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const posix = std.posix;
 
 pub const LocalHostnameValidationError = error{
@@ -99,23 +100,21 @@ pub fn isLocal(hostname: []const u8) LocalHostnameValidationError!bool {
     if (std.mem.eql(u8, "localhost", hostname)) return true;
 
     // If hostname is not "localhost" it must match our hostname.
-    if (comptime @import("builtin").os.tag == .windows) {
-        const windows = std.os.windows;
-        const kernel32 = struct {
-            pub extern "kernel32" fn GetComputerNameW(lpBuffer: [*]u16, nSize: *windows.DWORD) callconv(.winapi) windows.BOOL;
-        };
-        var buf: [256]u16 = undefined;
-        var len: u32 = buf.len;
-        if (kernel32.GetComputerNameW(&buf, &len) == 0) return false;
-        var utf8_buf: [256]u8 = undefined;
-        const utf8_len = std.unicode.utf16LeToUtf8(&utf8_buf, buf[0..len]) catch return false;
-        return std.mem.eql(u8, hostname, utf8_buf[0..utf8_len]);
+    switch (builtin.os.tag) {
+        .windows => {
+            const windows = @import("windows.zig");
+            var buf: [256:0]u8 = undefined;
+            var nSize: windows.DWORD = buf.len;
+            if (windows.exp.kernel32.GetComputerNameA(&buf, &nSize) == 0) return false;
+            const ourHostname = buf[0..nSize];
+            return std.mem.eql(u8, hostname, ourHostname);
+        },
+        else => {
+            var buf: [posix.HOST_NAME_MAX]u8 = undefined;
+            const ourHostname = try posix.gethostname(&buf);
+            return std.mem.eql(u8, hostname, ourHostname);
+        },
     }
-
-    const host_name_max = if (@hasDecl(posix, "HOST_NAME_MAX") and @TypeOf(posix.HOST_NAME_MAX) != void) posix.HOST_NAME_MAX else 256;
-    var buf: [host_name_max]u8 = undefined;
-    const ourHostname = try posix.gethostname(&buf);
-    return std.mem.eql(u8, hostname, ourHostname);
 }
 
 test "isLocal returns true when provided hostname is localhost" {
@@ -123,24 +122,21 @@ test "isLocal returns true when provided hostname is localhost" {
 }
 
 test "isLocal returns true when hostname is local" {
-    if (comptime @import("builtin").os.tag == .windows) {
-        const windows = std.os.windows;
-        const kernel32 = struct {
-            pub extern "kernel32" fn GetComputerNameW(lpBuffer: [*]u16, nSize: *windows.DWORD) callconv(.winapi) windows.BOOL;
-        };
-        var buf: [256]u16 = undefined;
-        var len: u32 = buf.len;
-        _ = kernel32.GetComputerNameW(&buf, &len);
-        var utf8_buf: [256]u8 = undefined;
-        const utf8_len = std.unicode.utf16LeToUtf8(&utf8_buf, buf[0..len]) catch unreachable;
-        try std.testing.expect(try isLocal(utf8_buf[0..utf8_len]));
-        return;
+    switch (builtin.os.tag) {
+        .windows => {
+            const windows = @import("windows.zig");
+            var buf: [256:0]u8 = undefined;
+            var nSize: windows.DWORD = buf.len;
+            if (windows.exp.kernel32.GetComputerNameA(&buf, &nSize) == 0) return error.GetComputerNameFailed;
+            const localHostname = buf[0..nSize];
+            try std.testing.expect(try isLocal(localHostname));
+        },
+        else => {
+            var buf: [posix.HOST_NAME_MAX]u8 = undefined;
+            const localHostname = try posix.gethostname(&buf);
+            try std.testing.expect(try isLocal(localHostname));
+        },
     }
-
-    const host_name_max = if (@hasDecl(posix, "HOST_NAME_MAX") and @TypeOf(posix.HOST_NAME_MAX) != void) posix.HOST_NAME_MAX else 256;
-    var buf: [host_name_max]u8 = undefined;
-    const localHostname = try posix.gethostname(&buf);
-    try std.testing.expect(try isLocal(localHostname));
 }
 
 test "isLocal returns false when hostname is not local" {

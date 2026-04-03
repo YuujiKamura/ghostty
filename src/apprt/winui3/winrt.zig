@@ -237,14 +237,57 @@ pub const IActivationFactory = extern struct {
 pub fn getActivationFactory(comptime T: type, class_name: HSTRING) WinRTError!*T {
     var factory: ?*anyopaque = null;
     const hr = RoGetActivationFactory(class_name, &T.IID, &factory);
-    if (hr < 0) {
-        const class_utf8 = hstringDebugName(class_name);
-        defer if (class_utf8.owned) std.heap.page_allocator.free(class_utf8.slice);
+    const class_utf8 = hstringDebugName(class_name);
+    defer if (class_utf8.owned) std.heap.page_allocator.free(class_utf8.slice);
+
+    log.debug("getActivationFactory class={s} hr=0x{x:0>8} factory=0x{x}", .{
+        class_utf8.slice,
+        @as(u32, @bitCast(hr)),
+        @intFromPtr(factory),
+    });
+
+    if (hr >= 0) return @ptrCast(@alignCast(factory orelse return error.WinRTFailed));
+
+    // Fallback for self-contained/unpackaged mode where registration is missing.
+    // If RoGetActivationFactory fails with CLASS_NOT_REGISTERED (0x80040154),
+    // try to load the implementation DLL directly and call DllGetActivationFactory.
+    if (@as(u32, @bitCast(hr)) == 0x80040154) {
+        // Map namespaces to implementation DLLs.
+        const dll_name: ?[*:0]const u16 = if (std.mem.startsWith(u8, class_utf8.slice, "Microsoft.UI.Xaml"))
+            std.unicode.utf8ToUtf16LeStringLiteral("Microsoft.ui.xaml.dll")
+        else if (std.mem.startsWith(u8, class_utf8.slice, "Microsoft.UI.Dispatching"))
+            std.unicode.utf8ToUtf16LeStringLiteral("Microsoft.WindowsAppRuntime.dll")
+        else if (std.mem.startsWith(u8, class_utf8.slice, "Microsoft.Windows.ApplicationModel.Resources"))
+            std.unicode.utf8ToUtf16LeStringLiteral("Microsoft.Windows.ApplicationModel.Resources.dll")
+        else
+            null;
+
+        if (dll_name) |name| {
+            const module = std.os.windows.kernel32.GetModuleHandleW(name) orelse
+                std.os.windows.kernel32.LoadLibraryW(name);
+
+            if (module) |mod| {
+                const DllGetActivationFactoryFn = *const fn (HSTRING, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT;
+                const get_factory_fn: ?DllGetActivationFactoryFn = @ptrCast(std.os.windows.kernel32.GetProcAddress(mod, "DllGetActivationFactory"));
+
+                if (get_factory_fn) |f| {
+                    var manual_factory: ?*anyopaque = null;
+                    const mhr = f(class_name, &T.IID, &manual_factory);
+                    log.debug("Manual DllGetActivationFactory hr=0x{x:0>8} factory=0x{x}", .{ @as(u32, @bitCast(mhr)), @intFromPtr(manual_factory) });
+                    if (mhr >= 0) {
+                        log.info("Manual activation success for class={s}", .{class_utf8.slice});
+                        return @ptrCast(@alignCast(manual_factory orelse return error.WinRTFailed));
+                    }
+                }
+            }
+        }
+
         log.err(
             "RoGetActivationFactory failed class={s} hr=0x{x:0>8}",
             .{ class_utf8.slice, @as(u32, @bitCast(hr)) },
         );
     }
+
     try hrCheck(hr);
     return @ptrCast(@alignCast(factory orelse return error.WinRTFailed));
 }
@@ -253,14 +296,51 @@ pub fn getActivationFactory(comptime T: type, class_name: HSTRING) WinRTError!*T
 pub fn activateInstance(class_name: HSTRING) WinRTError!*IInspectable {
     var instance: ?*IInspectable = null;
     const hr = RoActivateInstance(class_name, &instance);
-    if (hr < 0) {
+    if (hr >= 0) return instance orelse error.WinRTFailed;
+
+    // Fallback for self-contained/unpackaged mode.
+    if (@as(u32, @bitCast(hr)) == 0x80040154) {
         const class_utf8 = hstringDebugName(class_name);
         defer if (class_utf8.owned) std.heap.page_allocator.free(class_utf8.slice);
+
+        // Map namespaces to implementation DLLs.
+        const dll_name: ?[*:0]const u16 = if (std.mem.startsWith(u8, class_utf8.slice, "Microsoft.UI.Xaml"))
+            std.unicode.utf8ToUtf16LeStringLiteral("Microsoft.ui.xaml.dll")
+        else if (std.mem.startsWith(u8, class_utf8.slice, "Microsoft.UI.Dispatching"))
+            std.unicode.utf8ToUtf16LeStringLiteral("Microsoft.WindowsAppRuntime.dll")
+        else if (std.mem.startsWith(u8, class_utf8.slice, "Microsoft.Windows.ApplicationModel.Resources"))
+            std.unicode.utf8ToUtf16LeStringLiteral("Microsoft.Windows.ApplicationModel.Resources.dll")
+        else
+            null;
+
+        if (dll_name) |name| {
+            const module = std.os.windows.kernel32.GetModuleHandleW(name) orelse
+                std.os.windows.kernel32.LoadLibraryW(name);
+
+            if (module) |mod| {
+                const DllGetActivationFactoryFn = *const fn (HSTRING, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT;
+                const get_factory_fn: ?DllGetActivationFactoryFn = @ptrCast(std.os.windows.kernel32.GetProcAddress(mod, "DllGetActivationFactory"));
+
+                if (get_factory_fn) |f| {
+                    var factory: ?*anyopaque = null;
+                    if (f(class_name, &IActivationFactory.IID, &factory) >= 0) {
+                        if (factory) |fac| {
+                            const act_factory: *IActivationFactory = @ptrCast(@alignCast(fac));
+                            defer act_factory.release();
+                            log.info("Manual activation success for class={s}", .{class_utf8.slice});
+                            return act_factory.activateInstance();
+                        }
+                    }
+                }
+            }
+        }
+
         log.err(
             "RoActivateInstance failed class={s} hr=0x{x:0>8}",
             .{ class_utf8.slice, @as(u32, @bitCast(hr)) },
         );
     }
+
     try hrCheck(hr);
     return instance orelse error.WinRTFailed;
 }

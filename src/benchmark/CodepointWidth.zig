@@ -113,6 +113,11 @@ fn wcwidthFn(c: u32) c_int {
 }
 
 fn stepWcwidth(ptr: *anyopaque) Benchmark.Error!void {
+    if (comptime builtin.os.tag == .windows) {
+        log.warn("wcwidth is not available on Windows", .{});
+        return;
+    }
+
     const self: *CodepointWidth = @ptrCast(@alignCast(ptr));
 
     const f = self.data_f orelse return;

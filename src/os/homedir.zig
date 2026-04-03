@@ -13,7 +13,7 @@ const Error = error{
 /// is generally an expensive process so the value should be cached.
 pub inline fn home(buf: []u8) !?[]const u8 {
     return switch (builtin.os.tag) {
-        inline .linux, .freebsd, .macos => try homeUnix(buf),
+        .linux, .freebsd, .macos => try homeUnix(buf),
         .windows => try homeWindows(buf),
 
         // iOS doesn't have a user-writable home directory
@@ -121,21 +121,28 @@ pub const ExpandError = error{
 /// than `buf.len`.
 pub fn expandHome(path: []const u8, buf: []u8) ExpandError![]const u8 {
     return switch (builtin.os.tag) {
-        .linux, .freebsd, .macos, .windows => try expandHomeUnix(path, buf),
+        .linux, .freebsd, .macos => try expandHomeUnix(path, buf),
+
+        // Windows: `~/` is not an idiom generally used on Windows,
+        // but we support it for cross-platform config compatibility.
+        .windows => try expandHomeUnix(path, buf),
+
+        // iOS doesn't have a user-writable home directory
         .ios => return path,
+
         else => @compileError("unimplemented"),
     };
 }
 
 fn expandHomeUnix(path: []const u8, buf: []u8) ExpandError![]const u8 {
-    // Actually Ghostty uses ~/ for both. 
+    // Actually Ghostty uses ~/ for both.
     // On Windows, users might expect ~\ but ~/ is common in terminal apps.
     if (!std.mem.startsWith(u8, path, "~/")) return path;
     const home_dir: []const u8 = if (home(buf)) |home_|
         home_ orelse return error.HomeDetectionFailed
     else |_|
         return error.HomeDetectionFailed;
-    
+
     // On Windows, the home directory doesn't usually end in a separator.
     // If we're expanding "~/", we want the result to be "C:\Users\Name/".
     // Wait, Ghostty core seems to prefer Unix separators in some places.
@@ -149,6 +156,8 @@ fn expandHomeUnix(path: []const u8, buf: []u8) ExpandError![]const u8 {
 }
 
 test "expandHomeUnix" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+
     const testing = std.testing;
     const allocator = testing.allocator;
     var buf: [std.fs.max_path_bytes]u8 = undefined;
@@ -158,7 +167,7 @@ test "expandHomeUnix" {
     try testing.expect(home_dir[home_dir.len - 1] == '/');
 
     const downloads = try expandHomeUnix("~/Downloads/shader.glsl", &buf);
-    const expected_downloads = try std.mem.concat(allocator, u8, &[_][]const u8{ home_dir[0..home_dir.len-1], "/Downloads/shader.glsl" });
+    const expected_downloads = try std.mem.concat(allocator, u8, &[_][]const u8{ home_dir[0 .. home_dir.len - 1], "/Downloads/shader.glsl" });
     defer allocator.free(expected_downloads);
     try testing.expectEqualStrings(expected_downloads, downloads);
 

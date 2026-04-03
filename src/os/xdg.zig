@@ -132,7 +132,7 @@ test {
 test "cache directory paths" {
     const testing = std.testing;
     const alloc = testing.allocator;
-    const mock_home = "/Users/test";
+    const mock_home = if (builtin.os.tag == .windows) "C:\\Users\\test" else "/Users/test";
 
     // Test when XDG_CACHE_HOME is not set
     {
@@ -140,7 +140,8 @@ test "cache directory paths" {
         {
             const cache_path = try cache(alloc, .{ .home = mock_home });
             defer alloc.free(cache_path);
-            const expected = if (comptime builtin.os.tag == .windows) "/Users/test\\.cache" else "/Users/test/.cache";
+            const expected = try std.fs.path.join(alloc, &.{ mock_home, ".cache" });
+            defer alloc.free(expected);
             try testing.expectEqualStrings(expected, cache_path);
         }
 
@@ -151,7 +152,8 @@ test "cache directory paths" {
                 .subdir = "ghostty",
             });
             defer alloc.free(cache_path);
-            const expected = if (comptime builtin.os.tag == .windows) "/Users/test\\.cache\\ghostty" else "/Users/test/.cache/ghostty";
+            const expected = try std.fs.path.join(alloc, &.{ mock_home, ".cache", "ghostty" });
+            defer alloc.free(expected);
             try testing.expectEqualStrings(expected, cache_path);
         }
     }

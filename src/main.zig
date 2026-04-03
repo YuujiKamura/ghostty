@@ -15,6 +15,9 @@ const entrypoint = switch (build_config.exe_entrypoint) {
 /// The main entrypoint for the program.
 pub const main = entrypoint.main;
 
+/// Zig 0.15.2 + link_libc + subsystem=.Windows: the MSVC linker needs a
+/// WinMain-family symbol. start.zig detects wWinMain in root and generates
+/// wWinMainCRTStartup. We delegate to main() which delegates to the entrypoint.
 /// Standard options such as logger overrides.
 pub const std_options: std.Options = if (@hasDecl(entrypoint, "std_options"))
     entrypoint.std_options

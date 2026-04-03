@@ -29,8 +29,9 @@ pub fn init(b: *std.Build, cfg: *const Config, deps: *const SharedDeps) !Ghostty
     // Set PIE if requested
     if (cfg.pie) exe.pie = true;
 
-    // Add the shared dependencies
-    _ = try deps.add(exe);
+    // Add the shared dependencies. When building only lib-vt we skip
+    // heavy deps so cross-compilation doesn't pull in GTK, etc.
+    if (!cfg.emit_lib_vt) _ = try deps.add(exe);
 
     // Check for possible issues
     try checkNixShell(exe, cfg);
@@ -48,7 +49,12 @@ pub fn init(b: *std.Build, cfg: *const Config, deps: *const SharedDeps) !Ghostty
     // OS-specific
     switch (cfg.target.result.os.tag) {
         .windows => {
-            exe.subsystem = .Windows;
+            // TODO: restore .Windows subsystem once WinMain entry is properly
+            // integrated with Zig 0.15 start.zig runtime initialization.
+            // For now, use console subsystem to let start.zig handle entry
+            // via C main, which ensures Zig runtime is fully initialized.
+            // Side effect: a console window briefly flashes on launch.
+            exe.win32_manifest = b.path("dist/windows/ghostty.manifest");
             exe.addWin32ResourceFile(.{
                 .file = b.path("dist/windows/ghostty.rc"),
             });
