@@ -45,7 +45,7 @@ jobs:
         shell: pwsh
         run: |
           $env:GHOSTTY_WINUI3_PREBUILT_ONLY = "1"
-          bash ./build-winui3.sh --release=fast
+          bash ./build-winui3.sh --release=fast -Dcpu=baseline
 
       - name: List Artifacts
         shell: pwsh
