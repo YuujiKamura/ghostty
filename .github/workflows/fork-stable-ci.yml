@@ -56,4 +56,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ghostty-windows-winui3
-          path: zig-out-winui3/bin/
+          path: |
+            zig-out-winui3/bin/
+            zig-out-winui3/share/
