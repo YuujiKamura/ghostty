@@ -2,49 +2,49 @@
   {
     "Name": "phase1-ghost-demo-smoke",
     "Status": "PASS",
-    "Time": 2802,
+    "Time": 2775,
     "Error": null
   },
   {
     "Name": "phase1-noise-ghost-demo",
     "Status": "PASS",
-    "Time": 5036,
+    "Time": 5027,
     "Error": null
   },
   {
     "Name": "test-02b-ime-overlay",
     "Status": "PASS",
-    "Time": 38,
+    "Time": 67,
     "Error": null
   },
   {
     "Name": "test-02c-drag-bar",
     "Status": "PASS",
-    "Time": 65,
+    "Time": 63,
     "Error": null
   },
   {
     "Name": "test-03-window-ops",
     "Status": "PASS",
-    "Time": 1231,
+    "Time": 1391,
     "Error": null
   },
   {
     "Name": "phase2-session-detect",
     "Status": "PASS",
-    "Time": 19,
+    "Time": 31,
     "Error": null
   },
   {
     "Name": "phase2-send-show-roundtrip",
     "Status": "PASS",
-    "Time": 3766,
+    "Time": 3787,
     "Error": null
   },
   {
     "Name": "phase3-ascii-input",
     "Status": "PASS",
-    "Time": 3754,
+    "Time": 3755,
     "Error": null
   },
   {

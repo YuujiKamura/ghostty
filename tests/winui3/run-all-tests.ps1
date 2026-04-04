@@ -12,7 +12,8 @@
 param(
     [string]$ExePath,
     [switch]$SkipBuild,
-    [switch]$OnlyFailed
+    [switch]$OnlyFailed,
+    [switch]$IncludeStress
 )
 
 $ErrorActionPreference = 'Stop'
@@ -392,6 +393,31 @@ if (-not (Test-Path $deckpilot)) {
         }
     } else {
         Write-Host "  SKIP: phase3-japanese-input" -ForegroundColor DarkGray
+    }
+}
+
+# ============================================================
+# Phase 4: Stress tests (opt-in via -IncludeStress)
+# ============================================================
+Write-Host "`n=== Phase 4: Stress tests ===" -ForegroundColor Cyan
+
+if (-not $IncludeStress) {
+    Write-Host "  SKIP: stress tests (use -IncludeStress to run)" -ForegroundColor DarkGray
+} else {
+    $stressScripts = @(
+        @{ Name = "stress-resize-crash";   Path = Join-Path $PSScriptRoot "..\self_diagnosis\test_resize_crash.ps1" }
+        @{ Name = "stress-repro-197";      Path = Join-Path $PSScriptRoot "..\..\scripts\repro-issue-197.ps1" }
+        @{ Name = "stress-window-ops";     Path = Join-Path $PSScriptRoot "..\..\scripts\winui3-stress-test.ps1" }
+        @{ Name = "stress-soak";           Path = Join-Path $PSScriptRoot "..\..\scripts\winui3-soak-test.ps1" }
+    )
+    foreach ($s in $stressScripts) {
+        if (-not (Test-Path $s.Path)) {
+            Write-Host "  SKIP: $($s.Name) (not found)" -ForegroundColor Yellow
+            continue
+        }
+        Invoke-Test -Name $s.Name -Block {
+            & $s.Path -ExePath $ExePath -Hwnd $hwnd -ProcessId $proc.Id 2>&1 | Write-Host
+        }
     }
 }
 
