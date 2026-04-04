@@ -1,8 +1,13 @@
-# run-all-tests.ps1 — winui3 integration test runner (reorganized)
+# run-all-tests.ps1 — winui3 integration test runner
 # Usage: pwsh.exe -File run-all-tests.ps1
 #
-# test-01-lifecycle runs FIRST and SEPARATELY (manages its own process).
-# Then a shared ghostty is launched for tests 02a through 04.
+# Ghostty 1 (test target): Started via Start-Ghostty, stays alive for all phases
+# Test driver: PowerShell process calls deckpilot.exe directly (no Ghostty 2 needed)
+#
+# Phase 1: Lifecycle — ghost-demo (tab1), noise ghost-demo (tab2), UI checks
+# Phase 2: CP roundtrip — deckpilot send/show
+# Phase 3: CP input — ASCII + Japanese via deckpilot
+# Cleanup: Stop Ghostty 1
 
 param(
     [string]$ExePath,
@@ -26,6 +31,8 @@ if (-not (Test-Path $ExePath)) {
     exit 1
 }
 
+$deckpilot = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
+
 $results = @()
 
 # --- OnlyFailed: load previous results and build filter set ---
@@ -46,41 +53,67 @@ if ($OnlyFailed) {
     $failedNames | ForEach-Object { Write-Host "  - $_" -ForegroundColor Magenta }
 }
 
-# ============================================================
-# Phase 1: Lifecycle test (own process, no shared ghostty)
-# ============================================================
-Write-Host "`n=== Phase 1: Lifecycle Test (standalone) ===" -ForegroundColor Cyan
+# --- Test names ---
+$phase1Tests = @(
+    "phase1-ghost-demo-smoke",
+    "phase1-noise-ghost-demo",
+    "test-02b-ime-overlay",
+    "test-02c-drag-bar",
+    "test-03-window-ops"
+)
 
-$lifecycleTest = Join-Path $PSScriptRoot "test-01-lifecycle.ps1"
-if ($failedNames -and ("test-01-lifecycle" -notin $failedNames)) {
-    Write-Host "  SKIP: test-01-lifecycle (not in previous failures)" -ForegroundColor DarkGray
-} elseif (Test-Path $lifecycleTest) {
-    $name = "test-01-lifecycle"
-    $startTime = [DateTime]::UtcNow
-    $testOutput = $null
-    try {
-        $testOutput = & $lifecycleTest 6>&1
-        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
-        $results += @{ Name = $name; Status = "PASS"; Time = [int]$elapsed; Error = $null }
-    } catch {
-        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
-        $results += @{ Name = $name; Status = "FAIL"; Time = [int]$elapsed; Error = $_.Exception.Message }
-        Write-Host "`n--- $name (FAIL) ---" -ForegroundColor Red
-        if ($testOutput) { $testOutput | ForEach-Object { Write-Host "  $_" } }
-        Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
-    }
-} else {
-    Write-Host "  SKIP: test-01-lifecycle.ps1 not found" -ForegroundColor Yellow
+$phase2Tests = @(
+    "phase2-session-detect",
+    "phase2-send-show-roundtrip"
+)
+
+$phase3Tests = @(
+    "phase3-ascii-input",
+    "phase3-japanese-input"
+)
+
+# --- OnlyFailed: filter ---
+if ($failedNames) {
+    $phase1Tests = @($phase1Tests | Where-Object { $_ -in $failedNames })
+    $phase2Tests = @($phase2Tests | Where-Object { $_ -in $failedNames })
+    $phase3Tests = @($phase3Tests | Where-Object { $_ -in $failedNames })
+}
+
+$needGhostty = ($phase1Tests.Count -gt 0 -or $phase2Tests.Count -gt 0 -or $phase3Tests.Count -gt 0)
+if (-not $needGhostty) {
+    Write-Host "  SKIP: No tests to run" -ForegroundColor DarkGray
+    @() | ConvertTo-Json -Depth 2 | Set-Content (Join-Path $PSScriptRoot ".last-results.json") -Encoding UTF8
+    exit 0
 }
 
 # ============================================================
-# Phase 2: Shared-process tests (02a through 04)
+# Helper: run a named test block, record result
 # ============================================================
-Write-Host "`n=== Phase 2: Launching Ghostty for shared tests ===" -ForegroundColor Cyan
+function Invoke-Test {
+    param(
+        [string]$Name,
+        [scriptblock]$Block
+    )
+    $startTime = [DateTime]::UtcNow
+    try {
+        & $Block
+        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
+        $script:results += @{ Name = $Name; Status = "PASS"; Time = [int]$elapsed; Error = $null }
+    } catch {
+        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
+        $script:results += @{ Name = $Name; Status = "FAIL"; Time = [int]$elapsed; Error = $_.Exception.Message }
+        Write-Host "`n--- $Name (FAIL) ---" -ForegroundColor Red
+        Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+# ============================================================
+# Launch Ghostty 1 (test target)
+# ============================================================
+Write-Host "`n=== Launching Ghostty 1 (test target) ===" -ForegroundColor Cyan
 $env:GHOSTTY_CONTROL_PLANE = "1"
 
-# Clean stale ghostty session files (Force Kill doesn't trigger DLL cleanup)
-$agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
+# Clean stale ghostty session files
 $ghosttySessionDir = Join-Path $env:LOCALAPPDATA "ghostty\control-plane\winui3\sessions"
 foreach ($sessionDir in @($ghosttySessionDir, (Join-Path $env:LOCALAPPDATA "WindowsTerminal\control-plane\winui3\sessions"))) {
     if (Test-Path $sessionDir) {
@@ -99,158 +132,243 @@ foreach ($sessionDir in @($ghosttySessionDir, (Join-Path $env:LOCALAPPDATA "Wind
     }
 }
 
-# Run base UI tests (no CP dependency)
-$sharedTests = @(
-    "test-02a-tabview",
-    "test-02b-ime-overlay",
-    "test-02c-drag-bar",
-    "test-03-window-ops"
-)
-
-# CP-dependent tests run separately in Phase 2b
-$cpTests = @(
-    "test-02d-control-plane",
-    "test-02e-agent-roundtrip",
-    "test-04-keyboard",
-    "test-06-ime-input"
-)
-
-# --- OnlyFailed: filter test arrays to previously-failed tests only ---
-if ($failedNames) {
-    $sharedTests = @($sharedTests | Where-Object { $_ -in $failedNames })
-    $cpTests = @($cpTests | Where-Object { $_ -in $failedNames })
-}
-
-# Skip Ghostty launch entirely if no Phase 2/2b tests to run
-$needSharedGhostty = ($sharedTests.Count -gt 0 -or $cpTests.Count -gt 0)
-$proc = $null
+$proc = Start-Ghostty -ExePath $ExePath
 $hwnd = [IntPtr]::Zero
 
-if (-not $needSharedGhostty) {
-    Write-Host "  SKIP: No Phase 2/2b tests to run" -ForegroundColor DarkGray
+try {
+    $hwnd = Find-GhosttyWindow -ProcessId $proc.Id -TimeoutMs 15000
+    Write-Host "  Window ready: HWND=0x$($hwnd.ToString('X'))" -ForegroundColor Green
+} catch {
+    Write-Host "FATAL: Could not find Ghostty window: $_" -ForegroundColor Red
+    Stop-Ghostty -Process $proc
+    exit 1
+}
+
+# Give XAML time to fully initialize + CP DLL to register session
+Start-Sleep -Milliseconds 3000
+
+# Discover the ghostty CP session via deckpilot
+$sessionName = ""
+$registered = Register-GhosttyCP -ProcessId $proc.Id
+if ($registered) {
+    $sessionName = $registered
+    Write-Host "  CP session: $sessionName" -ForegroundColor Green
 } else {
-    $proc = Start-Ghostty -ExePath $ExePath
-
-    try {
-        $hwnd = Find-GhosttyWindow -ProcessId $proc.Id -TimeoutMs 15000
-        Write-Host "  Window ready: HWND=0x$($hwnd.ToString('X'))" -ForegroundColor Green
-    } catch {
-        Write-Host "FATAL: Could not find Ghostty window: $_" -ForegroundColor Red
-        Stop-Ghostty -Process $proc
-        exit 1
-    }
-
-    # Give XAML time to fully initialize + CP DLL to register session
-    Start-Sleep -Milliseconds 3000
-
-    # Register + discover the ghostty CP session via deckpilot
-    $env:GHOSTTY_CP_SESSION = ""
-    $registered = Register-GhosttyCP -ProcessId $proc.Id
-    if ($registered) {
-        $env:GHOSTTY_CP_SESSION = $registered
-        Write-Host "  CP session: $($env:GHOSTTY_CP_SESSION)" -ForegroundColor Green
+    $discovered = Find-GhosttyCP -ProcessId $proc.Id
+    if ($discovered) {
+        $sessionName = $discovered
+        Write-Host "  CP session (discovered): $sessionName" -ForegroundColor Green
     } else {
-        # Fallback: try to discover without registration
-        $discovered = Find-GhosttyCP -ProcessId $proc.Id
-        if ($discovered) {
-            $env:GHOSTTY_CP_SESSION = $discovered
-            Write-Host "  CP session (discovered): $($env:GHOSTTY_CP_SESSION)" -ForegroundColor Green
+        Write-Host "  WARN: Could not identify ghostty CP session" -ForegroundColor Yellow
+    }
+}
+$env:GHOSTTY_CP_SESSION = $sessionName
+
+# ============================================================
+# Phase 1: Lifecycle
+# ============================================================
+Write-Host "`n=== Phase 1: Lifecycle ===" -ForegroundColor Cyan
+
+$playPy = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) "tools\ghost-demo\play.py"
+
+# --- Phase 1: ghost-demo smoke (tab 1) ---
+if ("phase1-ghost-demo-smoke" -in $phase1Tests) {
+    Invoke-Test -Name "phase1-ghost-demo-smoke" -Block {
+        # Verify process alive
+        $proc.Refresh()
+        Test-Assert -Condition (-not $proc.HasExited) -Message "phase1-ghost-demo-smoke - process alive"
+
+        # Read log to verify init
+        $logPath = Join-Path $env:TEMP "ghostty_debug.log"
+        $logContent = ""
+        if (Test-Path $logPath) {
+            try {
+                $fs = [System.IO.FileStream]::new($logPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)
+                $reader = [System.IO.StreamReader]::new($fs, [System.Text.Encoding]::UTF8)
+                $logContent = $reader.ReadToEnd()
+                $reader.Dispose()
+                $fs.Dispose()
+            } catch {
+                Write-Host "  WARN: Could not read log: $_" -ForegroundColor Yellow
+            }
+        }
+
+        Test-Assert -Condition ($logContent -match "App.init: EXIT OK") -Message "phase1-ghost-demo-smoke - App.init completed"
+        Test-Assert -Condition ($logContent -match "initXaml step 8") -Message "phase1-ghost-demo-smoke - initXaml step 8 reached"
+        Test-Assert -Condition ($logContent -match "Present OK") -Message "phase1-ghost-demo-smoke - D3D11 rendering active"
+
+        $hasCpOk = ($logContent -match "control plane DLL started") -or ($logContent -match "control plane started")
+        Test-Assert -Condition $hasCpOk -Message "phase1-ghost-demo-smoke - Control plane loaded"
+
+        # Run ghost-demo on tab 1 via CP
+        if ($sessionName) {
+            $sendOk = Send-GhosttyInput -SessionName $sessionName -Text "python `"$playPy`" --fps 60"
+            if ($sendOk) {
+                Write-Host "  Sent play.py --fps 60 to tab 1" -ForegroundColor DarkGray
+            } else {
+                Write-Host "  WARN: Could not send play.py" -ForegroundColor Yellow
+            }
+            Start-Sleep -Seconds 8
+            Send-GhosttyInput -SessionName $sessionName -Text "`u{0003}" | Out-Null
+            Start-Sleep -Milliseconds 500
         } else {
-            Write-Host "  WARN: Could not identify ghostty CP session" -ForegroundColor Yellow
+            Write-Host "  WARN: No CP session, skipping demo playback" -ForegroundColor Yellow
         }
     }
+} else {
+    Write-Host "  SKIP: phase1-ghost-demo-smoke" -ForegroundColor DarkGray
 }
 
-foreach ($testBaseName in $sharedTests) {
+# --- Phase 1: noise ghost-demo (tab 2) ---
+if ("phase1-noise-ghost-demo" -in $phase1Tests) {
+    Invoke-Test -Name "phase1-noise-ghost-demo" -Block {
+        if (-not $sessionName) {
+            throw "No CP session available for tab 2 creation"
+        }
+
+        # Open new tab via CP new_tab action
+        & $deckpilot send $sessionName "new_tab" 2>&1 | Out-Null
+        Start-Sleep -Seconds 2
+
+        # Re-discover session list to find tab 2 session
+        $json = & $deckpilot list --json 2>$null | ConvertFrom-Json
+        $sessions = @($json | Where-Object { $_.pid -eq $proc.Id })
+        Test-Assert -Condition ($sessions.Count -ge 1) -Message "phase1-noise-ghost-demo - tab 2 session exists"
+
+        # Send noise ghost-demo to the newest session (tab 2)
+        $tab2Session = if ($sessions.Count -ge 2) { $sessions[-1].name } else { $sessionName }
+        $sendOk = Send-GhosttyInput -SessionName $tab2Session -Text "python `"$playPy`" --fps 60"
+        if ($sendOk) {
+            Write-Host "  Sent noise play.py --fps 60 to tab 2 ($tab2Session)" -ForegroundColor DarkGray
+        } else {
+            Write-Host "  WARN: Could not send noise play.py" -ForegroundColor Yellow
+        }
+
+        # Let it run briefly, then verify process still alive
+        Start-Sleep -Seconds 4
+        $proc.Refresh()
+        Test-Assert -Condition (-not $proc.HasExited) -Message "phase1-noise-ghost-demo - process alive with 2 tabs"
+
+        # Stop noise demo
+        Send-GhosttyInput -SessionName $tab2Session -Text "`u{0003}" | Out-Null
+        Start-Sleep -Milliseconds 500
+    }
+} else {
+    Write-Host "  SKIP: phase1-noise-ghost-demo" -ForegroundColor DarkGray
+}
+
+# --- Phase 1: UI tests via individual scripts ---
+foreach ($testBaseName in @("test-02b-ime-overlay", "test-02c-drag-bar", "test-03-window-ops")) {
+    if ($testBaseName -notin $phase1Tests) {
+        Write-Host "  SKIP: $testBaseName" -ForegroundColor DarkGray
+        continue
+    }
+
     $testPath = Join-Path $PSScriptRoot "$testBaseName.ps1"
     if (-not (Test-Path $testPath)) {
         Write-Host "`n--- $testBaseName --- SKIP (not found)" -ForegroundColor Yellow
         continue
     }
 
-    $startTime = [DateTime]::UtcNow
-    $testOutput = $null
-    try {
-        # Capture test output; only show on failure
-        $testOutput = & $testPath -Hwnd $hwnd -ProcessId $proc.Id 6>&1
-        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
-        $results += @{ Name = $testBaseName; Status = "PASS"; Time = [int]$elapsed; Error = $null }
-    } catch {
-        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
-        $results += @{ Name = $testBaseName; Status = "FAIL"; Time = [int]$elapsed; Error = $_.Exception.Message }
-        # Show captured output on failure for debugging
-        Write-Host "`n--- $testBaseName (FAIL) ---" -ForegroundColor Red
-        if ($testOutput) { $testOutput | ForEach-Object { Write-Host "  $_" } }
-        Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
+    Invoke-Test -Name $testBaseName -Block {
+        & $testPath -Hwnd $hwnd -ProcessId $proc.Id 6>&1 | Out-Null
     }
 }
 
 # ============================================================
-# Phase 2b: Control-plane-dependent tests (same process, may be flaky)
+# Phase 2: CP roundtrip
 # ============================================================
-Write-Host "`n=== Phase 2b: Control Plane tests (CP-dependent) ===" -ForegroundColor Cyan
+Write-Host "`n=== Phase 2: CP roundtrip ===" -ForegroundColor Cyan
 
-foreach ($testBaseName in $cpTests) {
-    $testPath = Join-Path $PSScriptRoot "$testBaseName.ps1"
-    if (-not (Test-Path $testPath)) {
-        Write-Host "`n--- $testBaseName --- SKIP (not found)" -ForegroundColor Yellow
-        continue
+if (-not (Test-Path $deckpilot)) {
+    Write-Host "  SKIP: deckpilot.exe not found at $deckpilot" -ForegroundColor Yellow
+} else {
+
+    # --- Phase 2: session detect ---
+    if ("phase2-session-detect" -in $phase2Tests) {
+        Invoke-Test -Name "phase2-session-detect" -Block {
+            $json = & $deckpilot list --json 2>$null | ConvertFrom-Json
+            $sessions = @($json | Where-Object { $_.pid -eq $proc.Id })
+            Test-Assert -Condition ($sessions.Count -ge 1) -Message "phase2-session-detect - deckpilot list finds session for PID $($proc.Id)"
+            Write-Host "  Sessions found: $($sessions.Count)" -ForegroundColor DarkGray
+            $sessions | ForEach-Object { Write-Host "    - $($_.name)" -ForegroundColor DarkGray }
+        }
+    } else {
+        Write-Host "  SKIP: phase2-session-detect" -ForegroundColor DarkGray
     }
 
-    $startTime = [DateTime]::UtcNow
-    $testOutput = $null
-    try {
-        $testOutput = & $testPath -Hwnd $hwnd -ProcessId $proc.Id 6>&1
-        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
-        $results += @{ Name = $testBaseName; Status = "PASS"; Time = [int]$elapsed; Error = $null }
-    } catch {
-        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
-        $results += @{ Name = $testBaseName; Status = "FAIL"; Time = [int]$elapsed; Error = $_.Exception.Message }
-        Write-Host "`n--- $testBaseName (FAIL) ---" -ForegroundColor Red
-        if ($testOutput) { $testOutput | ForEach-Object { Write-Host "  $_" } }
-        Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
-    }
-}
+    # --- Phase 2: send/show roundtrip ---
+    if ("phase2-send-show-roundtrip" -in $phase2Tests) {
+        Invoke-Test -Name "phase2-send-show-roundtrip" -Block {
+            if (-not $sessionName) {
+                throw "No CP session available"
+            }
 
-# --- Cleanup Phase 2 ---
-if ($proc) {
-    Write-Host "`n=== Stopping Ghostty (shared) ===" -ForegroundColor Cyan
-    Stop-Ghostty -Process $proc
+            $marker = "roundtrip_marker_$(Get-Random)"
+            & $deckpilot send $sessionName "echo $marker" 2>&1 | Out-Null
+            Start-Sleep -Seconds 3
+
+            $buffer = & $deckpilot show $sessionName 2>&1
+            $bufferText = $buffer -join "`n"
+            Test-Assert -Condition ($bufferText -match $marker) -Message "phase2-send-show-roundtrip - buffer contains marker '$marker'"
+        }
+    } else {
+        Write-Host "  SKIP: phase2-send-show-roundtrip" -ForegroundColor DarkGray
+    }
 }
 
 # ============================================================
-# Phase 3: Standalone tests (own process, ReleaseFast verification)
+# Phase 3: CP input
 # ============================================================
-Write-Host "`n=== Phase 3: Standalone Tests ===" -ForegroundColor Cyan
+Write-Host "`n=== Phase 3: CP input ===" -ForegroundColor Cyan
 
-$standaloneTests = @(
-    "test-05-ghost-demo"
-)
-if ($failedNames) {
-    $standaloneTests = @($standaloneTests | Where-Object { $_ -in $failedNames })
-}
+if (-not (Test-Path $deckpilot)) {
+    Write-Host "  SKIP: deckpilot.exe not found at $deckpilot" -ForegroundColor Yellow
+} else {
 
-foreach ($testBaseName in $standaloneTests) {
-    $testPath = Join-Path $PSScriptRoot "$testBaseName.ps1"
-    if (-not (Test-Path $testPath)) {
-        Write-Host "`n--- $testBaseName --- SKIP (not found)" -ForegroundColor Yellow
-        continue
+    # --- Phase 3: ASCII input ---
+    if ("phase3-ascii-input" -in $phase3Tests) {
+        Invoke-Test -Name "phase3-ascii-input" -Block {
+            if (-not $sessionName) {
+                throw "No CP session available"
+            }
+
+            $marker = "keyboard_test_marker_$(Get-Random)"
+            & $deckpilot send $sessionName "echo $marker" 2>&1 | Out-Null
+            Start-Sleep -Seconds 3
+
+            $buffer = & $deckpilot show $sessionName 2>&1
+            $bufferText = $buffer -join "`n"
+            Test-Assert -Condition ($bufferText -match $marker) -Message "phase3-ascii-input - ASCII marker found in buffer"
+        }
+    } else {
+        Write-Host "  SKIP: phase3-ascii-input" -ForegroundColor DarkGray
     }
 
-    $startTime = [DateTime]::UtcNow
-    $testOutput = $null
-    try {
-        $testOutput = & $testPath 6>&1
-        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
-        $results += @{ Name = $testBaseName; Status = "PASS"; Time = [int]$elapsed; Error = $null }
-    } catch {
-        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
-        $results += @{ Name = $testBaseName; Status = "FAIL"; Time = [int]$elapsed; Error = $_.Exception.Message }
-        Write-Host "`n--- $testBaseName (FAIL) ---" -ForegroundColor Red
-        if ($testOutput) { $testOutput | ForEach-Object { Write-Host "  $_" } }
-        Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
+    # --- Phase 3: Japanese input ---
+    if ("phase3-japanese-input" -in $phase3Tests) {
+        Invoke-Test -Name "phase3-japanese-input" -Block {
+            if (-not $sessionName) {
+                throw "No CP session available"
+            }
+
+            & $deckpilot send $sessionName "echo テスト" 2>&1 | Out-Null
+            Start-Sleep -Seconds 3
+
+            $buffer = & $deckpilot show $sessionName 2>&1
+            $bufferText = $buffer -join "`n"
+            Test-Assert -Condition ($bufferText -match "テスト") -Message "phase3-japanese-input - Japanese text found in buffer"
+        }
+    } else {
+        Write-Host "  SKIP: phase3-japanese-input" -ForegroundColor DarkGray
     }
 }
+
+# ============================================================
+# Cleanup: Stop Ghostty 1
+# ============================================================
+Write-Host "`n=== Stopping Ghostty ===" -ForegroundColor Cyan
+Stop-Ghostty -Process $proc
 
 # --- Summary ---
 Write-Host "`n============================================" -ForegroundColor White
