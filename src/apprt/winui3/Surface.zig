@@ -136,6 +136,9 @@ pub fn Surface(comptime App: type) type {
         /// Timestamp of the last scrollbar UI update to enable throttling.
         last_scrollbar_update_ns: i128 = 0,
 
+        /// Timestamp of the last window title update to enable throttling.
+        last_title_update_ns: i128 = 0,
+
         /// Touch scroll anchor point (set on touch press, cleared on release).
         /// Used to convert touch drag distance into scroll rows, matching
         /// Windows Terminal's ControlInteractivity::TouchMoved pattern.
@@ -2055,7 +2058,7 @@ pub fn Surface(comptime App: type) type {
             self.last_scrollbar_update_ns = now;
 
             log.debug("updateScrollbarUi: total={} offset={} len={}", .{ total, offset, len });
-            const sb = self.scroll_bar_insp orelse return;
+            _ = self.scroll_bar_insp orelse return;
             self.is_internal_scroll_update = true;
             defer {
                 self.is_internal_scroll_update = false;

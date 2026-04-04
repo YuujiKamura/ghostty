@@ -23,7 +23,7 @@ pub fn setTabItemContent(tvi_insp: *winrt.IInspectable, content: ?*winrt.IInspec
 /// WT-style tab content switch: Clear tab_content_grid children, then Append the active tab's panel.
 /// This is the direct equivalent of TerminalPage::_UpdatedSelectedTab() in Windows Terminal.
 pub fn updateSelectedTab(self: anytype, idx: usize) void {
-    if (idx >= self.surfaces.items.len) return;
+    if (idx >= self.countSurfaces()) return;
     const tab_content = self.tab_content_grid orelse return;
 
     const content_panel = tab_content.queryInterface(com.IPanel) catch |err| {
@@ -45,7 +45,10 @@ pub fn updateSelectedTab(self: anytype, idx: usize) void {
         return;
     };
 
-    const surface = self.surfaces.items[idx];
+    const surface = self.getSurface(idx) orelse {
+        log.warn("updateSelectedTab: idx={} has no panel", .{idx});
+        return;
+    };
     const panel: *winrt.IInspectable = surface.surface_grid orelse surface.swap_chain_panel orelse {
         log.warn("updateSelectedTab: idx={} has no panel", .{idx});
         return;
@@ -65,10 +68,14 @@ pub fn updateSelectedTab(self: anytype, idx: usize) void {
 /// Called from Surface.onLoaded() when a SwapChainPanel enters the visual tree.
 pub fn ensureVisibleSurfaceAttached(self: anytype, surface: *Surface) void {
     if (self.tab_view == null) return;
-    for (self.surfaces.items, 0..) |s, i| {
-        if (s == surface and i == self.active_surface_idx) {
-            updateSelectedTab(self, i);
-            return;
+    const tab_count = self.countSurfaces();
+    var i: usize = 0;
+    while (i < tab_count) : (i += 1) {
+        if (self.getSurface(i)) |s| {
+            if (s == surface and i == self.active_surface_idx) {
+                updateSelectedTab(self, i);
+                return;
+            }
         }
     }
 }

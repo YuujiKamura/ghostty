@@ -41,7 +41,7 @@ const surface_binding = @import("surface_binding.zig");
 const event_handlers = @import("event_handlers.zig");
 const control_plane_mod = @import("control_plane.zig");
 const ControlPlaneNative = control_plane_mod.ControlPlane;
-const CpQuery = control_plane_mod.CpQuery;
+
 const nonclient_island_window = @import("nonclient_island_window.zig");
 const NonClientIslandWindow = nonclient_island_window.NonClientIslandWindow;
 const Tsf = @import("tsf.zig");
@@ -155,6 +155,12 @@ ime_last_had_result: bool = false,
 /// All surfaces (one per tab).
 surfaces: std.ArrayListUnmanaged(*Surface) = .{},
 
+/// Mutex protecting the surfaces list for thread-safe access from CP and UI threads.
+surfaces_mutex: std.Thread.Mutex = .{},
+
+/// Thread-safe snapshot of surfaces for read-only access (CP thread).
+/// Updated by the UI thread whenever 'surfaces' changes.
+surfaces_snapshot: []const *Surface = &[_]*Surface{},
 /// Index of the currently active/selected tab.
 active_surface_idx: usize = 0,
 
@@ -238,6 +244,33 @@ dispatcher_queue: ?*gen.IDispatcherQueue = null,
 
 /// Named Pipe IPC server for cross-process communication.
 ipc_server: ?*IpcServer = null,
+
+
+    /// Get a surface by index. Non-blocking (reads from snapshot).
+    pub fn getSurface(self: *App, idx: usize) ?*Surface {
+        const snapshot = self.surfaces_snapshot;
+        if (idx >= snapshot.len) return null;
+        return snapshot[idx];
+    }
+
+    /// Get the number of active surfaces. Non-blocking (reads from snapshot).
+    pub fn countSurfaces(self: *App) usize {
+        return self.surfaces_snapshot.len;
+    }
+
+    /// Update the thread-safe surfaces snapshot. Must be called on the UI thread
+    /// after any modification to self.surfaces.
+    pub fn updateSurfacesSnapshot(self: *App) !void {
+        const alloc = self.core_app.alloc;
+        const new_snapshot = try alloc.dupe(*Surface, self.surfaces.items);
+        
+        self.surfaces_mutex.lock();
+        const old = self.surfaces_snapshot;
+        self.surfaces_snapshot = new_snapshot;
+        self.surfaces_mutex.unlock();
+        
+        if (old.len > 0) alloc.free(old);
+    }
 
 pub fn init(
     self: *App,
@@ -466,9 +499,13 @@ fn initXaml(self: *App) !void {
 
             // Now that CP is active, refresh tab titles and window title
             // to include the tab ID prefix and session name.
-            for (self.surfaces.items) |surface| {
-                if (surface.getTitle()) |t| {
-                    surface.setTabTitle(t);
+            const tab_count = self.countSurfaces();
+            var i: usize = 0;
+            while (i < tab_count) : (i += 1) {
+                if (self.getSurface(i)) |surface| {
+                    if (surface.getTitle()) |t| {
+                        surface.setTabTitle(t);
+                    }
                 }
             }
             self.syncWindowTitleToActiveSurface();
@@ -880,7 +917,12 @@ fn createInitialSurfaceContent(self: *App, tab_view: ?*com.ITabView) !void {
     surface.tab_id = self.next_tab_id;
     self.next_tab_id += 1;
 
-    try self.surfaces.append(alloc, surface);
+    {
+        self.surfaces_mutex.lock();
+        defer self.surfaces_mutex.unlock();
+        try self.surfaces.append(alloc, surface);
+    }
+    try self.updateSurfacesSnapshot();
 
     if (self.hwnd) |hwnd| {
         var rect: os.RECT = .{};
@@ -1026,10 +1068,10 @@ fn pollTabCloseState(self: *App) void {
     const previous_size = self.last_polled_tab_items_size orelse current_size;
     self.last_polled_tab_items_size = current_size;
 
-    if (current_size < previous_size and current_size < self.surfaces.items.len) {
+    if (current_size < previous_size and current_size < self.countSurfaces()) {
         log.debug(
             "pollTabCloseState: size decreased prev={} current={} surfaces={}, closing active tab",
-            .{ previous_size, current_size, self.surfaces.items.len },
+            .{ previous_size, current_size, self.countSurfaces() },
         );
         self.closeActiveTab();
         self.last_polled_tab_items_size = self.currentTabItemsSize() catch current_size;
@@ -1097,8 +1139,9 @@ fn validateIslandsParity(self: *App) !void {
         }
 
         // Canonical Step 6: Loaded/SizeChanged lifecycle tokens exist on initial surface.
-        if (self.debug_cfg.enable_tabview and self.surfaces.items.len > 0) {
-            const surf = self.surfaces.items[0];
+        if (self.debug_cfg.enable_tabview and self.surfaces_snapshot.len > 0) {
+            const surf = self.surfaces_snapshot[0];
+
             if (surf.loaded_token == 0 or surf.size_changed_token == 0) {
                 log.err("PARITY_FAIL: step6_loaded_sizechanged_lifecycle_registered", .{});
                 return error.ParityFail;
@@ -1235,11 +1278,19 @@ fn fullCleanup(self: *App) void {
     // 1. No subclassing to remove (we own the wndproc).
 
     // 2. Close all surfaces (stops threads).
-    for (self.surfaces.items) |surface| {
+    const surfaces_copy = blk: {
+        self.surfaces_mutex.lock();
+        defer self.surfaces_mutex.unlock();
+        const copy = alloc.dupe(*Surface, self.surfaces.items) catch &[_]*Surface{};
+        self.surfaces.deinit(alloc);
+        break :blk copy;
+    };
+    defer alloc.free(surfaces_copy);
+
+    for (surfaces_copy) |surface| {
         surface.deinit();
         alloc.destroy(surface);
     }
-    self.surfaces.deinit(alloc);
 
     // 3. Unregister WinRT events.
     if (self.tab_view) |tv| self.unregisterTabViewHandlers(tv);
@@ -1438,7 +1489,7 @@ pub fn performAction(
         },
         .goto_tab => {
             if (self.tab_view) |tv| {
-                const tab_count = self.surfaces.items.len;
+                const tab_count = self.countSurfaces();
                 if (tab_count == 0) return true;
                 const new_idx = tab_index.computeGotoIndex(self.active_surface_idx, tab_count, value);
                 tv.SetSelectedIndex(@intCast(new_idx)) catch {};
@@ -1585,34 +1636,38 @@ pub fn newTab(self: *App) !void {
 
 /// Close the active tab and its surface.
 pub fn closeActiveTab(self: *App) void {
-    log.debug("closeActiveTab: ENTRY active={} total={}", .{ self.active_surface_idx, self.surfaces.items.len });
+    log.debug("closeActiveTab: ENTRY active={} total={}", .{ self.active_surface_idx, self.countSurfaces() });
     if (tab_manager.closeActiveTab(self)) {
         log.info("closeActiveTab: no tabs remain, requesting app exit", .{});
         self.running = false;
         if (self.xaml_app) |xa| xa.Exit() catch {};
     }
-    log.debug("closeActiveTab: EXIT total={}", .{self.surfaces.items.len});
+    log.debug("closeActiveTab: EXIT total={}", .{self.countSurfaces()});
 }
 
 /// Close a specific tab by index.
 pub fn closeTab(self: *App, idx: usize) void {
-    log.debug("closeTab: ENTRY idx={} total={}", .{ idx, self.surfaces.items.len });
+    log.debug("closeTab: ENTRY idx={} total={}", .{ idx, self.countSurfaces() });
     if (tab_manager.closeTab(self, idx)) {
         log.info("closeTab: no tabs remain, requesting app exit", .{});
         self.running = false;
         if (self.xaml_app) |xa| xa.Exit() catch {};
     }
-    log.debug("closeTab: EXIT total={}", .{self.surfaces.items.len});
+    log.debug("closeTab: EXIT total={}", .{self.countSurfaces()});
 }
-
 /// Close a surface by pointer (called from Surface.close).
 pub fn closeSurface(self: *App, surface: *Surface) void {
-    for (self.surfaces.items, 0..) |s, i| {
-        if (s == surface) {
-            self.closeTab(i);
-            return;
+    const tab_count = self.countSurfaces();
+    var i: usize = 0;
+    while (i < tab_count) : (i += 1) {
+        if (self.getSurface(i)) |s| {
+            if (s == surface) {
+                self.closeTab(i);
+                return;
+            }
         }
     }
+
     // Fallback: close the app if surface not found
     if (self.hwnd) |hwnd| {
         _ = postMessageWarn(hwnd, os.WM_CLOSE, 0, 0, "WM_CLOSE");
@@ -1621,7 +1676,7 @@ pub fn closeSurface(self: *App, surface: *Surface) void {
 
 /// Switch to a specific tab by index.
 pub fn switchToTab(self: *App, idx: usize) void {
-    if (idx >= self.surfaces.items.len) return;
+    if (idx >= self.countSurfaces()) return;
     if (self.tab_view) |tv| {
         tv.SetSelectedIndex(@intCast(idx)) catch {};
         self.active_surface_idx = idx;
@@ -1633,9 +1688,10 @@ pub fn switchToTab(self: *App, idx: usize) void {
 
 /// Get the currently active Surface, or null if none.
 pub fn activeSurface(self: *App) ?*Surface {
-    if (self.surfaces.items.len == 0) return null;
-    if (!tab_index.isValid(self.active_surface_idx, self.surfaces.items.len)) return null;
-    return self.surfaces.items[self.active_surface_idx];
+    const tab_count = self.countSurfaces();
+    if (tab_count == 0) return null;
+    if (!tab_index.isValid(self.active_surface_idx, tab_count)) return null;
+    return self.getSurface(self.active_surface_idx);
 }
 
 // ---------------------------------------------------------------
@@ -1645,7 +1701,7 @@ pub fn activeSurface(self: *App) ?*Surface {
 fn controlPlaneCaptureState(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) !?ControlPlaneNative.StateSnapshot {
     const self: *App = @ptrCast(@alignCast(ctx));
     const surface = if (tab_idx) |idx|
-        (if (idx < self.surfaces.items.len) self.surfaces.items[idx] else null)
+        self.getSurface(idx)
     else
         self.activeSurface();
     const s = surface orelse return null;
@@ -1653,7 +1709,7 @@ fn controlPlaneCaptureState(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usi
         .pwd = try s.pwd(allocator),
         .has_selection = s.hasSelection(),
         .at_prompt = s.cursorIsAtPrompt(),
-        .tab_count = self.surfaces.items.len,
+        .tab_count = self.countSurfaces(),
         .active_tab = self.active_surface_idx,
         .pane_pid = s.panePid() orelse 0,
     };
@@ -1662,7 +1718,7 @@ fn controlPlaneCaptureState(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usi
 fn controlPlaneCaptureTail(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) !?[]u8 {
     const self: *App = @ptrCast(@alignCast(ctx));
     const surface = if (tab_idx) |idx|
-        (if (idx < self.surfaces.items.len) self.surfaces.items[idx] else null)
+        self.getSurface(idx)
     else
         self.activeSurface();
     const s = surface orelse return null;
@@ -1673,33 +1729,39 @@ fn controlPlaneCaptureTail(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usiz
 fn controlPlaneCaptureHistory(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) !?[]u8 {
     const self: *App = @ptrCast(@alignCast(ctx));
     const surface = if (tab_idx) |idx|
-        (if (idx < self.surfaces.items.len) self.surfaces.items[idx] else null)
+        self.getSurface(idx)
     else
         self.activeSurface();
     const s = surface orelse return null;
-    return try s.historyString(allocator);
+    const history = try s.historyString(allocator);
+    return try allocator.dupe(u8, history);
 }
 
 fn controlPlaneCaptureTabList(ctx: *anyopaque, allocator: Allocator) !?[]u8 {
     const self: *App = @ptrCast(@alignCast(ctx));
-    if (self.surfaces.items.len == 0) return null;
+    const tab_count = self.countSurfaces();
+    if (tab_count == 0) return null;
 
     var buf: std.ArrayListUnmanaged(u8) = .{};
     errdefer buf.deinit(allocator);
     const writer = buf.writer(allocator);
-    try writer.print("LIST_TABS|{d}|{d}\n", .{ self.surfaces.items.len, self.active_surface_idx });
-    for (self.surfaces.items, 0..) |surface, i| {
-        const pwd_val = surface.pwd(allocator) catch null;
-        defer if (pwd_val) |p| allocator.free(p);
-        const title = surface.getTitle() orelse "";
-        try writer.print("TAB|{d}|{s}|pwd={s}|prompt={d}|selection={d}|id={d}\n", .{
-            i,
-            title,
-            pwd_val orelse "",
-            @as(u8, if (surface.cursorIsAtPrompt()) 1 else 0),
-            @as(u8, if (surface.hasSelection()) 1 else 0),
-            surface.tab_id,
-        });
+    try writer.print("LIST_TABS|{d}|{d}\n", .{ tab_count, self.active_surface_idx });
+    
+    var i: usize = 0;
+    while (i < tab_count) : (i += 1) {
+        if (self.getSurface(i)) |surface| {
+            const pwd_val = surface.pwd(allocator) catch null;
+            defer if (pwd_val) |p| allocator.free(p);
+            const title = surface.getTitle() orelse "";
+            try writer.print("TAB|{d}|{s}|pwd={s}|prompt={d}|selection={d}|id={d}\n", .{
+                i,
+                title,
+                pwd_val orelse "",
+                @as(u8, if (surface.cursorIsAtPrompt()) 1 else 0),
+                @as(u8, if (surface.hasSelection()) 1 else 0),
+                surface.tab_id,
+            });
+        }
     }
     return try buf.toOwnedSlice(allocator);
 }
@@ -1712,16 +1774,16 @@ fn onTabCloseRequested(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void 
     log.debug("onTabCloseRequested: ENTRY sender={} args={} tabs={}", .{
         @intFromPtr(sender),
         @intFromPtr(args),
-        self.surfaces.items.len,
+        self.countSurfaces(),
     });
     event_handlers.onTabCloseRequested(self, sender, args);
-    log.debug("onTabCloseRequested: EXIT tabs={}", .{self.surfaces.items.len});
+    log.debug("onTabCloseRequested: EXIT tabs={}", .{self.countSurfaces()});
 }
 
 fn onAddTabButtonClick(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
-    log.debug("onAddTabButtonClick: ENTRY tabs={}", .{self.surfaces.items.len});
+    log.debug("onAddTabButtonClick: ENTRY tabs={}", .{self.countSurfaces()});
     event_handlers.onAddTabButtonClick(self, sender, args);
-    log.debug("onAddTabButtonClick: EXIT tabs={}", .{self.surfaces.items.len});
+    log.debug("onAddTabButtonClick: EXIT tabs={}", .{self.countSurfaces()});
 }
 
 fn onResourceManagerRequested(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
@@ -2049,31 +2111,35 @@ fn logDiagnosticSnapshot(self: *App) void {
     if (comptime builtin.mode != .Debug) return;
 
     log.debug("=== DIAGNOSTIC tick={} ===", .{diagnostic_tick_count});
-    log.debug("  surfaces={} active_idx={}", .{ self.surfaces.items.len, self.active_surface_idx });
+    log.debug("  surfaces={} active_idx={}", .{ self.countSurfaces(), self.active_surface_idx });
     log.debug("  resizing={} pending_size={}", .{
         @intFromBool(self.resizing),
         @intFromBool(self.pending_size != null),
     });
 
     // Per-surface terminal stats
-    for (self.surfaces.items, 0..) |surface, i| {
-        if (surface.core_initialized) {
-            const t = surface.core_surface.renderer_state.terminal;
-            const screen = t.screens.active;
-            var page_count: usize = 0;
-            var it = screen.pages.pages.first;
-            while (it) |node| : (it = node.next) {
-                page_count += 1;
+    const tab_count = self.countSurfaces();
+    var i: usize = 0;
+    while (i < tab_count) : (i += 1) {
+        if (self.getSurface(i)) |surface| {
+            if (surface.core_initialized) {
+                const t = surface.core_surface.renderer_state.terminal;
+                const screen = t.screens.active;
+                var page_count: usize = 0;
+                var it = screen.pages.pages.first;
+                while (it) |node| : (it = node.next) {
+                    page_count += 1;
+                }
+                const tracked_pins = screen.pages.countTrackedPins();
+                log.debug("  surface[{}] pages={} rows={} cols={} pins={} page_size={}", .{
+                    i,
+                    page_count,
+                    screen.pages.rows,
+                    screen.pages.cols,
+                    tracked_pins,
+                    screen.pages.page_size,
+                });
             }
-            const tracked_pins = screen.pages.countTrackedPins();
-            log.debug("  surface[{}] pages={} rows={} cols={} pins={} page_size={}", .{
-                i,
-                page_count,
-                screen.pages.rows,
-                screen.pages.cols,
-                tracked_pins,
-                screen.pages.page_size,
-            });
         }
     }
     log.debug("=== END DIAGNOSTIC ===", .{});
@@ -2228,7 +2294,7 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
             const surface: *Surface = @ptrFromInt(@as(usize, @bitCast(lparam)));
             const swap_chain: *anyopaque = @ptrFromInt(@as(usize, @bitCast(wparam)));
             var alive = false;
-            for (self.surfaces.items) |s| {
+            for (self.surfaces_snapshot) |s| {
                 if (s == surface) {
                     alive = true;
                     break;
@@ -2246,7 +2312,7 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
             const surface: *Surface = @ptrFromInt(@as(usize, @bitCast(lparam)));
             const swap_chain_handle: usize = @as(usize, @bitCast(wparam));
             var alive = false;
-            for (self.surfaces.items) |s| {
+            for (self.surfaces_snapshot) |s| {
                 if (s == surface) {
                     alive = true;
                     break;
@@ -2374,7 +2440,7 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
                     log.warn("control_plane new_tab failed: {}", .{err});
                 },
                 .close_tab => {
-                    if (param < self.surfaces.items.len) {
+                    if (param < self.countSurfaces()) {
                         self.closeTab(param);
                     } else {
                         self.closeActiveTab();
@@ -2393,226 +2459,7 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
             }
             return 0;
         },
-        os.WM_APP_CP_QUERY => {
-            // Synchronous control plane query from pipe thread (Issue #139 H1 fix).
-            // SendMessageW blocks the pipe thread until we fill the result and return.
-            const query: *CpQuery = @ptrFromInt(@as(usize, @bitCast(lparam)));
-            self.handleCpQuery(query);
-            return 0;
-        },
         else => return null,
-    }
-}
-
-/// Handle a synchronous CP query on the UI thread.
-/// Called from WM_APP_CP_QUERY — all App state access is safe here.
-fn handleCpQuery(self: *App, query: *CpQuery) void {
-    switch (query.kind) {
-        .read_buffer => {
-            const result = controlPlaneCaptureTail(
-                @ptrCast(self),
-                query.allocator,
-                query.tab_index,
-            ) catch null;
-            if (result) |viewport| {
-                defer query.allocator.free(viewport);
-                if (query.out_buf) |buf| {
-                    const copy_len = @min(viewport.len, query.out_buf_len);
-                    @memcpy(buf[0..copy_len], viewport[0..copy_len]);
-                    query.result_len = copy_len;
-                }
-            }
-        },
-        .tab_count => {
-            var snapshot = controlPlaneCaptureState(
-                @ptrCast(self),
-                query.allocator,
-                null,
-            ) catch null;
-            if (snapshot) |*s| {
-                query.result_usize = s.tab_count;
-                s.deinit(query.allocator);
-            }
-        },
-        .active_tab => {
-            var snapshot = controlPlaneCaptureState(
-                @ptrCast(self),
-                query.allocator,
-                null,
-            ) catch null;
-            if (snapshot) |*s| {
-                query.result_usize = s.active_tab;
-                s.deinit(query.allocator);
-            }
-        },
-        .tab_working_dir => {
-            var snapshot = controlPlaneCaptureState(
-                @ptrCast(self),
-                query.allocator,
-                query.tab_index,
-            ) catch null;
-            if (snapshot) |*s| {
-                defer s.deinit(query.allocator);
-                if (s.pwd) |pwd| {
-                    if (query.out_buf) |buf| {
-                        const copy_len = @min(pwd.len, query.out_buf_len);
-                        @memcpy(buf[0..copy_len], pwd[0..copy_len]);
-                        query.result_len = copy_len;
-                    }
-                }
-            }
-        },
-        .tab_has_selection => {
-            var snapshot = controlPlaneCaptureState(
-                @ptrCast(self),
-                query.allocator,
-                query.tab_index,
-            ) catch null;
-            if (snapshot) |*s| {
-                query.result_bool = s.has_selection;
-                s.deinit(query.allocator);
-            }
-        },
-        .tab_title => {
-            // provTabTitle uses GetWindowTextW (thread-safe), but handle here too for completeness.
-            if (query.out_buf) |buf| {
-                const title = self.activeSurface().?.getTitle() orelse "";
-                const copy_len = @min(title.len, query.out_buf_len);
-                @memcpy(buf[0..copy_len], title[0..copy_len]);
-                query.result_len = copy_len;
-            }
-        },
-        .capture_tab_list => {
-            query.result_owned = controlPlaneCaptureTabList(
-                @ptrCast(self),
-                query.allocator,
-            ) catch null;
-        },
-        .capture_snapshot => {
-            // Issue #142: fill all snapshot fields in a single UI-thread call.
-            // All error paths leave default values (0/false) — no panic/unreachable.
-            var snapshot = controlPlaneCaptureState(
-                @ptrCast(self),
-                query.allocator,
-                query.tab_index,
-            ) catch |err| blk: {
-                log.err("capture_snapshot: controlPlaneCaptureState failed: {}", .{err});
-                break :blk null;
-            };
-            if (snapshot) |*s| {
-                defer s.deinit(query.allocator);
-                query.result_tab_count = s.tab_count;
-                query.result_active_tab = s.active_tab;
-                query.result_pane_pid = s.pane_pid;
-                query.result_has_selection = s.has_selection;
-                query.result_at_prompt = s.at_prompt;
-                if (s.pwd) |pwd| {
-                    const copy_len = @min(pwd.len, query.result_pwd.len);
-                    if (pwd.len > query.result_pwd.len) {
-                        log.warn("capture_snapshot: truncating pwd from {d} to {d} bytes", .{ pwd.len, query.result_pwd.len });
-                    }
-                    @memcpy(query.result_pwd[0..copy_len], pwd[0..copy_len]);
-                    query.result_pwd_len = copy_len;
-                }
-            } else {
-                log.err("capture_snapshot: no surface for tab_index={?}", .{query.tab_index});
-            }
-            // Capture viewport into out_buf.
-            const viewport = controlPlaneCaptureTail(
-                @ptrCast(self),
-                query.allocator,
-                query.tab_index,
-            ) catch |err| blk: {
-                log.err("capture_snapshot: controlPlaneCaptureTail failed: {}", .{err});
-                break :blk null;
-            };
-            if (viewport) |vp| {
-                defer query.allocator.free(vp);
-                if (query.out_buf) |buf| {
-                    const copy_len = @min(vp.len, query.out_buf_len);
-                    @memcpy(buf[0..copy_len], vp[0..copy_len]);
-                    query.result_len = copy_len;
-                } else {
-                    log.err("capture_snapshot: out_buf is null, viewport data dropped", .{});
-                }
-            }
-            // Capture title.
-            const surface = if (query.tab_index) |idx|
-                (if (idx < self.surfaces.items.len) self.surfaces.items[idx] else null)
-            else
-                self.activeSurface();
-            if (surface) |s| {
-                const title = s.getTitle() orelse "";
-                const copy_len = @min(title.len, query.result_title.len);
-                if (title.len > query.result_title.len) {
-                    log.warn("capture_snapshot: truncating title from {d} to {d} bytes", .{ title.len, query.result_title.len });
-                }
-                @memcpy(query.result_title[0..copy_len], title[0..copy_len]);
-                query.result_title_len = copy_len;
-            }
-        },
-        .capture_history => {
-            // Fill state fields (same as capture_snapshot).
-            var snapshot = controlPlaneCaptureState(
-                @ptrCast(self),
-                query.allocator,
-                query.tab_index,
-            ) catch |err| blk: {
-                log.err("capture_history: controlPlaneCaptureState failed: {}", .{err});
-                break :blk null;
-            };
-            if (snapshot) |*s| {
-                defer s.deinit(query.allocator);
-                query.result_tab_count = s.tab_count;
-                query.result_active_tab = s.active_tab;
-                query.result_pane_pid = s.pane_pid;
-                query.result_has_selection = s.has_selection;
-                query.result_at_prompt = s.at_prompt;
-                if (s.pwd) |pwd| {
-                    const copy_len = @min(pwd.len, query.result_pwd.len);
-                    if (pwd.len > query.result_pwd.len) {
-                        log.warn("capture_history: truncating pwd from {d} to {d} bytes", .{ pwd.len, query.result_pwd.len });
-                    }
-                    @memcpy(query.result_pwd[0..copy_len], pwd[0..copy_len]);
-                    query.result_pwd_len = copy_len;
-                }
-            } else {
-                log.err("capture_history: no surface for tab_index={?}", .{query.tab_index});
-            }
-            // Capture full scrollback history into out_buf.
-            const history = controlPlaneCaptureHistory(
-                @ptrCast(self),
-                query.allocator,
-                query.tab_index,
-            ) catch |err| blk: {
-                log.err("capture_history: controlPlaneCaptureHistory failed: {}", .{err});
-                break :blk null;
-            };
-            if (history) |h| {
-                defer query.allocator.free(h);
-                if (query.out_buf) |buf| {
-                    const copy_len = @min(h.len, query.out_buf_len);
-                    @memcpy(buf[0..copy_len], h[0..copy_len]);
-                    query.result_len = copy_len;
-                } else {
-                    log.err("capture_history: out_buf is null, history data dropped", .{});
-                }
-            }
-            // Capture title.
-            const surface = if (query.tab_index) |idx|
-                (if (idx < self.surfaces.items.len) self.surfaces.items[idx] else null)
-            else
-                self.activeSurface();
-            if (surface) |s| {
-                const title = s.getTitle() orelse "";
-                const copy_len = @min(title.len, query.result_title.len);
-                if (title.len > query.result_title.len) {
-                    log.warn("capture_history: truncating title from {d} to {d} bytes", .{ title.len, query.result_title.len });
-                }
-                @memcpy(query.result_title[0..copy_len], title[0..copy_len]);
-                query.result_title_len = copy_len;
-            }
-        },
     }
 }
 
@@ -2699,8 +2546,12 @@ fn handleSize(self: *App, hwnd: os.HWND, _: os.WPARAM, lparam: os.LPARAM) os.LRE
 fn applySizeChange(self: *App, width: u32, height: u32) void {
     if (width == 0 or height == 0) return;
 
-    for (self.surfaces.items) |surface| {
-        surface.updateSize(width, height);
+    const tab_count = self.countSurfaces();
+    var i: usize = 0;
+    while (i < tab_count) : (i += 1) {
+        if (self.getSurface(i)) |surface| {
+            surface.updateSize(width, height);
+        }
     }
 }
 

@@ -32,7 +32,7 @@ const PendingInput = struct {
 
 const default_max_pending_inputs: usize = 128;
 const default_max_inflight_data_requests: u32 = 1;
-const cp_query_timeout_ms: os.UINT = 100;
+
 
 const ResponseCache = struct {
     req: ?[]u8 = null,
@@ -49,57 +49,13 @@ const ResponseCache = struct {
     }
 };
 
-/// Query kind for CpQuery — dispatched via WM_APP_CP_QUERY (SendMessageW).
-pub const QueryKind = enum {
-    read_buffer,
-    tab_count,
-    active_tab,
-    tab_title,
-    tab_working_dir,
-    tab_has_selection,
-    capture_tab_list,
-    /// Issue #142: coalesce multiple provider reads into a single SendMessageW.
-    capture_snapshot,
-    /// Full scrollback history capture (HISTORY command).
-    capture_history,
-};
-
-/// Synchronous query struct passed via SendMessageW(WM_APP_CP_QUERY, 0, @intFromPtr(&query)).
-/// Pipe thread creates on stack → SendMessageW blocks → UI thread fills result → returns.
-pub const CpQuery = struct {
-    kind: QueryKind,
-    tab_index: ?usize = null,
-    /// For read_buffer/tab_title/tab_working_dir: caller-owned buffer to write into.
-    out_buf: ?[*]u8 = null,
-    out_buf_len: usize = 0,
-    /// Result: bytes written to out_buf.
-    result_len: usize = 0,
-    /// Result: scalar value (tabCount, activeTab).
-    result_usize: usize = 0,
-    /// Result: boolean (tabHasSelection).
-    result_bool: bool = false,
-    /// Result: heap-allocated response (capture_tab_list). Caller must free.
-    result_owned: ?[]u8 = null,
-    /// Issue #142: combined snapshot result fields (capture_snapshot).
-    result_tab_count: usize = 0,
-    result_active_tab: usize = 0,
-    result_pane_pid: u32 = 0,
-    result_pwd: [4096]u8 = undefined,
-    result_pwd_len: usize = 0,
-    result_has_selection: bool = false,
-    result_at_prompt: bool = false,
-    result_title: [256]u8 = undefined,
-    result_title_len: usize = 0,
-    /// Allocator for heap results.
-    allocator: Allocator,
-};
-
 /// Zig-native control plane that replaces the Rust DLL.
 ///
 /// Integrates the zig-control-plane library with the WinUI3 App runtime.
-/// Thread-safe: ALL callbacks are routed to the UI thread.
-/// - Mutations (newTab, closeTab, etc.) via PostMessageW (async).
-/// - Reads (readBuffer, tabCount, etc.) via SendMessageW (sync).
+/// Thread-safe architecture:
+/// - Mutations (newTab, closeTab, etc.) via PostMessageW (async) to UI thread.
+/// - Reads (STATE, TAIL, etc.) use shared-memory snapshots (lock-free or mutex).
+/// - No SendMessageW calls from CP thread to prevent UI-induced deadlocks.
 pub const ControlPlane = struct {
     const BackendFn = *const fn (ctx: ?*anyopaque, request: []const u8, allocator: Allocator) anyerror![]const u8;
     /// Action codes posted via WM_APP_CONTROL_ACTION (wparam).
@@ -114,6 +70,7 @@ pub const ControlPlane = struct {
     // Capture function types for App.zig callbacks
     pub const StateSnapshot = struct {
         pwd: ?[]const u8 = null,
+        title: ?[]const u8 = null,
         has_selection: bool = false,
         at_prompt: bool = false,
         tab_count: usize = 0,
@@ -122,6 +79,7 @@ pub const ControlPlane = struct {
 
         pub fn deinit(self: *StateSnapshot, allocator: Allocator) void {
             if (self.pwd) |pwd| allocator.free(pwd);
+            if (self.title) |title| allocator.free(title);
             self.* = .{};
         }
     };
@@ -605,69 +563,49 @@ pub const ControlPlane = struct {
         return cmd_id <= self.last_drained_cmd_id;
     }
 
-    fn sendCpQueryWithTimeout(self: *ControlPlane, query: *CpQuery, op_name: []const u8) bool {
-        var message_result: usize = 0;
-        os.SetLastError(0);
-        const ok = os.SendMessageTimeoutW(
-            self.hwnd,
-            os.WM_APP_CP_QUERY,
-            0,
-            @bitCast(@intFromPtr(query)),
-            os.SMTO_ABORTIFHUNG,
-            cp_query_timeout_ms,
-            &message_result,
-        );
-        if (ok != 0) return true;
-
-        const last_error = os.GetLastError();
-        if (last_error == os.ERROR_TIMEOUT) {
-            log.warn("{s}: WM_APP_CP_QUERY timed out after {d}ms; returning ui_thread_busy", .{ op_name, cp_query_timeout_ms });
-            self.last_provider_timeout.store(true, .release);
-        }
-        return false;
-    }
+    
 
     /// Issue #142: capture all tab state in a single SendMessageW round-trip.
     /// Called from zig-control-plane when captureSnapshot is wired into Provider.
     fn provCaptureSnapshot(ctx: *anyopaque, tab_index: usize, result: *zcp.CombinedSnapshot) bool {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        // Use a CpQuery with a large out_buf for viewport data, plus snapshot fields.
-        var viewport_buf: [65536]u8 = undefined;
-        var query = CpQuery{
-            .kind = .capture_snapshot,
-            .tab_index = tab_index,
-            .out_buf = &viewport_buf,
-            .out_buf_len = viewport_buf.len,
-            .allocator = self.allocator,
-        };
-        if (!self.sendCpQueryWithTimeout(&query, "provCaptureSnapshot")) {
-            return false;
+        const callback_ctx = self.callback_ctx orelse return false;
+        const capture_fn = self.capture_state_fn orelse return false;
+        const capture_tail_fn = self.capture_tail_fn orelse return false;
+
+        // 1. Capture basic state (pwd, etc.)
+        var snapshot = (capture_fn(callback_ctx, self.allocator, tab_index) catch return false) orelse return false;
+        defer snapshot.deinit(self.allocator);
+
+        result.tab_count = snapshot.tab_count;
+        result.active_tab = snapshot.active_tab;
+        result.pane_pid = snapshot.pane_pid;
+        result.has_selection = snapshot.has_selection;
+
+        if (snapshot.pwd) |pwd| {
+            const pwd_len = @min(pwd.len, result.pwd.len);
+            @memcpy(result.pwd[0..pwd_len], pwd[0..pwd_len]);
+            result.pwd_len = pwd_len;
+        } else {
+            result.pwd_len = 0;
         }
-        // Copy results into the CombinedSnapshot output struct.
-        result.tab_count = query.result_tab_count;
-        result.active_tab = query.result_active_tab;
-        result.pane_pid = query.result_pane_pid;
-        const pwd_copy_len = @min(query.result_pwd_len, result.pwd.len);
-        if (query.result_pwd_len > result.pwd.len) {
-            log.warn("provCaptureSnapshot: truncating pwd from {d} to {d} bytes", .{ query.result_pwd_len, result.pwd.len });
+
+        if (snapshot.title) |title| {
+            const title_len = @min(title.len, result.title.len);
+            @memcpy(result.title[0..title_len], title[0..title_len]);
+            result.title_len = title_len;
+        } else {
+            result.title_len = 0;
         }
-        result.pwd_len = pwd_copy_len;
-        if (pwd_copy_len > 0) {
-            @memcpy(result.pwd[0..pwd_copy_len], query.result_pwd[0..pwd_copy_len]);
-        }
-        result.has_selection = query.result_has_selection;
-        result.viewport_len = query.result_len;
-        if (query.result_len > 0) {
-            @memcpy(result.viewport[0..query.result_len], viewport_buf[0..query.result_len]);
-        }
-        const title_copy_len = @min(query.result_title_len, result.title.len);
-        if (query.result_title_len > result.title.len) {
-            log.warn("provCaptureSnapshot: truncating title from {d} to {d} bytes", .{ query.result_title_len, result.title.len });
-        }
-        result.title_len = title_copy_len;
-        if (title_copy_len > 0) {
-            @memcpy(result.title[0..title_copy_len], query.result_title[0..title_copy_len]);
-        }
+
+        // 2. Capture viewport/tail
+        const tail = (capture_tail_fn(callback_ctx, self.allocator, tab_index) catch return false) orelse return false;
+        defer self.allocator.free(tail);
+
+        const tail_len = @min(tail.len, result.viewport.len);
+        @memcpy(result.viewport[0..tail_len], tail[0..tail_len]);
+        result.viewport_len = tail_len;
+
         return true;
     }
 
@@ -675,42 +613,43 @@ pub const ControlPlane = struct {
     /// Same pattern as provCaptureSnapshot but uses capture_history QueryKind.
     fn provCaptureHistory(ctx: *anyopaque, tab_index: usize, result: *zcp.CombinedSnapshot) bool {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        var viewport_buf: [65536]u8 = undefined;
-        var query = CpQuery{
-            .kind = .capture_history,
-            .tab_index = tab_index,
-            .out_buf = &viewport_buf,
-            .out_buf_len = viewport_buf.len,
-            .allocator = self.allocator,
-        };
-        if (!self.sendCpQueryWithTimeout(&query, "provCaptureHistory")) {
-            return false;
+        const callback_ctx = self.callback_ctx orelse return false;
+        const capture_fn = self.capture_state_fn orelse return false;
+        const capture_history_fn = self.capture_history_fn orelse return false;
+
+        // 1. Capture basic state (pwd, etc.)
+        var snapshot = (capture_fn(callback_ctx, self.allocator, tab_index) catch return false) orelse return false;
+        defer snapshot.deinit(self.allocator);
+
+        result.tab_count = snapshot.tab_count;
+        result.active_tab = snapshot.active_tab;
+        result.pane_pid = snapshot.pane_pid;
+        result.has_selection = snapshot.has_selection;
+
+        if (snapshot.pwd) |pwd| {
+            const pwd_len = @min(pwd.len, result.pwd.len);
+            @memcpy(result.pwd[0..pwd_len], pwd[0..pwd_len]);
+            result.pwd_len = pwd_len;
+        } else {
+            result.pwd_len = 0;
         }
-        // Copy results into the CombinedSnapshot output struct.
-        result.tab_count = query.result_tab_count;
-        result.active_tab = query.result_active_tab;
-        result.pane_pid = query.result_pane_pid;
-        const pwd_copy_len = @min(query.result_pwd_len, result.pwd.len);
-        if (query.result_pwd_len > result.pwd.len) {
-            log.warn("provCaptureHistory: truncating pwd from {d} to {d} bytes", .{ query.result_pwd_len, result.pwd.len });
+
+        if (snapshot.title) |title| {
+            const title_len = @min(title.len, result.title.len);
+            @memcpy(result.title[0..title_len], title[0..title_len]);
+            result.title_len = title_len;
+        } else {
+            result.title_len = 0;
         }
-        result.pwd_len = pwd_copy_len;
-        if (pwd_copy_len > 0) {
-            @memcpy(result.pwd[0..pwd_copy_len], query.result_pwd[0..pwd_copy_len]);
-        }
-        result.has_selection = query.result_has_selection;
-        result.viewport_len = query.result_len;
-        if (query.result_len > 0) {
-            @memcpy(result.viewport[0..query.result_len], viewport_buf[0..query.result_len]);
-        }
-        const title_copy_len = @min(query.result_title_len, result.title.len);
-        if (query.result_title_len > result.title.len) {
-            log.warn("provCaptureHistory: truncating title from {d} to {d} bytes", .{ query.result_title_len, result.title.len });
-        }
-        result.title_len = title_copy_len;
-        if (title_copy_len > 0) {
-            @memcpy(result.title[0..title_copy_len], query.result_title[0..title_copy_len]);
-        }
+
+        // 2. Capture history
+        const history = (capture_history_fn(callback_ctx, self.allocator, tab_index) catch return false) orelse return false;
+        defer self.allocator.free(history);
+
+        const history_len = @min(history.len, result.viewport.len);
+        @memcpy(result.viewport[0..history_len], history[0..history_len]);
+        result.viewport_len = history_len;
+
         return true;
     }
 
@@ -804,60 +743,6 @@ fn loadSessionName(allocator: Allocator, pid: u32) ![]u8 {
 // Tests
 // ═══════════════════════════════════════════════════════════════
 
-test "CpQuery default values" {
-    const alloc = std.testing.allocator;
-    const q = CpQuery{
-        .kind = .tab_count,
-        .allocator = alloc,
-    };
-    try std.testing.expectEqual(@as(usize, 0), q.result_usize);
-    try std.testing.expectEqual(false, q.result_bool);
-    try std.testing.expectEqual(@as(usize, 0), q.result_len);
-    try std.testing.expect(q.result_owned == null);
-    try std.testing.expect(q.out_buf == null);
-    try std.testing.expect(q.tab_index == null);
-}
-
-test "CpQuery with buffer" {
-    const alloc = std.testing.allocator;
-    var buf: [64]u8 = undefined;
-    var q = CpQuery{
-        .kind = .read_buffer,
-        .tab_index = 0,
-        .out_buf = &buf,
-        .out_buf_len = buf.len,
-        .allocator = alloc,
-    };
-    // Simulate UI thread writing result
-    const data = "hello world";
-    @memcpy(q.out_buf.?[0..data.len], data);
-    q.result_len = data.len;
-
-    try std.testing.expectEqual(data.len, q.result_len);
-    try std.testing.expectEqualStrings(data, buf[0..q.result_len]);
-}
-
-test "QueryKind exhaustive" {
-    // Ensure all variants are handled (compile-time exhaustiveness)
-    const kinds = [_]QueryKind{
-        .read_buffer,
-        .tab_count,
-        .active_tab,
-        .tab_title,
-        .tab_working_dir,
-        .tab_has_selection,
-        .capture_tab_list,
-        .capture_snapshot,
-        .capture_history,
-    };
-    try std.testing.expectEqual(@as(usize, 9), kinds.len);
-
-    for (kinds) |k| {
-        switch (k) {
-            .read_buffer, .tab_count, .active_tab, .tab_title, .tab_working_dir, .tab_has_selection, .capture_tab_list, .capture_snapshot, .capture_history => {},
-        }
-    }
-}
 
 test "commandName parses up to delimiter" {
     try std.testing.expectEqualStrings("STATE", commandName("STATE"));

@@ -30,7 +30,7 @@ const DeferredSurfaceClose = struct {
 };
 
 pub fn closeActiveTab(self: anytype) bool {
-    if (self.surfaces.items.len == 0) return false;
+    if (self.countSurfaces() == 0) return false;
     return closeTab(self, self.active_surface_idx);
 }
 
@@ -61,8 +61,12 @@ pub fn newTabWithProfile(
     surface.tab_id = self.next_tab_id;
     self.next_tab_id += 1;
 
-    try self.surfaces.append(alloc, surface);
-    errdefer _ = self.surfaces.pop();
+    {
+        self.surfaces_mutex.lock();
+        defer self.surfaces_mutex.unlock();
+        try self.surfaces.append(alloc, surface);
+    }
+    try self.updateSurfacesSnapshot();
 
     // Sync surface size with actual HWND client area.
     if (self.hwnd) |hwnd| {
@@ -131,22 +135,28 @@ pub fn newTabWithProfile(
 }
 
 pub fn closeTab(self: anytype, idx: usize) bool {
-    if (idx >= self.surfaces.items.len) return false;
+    const surface, const had_core_initialized = blk: {
+        self.surfaces_mutex.lock();
+        defer self.surfaces_mutex.unlock();
 
-    const surface = self.surfaces.items[idx];
-    const had_core_initialized = surface.core_initialized;
+        if (idx >= self.surfaces.items.len) return false;
 
-    // 1. Remove from the model first, then immediately gate callbacks so any
-    //    pending XAML delegates become no-ops during the UI-thread TabView work.
-    _ = self.surfaces.orderedRemove(idx);
-    surface.core_initialized = false;
+        const s = self.surfaces.items[idx];
+        const hci = s.core_initialized;
 
-    // No need to remove panel from tab_content_grid here —
-    // updateSelectedTab() uses Clear+Append (WT pattern), so the next
-    // tab switch will replace the grid's children entirely.
+        // 1. Remove from the model first.
+        _ = self.surfaces.orderedRemove(idx);
+        s.core_initialized = false;
+        break :blk .{ s, hci };
+    };
+    self.updateSurfacesSnapshot() catch {};
+
+    // --- LOCK RELEASED HERE ---
+    // Now perform heavy XAML/WinRT work without holding surfaces_mutex.
 
     // 2. Adjust active index before TabView triggers SelectionChanged.
-    if (self.surfaces.items.len == 0) {
+    const current_len = self.countSurfaces();
+    if (current_len == 0) {
         // Guard: suppress onSelectionChanged during last-tab removal (Issue #129).
         self.tab_mutation_in_progress = true;
         defer self.tab_mutation_in_progress = false;
