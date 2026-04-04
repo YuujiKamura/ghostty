@@ -31,6 +31,11 @@ island: IslandWindow,
 /// WT: _dragBarWindow (wil::unique_hwnd)
 drag_bar_hwnd: ?os.HWND = null,
 
+/// Tab area right edge in pixels (client coords relative to parent left).
+/// Updated by resizeDragBarWindow based on tab count.
+/// Used by dragBarNcHitTest to return HTTRANSPARENT for the tab region.
+tab_area_right_px: c_int = 300,
+
 /// Whether the window is currently maximized.
 /// WT: _isMaximized
 is_maximized: bool = false,
@@ -296,30 +301,29 @@ pub fn resizeDragBarWindow(self: *NonClientIslandWindow, width_px: c_int) void {
     });
 
     if (width_px > 0 and titlebar_h > 0) {
-        // Drag bar covers the RIGHT portion of the titlebar only.
-        // Left portion (tabs) is left uncovered so XAML receives clicks.
-        // WT uses _GetDragAreaRect() from XAML to size this; we approximate
-        // with a fixed zone = caption buttons + generous drag space.
+        // Update tab area width (DPI-scaled). 300px at 96 DPI covers ~1 tab + "+" button.
         const scale: f32 = @as(f32, @floatFromInt(dpi)) / 96.0;
-        const drag_zone: c_int = @intFromFloat(@as(f32, @floatFromInt(DRAG_ZONE_96DPI)) * scale);
-        // Clamp: don't exceed half the window width so tabs stay clickable.
-        const max_zone = @divFloor(width_px, 2);
-        const clamped_zone = @min(drag_zone, max_zone);
-        const drag_x = width_px - clamped_zone;
-        const drag_w = clamped_zone;
+        const tab_px: c_int = @intFromFloat(300.0 * scale);
+        @atomicStore(c_int, &self.tab_area_right_px, tab_px, .release);
 
+        // Drag bar covers the FULL titlebar width.
+        // Tab clicks pass through via HTTRANSPARENT in dragBarNcHitTest.
         _ = os.SetWindowPos(
             drag_bar_hwnd,
             os.HWND_TOP,
-            drag_x,
+            0,
             top_offset,
-            drag_w,
+            width_px,
             titlebar_h,
             os.SWP_NOACTIVATE | os.SWP_SHOWWINDOW | os.SWP_NOSENDCHANGING,
         );
 
-        // WT: alpha=255 — opaque to hit testing, visually transparent via NOREDIRECTIONBITMAP.
-        _ = os.SetLayeredWindowAttributes(drag_bar_hwnd, 0, 255, os.LWA_ALPHA);
+        const debug_dragbar = self.isDebugDragBar();
+        if (debug_dragbar) {
+            _ = os.SetLayeredWindowAttributes(drag_bar_hwnd, 0, 80, os.LWA_ALPHA);
+        } else {
+            _ = os.SetLayeredWindowAttributes(drag_bar_hwnd, 0, 255, os.LWA_ALPHA);
+        }
     } else {
         _ = os.SetWindowPos(drag_bar_hwnd, os.HWND_BOTTOM, 0, 0, 0, 0, os.SWP_HIDEWINDOW | os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOSENDCHANGING);
     }
@@ -328,6 +332,13 @@ pub fn resizeDragBarWindow(self: *NonClientIslandWindow, width_px: c_int) void {
 // ---------------------------------------------------------------------------
 // Helpers — WT: _GetTopBorderHeight, _GetResizeHandleHeight
 // ---------------------------------------------------------------------------
+
+fn isDebugDragBar(self: *const NonClientIslandWindow) bool {
+    _ = self;
+    const val = std.process.getEnvVarOwned(std.heap.page_allocator, "GHOSTTY_DEBUG_DRAGBAR") catch return false;
+    defer std.heap.page_allocator.free(val);
+    return std.mem.eql(u8, val, "1");
+}
 
 /// WT: _GetTopBorderHeight — returns topBorderVisibleHeight (1) normally,
 /// 0 when maximized or fullscreen.
@@ -380,11 +391,16 @@ fn createDragBarWindow(self: *NonClientIslandWindow) ?os.HWND {
         drag_bar_class_registered = true;
     }
 
-    // WT: WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP.
-    // NOREDIRECTIONBITMAP = no surface → DWM sees through (visually transparent).
-    // Combined with alpha=255 → window is opaque to hit testing but invisible.
+    // Debug mode: GHOSTTY_DEBUG_DRAGBAR=1 makes drag bar visible (semi-transparent red).
+    // Normal mode: NOREDIRECTIONBITMAP = no surface → visually transparent, opaque to hit testing.
+    const debug_dragbar = self.isDebugDragBar();
+    const ex_style: os.DWORD = if (debug_dragbar)
+        os.WS_EX_LAYERED
+    else
+        os.WS_EX_LAYERED | os.WS_EX_NOREDIRECTIONBITMAP;
+
     const hwnd = os.CreateWindowExW(
-        os.WS_EX_LAYERED | os.WS_EX_NOREDIRECTIONBITMAP,
+        ex_style,
         DRAG_BAR_CLASS_NAME,
         EMPTY_WINDOW_NAME,
         os.WS_CHILD | os.WS_VISIBLE,
@@ -400,9 +416,13 @@ fn createDragBarWindow(self: *NonClientIslandWindow) ?os.HWND {
         log.err("createDragBarWindow: FAILED err={} — check supportedOS in manifest", .{os.GetLastError()});
         return null;
     };
-    // WT: alpha=255 (opaque to hit testing). NOREDIRECTIONBITMAP makes it
-    // visually transparent since DWM has no surface to composite.
-    _ = os.SetLayeredWindowAttributes(hwnd, 0, 255, os.LWA_ALPHA);
+    if (debug_dragbar) {
+        // Semi-transparent so drag region is visible as a colored overlay
+        _ = os.SetLayeredWindowAttributes(hwnd, 0, 80, os.LWA_ALPHA);
+        log.info("createDragBarWindow: DEBUG MODE — drag bar visible (alpha=80)", .{});
+    } else {
+        _ = os.SetLayeredWindowAttributes(hwnd, 0, 255, os.LWA_ALPHA);
+    }
     _ = os.SetWindowPos(hwnd, os.HWND_TOP, 0, 0, 0, 0, os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOACTIVATE);
     log.info("createDragBarWindow: OK hwnd=0x{x} (LAYERED visible child)", .{@intFromPtr(hwnd)});
 
@@ -499,8 +519,9 @@ fn inputSinkMessageHandler(self: *NonClientIslandWindow, hwnd: os.HWND, msg: os.
 }
 
 /// WT: _dragBarNcHitTest
-/// Right-portion drag bar: returns HT*BUTTON for caption buttons,
-/// HTTOP for resize handle, HTCAPTION for everything else in the drag bar.
+/// Full-width drag bar: returns HT*BUTTON for caption buttons,
+/// HTTOP for resize handle, HTTRANSPARENT for tab area (left side),
+/// HTCAPTION for everything else (draggable space between tabs and buttons).
 fn dragBarNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
     const lp: usize = @bitCast(lparam);
     const pt = os.POINT{
@@ -522,6 +543,7 @@ fn dragBarNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
         os.GetSystemMetricsForDpi(os.SM_CXPADDEDBORDER, dpi);
     const right_border = parent_rect.right - border;
 
+    // Caption buttons (rightmost)
     if ((right_border - pt.x) < button_w) {
         return os.HTCLOSE;
     }
@@ -532,8 +554,30 @@ fn dragBarNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
         return os.HTMINBUTTON;
     }
 
+    // Resize handle at top edge
     const resize_h = getResizeHandleHeight(parent);
-    return if (pt.y < parent_rect.top + resize_h and os.IsZoomed(parent) == 0) os.HTTOP else os.HTCAPTION;
+    if (pt.y < parent_rect.top + resize_h and os.IsZoomed(parent) == 0) {
+        return os.HTTOP;
+    }
+
+    // Full-width drag bar: everything is draggable (HTCAPTION).
+    // Tab clicks are handled by XAML via the interop island which sits below
+    // the drag bar in z-order. The OS routes input to the drag bar first;
+    // for the tab region we return HTTRANSPARENT so clicks fall through to XAML.
+    //
+    // Tab width heuristic: the TabView occupies the left portion.
+    // We use the stored tab_area_right_px value if available, otherwise
+    // fall back to a conservative 300px at 96 DPI.
+    const self_ptr = os.GetWindowLongPtrW(hwnd, os.GWLP_USERDATA);
+    if (self_ptr != 0) {
+        const self: *NonClientIslandWindow = @ptrFromInt(@as(usize, @bitCast(self_ptr)));
+        const tab_right = @atomicLoad(c_int, &self.tab_area_right_px, .acquire);
+        if (tab_right > 0 and pt.x < parent_rect.left + tab_right) {
+            return os.HTTRANSPARENT;
+        }
+    }
+
+    return os.HTCAPTION;
 }
 
 // ---------------------------------------------------------------------------
