@@ -47,6 +47,7 @@ const NonClientIslandWindow = nonclient_island_window.NonClientIslandWindow;
 const Tsf = @import("tsf.zig");
 const tsf_logic = @import("tsf_logic.zig");
 const IpcServer = @import("ipc.zig");
+const internal_os = @import("../../os/main.zig");
 
 const log = std.log.scoped(.winui3);
 
@@ -1528,6 +1529,26 @@ pub fn performAction(
                 },
             }
         },
+        .open_url => {
+            // Do NOT call internal_os.open() on the UI/DispatcherQueue thread.
+            // CreateProcessW (via rundll32) can block while DDE-negotiating with
+            // the default browser, freezing the XAML message loop.
+            // Offload to a background thread so the UI stays responsive.
+            const alloc = self.core_app.alloc;
+            const duped_url = try alloc.dupe(u8, value.url);
+            const kind = value.kind;
+            const thread = try std.Thread.spawn(.{}, struct {
+                fn run(a: Allocator, k: apprt.action.OpenUrl.Kind, u: []const u8) void {
+                    defer a.free(u);
+                    internal_os.open(a, k, u) catch |err| {
+                        log.warn("open_url failed err={}", .{err});
+                    };
+                }
+            }.run, .{ alloc, kind, duped_url });
+            thread.detach();
+            return true;
+        },
+
         else => return false,
     }
 }
