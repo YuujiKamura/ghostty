@@ -216,6 +216,8 @@ resource_manager_requested_token: ?i64 = null,
 /// Uses the Zig-native control plane (replaces Rust DLL).
 control_plane: ?*ControlPlaneNative = null,
 
+/// Timestamp of the last window title update to enable throttling.
+last_title_update_ns: i128 = 0,
 /// TSF (Text Services Framework) implementation for IME composition.
 tsf_impl: ?Tsf.TsfImplementation = null,
 
@@ -2106,6 +2108,14 @@ fn setTitle(self: *App, title: [:0]const u8) void {
 
 /// Set the window title, using "Ghostty [session-name]" when CP is active.
 fn setWindowTitleWithSession(self: *App, title: [:0]const u8) void {
+    const now = std.time.nanoTimestamp();
+    const min_interval_ns = 16 * std.time.ns_per_ms; // ~60Hz
+    if (now - self.last_title_update_ns < min_interval_ns) {
+        // Throttle window title updates to prevent UI thread saturation.
+        return;
+    }
+    self.last_title_update_ns = now;
+
     if (self.control_plane) |cp| {
         if (cp.session_name) |sn| {
             const alloc = self.core_app.alloc;

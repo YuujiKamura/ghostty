@@ -841,6 +841,14 @@ pub fn Surface(comptime App: type) type {
 
         /// Update the TabViewItem header with the given title.
         pub fn setTabTitle(self: *Self, title: [:0]const u8) void {
+            const now = std.time.nanoTimestamp();
+            const min_interval_ns = 16 * std.time.ns_per_ms; // ~60Hz
+            if (now - self.last_title_update_ns < min_interval_ns) {
+                // Throttle title updates to prevent UI thread saturation.
+                return;
+            }
+            self.last_title_update_ns = now;
+
             const alloc = self.app.core_app.alloc;
             if (self.title) |old_title| alloc.free(old_title);
 
