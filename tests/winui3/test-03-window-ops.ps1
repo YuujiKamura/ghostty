@@ -148,11 +148,7 @@ Write-Host "  --- Sub-test: Restore from maximize --- SKIPPED" -ForegroundColor 
 # ============================================================
 Write-Host "  --- Sub-test: Minimize ---" -ForegroundColor Cyan
 
-if ($wp -ne $null) {
-    $wp.SetWindowVisualState([System.Windows.Automation.WindowVisualState]::Minimized)
-} else {
-    [Win32]::ShowWindow($Hwnd, [Win32]::SW_MINIMIZE) | Out-Null
-}
+[Win32]::ShowWindow($Hwnd, [Win32]::SW_MINIMIZE) | Out-Null
 
 Wait-Condition -TimeoutMs 3000 -Description "window minimized" -ScriptBlock {
     [Win32]::IsIconic($Hwnd)
@@ -172,4 +168,4 @@ Wait-Condition -TimeoutMs 3000 -Description "window restored after minimize" -Sc
 Test-Assert -Condition ((-not [Win32]::IsIconic($Hwnd)) -and [Win32]::IsWindowVisible($Hwnd)) `
     -Message "$testName/restore - window restored and visible"
 
-Write-Host "PASS: $testName - All window operations (move/resize/maximize/restore/minimize/restore) succeeded" -ForegroundColor Green
+Write-Host "PASS: $testName - All window operations (move/resize/minimize/restore) succeeded" -ForegroundColor Green

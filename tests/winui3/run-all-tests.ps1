@@ -219,27 +219,20 @@ if ("phase1-ghost-demo-smoke" -in $phase1Tests) {
     Write-Host "  SKIP: phase1-ghost-demo-smoke" -ForegroundColor DarkGray
 }
 
-# --- Phase 1: noise ghost-demo (tab 2) ---
+# --- Phase 1: noise ghost-demo (same tab, no tab creation via CP) ---
 if ("phase1-noise-ghost-demo" -in $phase1Tests) {
     Invoke-Test -Name "phase1-noise-ghost-demo" -Block {
         if (-not $sessionName) {
-            throw "No CP session available for tab 2 creation"
+            throw "No CP session available"
         }
 
-        # Open new tab via CP new_tab action
-        & $deckpilot send $sessionName "new_tab" 2>&1 | Out-Null
-        Start-Sleep -Seconds 2
+        # NOTE: deckpilot send is INPUT-only (types text into shell).
+        # It cannot invoke CP actions like new_tab, so we run the noise
+        # demo in the existing session (tab 1) instead of opening tab 2.
 
-        # Re-discover session list to find tab 2 session
-        $json = & $deckpilot list --json 2>$null | ConvertFrom-Json
-        $sessions = @($json | Where-Object { $_.pid -eq $proc.Id })
-        Test-Assert -Condition ($sessions.Count -ge 1) -Message "phase1-noise-ghost-demo - tab 2 session exists"
-
-        # Send noise ghost-demo to the newest session (tab 2)
-        $tab2Session = if ($sessions.Count -ge 2) { $sessions[-1].name } else { $sessionName }
-        $sendOk = Send-GhosttyInput -SessionName $tab2Session -Text "python `"$playPy`" --fps 60"
+        $sendOk = Send-GhosttyInput -SessionName $sessionName -Text "python `"$playPy`" --fps 60"
         if ($sendOk) {
-            Write-Host "  Sent noise play.py --fps 60 to tab 2 ($tab2Session)" -ForegroundColor DarkGray
+            Write-Host "  Sent noise play.py --fps 60 to $sessionName" -ForegroundColor DarkGray
         } else {
             Write-Host "  WARN: Could not send noise play.py" -ForegroundColor Yellow
         }
@@ -247,10 +240,10 @@ if ("phase1-noise-ghost-demo" -in $phase1Tests) {
         # Let it run briefly, then verify process still alive
         Start-Sleep -Seconds 4
         $proc.Refresh()
-        Test-Assert -Condition (-not $proc.HasExited) -Message "phase1-noise-ghost-demo - process alive with 2 tabs"
+        Test-Assert -Condition (-not $proc.HasExited) -Message "phase1-noise-ghost-demo - process alive during demo"
 
         # Stop noise demo
-        Send-GhosttyInput -SessionName $tab2Session -Text "`u{0003}" | Out-Null
+        Send-GhosttyInput -SessionName $sessionName -Text "`u{0003}" | Out-Null
         Start-Sleep -Milliseconds 500
     }
 } else {
@@ -305,10 +298,10 @@ if (-not (Test-Path $deckpilot)) {
             }
 
             $marker = "roundtrip_marker_$(Get-Random)"
-            & $deckpilot send $sessionName "echo $marker" 2>&1 | Out-Null
+            & $deckpilot send $sessionName "echo $marker" 2>$null
             Start-Sleep -Seconds 3
 
-            $buffer = & $deckpilot show $sessionName 2>&1
+            $buffer = & $deckpilot show $sessionName 2>$null
             $bufferText = $buffer -join "`n"
             Test-Assert -Condition ($bufferText -match $marker) -Message "phase2-send-show-roundtrip - buffer contains marker '$marker'"
         }
@@ -334,10 +327,10 @@ if (-not (Test-Path $deckpilot)) {
             }
 
             $marker = "keyboard_test_marker_$(Get-Random)"
-            & $deckpilot send $sessionName "echo $marker" 2>&1 | Out-Null
+            & $deckpilot send $sessionName "echo $marker" 2>$null
             Start-Sleep -Seconds 3
 
-            $buffer = & $deckpilot show $sessionName 2>&1
+            $buffer = & $deckpilot show $sessionName 2>$null
             $bufferText = $buffer -join "`n"
             Test-Assert -Condition ($bufferText -match $marker) -Message "phase3-ascii-input - ASCII marker found in buffer"
         }
@@ -352,10 +345,10 @@ if (-not (Test-Path $deckpilot)) {
                 throw "No CP session available"
             }
 
-            & $deckpilot send $sessionName "echo $([char]0x30C6)$([char]0x30B9)$([char]0x30C8)" 2>&1 | Out-Null
+            & $deckpilot send $sessionName "echo $([char]0x30C6)$([char]0x30B9)$([char]0x30C8)" 2>$null
             Start-Sleep -Seconds 3
 
-            $buffer = & $deckpilot show $sessionName 2>&1
+            $buffer = & $deckpilot show $sessionName 2>$null
             $bufferText = $buffer -join "`n"
             Test-Assert -Condition ($bufferText -match "$([char]0x30C6)$([char]0x30B9)$([char]0x30C8)") -Message "phase3-japanese-input - Japanese text found in buffer"
         }

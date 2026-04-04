@@ -14,7 +14,7 @@ using System.Runtime.InteropServices;
 public class DpiHelper {
     [DllImport("user32.dll")]
     public static extern bool AdjustWindowRectExForDpi(
-        ref RECT2 lpRect, uint dwStyle, bool bMenu, uint dwExStyle, uint dpi);
+        ref RECT2 lpRect, int dwStyle, bool bMenu, uint dwExStyle, uint dpi);
 }
 
 [StructLayout(LayoutKind.Sequential)]
