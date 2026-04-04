@@ -34,6 +34,18 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install Windows App SDK (NuGet)
+        shell: pwsh
+        run: |
+          nuget install Microsoft.WindowsAppSDK -Version 1.6.250108002 -OutputDirectory _nuget
+          $src = "_nuget/Microsoft.WindowsAppSDK.1.6.250108002"
+          $dest = Join-Path $env:USERPROFILE ".nuget/packages/microsoft.windowsappsdk/1.6.250108002"
+          if (-not (Test-Path $dest)) {
+            New-Item -ItemType Directory -Path $dest -Force | Out-Null
+            Copy-Item -Recurse -Force "$src/*" $dest
+          }
+          Write-Host "WindowsAppSDK installed to $dest"
+
       - name: Verify Prebuilt Manifest Consistency
         shell: pwsh
         run: |
