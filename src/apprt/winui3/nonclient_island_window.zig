@@ -32,9 +32,9 @@ island: IslandWindow,
 drag_bar_hwnd: ?os.HWND = null,
 
 /// Tab area right edge in pixels (client coords relative to parent left).
-/// Updated by resizeDragBarWindow based on tab count.
+/// Updated by App.onLayoutUpdated based on actual XAML layout.
 /// Used by dragBarNcHitTest to return HTTRANSPARENT for the tab region.
-tab_area_right_px: c_int = 300,
+tab_area_right_px: c_int align(4) = 0,
 
 /// Whether the window is currently maximized.
 /// WT: _isMaximized
@@ -60,6 +60,19 @@ const DRAG_BAR_CLASS_NAME = std.unicode.utf8ToUtf16LeStringLiteral("GhosttyDragB
 const EMPTY_WINDOW_NAME = std.unicode.utf8ToUtf16LeStringLiteral("");
 
 var drag_bar_class_registered: bool = false;
+var g_debug_dragbar: ?bool = null;
+
+fn isDebugDragBarStatic() bool {
+    if (g_debug_dragbar) |d| return d;
+    const val = std.process.getEnvVarOwned(std.heap.page_allocator, "GHOSTTY_DEBUG_DRAGBAR") catch {
+        g_debug_dragbar = false;
+        return false;
+    };
+    defer std.heap.page_allocator.free(val);
+    const d = std.mem.eql(u8, val, "1");
+    g_debug_dragbar = d;
+    return d;
+}
 
 // ---------------------------------------------------------------------------
 // Construction — WT: NonClientIslandWindow::MakeWindow()
@@ -70,6 +83,12 @@ pub fn init(self: *NonClientIslandWindow, app_ptr: *anyopaque) !void {
         .island = try IslandWindow.makeWindow(app_ptr, &nonclientWndProc),
         .drag_bar_hwnd = null,
     };
+
+    // Add WS_CLIPCHILDREN to parent to ensure it doesn't paint over the drag bar.
+    // Also add WS_CLIPSIBLINGS just in case.
+    const hwnd = self.island.hwnd;
+    const style = os.GetWindowLongPtrW(hwnd, os.GWL_STYLE);
+    _ = os.SetWindowLongPtrW(hwnd, os.GWL_STYLE, style | os.WS_CLIPCHILDREN | os.WS_CLIPSIBLINGS);
 
     // Drag bar creation is DEFERRED to createDragBarIfNeeded(), called
     // after DXWS initialization (island.initialize()). WS_EX_LAYERED on
@@ -207,6 +226,8 @@ pub fn onNcCalcSize(hwnd: os.HWND, wparam: os.WPARAM, lparam: os.LPARAM) os.LRES
 // ---------------------------------------------------------------------------
 
 pub fn onNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
+    const App = @import("App.zig");
+
     const lp: usize = @bitCast(lparam);
     const mouse_x = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp)))));
     const mouse_y = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp >> 16)))));
@@ -227,16 +248,17 @@ pub fn onNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
         return os.HTTOP;
     }
 
-    // The drag bar only covers the right portion of the titlebar.
-    // For the left portion (tab area), return HTCLIENT so XAML gets clicks.
-    const dpi = os.GetDpiForWindow(hwnd);
-    const scale: f32 = @as(f32, @floatFromInt(dpi)) / 96.0;
-    const drag_zone: c_int = @intFromFloat(@as(f32, @floatFromInt(DRAG_ZONE_96DPI)) * scale);
-    const drag_x = wrect.right - drag_zone;
-
-    // In the titlebar region but LEFT of drag zone → let XAML handle it
-    if (mouse_x < drag_x) {
-        return os.HTCLIENT;
+    // Manual Hit-Test Sync: Use tab_area_right_px from the left.
+    // In the titlebar region but LEFT of tab_area_right_px → let XAML handle it
+    const app_ptr_raw = os.GetWindowLongPtrW(hwnd, os.GWLP_USERDATA);
+    if (app_ptr_raw != 0) {
+        const app: *App = @ptrFromInt(app_ptr_raw);
+        if (app.nci_window) |nci| {
+            const tab_right = @atomicLoad(c_int, &nci.tab_area_right_px, .acquire);
+            if (mouse_x < wrect.left + tab_right) {
+                return os.HTCLIENT;
+            }
+        }
     }
 
     return os.HTCAPTION;
@@ -301,11 +323,6 @@ pub fn resizeDragBarWindow(self: *NonClientIslandWindow, width_px: c_int) void {
     });
 
     if (width_px > 0 and titlebar_h > 0) {
-        // Update tab area width (DPI-scaled). 300px at 96 DPI covers ~1 tab + "+" button.
-        const scale: f32 = @as(f32, @floatFromInt(dpi)) / 96.0;
-        const tab_px: c_int = @intFromFloat(300.0 * scale);
-        @atomicStore(c_int, &self.tab_area_right_px, tab_px, .release);
-
         // Drag bar covers the FULL titlebar width.
         // Tab clicks pass through via HTTRANSPARENT in dragBarNcHitTest.
         _ = os.SetWindowPos(
@@ -320,7 +337,7 @@ pub fn resizeDragBarWindow(self: *NonClientIslandWindow, width_px: c_int) void {
 
         const debug_dragbar = self.isDebugDragBar();
         if (debug_dragbar) {
-            _ = os.SetLayeredWindowAttributes(drag_bar_hwnd, 0, 80, os.LWA_ALPHA);
+            _ = os.SetLayeredWindowAttributes(drag_bar_hwnd, 0, 180, os.LWA_ALPHA);
         } else {
             _ = os.SetLayeredWindowAttributes(drag_bar_hwnd, 0, 255, os.LWA_ALPHA);
         }
@@ -335,9 +352,7 @@ pub fn resizeDragBarWindow(self: *NonClientIslandWindow, width_px: c_int) void {
 
 fn isDebugDragBar(self: *const NonClientIslandWindow) bool {
     _ = self;
-    const val = std.process.getEnvVarOwned(std.heap.page_allocator, "GHOSTTY_DEBUG_DRAGBAR") catch return false;
-    defer std.heap.page_allocator.free(val);
-    return std.mem.eql(u8, val, "1");
+    return isDebugDragBarStatic();
 }
 
 /// WT: _GetTopBorderHeight — returns topBorderVisibleHeight (1) normally,
@@ -364,16 +379,19 @@ fn createDragBarWindow(self: *NonClientIslandWindow) ?os.HWND {
         return null;
     };
 
-    // WT: static lambda registers class once with CS_DBLCLKS, BLACK_BRUSH,
+    // WT: static lambda registers class once with CS_DBLCLKS,
     // cbWndExtra = sizeof(NonClientIslandWindow*).
+    // Debug: hot pink brush so drag bar coverage is visible.
     if (!drag_bar_class_registered) {
+        const debug = isDebugDragBarStatic();
+        const bg_brush = if (debug) os.CreateSolidBrush(0x00B469FF) else os.GetStockObject(os.BLACK_BRUSH);
         const wc = os.WNDCLASSEXW{
             .style = os.CS_HREDRAW | os.CS_VREDRAW | os.CS_DBLCLKS,
             .lpfnWndProc = &dragBarStaticWndProc,
             .cbWndExtra = @sizeOf(usize), // WT: sizeof(NonClientIslandWindow*)
             .hInstance = hinstance,
             .hCursor = os.LoadCursorW(null, os.IDC_ARROW),
-            .hbrBackground = os.GetStockObject(os.BLACK_BRUSH),
+            .hbrBackground = bg_brush,
             .lpszClassName = DRAG_BAR_CLASS_NAME,
         };
         const atom = os.RegisterClassExW(&wc);
@@ -403,7 +421,7 @@ fn createDragBarWindow(self: *NonClientIslandWindow) ?os.HWND {
         ex_style,
         DRAG_BAR_CLASS_NAME,
         EMPTY_WINDOW_NAME,
-        os.WS_CHILD | os.WS_VISIBLE,
+        os.WS_CHILD | os.WS_VISIBLE | os.WS_CLIPSIBLINGS,
         0,
         0,
         0,
@@ -418,8 +436,8 @@ fn createDragBarWindow(self: *NonClientIslandWindow) ?os.HWND {
     };
     if (debug_dragbar) {
         // Semi-transparent so drag region is visible as a colored overlay
-        _ = os.SetLayeredWindowAttributes(hwnd, 0, 80, os.LWA_ALPHA);
-        log.info("createDragBarWindow: DEBUG MODE — drag bar visible (alpha=80)", .{});
+        _ = os.SetLayeredWindowAttributes(hwnd, 0, 180, os.LWA_ALPHA);
+        log.info("createDragBarWindow: DEBUG MODE — drag bar visible (alpha=180)", .{});
     } else {
         _ = os.SetLayeredWindowAttributes(hwnd, 0, 255, os.LWA_ALPHA);
     }
@@ -463,6 +481,22 @@ fn inputSinkMessageHandler(self: *NonClientIslandWindow, hwnd: os.HWND, msg: os.
     }
 
     switch (msg) {
+        os.WM_PAINT => {
+            if (isDebugDragBarStatic()) {
+                var ps: os.PAINTSTRUCT = .{};
+                if (os.BeginPaint(hwnd, &ps)) |hdc| {
+                    var rect: os.RECT = .{};
+                    _ = os.GetClientRect(hwnd, &rect);
+                    const brush = os.CreateSolidBrush(0x00B469FF);
+                    _ = os.FillRect(hdc, &rect, brush);
+                    _ = os.DeleteObject(brush);
+                    _ = os.EndPaint(hwnd, &ps);
+                }
+                return 0;
+            }
+            return os.DefWindowProcW(hwnd, msg, wparam, lparam);
+        },
+
         os.WM_NCHITTEST => return dragBarNcHitTest(hwnd, lparam),
 
         os.WM_NCMOUSEMOVE => {
@@ -566,8 +600,8 @@ fn dragBarNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
     // for the tab region we return HTTRANSPARENT so clicks fall through to XAML.
     //
     // Tab width heuristic: the TabView occupies the left portion.
-    // We use the stored tab_area_right_px value if available, otherwise
-    // fall back to a conservative 300px at 96 DPI.
+    // We use the stored tab_area_right_px value (updated via LayoutUpdated).
+    // If it's 0 (not yet measured), we return HTCAPTION so the titlebar is draggable.
     const self_ptr = os.GetWindowLongPtrW(hwnd, os.GWLP_USERDATA);
     if (self_ptr != 0) {
         const self: *NonClientIslandWindow = @ptrFromInt(@as(usize, @bitCast(self_ptr)));
