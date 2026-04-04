@@ -218,6 +218,10 @@ control_plane: ?*ControlPlaneNative = null,
 
 /// Timestamp of the last window title update to enable throttling.
 last_title_update_ns: i128 = 0,
+
+/// Cached window title to prevent redundant SetWindowTextW calls.
+window_title: ?[:0]u8 = null,
+
 /// TSF (Text Services Framework) implementation for IME composition.
 tsf_impl: ?Tsf.TsfImplementation = null,
 
@@ -1673,8 +1677,7 @@ fn controlPlaneCaptureHistory(ctx: *anyopaque, allocator: Allocator, tab_idx: ?u
     else
         self.activeSurface();
     const s = surface orelse return null;
-    const history = try s.historyString(allocator);
-    return try allocator.dupe(u8, history);
+    return try s.historyString(allocator);
 }
 
 fn controlPlaneCaptureTabList(ctx: *anyopaque, allocator: Allocator) !?[]u8 {
@@ -2077,6 +2080,14 @@ fn logDiagnosticSnapshot(self: *App) void {
 }
 
 fn setWindowTitle(self: *App, title: [:0]const u8) void {
+    if (self.window_title) |old_title| {
+        if (std.mem.eql(u8, old_title, title)) return;
+    }
+
+    const alloc = self.core_app.alloc;
+    if (self.window_title) |old_title| alloc.free(old_title);
+    self.window_title = alloc.dupeZ(u8, title) catch null;
+
     // In XAML Islands mode, use Win32 SetWindowTextW instead of IWindow.SetTitle.
     const hwnd = self.hwnd orelse return;
     // Convert UTF-8 to UTF-16 for SetWindowTextW.

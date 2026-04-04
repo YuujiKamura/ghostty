@@ -116,6 +116,12 @@ pub fn Surface(comptime App: type) type {
         surface_grid: ?*winrt.IInspectable = null,
         /// The vertical ScrollBar XAML control (IInspectable, QI to IScrollBar/IRangeBase).
         scroll_bar_insp: ?*winrt.IInspectable = null,
+        /// Cached COM interfaces for scrollbar to avoid repeated QIs.
+        scroll_bar_range_base: ?*com.IRangeBase = null,
+        scroll_bar_isb: ?*com.IScrollBar = null,
+        scroll_bar_fe: ?*com.IFrameworkElement = null,
+        scroll_bar_ue: ?*com.IUIElement = null,
+
         /// Hidden XAML TextBox used as the WinUI3/TSF-backed IME focus target.
         ime_text_box: ?*com.ITextBox = null,
         ime_text_box_internal_update: bool = false,
@@ -342,6 +348,10 @@ pub fn Surface(comptime App: type) type {
             // Store references.
             self.surface_grid = grid_insp;
             self.scroll_bar_insp = sb_insp;
+            self.scroll_bar_range_base = sb_insp.queryInterface(com.IRangeBase) catch null;
+            self.scroll_bar_isb = sb_insp.queryInterface(com.IScrollBar) catch null;
+            self.scroll_bar_fe = sb_insp.queryInterface(com.IFrameworkElement) catch null;
+            self.scroll_bar_ue = sb_insp.queryInterface(com.IUIElement) catch null;
             self.ime_text_box = ime_tb;
             _ = ime_tb_insp.release();
 
@@ -614,6 +624,24 @@ pub fn Surface(comptime App: type) type {
                     }
                     self.scroll_bar_value_changed_token = 0;
                 }
+                
+                if (self.scroll_bar_range_base) |rb| {
+                    rb.release();
+                    self.scroll_bar_range_base = null;
+                }
+                if (self.scroll_bar_isb) |isb| {
+                    isb.release();
+                    self.scroll_bar_isb = null;
+                }
+                if (self.scroll_bar_fe) |fe| {
+                    fe.release();
+                    self.scroll_bar_fe = null;
+                }
+                if (self.scroll_bar_ue) |ue| {
+                    ue.release();
+                    self.scroll_bar_ue = null;
+                }
+
                 _ = sb.release();
                 self.scroll_bar_insp = null;
             }
@@ -841,6 +869,13 @@ pub fn Surface(comptime App: type) type {
 
         /// Update the TabViewItem header with the given title.
         pub fn setTabTitle(self: *Self, title: [:0]const u8) void {
+            if (self.title) |old_title| {
+                if (std.mem.eql(u8, old_title, title)) {
+                    // No change in title, skip allocation and UI update entirely.
+                    return;
+                }
+            }
+
             const now = std.time.nanoTimestamp();
             const min_interval_ns = 16 * std.time.ns_per_ms; // ~60Hz
             if (now - self.last_title_update_ns < min_interval_ns) {
@@ -2026,12 +2061,7 @@ pub fn Surface(comptime App: type) type {
                 self.is_internal_scroll_update = false;
             }
 
-            const range_base = sb.queryInterface(com.IRangeBase) catch |err| {
-                log.warn("scrollbar ui sync: IRangeBase QI failed: {}", .{err});
-                return;
-            };
-            defer range_base.release();
-
+            const range_base = self.scroll_bar_range_base orelse return;
             const total_f: f64 = @floatFromInt(total);
             const offset_f: f64 = @floatFromInt(offset);
             const len_f: f64 = @floatFromInt(len);
@@ -2043,30 +2073,18 @@ pub fn Surface(comptime App: type) type {
             range_base.SetLargeChange(len_f) catch {};
             range_base.SetSmallChange(1.0) catch {};
 
-            const isb = sb.queryInterface(com.IScrollBar) catch |err| {
-                log.warn("scrollbar ui sync: IScrollBar QI failed: {}", .{err});
-                return;
-            };
-            defer isb.release();
+            const isb = self.scroll_bar_isb orelse return;
             isb.SetViewportSize(len_f) catch {};
 
-            const fe = sb.queryInterface(com.IFrameworkElement) catch |err| {
-                log.warn("scrollbar ui sync: IFrameworkElement QI failed: {}", .{err});
-                return;
-            };
-            defer fe.release();
-            const ue = sb.queryInterface(com.IUIElement) catch |err| {
-                log.warn("scrollbar ui sync: IUIElement QI failed: {}", .{err});
-                return;
-            };
-            defer ue.release();
-
-            const orientation = isb.Orientation() catch -1;
-            const viewport = isb.ViewportSize() catch -1.0;
-            const width = fe.ActualWidth() catch -1.0;
-            const height = fe.ActualHeight() catch -1.0;
-            const visibility = ue.Visibility() catch -1;
             if (comptime log_hot_path) {
+                const fe = self.scroll_bar_fe orelse return;
+                const ue = self.scroll_bar_ue orelse return;
+
+                const orientation = isb.Orientation() catch -1;
+                const viewport = isb.ViewportSize() catch -1.0;
+                const width = fe.ActualWidth() catch -1.0;
+                const height = fe.ActualHeight() catch -1.0;
+                const visibility = ue.Visibility() catch -1;
                 log.debug(
                     "scrollbar ui sync: orientation={} viewport={d:.2} actual={d:.2}x{d:.2} visibility={} max={d:.2} value={d:.2} len={d:.2}",
                     .{ orientation, viewport, width, height, visibility, maximum, offset_f, len_f },

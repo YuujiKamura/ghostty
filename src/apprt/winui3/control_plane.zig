@@ -949,20 +949,20 @@ test "handleRequestWith caches read commands and invalidates on mutating command
 
     var tb = TestBackendCtx{};
 
-    const r1 = cp.handleRequestWith("TAIL|agent-deck|20", std.testing.allocator, &tb, testBackend);
+    const r1 = cp.handleRequestWith("TAIL|deckpilot|20", std.testing.allocator, &tb, testBackend);
     defer std.testing.allocator.free(r1);
     try std.testing.expectEqual(@as(usize, 1), tb.calls);
 
-    const r2 = cp.handleRequestWith("TAIL|agent-deck|20", std.testing.allocator, &tb, testBackend);
+    const r2 = cp.handleRequestWith("TAIL|deckpilot|20", std.testing.allocator, &tb, testBackend);
     defer std.testing.allocator.free(r2);
     try std.testing.expectEqual(@as(usize, 1), tb.calls);
     try std.testing.expectEqualStrings(r1, r2);
 
-    const r3 = cp.handleRequestWith("INPUT|agent-deck|echo hi", std.testing.allocator, &tb, testBackend);
+    const r3 = cp.handleRequestWith("INPUT|deckpilot|echo hi", std.testing.allocator, &tb, testBackend);
     defer std.testing.allocator.free(r3);
     try std.testing.expectEqual(@as(usize, 2), tb.calls);
 
-    const r4 = cp.handleRequestWith("TAIL|agent-deck|20", std.testing.allocator, &tb, testBackend);
+    const r4 = cp.handleRequestWith("TAIL|deckpilot|20", std.testing.allocator, &tb, testBackend);
     defer std.testing.allocator.free(r4);
     try std.testing.expectEqual(@as(usize, 3), tb.calls);
 }
@@ -977,7 +977,7 @@ test "handleRequestWith rejects input when queue is full" {
 
     try std.testing.expect(cp.enqueueInput("zig-cp", "echo hi", false, 1));
 
-    const resp = cp.handleRequestWith("INPUT|agent-deck|echo again", std.testing.allocator, null, testBackend);
+    const resp = cp.handleRequestWith("INPUT|deckpilot|echo again", std.testing.allocator, null, testBackend);
     defer std.testing.allocator.free(resp);
     try std.testing.expectEqualStrings("ERR|BUSY|input_queue_full\n", resp);
 }
@@ -992,7 +992,7 @@ test "handleRequestWith limits data lane but allows control lane" {
 
     var tb = TestBackendCtx{};
 
-    const data_resp = cp.handleRequestWith("TAIL|agent-deck|20", std.testing.allocator, &tb, testBackend);
+    const data_resp = cp.handleRequestWith("TAIL|deckpilot|20", std.testing.allocator, &tb, testBackend);
     defer std.testing.allocator.free(data_resp);
     try std.testing.expectEqualStrings("ERR|BUSY|data_lane_full\n", data_resp);
     try std.testing.expectEqual(@as(usize, 0), tb.calls);
@@ -1030,19 +1030,19 @@ test "handleRequestWith keeps legacy commands working without CAPABILITIES query
     defer std.testing.allocator.free(ping);
     try std.testing.expectEqualStrings("OK|PONG\n", ping);
 
-    const state = cp.handleRequestWith("STATE|agent-deck|0", std.testing.allocator, null, contractBackend);
+    const state = cp.handleRequestWith("STATE|deckpilot|0", std.testing.allocator, null, contractBackend);
     defer std.testing.allocator.free(state);
     try std.testing.expectEqualStrings("OK|state\n", state);
 
-    const tail = cp.handleRequestWith("TAIL|agent-deck|20", std.testing.allocator, null, contractBackend);
+    const tail = cp.handleRequestWith("TAIL|deckpilot|20", std.testing.allocator, null, contractBackend);
     defer std.testing.allocator.free(tail);
     try std.testing.expectEqualStrings("OK|tail\n", tail);
 
-    const input = cp.handleRequestWith("INPUT|agent-deck|echo hi", std.testing.allocator, null, contractBackend);
+    const input = cp.handleRequestWith("INPUT|deckpilot|echo hi", std.testing.allocator, null, contractBackend);
     defer std.testing.allocator.free(input);
     try std.testing.expectEqualStrings("OK|input\n", input);
 
-    const ack = cp.handleRequestWith("ACK_POLL|agent-deck", std.testing.allocator, null, contractBackend);
+    const ack = cp.handleRequestWith("ACK_POLL|deckpilot", std.testing.allocator, null, contractBackend);
     defer std.testing.allocator.free(ack);
     try std.testing.expectEqualStrings("OK|ack\n", ack);
 }
@@ -1053,7 +1053,7 @@ test "handleRequestWith returns deterministic ERR for unsupported command" {
         .hwnd = @ptrFromInt(0),
     };
 
-    const resp = cp.handleRequestWith("RAW_INPUT|agent-deck|hello", std.testing.allocator, null, contractBackend);
+    const resp = cp.handleRequestWith("RAW_INPUT|deckpilot|hello", std.testing.allocator, null, contractBackend);
     defer std.testing.allocator.free(resp);
     try std.testing.expectEqualStrings("ERR|UNSUPPORTED|RAW_INPUT\n", resp);
 }
