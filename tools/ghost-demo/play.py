@@ -110,7 +110,7 @@ def load_frames():
     return frames
 
 
-def play_demo(frames, fps, rows):
+def play_demo(frames, fps, rows, max_loops=0):
     total = len(frames)
     loop = 0
     current_fps = fps
@@ -143,17 +143,36 @@ def play_demo(frames, fps, rows):
 
     import random
     _haunt_until = 0
+    # File-based control (for automation — msvcrt.getch can't receive pipe input)
+    _trigger_dir = os.environ.get("TEMP", "/tmp")
+    _haunt_trigger = os.path.join(_trigger_dir, "ghost-haunt-trigger")
+    _exit_trigger = os.path.join(_trigger_dir, "ghost-exit-trigger")
+    _haunt_forced = False
     _next_haunt = time.time() + random.uniform(30, 120)  # first haunting in 30-120s
 
     sys.stdout.write(ALT_SCREEN_ON + CLEAR_SCREEN + HIDE_CURSOR)
     sys.stdout.flush()
     try:
-        while True:
+        while max_loops == 0 or loop < max_loops:
             loop += 1
             for i, frame in enumerate(frames):
                 now = time.time()
-                # Spontaneous haunting: triggers randomly, lasts 1-3 seconds
-                if now >= _next_haunt and now >= _haunt_until:
+                # File-based exit trigger
+                if os.path.exists(_exit_trigger):
+                    try: os.remove(_exit_trigger)
+                    except OSError: pass
+                    raise KeyboardInterrupt
+                # File-based haunting trigger
+                if os.path.exists(_haunt_trigger):
+                    if not _haunt_forced:
+                        _haunt_forced = True
+                        _haunt_until = now + 999999
+                elif _haunt_forced:
+                    _haunt_forced = False
+                    _haunt_until = 0
+                    _next_haunt = now + random.uniform(45, 180)
+                # Spontaneous haunting
+                if not _haunt_forced and now >= _next_haunt and now >= _haunt_until:
                     _haunt_until = now + random.uniform(1, 3)
                     _next_haunt = now + random.uniform(45, 180)
                 if now < _haunt_until and random.random() < 0.35:
@@ -229,6 +248,7 @@ def run_benchmark(frames, iterations):
 def main():
     parser = argparse.ArgumentParser(description="Ghost AA animation player/benchmark")
     parser.add_argument("--fps", type=int, default=60, help="Playback FPS (default: 60)")
+    parser.add_argument("--loops", type=int, default=0, help="Max loops in demo mode (0=infinite, default: 0)")
     parser.add_argument("--benchmark", action="store_true", help="Run benchmark mode")
     parser.add_argument("--iterations", type=int, default=3, help="Benchmark iterations (default: 3)")
     args = parser.parse_args()
@@ -242,7 +262,7 @@ def main():
     frames = fit_frames(frames, sz.columns, sz.lines)
 
     if not args.benchmark:
-        play_demo(frames, args.fps, sz.lines)
+        play_demo(frames, args.fps, sz.lines, max_loops=args.loops)
     else:
         run_benchmark(frames, args.iterations)
 

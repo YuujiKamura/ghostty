@@ -165,18 +165,25 @@ public class Win32 {
     }
 
     /// Find a top-level window by PID.
+    /// Prefers a window with class name "GhosttyWindow"; falls back to first visible window.
     public static IntPtr FindWindowByPid(uint pid) {
-        IntPtr found = IntPtr.Zero;
+        IntPtr fallback = IntPtr.Zero;
+        IntPtr preferred = IntPtr.Zero;
         EnumWindows((h, _) => {
             uint wpid;
             GetWindowThreadProcessId(h, out wpid);
             if (wpid == pid && IsWindowVisible(h)) {
-                found = h;
-                return false; // stop enumeration
+                if (GetClassName(h) == "GhosttyWindow") {
+                    preferred = h;
+                    return false; // stop enumeration
+                }
+                if (fallback == IntPtr.Zero) {
+                    fallback = h;
+                }
             }
             return true;
         }, IntPtr.Zero);
-        return found;
+        return preferred != IntPtr.Zero ? preferred : fallback;
     }
 }
 
@@ -325,13 +332,16 @@ function Find-GhosttyWindow {
         }
 
         # Strategy 3: Enumerate by PID (catches renamed class+title)
+        # Only accept GhosttyWindow immediately; keep polling if only PseudoConsoleWindow found
         if ($ProcessId -ne 0) {
             $hwnd = [Win32]::FindWindowByPid($ProcessId)
             if ($hwnd -ne [IntPtr]::Zero) {
                 $cls = [Win32]::GetClassName($hwnd)
-                $ttl = [Win32]::GetWindowText($hwnd)
-                Write-Host "  Found window via PID $ProcessId (class='$cls', title='$ttl') -> 0x$($hwnd.ToString('X'))" -ForegroundColor DarkGray
-                return $hwnd
+                if ($cls -ne 'PseudoConsoleWindow') {
+                    $ttl = [Win32]::GetWindowText($hwnd)
+                    Write-Host "  Found window via PID $ProcessId (class='$cls', title='$ttl') -> 0x$($hwnd.ToString('X'))" -ForegroundColor DarkGray
+                    return $hwnd
+                }
             }
         }
 
@@ -1017,12 +1027,19 @@ function Register-GhosttyCP {
     [CmdletBinding()]
     param([Parameter(Mandatory)][int]$ProcessId)
 
-    $agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
+    $agentDeck = if ($env:DECKPILOT_EXE) { $env:DECKPILOT_EXE } else { "deckpilot" }
     if (-not (Test-Path $agentDeck)) { return $null }
 
-    $json = & $agentDeck list --json 2>$null | ConvertFrom-Json
-    $session = $json | Where-Object { $_.pid -eq $ProcessId }
-    return $session.name
+    try {
+        $raw = & $agentDeck list --json 2>$null
+        if (-not $raw) { return $null }
+        $json = $raw | ConvertFrom-Json
+        if (-not $json) { return $null }
+        $session = $json | Where-Object { $_.pid -eq $ProcessId }
+        return $session.name
+    } catch {
+        return $null
+    }
 }
 
 function Find-GhosttyCP {
@@ -1036,7 +1053,7 @@ function Find-GhosttyCP {
     [CmdletBinding()]
     param([int]$ProcessId = 0)
 
-    $agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
+    $agentDeck = if ($env:DECKPILOT_EXE) { $env:DECKPILOT_EXE } else { "deckpilot" }
     if (-not (Test-Path $agentDeck)) { return $null }
 
     try {
@@ -1073,20 +1090,13 @@ function Send-GhosttyInput {
         [Parameter(Mandatory)][string]$Text
     )
 
-    $agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
+    $agentDeck = if ($env:DECKPILOT_EXE) { $env:DECKPILOT_EXE } else { "deckpilot" }
 
-    # Try deckpilot send first
+    # Try deckpilot send
     if (Test-Path $agentDeck) {
         $prev = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
-        $sendResult = & $agentDeck send $SessionName $Text --no-wait 2>&1
-        $sendExit = $LASTEXITCODE
-        $ErrorActionPreference = $prev
-        if ($sendExit -eq 0) { return $true }
-
-        # Try session send as fallback
-        $ErrorActionPreference = 'Continue'
-        $sendResult = & $agentDeck session send $SessionName $Text --no-wait 2>&1
+        $sendResult = & $agentDeck send $SessionName $Text 2>$null
         $sendExit = $LASTEXITCODE
         $ErrorActionPreference = $prev
         if ($sendExit -eq 0) { return $true }
@@ -1162,13 +1172,13 @@ function Get-GhosttyOutput {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$SessionName)
 
-    $agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
+    $agentDeck = if ($env:DECKPILOT_EXE) { $env:DECKPILOT_EXE } else { "deckpilot" }
     if (-not (Test-Path $agentDeck)) { return "" }
 
     $prev = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        $output = & $agentDeck session output $SessionName -q 2>$null
+        $output = & $agentDeck show $SessionName 2>$null
         return ($output | Out-String)
     } catch {
         return ""
