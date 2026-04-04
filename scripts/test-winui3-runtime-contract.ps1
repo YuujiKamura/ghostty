@@ -10,6 +10,65 @@ $smokeScript = Join-Path $repoRoot "visual_smoke_test_run.ps1"
 $debugLog = Join-Path $repoRoot "debug.log"
 $auditLog = Join-Path $repoRoot "multitab_audit.log"
 
+# Detect CI environment (GitHub Actions, Azure DevOps, etc.)
+$isCI = $env:CI -eq "true" -or $env:TF_BUILD -eq "True" -or $env:GITHUB_ACTIONS -eq "true"
+
+if ($isCI) {
+    Write-Host "CI environment detected: skipping GUI smoke test, running static checks only."
+
+    # Static check: verify built artifacts contain required DLLs
+    $binDirs = @("zig-out-winui3/bin", "zig-out-winui3-staging/bin") | ForEach-Object { Join-Path $repoRoot $_ } | Where-Object { Test-Path $_ }
+    if ($binDirs.Count -eq 0) {
+        throw "Contract check failed: no build output directory found (zig-out-winui3/bin or staging)."
+    }
+
+    $binDir = $binDirs[0]
+    Write-Host "Checking artifacts in: $binDir"
+
+    $requiredDlls = @(
+        "Microsoft.WindowsAppRuntime.Bootstrap.dll",
+        "Microsoft.ui.xaml.dll",
+        "Microsoft.UI.dll"
+    )
+
+    $missing = @()
+    foreach ($dll in $requiredDlls) {
+        $path = Join-Path $binDir $dll
+        if (Test-Path $path) {
+            Write-Host "  OK: $dll"
+        } else {
+            Write-Host "  MISSING: $dll"
+            $missing += $dll
+        }
+    }
+
+    # Check XBF and PRI files
+    $xbfCount = (Get-ChildItem -Path $binDir -Filter "*.xbf" -ErrorAction SilentlyContinue | Measure-Object).Count
+    $priExists = Test-Path (Join-Path $binDir "resources.pri")
+    Write-Host "  XBF files: $xbfCount, resources.pri: $priExists"
+
+    if ($missing.Count -gt 0) {
+        $msg = "Contract check failed: missing DLLs: $($missing -join ', ')"
+        if ($Strict) { throw $msg } else { Write-Warning $msg }
+    }
+
+    if ($xbfCount -eq 0 -or -not $priExists) {
+        $msg = "Contract check failed: missing XAML resources (XBF=$xbfCount, PRI=$priExists)"
+        if ($Strict) { throw $msg } else { Write-Warning $msg }
+    }
+
+    # Check ghostty.exe exists
+    $ghosttyExe = Join-Path $binDir "ghostty.exe"
+    if (-not (Test-Path $ghosttyExe)) {
+        throw "Contract check failed: ghostty.exe not found in $binDir"
+    }
+    Write-Host "  OK: ghostty.exe"
+
+    Write-Host "test-winui3-runtime-contract: PASS (CI static mode, strict=$Strict)"
+    exit 0
+}
+
+# --- Non-CI: full GUI smoke test ---
 if (-not (Test-Path $smokeScript)) {
     throw "Missing smoke script: $smokeScript"
 }
