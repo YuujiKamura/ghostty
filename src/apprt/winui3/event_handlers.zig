@@ -92,3 +92,37 @@ pub fn onSelectionChanged(self: anytype, sender_obj: ?*anyopaque, args_obj: ?*an
         }
     }
 }
+
+pub fn onLayoutUpdated(self: anytype, _: ?*anyopaque, _: ?*anyopaque) void {
+    const splt_btn = self.add_tab_split_button orelse return;
+    const nci = self.nci_window orelse return;
+    const hwnd = self.hwnd orelse return;
+
+    // Use TransformToVisual to find the AddTabSplitButton's position relative to the root.
+    // The RootGrid is the visual root for the island.
+    const root_grid = self.root_grid orelse return;
+    const root_ui = root_grid.queryInterface(com.IUIElement) catch return;
+    defer root_ui.release();
+
+    const splt_btn_ui = splt_btn.queryInterface(com.IUIElement) catch return;
+    defer splt_btn_ui.release();
+
+    const transform = splt_btn_ui.TransformToVisual(root_ui) catch return;
+    defer transform.release();
+
+    const point = transform.TransformPoint(.{ .X = 0, .Y = 0 }) catch return;
+
+    const splt_btn_fe = splt_btn.queryInterface(com.IFrameworkElement) catch return;
+    defer splt_btn_fe.release();
+    const width = splt_btn_fe.ActualWidth() catch 0;
+
+    const right_edge_dip = point.X + width;
+
+    // Convert DIP to pixels.
+    const os_mod = @import("os.zig");
+    const dpi = os_mod.GetDpiForWindow(hwnd);
+    const scale = @as(f32, @floatFromInt(dpi)) / 96.0;
+    const right_edge_px = @as(c_int, @intFromFloat(@as(f32, @floatCast(right_edge_dip)) * scale));
+
+    @atomicStore(c_int, &nci.tab_area_right_px, right_edge_px, .release);
+}

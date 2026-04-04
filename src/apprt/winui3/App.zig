@@ -213,10 +213,12 @@ saved_placement: os.WINDOWPLACEMENT = .{},
 tab_close_handler: ?*TypedHandler = null,
 add_tab_handler: ?*TypedHandler = null,
 selection_changed_handler: ?*SelectionHandler = null,
+layout_updated_handler: ?*gen.EventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void) = null,
 resource_manager_requested_handler: ?*ResourceManagerRequestedHandler = null,
 tab_close_token: ?i64 = null,
 add_tab_token: ?i64 = null,
 selection_changed_token: ?i64 = null,
+layout_updated_token: ?i64 = null,
 resource_manager_requested_token: ?i64 = null,
 /// Optional side-channel control plane for session-aware automation.
 /// Uses the Zig-native control plane (replaces Rust DLL).
@@ -1031,6 +1033,14 @@ fn registerTabViewHandlers(self: *App, tab_view: ?*com.ITabView) !void {
             self.selection_changed_token = try tab_view.?.AddSelectionChanged(self.selection_changed_handler.?.comPtr());
             log.info("initXaml step 7.5: SelectionChanged handler registered", .{});
         }
+
+        // Handle LayoutUpdated to sync drag region (Manual Hit-Test Sync).
+        self.layout_updated_handler = try gen.EventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void).createWithIid(alloc, self, &onLayoutUpdated, &com.IID_EventHandler);
+        const fe = try tab_view.?.queryInterface(com.IFrameworkElement);
+        defer fe.release();
+        self.layout_updated_token = try fe.AddLayoutUpdated(self.layout_updated_handler.?.comPtr());
+        log.info("initXaml step 7.5: LayoutUpdated handler registered", .{});
+
         log.info("initXaml step 7.5 OK: TabView event handlers registered (close={} addtab={} selection={})", .{
             enable_close,
             enable_addtab,
@@ -1047,9 +1057,16 @@ fn unregisterTabViewHandlers(self: *App, tab_view: *com.ITabView) void {
     if (self.tab_close_token) |tok| tab_view.RemoveTabCloseRequested(tok) catch {};
     if (self.add_tab_token) |tok| tab_view.RemoveAddTabButtonClick(tok) catch {};
     if (self.selection_changed_token) |tok| tab_view.RemoveSelectionChanged(tok) catch {};
+    if (self.layout_updated_token) |tok| {
+        if (tab_view.queryInterface(com.IFrameworkElement)) |fe| {
+            defer fe.release();
+            fe.RemoveLayoutUpdated(tok) catch {};
+        } else |_| {}
+    }
     self.tab_close_token = null;
     self.add_tab_token = null;
     self.selection_changed_token = null;
+    self.layout_updated_token = null;
 }
 
 fn currentTabItemsSize(self: *App) !u32 {
@@ -1306,6 +1323,7 @@ fn fullCleanup(self: *App) void {
     if (self.tab_close_handler) |h| h.release();
     if (self.add_tab_handler) |h| h.release();
     if (self.selection_changed_handler) |h| h.release();
+    if (self.layout_updated_handler) |h| h.release();
     if (self.resource_manager_requested_handler) |h| h.release();
 
     if (self.root_grid) |rg| {
@@ -1872,6 +1890,10 @@ fn activateResourceManagerDirect(class_name: winrt.HSTRING) !*winrt.IInspectable
 
 fn onSelectionChanged(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
     event_handlers.onSelectionChanged(self, sender, args);
+}
+
+fn onLayoutUpdated(self: *App, sender: ?*anyopaque, args: ?*anyopaque) void {
+    event_handlers.onLayoutUpdated(self, sender, args);
 }
 
 fn logPackageIdentity() void {
