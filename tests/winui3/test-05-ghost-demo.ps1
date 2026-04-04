@@ -15,8 +15,8 @@ if (-not (Test-Path $exePath)) {
 
 $logPath = Join-Path $env:TEMP "ghostty_debug.log"
 
-# Kill any existing ghostty
-Get-Process -Name ghostty -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+# NOTE: Do NOT kill all ghostty processes — other sessions (deckpilot agents) may be running.
+# We only kill our own process at cleanup (line ~110).
 Start-Sleep -Seconds 1
 
 # Clear log
