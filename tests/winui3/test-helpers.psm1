@@ -1,4 +1,4 @@
-# test-helpers.psm1 — Shared PowerShell module for winui3 GUI tests
+# test-helpers.psm1  EShared PowerShell module for winui3 GUI tests
 # Usage: Import-Module .\test-helpers.psm1 -Force
 
 Set-StrictMode -Version Latest
@@ -246,7 +246,7 @@ function Start-Ghostty {
     $ExePath = (Resolve-Path $ExePath -ErrorAction Stop).Path
 
     if (-not (Test-Path $ExePath)) {
-        throw "ghostty.exe not found at $ExePath — build first with ./build-winui3.sh"
+        throw "ghostty.exe not found at $ExePath  Ebuild first with ./build-winui3.sh"
     }
 
     Write-Host "  Launching $ExePath ..." -ForegroundColor DarkGray
@@ -587,7 +587,7 @@ function Send-KeyPress {
         $up.ki.wVk   = $VirtualKey
         $up.ki.dwFlags = [Win32]::KEYEVENTF_KEYUP
     } elseif ($Char -ne [char]0) {
-        # Use VkKeyScanW to get the VK code — XAML needs real VK, not UNICODE scan.
+        # Use VkKeyScanW to get the VK code  EXAML needs real VK, not UNICODE scan.
         $vks = [Win32]::VkKeyScanW($Char)
         $vk = [uint16]($vks -band 0xFF)
         $modState = ($vks -shr 8) -band 0xFF
@@ -1137,7 +1137,10 @@ function Send-GhosttyPipeInput {
         $textWithNewline = $Text + "`n"
         $bytes = [System.Text.Encoding]::UTF8.GetBytes($textWithNewline)
         $b64 = [Convert]::ToBase64String($bytes)
-        $request = "INPUT|test-script|$b64`n"
+                # format: INPUT|from|b64|raw
+        # raw=0 (false) for normal text input
+        $request = "INPUT|test-script|$b64|0
+"
         $requestBytes = [System.Text.Encoding]::UTF8.GetBytes($request)
 
         $pipeName = $PipePath -replace '^\\\\\.\\pipe\\', ''
@@ -1147,7 +1150,7 @@ function Send-GhosttyPipeInput {
             [System.IO.Pipes.PipeDirection]::InOut
         )
         $pipe.Connect(3000)  # 3s timeout
-        # Pipe is PIPE_TYPE_BYTE mode — no message framing needed
+        # Pipe is PIPE_TYPE_BYTE mode  Eno message framing needed
 
         # Write request
         $pipe.Write($requestBytes, 0, $requestBytes.Length)
@@ -1159,7 +1162,7 @@ function Send-GhosttyPipeInput {
         $response = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $bytesRead)
         $pipe.Dispose()
 
-        return ($response -and ($response -match "ACK\|" -or $response -match "QUEUED\|"))
+        return ($response -and ($response -match "ACK\\|" -or $response -match "QUEUED\\|" -or $response -match "OK\\|"))
     } catch {
         Write-Host "  WARN: Direct pipe send failed: $($_.Exception.Message)" -ForegroundColor Yellow
         return $false

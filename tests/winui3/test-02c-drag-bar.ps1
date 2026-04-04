@@ -1,6 +1,6 @@
 param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
-# test-02c-drag-bar — Verify drag bar HWND exists with correct DPI-scaled dimensions.
+# test-02c-drag-bar  EVerify drag bar HWND exists with correct DPI-scaled dimensions.
 # Pure Win32, no UIA needed. Drag bar covers RIGHT portion only.
 
 $ErrorActionPreference = 'Stop'
@@ -28,7 +28,7 @@ $dpi = [Win32]::GetDpiForWindow($Hwnd)
 # WT: AdjustWindowRectExForDpi(&frame, style, FALSE, 0, dpi); expectedH = -frame.top
 $style = [Win32]::GetWindowLong($Hwnd, [Win32]::GWL_STYLE)
 $frame = New-Object RECT2
-[DpiHelper]::AdjustWindowRectExForDpi([ref]$frame, [uint32]$style, $false, 0, $dpi) | Out-Null
+[DpiHelper]::AdjustWindowRectExForDpi([ref]$frame, [int]$style, $false, 0, $dpi) | Out-Null
 $expectedDragBarHeight = -$frame.Top
 
 $clientRect = Get-ClientPosition -Hwnd $Hwnd
@@ -68,7 +68,7 @@ $WS_EX_LAYERED = 0x00080000
 if (($dbExStyle -band $WS_EX_LAYERED) -ne 0) {
     Write-Host "  PASS: drag bar has WS_EX_LAYERED (exStyle=0x$($dbExStyle.ToString('X8')))" -ForegroundColor Green
 } else {
-    Write-Host "  WARN: drag bar missing WS_EX_LAYERED (exStyle=0x$($dbExStyle.ToString('X8'))) — may work without it under NOREDIRECTIONBITMAP parent" -ForegroundColor Yellow
+    Write-Host "  WARN: drag bar missing WS_EX_LAYERED (exStyle=0x$($dbExStyle.ToString('X8')))  Emay work without it under NOREDIRECTIONBITMAP parent" -ForegroundColor Yellow
 }
 
 Write-Host "PASS: $testName - DPI and drag bar metrics are internally consistent" -ForegroundColor Green

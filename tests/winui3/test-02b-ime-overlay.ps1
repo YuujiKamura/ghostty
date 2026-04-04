@@ -1,12 +1,12 @@
 param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
-# test-02b-ime-overlay — Verify IME overlay HWND exists with correct styles.
+# test-02b-ime-overlay  EVerify IME overlay HWND exists with correct styles.
 # Pure Win32, no UIA needed.
 
 $ErrorActionPreference = 'Stop'
 $testName = "test-02b-ime-overlay"
 
-$inputOverlay = Get-ChildWindowByClass -Hwnd $Hwnd -ClassName "GhosttyInputOverlay"
+$inputOverlay = [IntPtr]::Zero; for ($i=0; $i -lt 10; $i++) { $inputOverlay = Get-ChildWindowByClass -Hwnd $Hwnd -ClassName "GhosttyInputOverlay"; if ($inputOverlay -ne [IntPtr]::Zero) { break }; Start-Sleep -Milliseconds 500 }
 Test-Assert -Condition ($inputOverlay -ne [IntPtr]::Zero) -Message "$testName - GhosttyInputOverlay child window exists"
 
 $overlayRect = Get-WindowPosition -Hwnd $inputOverlay

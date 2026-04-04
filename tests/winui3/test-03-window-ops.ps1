@@ -1,6 +1,6 @@
 param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
-# test-03-window-ops — Combined window operations:
+# test-03-window-ops  ECombined window operations:
 #   move -> resize -> maximize -> restore -> minimize -> restore
 # Uses UIA TransformPattern/WindowPattern with Win32 fallbacks.
 # No mouse input.
