@@ -2,61 +2,61 @@
     {
         "Name":  "test-01-lifecycle",
         "Status":  "PASS",
-        "Time":  11266,
+        "Time":  11299,
         "Error":  null
     },
     {
         "Name":  "test-02a-tabview",
         "Status":  "PASS",
-        "Time":  166,
+        "Time":  205,
         "Error":  null
     },
     {
         "Name":  "test-02b-ime-overlay",
         "Status":  "FAIL",
-        "Time":  19,
+        "Time":  5076,
         "Error":  "Assertion failed: test-02b-ime-overlay - GhosttyInputOverlay child window exists"
     },
     {
         "Name":  "test-02c-drag-bar",
         "Status":  "FAIL",
-        "Time":  168,
-        "Error":  "値 \"-1811939328\" を型 \"System.UInt32\" に変換できません。エラー: \"UInt32 型の値が大きすぎるか、または小さすぎます。\""
+        "Time":  171,
+        "Error":  "\"AdjustWindowRectExForDpi\" の引数 \"dwStyle\" (値 \"-1811939328\") を型 \"System.UInt32\" に変換できません: \"値 \"-1811939328\" を型 \"System.UInt32\" に変換できません。エラー: \"UInt32 型の値が大きすぎるか、または小さすぎます。\"\""
     },
     {
         "Name":  "test-03-window-ops",
         "Status":  "FAIL",
-        "Time":  1766,
+        "Time":  1749,
         "Error":  "Assertion failed: test-03-window-ops/maximize - window is maximized"
     },
     {
         "Name":  "test-02d-control-plane",
         "Status":  "PASS",
-        "Time":  2880,
+        "Time":  3818,
         "Error":  null
     },
     {
         "Name":  "test-02e-agent-roundtrip",
         "Status":  "PASS",
-        "Time":  15528,
+        "Time":  18448,
         "Error":  null
     },
     {
         "Name":  "test-04-keyboard",
         "Status":  "FAIL",
-        "Time":  2850,
-        "Error":  "Assertion failed: test-04-keyboard/ascii - terminal buffer contains echoed text after CP input"
+        "Time":  6287,
+        "Error":  "Timed out waiting for: terminal buffer to contain echoed text (5000ms)"
     },
     {
         "Name":  "test-06-ime-input",
         "Status":  "FAIL",
-        "Time":  2112,
+        "Time":  2152,
         "Error":  "Assertion failed: test-06-ime-input/jp-roundtrip - marker found in terminal buffer"
     },
     {
         "Name":  "test-05-ghost-demo",
         "Status":  "PASS",
-        "Time":  18232,
+        "Time":  18706,
         "Error":  null
     }
 ]

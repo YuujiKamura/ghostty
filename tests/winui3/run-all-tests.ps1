@@ -80,7 +80,7 @@ Write-Host "`n=== Phase 2: Launching Ghostty for shared tests ===" -ForegroundCo
 $env:GHOSTTY_CONTROL_PLANE = "1"
 
 # Clean stale ghostty session files (Force Kill doesn't trigger DLL cleanup)
-$agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+$agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
 $ghosttySessionDir = Join-Path $env:LOCALAPPDATA "ghostty\control-plane\winui3\sessions"
 foreach ($sessionDir in @($ghosttySessionDir, (Join-Path $env:LOCALAPPDATA "WindowsTerminal\control-plane\winui3\sessions"))) {
     if (Test-Path $sessionDir) {
@@ -143,7 +143,7 @@ if (-not $needSharedGhostty) {
     # Give XAML time to fully initialize + CP DLL to register session
     Start-Sleep -Milliseconds 3000
 
-    # Register + discover the ghostty CP session via agent-deck
+    # Register + discover the ghostty CP session via deckpilot
     $env:GHOSTTY_CP_SESSION = ""
     $registered = Register-GhosttyCP -ProcessId $proc.Id
     if ($registered) {

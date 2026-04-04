@@ -1,6 +1,6 @@
-Ôªøparam([IntPtr]$Hwnd, [int]$ProcessId = 0)
+param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
-# test-06-ime-input ‚Äî Japanese IME input verification.
+# test-06-ime-input ? Japanese IME input verification.
 # Sub-test 1: UTF-8 Japanese text round-trip via CP send + output
 # Sub-test 2: IME composing state management via WM_APP_TEST_FAKE_IME_COMPOSING
 # Sub-test 3: Multi-byte echo stability (repeat to detect drift)
@@ -32,7 +32,7 @@ if (-not (Test-Path $agentDeck) -or -not $sessionName) {
 Write-Host "  --- Sub-test 1: Japanese UTF-8 round-trip ---" -ForegroundColor Cyan
 
 $marker = "ime-test-$(Get-Random -Minimum 1000 -Maximum 9999)"
-$jpText = [char]0x30C6 + [char]0x30B9 + [char]0x30C8  # „ÉÜ„Çπ„Éà
+$jpText = [char]0x30C6 + [char]0x30B9 + [char]0x30C8  # ÉeÉXÉg
 $echoCmd = "echo ${marker}-${jpText}"
 
 # Send via CP helper (agent-deck send + direct pipe fallback)
@@ -99,7 +99,7 @@ if ($inputOverlay -eq [IntPtr]::Zero) {
             $killFocusClear = $newLines -match "WM_KILLFOCUS while ime_composing"
             Write-Host "  Log: fake_ime_set=$fakeSet, killfocus_clear=$killFocusClear (new lines: $($allLines.Count - $logLinesBefore))" -ForegroundColor Gray
             if (-not $fakeSet) {
-                Write-Host "  SKIP: WM_APP_TEST_FAKE_IME handler not found ‚Äî binary may be stale or ReleaseFast" -ForegroundColor Yellow
+                Write-Host "  SKIP: WM_APP_TEST_FAKE_IME handler not found ? binary may be stale or ReleaseFast" -ForegroundColor Yellow
             } else {
                 Test-Assert -Condition $fakeSet -Message "$testName/ime-state - fake IME composing state was set"
                 Test-Assert -Condition $killFocusClear -Message "$testName/ime-state - KILLFOCUS cleared composing preedit"
@@ -117,9 +117,9 @@ Write-Host "  --- Sub-test 3: Multi-byte stability (3x repeat) ---" -ForegroundC
 
 # Use different kanji/kana each round to detect character-level corruption
 $jpStrings = @(
-    ([char]0x6F22 + [char]0x5B57),           # Êº¢Â≠ó
-    ([char]0x3072 + [char]0x3089 + [char]0x304C + [char]0x306A),  # „Å≤„Çâ„Åå„Å™
-    ([char]0x30AB + [char]0x30BF + [char]0x30AB + [char]0x30CA)   # „Ç´„Çø„Ç´„Éä
+    ([char]0x6F22 + [char]0x5B57),           # äøéö
+    ([char]0x3072 + [char]0x3089 + [char]0x304C + [char]0x306A),  # Ç–ÇÁÇ™Ç»
+    ([char]0x30AB + [char]0x30BF + [char]0x30AB + [char]0x30CA)   # ÉJÉ^ÉJÉi
 )
 
 $driftFails = 0

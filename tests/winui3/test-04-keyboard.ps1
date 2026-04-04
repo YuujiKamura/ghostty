@@ -1,6 +1,6 @@
 param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
-# test-04-keyboard — Keyboard input verification: ASCII chars + Enter key.
+# test-04-keyboard  EKeyboard input verification: ASCII chars + Enter key.
 # Uses Send-GhosttyInput (agent-deck send + direct pipe fallback) + Get-GhosttyOutput.
 
 $ErrorActionPreference = 'Stop'
@@ -49,13 +49,11 @@ if (-not $sendOk) {
     return
 }
 
-Start-Sleep -Milliseconds 2000
-
-# Verify via session output
-$tail = Get-GhosttyOutput -SessionName $sessionName
-$found = $tail -match "codex-kb-test-96"
-
-Write-Host "  Output contains 'codex-kb-test-96': $found" -ForegroundColor Gray
-Test-Assert -Condition $found -Message "$testName/ascii - terminal buffer contains echoed text after CP input"
+Wait-Condition -Description "terminal buffer to contain echoed text" -TimeoutMs 5000 -PollMs 500 -ScriptBlock {
+    $tail = Get-GhosttyOutput -SessionName $sessionName
+    $found = $tail -match "codex-kb-test-96"
+    Write-Host "  Output contains 'codex-kb-test-96': $found" -ForegroundColor Gray
+    return $found
+}
 
 Write-Host "PASS: $testName - keyboard input via CP verified in terminal buffer" -ForegroundColor Green

@@ -1005,19 +1005,19 @@ function Dump-UIATree {
 }
 
 # ============================================================
-# Control Plane helpers (agent-deck + direct Named Pipe)
+# Control Plane helpers (deckpilot + direct Named Pipe)
 # ============================================================
 
 function Register-GhosttyCP {
     <#
     .SYNOPSIS
-        Register a ghostty CP session with agent-deck by PID.
+        Register a ghostty CP session with deckpilot by PID.
         Returns the session name (e.g. "ghostty-12345") or $null.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][int]$ProcessId)
 
-    $agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+    $agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
     if (-not (Test-Path $agentDeck)) { return $null }
 
     $sessionName = "ghostty-$ProcessId"
@@ -1038,7 +1038,7 @@ function Register-GhosttyCP {
 function Find-GhosttyCP {
     <#
     .SYNOPSIS
-        Find a ghostty CP session via agent-deck ls --json.
+        Find a ghostty CP session via deckpilot list --json.
         Returns the session title or $null.
     .PARAMETER ProcessId
         If provided, prefer session matching this PID.
@@ -1046,7 +1046,7 @@ function Find-GhosttyCP {
     [CmdletBinding()]
     param([int]$ProcessId = 0)
 
-    $agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+    $agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
     if (-not (Test-Path $agentDeck)) { return $null }
 
     try {
@@ -1078,7 +1078,7 @@ function Send-GhosttyInput {
     <#
     .SYNOPSIS
         Send text input to a ghostty CP session.
-        Tries agent-deck send first, falls back to direct Named Pipe.
+        Tries deckpilot send first, falls back to direct Named Pipe.
     .PARAMETER SessionName
         The CP session name (e.g. "ghostty-12345").
     .PARAMETER Text
@@ -1090,9 +1090,9 @@ function Send-GhosttyInput {
         [Parameter(Mandatory)][string]$Text
     )
 
-    $agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+    $agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
 
-    # Try agent-deck send first
+    # Try deckpilot send first
     if (Test-Path $agentDeck) {
         $prev = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
@@ -1172,14 +1172,14 @@ function Send-GhosttyPipeInput {
 function Get-GhosttyOutput {
     <#
     .SYNOPSIS
-        Get terminal output from a ghostty CP session via agent-deck session output.
+        Get terminal output from a ghostty CP session via deckpilot show output.
     .PARAMETER SessionName
         The CP session name.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$SessionName)
 
-    $agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+    $agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
     if (-not (Test-Path $agentDeck)) { return "" }
 
     $prev = $ErrorActionPreference
