@@ -17,10 +17,12 @@ const Descriptor = @import("discovery.zig").Descriptor;
 
 const log = std.log.scoped(.discovery);
 
+const dw = @import("dwrite_generated.zig");
+
 // --- Windows types ---
-const BOOL = c_int;
-const HRESULT = c_long;
-const GUID = std.os.windows.GUID;
+const BOOL = dw.BOOL;
+const HRESULT = dw.HRESULT;
+const GUID = dw.GUID;
 
 // --- DirectWrite constants ---
 const DWRITE_FACTORY_TYPE_SHARED: u32 = 0;
@@ -29,21 +31,17 @@ const DWRITE_FONT_STYLE_NORMAL: u32 = 0;
 const DWRITE_FONT_STYLE_OBLIQUE: u32 = 1;
 const DWRITE_FONT_STYLE_ITALIC: u32 = 2;
 const DWRITE_INFORMATIONAL_STRING_FULL_NAME: u32 = 16;
+const DWRITE_FONT_STRETCH_MEDIUM: u32 = 5;
 
 // --- GUIDs ---
-const IID_IDWriteFactory = GUID{
-    .Data1 = 0xb859ee5a,
-    .Data2 = 0xd838,
-    .Data3 = 0x4b5b,
-    .Data4 = .{ 0xa2, 0xe8, 0x1a, 0xdc, 0x7d, 0x93, 0xdb, 0x48 },
-};
+const IID_IDWriteLocalFontFileLoader = dw.IDWriteLocalFontFileLoader.IID;
+const IID_IDWriteFactory2 = dw.IDWriteFactory2.IID;
 
-const IID_IDWriteLocalFontFileLoader = GUID{
-    .Data1 = 0xb2d9f3ec,
-    .Data2 = 0xc9fe,
-    .Data3 = 0x4a11,
-    .Data4 = .{ 0xa2, 0xec, 0xd8, 0x62, 0x08, 0xf7, 0xc0, 0xa2 },
-};
+// --- Win32 imports ---
+extern "kernel32" fn GetUserDefaultLocaleName(
+    lpLocaleName: [*]u16,
+    cchLocaleName: c_int,
+) callconv(.winapi) c_int;
 
 // --- DWriteCreateFactory ---
 extern "dwrite" fn DWriteCreateFactory(
@@ -65,378 +63,94 @@ extern "dwrite" fn DWriteCreateFactory(
 // Placeholder for vtable slots we don't call.
 const VtblPlaceholder = *const anyopaque;
 
-const IDWriteFactory = extern struct {
-    lpVtbl: *const VTable,
+const IDWriteFactory = dw.IDWriteFactory;
+const IDWriteFontCollection = dw.IDWriteFontCollection;
+const IDWriteFontFamily = dw.IDWriteFontFamily;
+const IDWriteFont = dw.IDWriteFont;
+const IDWriteFontFace = dw.IDWriteFontFace;
+const IDWriteFontFile = dw.IDWriteFontFile;
+const IDWriteFontFileLoader = dw.IDWriteFontFileLoader;
+const IDWriteLocalFontFileLoader = dw.IDWriteLocalFontFileLoader;
+const IDWriteLocalizedStrings = dw.IDWriteLocalizedStrings;
+const IDWriteFactory2 = dw.IDWriteFactory2;
+const IDWriteFontFallback = dw.IDWriteFontFallback;
+const IDWriteTextAnalysisSource = dw.IDWriteTextAnalysisSource;
 
-    const VTable = extern struct {
-        // IUnknown (slots 0-2)
-        QueryInterface: VtblPlaceholder,
-        AddRef: VtblPlaceholder,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        // IDWriteFactory (slots 3-23)
-        GetSystemFontCollection: *const fn (*anyopaque, *?*IDWriteFontCollection, BOOL) callconv(.winapi) HRESULT,
-        CreateCustomFontCollection: VtblPlaceholder,
-        RegisterFontCollectionLoader: VtblPlaceholder,
-        UnregisterFontCollectionLoader: VtblPlaceholder,
-        CreateFontFileReference: VtblPlaceholder,
-        CreateCustomFontFileReference: VtblPlaceholder,
-        CreateFontFace: VtblPlaceholder,
-        CreateRenderingParams: VtblPlaceholder,
-        CreateMonitorRenderingParams: VtblPlaceholder,
-        CreateCustomRenderingParams: VtblPlaceholder,
-        RegisterFontFileLoader: VtblPlaceholder,
-        UnregisterFontFileLoader: VtblPlaceholder,
-        CreateTextFormat: VtblPlaceholder,
-        CreateTypography: VtblPlaceholder,
-        GetGdiInterop: VtblPlaceholder,
-        CreateTextLayout: VtblPlaceholder,
-        CreateGdiCompatibleTextLayout: VtblPlaceholder,
-        CreateEllipsisTrimmingSign: VtblPlaceholder,
-        CreateTextAnalyzer: VtblPlaceholder,
-        CreateNumberSubstitution: VtblPlaceholder,
-        CreateGlyphRunAnalysis: VtblPlaceholder,
+/// Minimal IDWriteTextAnalysisSource implementation for MapCharacters.
+const SimpleTextAnalysisSource = struct {
+    // COM vtable pointer — MUST be the first field so that
+    // @ptrCast(*SimpleTextAnalysisSource) == @ptrCast(*IDWriteTextAnalysisSource).
+    lpVtbl: *const IDWriteTextAnalysisSource.VTable,
+    text: [*]const u16,
+    text_len: u32,
+    locale: [*:0]const u16,
+
+    const VTable = IDWriteTextAnalysisSource.VTable;
+
+    const vtbl_instance = VTable{
+        .QueryInterface = &queryInterface,
+        .AddRef = &addRef,
+        .Release = &release,
+        .GetTextAtPosition = &getTextAtPosition,
+        .GetTextBeforePosition = &getTextBeforePosition,
+        .GetParagraphReadingDirection = &getParagraphReadingDirection,
+        .GetLocaleName = &getLocaleName,
+        .GetNumberSubstitution = &getNumberSubstitution,
     };
 
-    fn release(self: *IDWriteFactory) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
+    fn init(text: [*]const u16, text_len: u32, locale: [*:0]const u16) SimpleTextAnalysisSource {
+        return .{
+            .lpVtbl = &vtbl_instance,
+            .text = text,
+            .text_len = text_len,
+            .locale = locale,
+        };
     }
 
-    fn getSystemFontCollection(self: *IDWriteFactory) !*IDWriteFontCollection {
-        var collection: ?*IDWriteFontCollection = null;
-        const hr = self.lpVtbl.GetSystemFontCollection(@ptrCast(self), &collection, 0);
-        if (hr < 0) return error.DWriteError;
-        return collection orelse error.DWriteError;
+    fn queryInterface(_: *anyopaque, _: *const GUID, _: *?*anyopaque) callconv(.winapi) HRESULT {
+        return @as(HRESULT, @bitCast(@as(u32, 0x80004002))); // E_NOINTERFACE
     }
-};
-
-const IDWriteFontCollection = extern struct {
-    lpVtbl: *const VTable,
-
-    const VTable = extern struct {
-        // IUnknown (slots 0-2)
-        QueryInterface: VtblPlaceholder,
-        AddRef: VtblPlaceholder,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        // IDWriteFontCollection (slots 3-6)
-        GetFontFamilyCount: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetFontFamily: *const fn (*anyopaque, u32, *?*IDWriteFontFamily) callconv(.winapi) HRESULT,
-        FindFamilyName: *const fn (*anyopaque, [*:0]const u16, *u32, *BOOL) callconv(.winapi) HRESULT,
-        GetFontFromFontFace: VtblPlaceholder,
-    };
-
-    fn release(self: *IDWriteFontCollection) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
+    fn addRef(_: *anyopaque) callconv(.winapi) u32 {
+        return 1;
     }
-
-    fn getFontFamilyCount(self: *IDWriteFontCollection) u32 {
-        return self.lpVtbl.GetFontFamilyCount(@ptrCast(self));
+    fn release(_: *anyopaque) callconv(.winapi) u32 {
+        return 1;
     }
-
-    fn getFontFamily(self: *IDWriteFontCollection, index: u32) !*IDWriteFontFamily {
-        var family: ?*IDWriteFontFamily = null;
-        const hr = self.lpVtbl.GetFontFamily(@ptrCast(self), index, &family);
-        if (hr < 0) return error.DWriteError;
-        return family orelse error.DWriteError;
+    fn getTextAtPosition(self_raw: *anyopaque, pos: u32, text_out: *?*anyopaque, len_out: *u32) callconv(.winapi) HRESULT {
+        const self: *const SimpleTextAnalysisSource = @ptrCast(@alignCast(self_raw));
+        if (pos >= self.text_len) {
+            text_out.* = null;
+            len_out.* = 0;
+        } else {
+            text_out.* = @ptrCast(@constCast(self.text + pos));
+            len_out.* = self.text_len - pos;
+        }
+        return 0; // S_OK
     }
-
-    fn findFamilyName(self: *IDWriteFontCollection, name: [*:0]const u16) !?u32 {
-        var index: u32 = 0;
-        var exists: BOOL = 0;
-        const hr = self.lpVtbl.FindFamilyName(@ptrCast(self), name, &index, &exists);
-        if (hr < 0) return error.DWriteError;
-        return if (exists != 0) index else null;
+    fn getTextBeforePosition(self_raw: *anyopaque, pos: u32, text_out: *?*anyopaque, len_out: *u32) callconv(.winapi) HRESULT {
+        const self: *const SimpleTextAnalysisSource = @ptrCast(@alignCast(self_raw));
+        if (pos == 0 or pos > self.text_len) {
+            text_out.* = null;
+            len_out.* = 0;
+        } else {
+            text_out.* = @ptrCast(@constCast(self.text));
+            len_out.* = pos;
+        }
+        return 0;
     }
-};
-
-// IDWriteFontFamily inherits IDWriteFontList inherits IUnknown
-const IDWriteFontFamily = extern struct {
-    lpVtbl: *const VTable,
-
-    const VTable = extern struct {
-        // IUnknown (slots 0-2)
-        QueryInterface: VtblPlaceholder,
-        AddRef: VtblPlaceholder,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        // IDWriteFontList (slots 3-5)
-        GetFontCollection: VtblPlaceholder,
-        GetFontCount: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetFont: *const fn (*anyopaque, u32, *?*IDWriteFont) callconv(.winapi) HRESULT,
-        // IDWriteFontFamily (slot 6)
-        GetFamilyNames: *const fn (*anyopaque, *?*IDWriteLocalizedStrings) callconv(.winapi) HRESULT,
-    };
-
-    fn release(self: *IDWriteFontFamily) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
+    fn getParagraphReadingDirection(_: *anyopaque) callconv(.winapi) i32 {
+        return 0; // DWRITE_READING_DIRECTION_LEFT_TO_RIGHT
     }
-
-    fn getFontCount(self: *IDWriteFontFamily) u32 {
-        return self.lpVtbl.GetFontCount(@ptrCast(self));
+    fn getLocaleName(self_raw: *anyopaque, _: u32, len_out: *u32, locale_out: *?*anyopaque) callconv(.winapi) HRESULT {
+        const self: *const SimpleTextAnalysisSource = @ptrCast(@alignCast(self_raw));
+        locale_out.* = @ptrCast(@constCast(self.locale));
+        len_out.* = self.text_len;
+        return 0;
     }
-
-    fn getFont(self: *IDWriteFontFamily, index: u32) !*IDWriteFont {
-        var f: ?*IDWriteFont = null;
-        const hr = self.lpVtbl.GetFont(@ptrCast(self), index, &f);
-        if (hr < 0) return error.DWriteError;
-        return f orelse error.DWriteError;
-    }
-
-    fn getFamilyNames(self: *IDWriteFontFamily) !*IDWriteLocalizedStrings {
-        var names: ?*IDWriteLocalizedStrings = null;
-        const hr = self.lpVtbl.GetFamilyNames(@ptrCast(self), &names);
-        if (hr < 0) return error.DWriteError;
-        return names orelse error.DWriteError;
-    }
-};
-
-const IDWriteFont = extern struct {
-    lpVtbl: *const VTable,
-
-    const VTable = extern struct {
-        // IUnknown (slots 0-2)
-        QueryInterface: VtblPlaceholder,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        // IDWriteFont (slots 3-13)
-        GetFontFamily: *const fn (*anyopaque, *?*IDWriteFontFamily) callconv(.winapi) HRESULT,
-        GetWeight: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetStretch: VtblPlaceholder,
-        GetStyle: *const fn (*anyopaque) callconv(.winapi) u32,
-        IsSymbolFont: VtblPlaceholder,
-        GetFaceNames: *const fn (*anyopaque, *?*IDWriteLocalizedStrings) callconv(.winapi) HRESULT,
-        GetInformationalStrings: *const fn (*anyopaque, u32, *?*IDWriteLocalizedStrings, *BOOL) callconv(.winapi) HRESULT,
-        GetSimulations: VtblPlaceholder,
-        GetMetrics: VtblPlaceholder,
-        HasCharacter: *const fn (*anyopaque, u32, *BOOL) callconv(.winapi) HRESULT,
-        CreateFontFace: *const fn (*anyopaque, *?*IDWriteFontFace) callconv(.winapi) HRESULT,
-    };
-
-    fn addRef(self: *IDWriteFont) u32 {
-        return self.lpVtbl.AddRef(@ptrCast(self));
-    }
-
-    fn release(self: *IDWriteFont) u32 {
-        return self.lpVtbl.Release(@ptrCast(self));
-    }
-
-    fn getWeight(self: *IDWriteFont) u32 {
-        return self.lpVtbl.GetWeight(@ptrCast(self));
-    }
-
-    fn getStyle(self: *IDWriteFont) u32 {
-        return self.lpVtbl.GetStyle(@ptrCast(self));
-    }
-
-    fn hasCharacter(self: *IDWriteFont, cp: u32) bool {
-        var exists: BOOL = 0;
-        const hr = self.lpVtbl.HasCharacter(@ptrCast(self), cp, &exists);
-        return hr >= 0 and exists != 0;
-    }
-
-    fn createFontFace(self: *IDWriteFont) !*IDWriteFontFace {
-        var face: ?*IDWriteFontFace = null;
-        const hr = self.lpVtbl.CreateFontFace(@ptrCast(self), &face);
-        if (hr < 0) return error.DWriteError;
-        return face orelse error.DWriteError;
-    }
-
-    fn getFontFamily(self: *IDWriteFont) !*IDWriteFontFamily {
-        var family: ?*IDWriteFontFamily = null;
-        const hr = self.lpVtbl.GetFontFamily(@ptrCast(self), &family);
-        if (hr < 0) return error.DWriteError;
-        return family orelse error.DWriteError;
-    }
-
-    fn getFaceNames(self: *IDWriteFont) !*IDWriteLocalizedStrings {
-        var names: ?*IDWriteLocalizedStrings = null;
-        const hr = self.lpVtbl.GetFaceNames(@ptrCast(self), &names);
-        if (hr < 0) return error.DWriteError;
-        return names orelse error.DWriteError;
-    }
-
-    fn getInformationalStrings(
-        self: *IDWriteFont,
-        string_id: u32,
-    ) ?*IDWriteLocalizedStrings {
-        var names: ?*IDWriteLocalizedStrings = null;
-        var exists: BOOL = 0;
-        const hr = self.lpVtbl.GetInformationalStrings(@ptrCast(self), string_id, &names, &exists);
-        if (hr < 0 or exists == 0) return null;
-        return names;
-    }
-};
-
-const IDWriteFontFace = extern struct {
-    lpVtbl: *const VTable,
-
-    const VTable = extern struct {
-        // IUnknown (slots 0-2)
-        QueryInterface: VtblPlaceholder,
-        AddRef: VtblPlaceholder,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        // IDWriteFontFace (slots 3-17)
-        GetType: VtblPlaceholder,
-        GetFiles: *const fn (*anyopaque, *u32, ?*?*IDWriteFontFile) callconv(.winapi) HRESULT,
-        GetIndex: *const fn (*anyopaque) callconv(.winapi) u32,
-        GetSimulations: VtblPlaceholder,
-        IsSymbolFont: VtblPlaceholder,
-        GetMetrics: VtblPlaceholder,
-        GetGlyphCount: VtblPlaceholder,
-        GetDesignGlyphMetrics: VtblPlaceholder,
-        GetGlyphIndices: VtblPlaceholder,
-        TryGetFontTable: VtblPlaceholder,
-        ReleaseFontTable: VtblPlaceholder,
-        GetGlyphRunOutline: VtblPlaceholder,
-        GetRecommendedRenderingMode: VtblPlaceholder,
-        GetGdiCompatibleMetrics: VtblPlaceholder,
-        GetGdiCompatibleGlyphMetrics: VtblPlaceholder,
-    };
-
-    fn release(self: *IDWriteFontFace) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
-    }
-
-    fn getIndex(self: *IDWriteFontFace) u32 {
-        return self.lpVtbl.GetIndex(@ptrCast(self));
-    }
-
-    fn getFiles(self: *IDWriteFontFace) !*IDWriteFontFile {
-        var num_files: u32 = 0;
-        var hr = self.lpVtbl.GetFiles(@ptrCast(self), &num_files, null);
-        if (hr < 0 or num_files == 0) return error.FontHasNoFile;
-
-        var font_file: ?*IDWriteFontFile = null;
-        num_files = 1;
-        hr = self.lpVtbl.GetFiles(@ptrCast(self), &num_files, &font_file);
-        if (hr < 0) return error.DWriteError;
-        return font_file orelse error.DWriteError;
-    }
-};
-
-const IDWriteFontFile = extern struct {
-    lpVtbl: *const VTable,
-
-    const VTable = extern struct {
-        // IUnknown (slots 0-2)
-        QueryInterface: VtblPlaceholder,
-        AddRef: VtblPlaceholder,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        // IDWriteFontFile (slots 3-5)
-        GetReferenceKey: *const fn (*anyopaque, *?*const anyopaque, *u32) callconv(.winapi) HRESULT,
-        GetLoader: *const fn (*anyopaque, *?*IDWriteFontFileLoader) callconv(.winapi) HRESULT,
-        Analyze: VtblPlaceholder,
-    };
-
-    fn release(self: *IDWriteFontFile) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
-    }
-
-    fn getReferenceKey(self: *IDWriteFontFile) !struct { key: *const anyopaque, size: u32 } {
-        var key: ?*const anyopaque = null;
-        var size: u32 = 0;
-        const hr = self.lpVtbl.GetReferenceKey(@ptrCast(self), &key, &size);
-        if (hr < 0) return error.DWriteError;
-        return .{ .key = key orelse return error.DWriteError, .size = size };
-    }
-
-    fn getLoader(self: *IDWriteFontFile) !*IDWriteFontFileLoader {
-        var loader: ?*IDWriteFontFileLoader = null;
-        const hr = self.lpVtbl.GetLoader(@ptrCast(self), &loader);
-        if (hr < 0) return error.DWriteError;
-        return loader orelse error.DWriteError;
-    }
-};
-
-const IDWriteFontFileLoader = extern struct {
-    lpVtbl: *const VTable,
-
-    const VTable = extern struct {
-        // IUnknown (slots 0-2)
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: VtblPlaceholder,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        // IDWriteFontFileLoader (slot 3)
-        CreateStreamFromKey: VtblPlaceholder,
-    };
-
-    fn release(self: *IDWriteFontFileLoader) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
-    }
-
-    fn queryInterfaceLocalLoader(self: *IDWriteFontFileLoader) ?*IDWriteLocalFontFileLoader {
-        var local_loader: ?*anyopaque = null;
-        const hr = self.lpVtbl.QueryInterface(@ptrCast(self), &IID_IDWriteLocalFontFileLoader, &local_loader);
-        if (hr < 0 or local_loader == null) return null;
-        return @ptrCast(@alignCast(local_loader.?));
-    }
-};
-
-const IDWriteLocalFontFileLoader = extern struct {
-    lpVtbl: *const VTable,
-
-    const VTable = extern struct {
-        // IUnknown (slots 0-2)
-        QueryInterface: VtblPlaceholder,
-        AddRef: VtblPlaceholder,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        // IDWriteFontFileLoader (slot 3)
-        CreateStreamFromKey: VtblPlaceholder,
-        // IDWriteLocalFontFileLoader (slots 4-6)
-        GetFilePathLengthFromKey: *const fn (*anyopaque, ?*const anyopaque, u32, *u32) callconv(.winapi) HRESULT,
-        GetFilePathFromKey: *const fn (*anyopaque, ?*const anyopaque, u32, [*]u16, u32) callconv(.winapi) HRESULT,
-        GetLastWriteTimeFromKey: VtblPlaceholder,
-    };
-
-    fn release(self: *IDWriteLocalFontFileLoader) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
-    }
-
-    fn getFilePath(
-        self: *IDWriteLocalFontFileLoader,
-        key: *const anyopaque,
-        key_size: u32,
-        buf: []u16,
-    ) ![]const u16 {
-        var path_len: u32 = 0;
-        var hr = self.lpVtbl.GetFilePathLengthFromKey(@ptrCast(self), key, key_size, &path_len);
-        if (hr < 0) return error.DWriteError;
-        if (path_len + 1 > buf.len) return error.FontPathTooLong;
-        hr = self.lpVtbl.GetFilePathFromKey(@ptrCast(self), key, key_size, buf.ptr, path_len + 1);
-        if (hr < 0) return error.DWriteError;
-        return buf[0..path_len];
-    }
-};
-
-const IDWriteLocalizedStrings = extern struct {
-    lpVtbl: *const VTable,
-
-    const VTable = extern struct {
-        // IUnknown (slots 0-2)
-        QueryInterface: VtblPlaceholder,
-        AddRef: VtblPlaceholder,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        // IDWriteLocalizedStrings (slots 3-8)
-        GetCount: VtblPlaceholder,
-        FindLocaleName: VtblPlaceholder,
-        GetLocaleNameLength: VtblPlaceholder,
-        GetLocaleName: VtblPlaceholder,
-        GetStringLength: *const fn (*anyopaque, u32, *u32) callconv(.winapi) HRESULT,
-        GetString: *const fn (*anyopaque, u32, [*]u16, u32) callconv(.winapi) HRESULT,
-    };
-
-    fn release(self: *IDWriteLocalizedStrings) void {
-        _ = self.lpVtbl.Release(@ptrCast(self));
-    }
-
-    /// Get the string at the given index, converting from UTF-16 to UTF-8.
-    fn getString(self: *IDWriteLocalizedStrings, index: u32, buf: []u8) ?[]const u8 {
-        var str_len: u32 = 0;
-        if (self.lpVtbl.GetStringLength(@ptrCast(self), index, &str_len) < 0) return null;
-
-        var utf16_buf: [512]u16 = undefined;
-        if (str_len + 1 > utf16_buf.len) return null;
-        if (self.lpVtbl.GetString(@ptrCast(self), index, &utf16_buf, str_len + 1) < 0) return null;
-
-        return utf16ToUtf8(buf, utf16_buf[0..str_len]) catch null;
+    fn getNumberSubstitution(_: *anyopaque, _: u32, len_out: *u32, subst_out: *?*anyopaque) callconv(.winapi) HRESULT {
+        len_out.* = 0;
+        subst_out.* = null;
+        return 0;
     }
 };
 
@@ -493,6 +207,17 @@ fn utf8ToUtf16Le(dest: []u16, src: []const u8) !struct { str: [*:0]const u16, le
     return .{ .str = @ptrCast(dest.ptr), .len = dest_i };
 }
 
+fn getString(names: *IDWriteLocalizedStrings, index: u32, buf: []u8) ?[]const u8 {
+    var str_len: u32 = 0;
+    names.getStringLength(index, &str_len) catch return null;
+
+    var utf16_buf: [512]u16 = undefined;
+    if (str_len + 1 > utf16_buf.len) return null;
+    names.getString(index, @ptrCast(&utf16_buf), str_len + 1) catch return null;
+
+    return utf16ToUtf8(buf, utf16_buf[0..str_len]) catch null;
+}
+
 // ============================================================================
 // DirectWriteFace — stored in DeferredFace.dw
 // ============================================================================
@@ -502,38 +227,53 @@ pub const DirectWriteFace = struct {
     variations: []const Variation,
 
     pub fn deinit(self: *DirectWriteFace) void {
-        _ = self.dw_font.release();
+        self.dw_font.release();
         self.* = undefined;
     }
 
     pub fn hasCodepoint(self: DirectWriteFace, cp: u32) bool {
-        return self.dw_font.hasCharacter(cp);
+        var exists: BOOL = 0;
+        self.dw_font.hasCharacter(cp, &exists) catch {};
+        return exists != 0;
     }
 
     pub fn familyName(self: DirectWriteFace, buf: []u8) []const u8 {
-        const family = self.dw_font.getFontFamily() catch return "";
-        defer _ = family.release();
+        var family_raw: ?*anyopaque = null;
+        self.dw_font.getFontFamily(&family_raw) catch return "";
+        if (family_raw == null) return "";
+        const family: *IDWriteFontFamily = @ptrCast(@alignCast(family_raw.?));
+        defer family.release();
 
-        const names = family.getFamilyNames() catch return "";
+        var names_raw: ?*anyopaque = null;
+        family.getFamilyNames(&names_raw) catch return "";
+        if (names_raw == null) return "";
+        const names: *IDWriteLocalizedStrings = @ptrCast(@alignCast(names_raw.?));
         defer names.release();
 
-        return names.getString(0, buf) orelse "";
+        return getString(names, 0, buf) orelse "";
     }
 
     pub fn name(self: DirectWriteFace, buf: []u8) []const u8 {
         // Try FULL_NAME informational string first
-        if (self.dw_font.getInformationalStrings(DWRITE_INFORMATIONAL_STRING_FULL_NAME)) |names| {
+        var names_raw: ?*anyopaque = null;
+        var exists: BOOL = 0;
+        self.dw_font.getInformationalStrings(@intCast(DWRITE_INFORMATIONAL_STRING_FULL_NAME), &names_raw, &exists) catch {};
+        if (exists != 0 and names_raw != null) {
+            const names: *IDWriteLocalizedStrings = @ptrCast(@alignCast(names_raw.?));
             defer names.release();
-            if (names.getString(0, buf)) |s| if (s.len > 0) return s;
+            if (getString(names, 0, buf)) |s| if (s.len > 0) return s;
         }
 
         // Build "Family Style" from family name + face name
         const family_str = self.familyName(buf);
         const family_len = family_str.len;
 
-        const face_names = self.dw_font.getFaceNames() catch return family_str;
+        var face_names_raw: ?*anyopaque = null;
+        self.dw_font.getFaceNames(&face_names_raw) catch return family_str;
+        if (face_names_raw == null) return family_str;
+        const face_names: *IDWriteLocalizedStrings = @ptrCast(@alignCast(face_names_raw.?));
         defer face_names.release();
-        const style_str = face_names.getString(0, buf[family_len..]) orelse return family_str;
+        const style_str = getString(face_names, 0, buf[family_len..]) orelse return family_str;
 
         if (style_str.len == 0) return family_str;
         if (family_len == 0) return style_str;
@@ -551,30 +291,44 @@ pub const DirectWriteFace = struct {
         opts: font.face.Options,
     ) !Face {
         // IDWriteFont → CreateFontFace → IDWriteFontFace
-        const font_face = try self.dw_font.createFontFace();
+        var font_face_raw: ?*anyopaque = null;
+        try self.dw_font.createFontFace(&font_face_raw);
+        const font_face: *IDWriteFontFace = @ptrCast(@alignCast(font_face_raw.?));
         defer font_face.release();
 
-        const face_index = font_face.getIndex();
+        const face_index = font_face.lpVtbl.GetIndex(font_face);
 
         // IDWriteFontFace → GetFiles → IDWriteFontFile
-        const font_file = try font_face.getFiles();
+        var num_files: u32 = 1;
+        var font_file_raw: ?*anyopaque = null;
+        try font_face.getFiles(&num_files, &font_file_raw);
+        if (font_file_raw == null) return error.FontHasNoFile;
+        const font_file: *IDWriteFontFile = @ptrCast(@alignCast(font_file_raw.?));
         defer font_file.release();
 
         // IDWriteFontFile → GetReferenceKey
-        const ref = try font_file.getReferenceKey();
+        var ref_key: ?*anyopaque = null;
+        var ref_size: u32 = 0;
+        try font_file.getReferenceKey(&ref_key, &ref_size);
 
         // IDWriteFontFile → GetLoader → IDWriteFontFileLoader
-        var loader = try font_file.getLoader();
+        var loader_raw: ?*anyopaque = null;
+        try font_file.getLoader(&loader_raw);
+        const loader: *IDWriteFontFileLoader = @ptrCast(@alignCast(loader_raw.?));
         defer loader.release();
 
         // QI for IDWriteLocalFontFileLoader
-        const local_loader = loader.queryInterfaceLocalLoader() orelse
+        const local_loader = loader.queryInterface(IDWriteLocalFontFileLoader) catch
             return error.FontNotLocal;
         defer local_loader.release();
 
         // GetFilePathFromKey → UTF-16 path
+        var path_len: u32 = 0;
+        try local_loader.getFilePathLengthFromKey(@ptrCast(ref_key.?), ref_size, &path_len);
         var path_buf_w: [std.fs.max_path_bytes]u16 = undefined;
-        const path_w = try local_loader.getFilePath(ref.key, ref.size, &path_buf_w);
+        if (path_len + 1 > path_buf_w.len) return error.FontPathTooLong;
+        try local_loader.getFilePathFromKey(@ptrCast(ref_key.?), ref_size, @ptrCast(&path_buf_w), path_len + 1);
+        const path_w = path_buf_w[0..path_len];
 
         // UTF-16 → UTF-8
         var path_buf: [std.fs.max_path_bytes]u8 = undefined;
@@ -610,7 +364,7 @@ pub const DiscoverIterator = struct {
         if (self.i >= self.fonts.len) return null;
 
         const dw_font = self.fonts[self.i];
-        _ = dw_font.addRef(); // DeferredFace gets its own reference
+        _ = dw_font.lpVtbl.AddRef(dw_font); // DeferredFace gets its own reference
         defer self.i += 1;
 
         return DeferredFace{
@@ -627,33 +381,52 @@ pub const DiscoverIterator = struct {
 // ============================================================================
 
 factory: *IDWriteFactory,
+factory2: ?*IDWriteFactory2,
 collection: *IDWriteFontCollection,
+font_fallback: ?*IDWriteFontFallback,
 
 pub fn init() DirectWrite {
     var factory_raw: ?*anyopaque = null;
     const hr = DWriteCreateFactory(
         DWRITE_FACTORY_TYPE_SHARED,
-        &IID_IDWriteFactory,
+        &IDWriteFactory.IID,
         &factory_raw,
     );
+
     if (hr < 0 or factory_raw == null) {
         log.err("DWriteCreateFactory failed: hr=0x{x}", .{@as(u32, @bitCast(hr))});
         @panic("failed to create DirectWrite factory");
     }
 
     const factory: *IDWriteFactory = @ptrCast(@alignCast(factory_raw.?));
-    const collection = factory.getSystemFontCollection() catch {
+    var collection_raw: ?*anyopaque = null;
+    factory.getSystemFontCollection(&collection_raw, 0) catch {
         log.err("GetSystemFontCollection failed", .{});
         @panic("failed to get system font collection");
     };
+    const collection: *IDWriteFontCollection = @ptrCast(@alignCast(collection_raw.?));
+
+    // Try to get IDWriteFactory2 for system font fallback (Windows 8.1+)
+    const factory2 = factory.queryInterface(IDWriteFactory2) catch null;
+
+    var font_fallback: ?*IDWriteFontFallback = null;
+    if (factory2) |f2| {
+        var fb_raw: ?*anyopaque = null;
+        f2.getSystemFontFallback(&fb_raw) catch {};
+        if (fb_raw) |raw| font_fallback = @ptrCast(@alignCast(raw));
+    }
 
     return .{
         .factory = factory,
+        .factory2 = factory2,
         .collection = collection,
+        .font_fallback = font_fallback,
     };
 }
 
 pub fn deinit(self: *DirectWrite) void {
+    if (self.font_fallback) |fb| fb.release();
+    if (self.factory2) |f2| f2.release();
     self.collection.release();
     self.factory.release();
 }
@@ -674,7 +447,10 @@ pub fn discover(
         // Search by family name
         var name_buf: [256]u16 = undefined;
         const conv = try utf8ToUtf16Le(&name_buf, family);
-        if (self.collection.findFamilyName(conv.str) catch null) |family_index| {
+        var family_index: u32 = 0;
+        var exists: BOOL = 0;
+        self.collection.findFamilyName(@ptrCast(@constCast(conv.str)), &family_index, &exists) catch {};
+        if (exists != 0) {
             try self.collectFontsFromFamily(alloc, family_index, desc, &results);
         }
     } else if (desc.codepoint > 0) {
@@ -694,7 +470,9 @@ pub fn discover(
     };
 }
 
-/// Discover a fallback font. Delegates to discover().
+/// Discover a fallback font. Uses IDWriteFontFallback::MapCharacters
+/// when available (Windows 8.1+) for locale-aware CJK font selection,
+/// falling back to brute-force search on older systems.
 pub fn discoverFallback(
     self: *const DirectWrite,
     alloc: Allocator,
@@ -702,6 +480,74 @@ pub fn discoverFallback(
     desc: Descriptor,
 ) !DiscoverIterator {
     _ = collection;
+
+    // Use MapCharacters for locale-aware fallback when possible.
+    if (desc.codepoint > 0) map_chars: {
+        const fb = self.font_fallback orelse break :map_chars;
+
+        // Encode codepoint as UTF-16
+        var text_buf: [3]u16 = undefined;
+        var text_len: u32 = undefined;
+        if (desc.codepoint >= 0x10000) {
+            const shifted: u21 = @intCast(desc.codepoint - 0x10000);
+            text_buf[0] = @intCast(0xD800 + (shifted >> 10));
+            text_buf[1] = @intCast(0xDC00 + @as(u16, @truncate(shifted & 0x3FF)));
+            text_buf[2] = 0;
+            text_len = 2;
+        } else {
+            text_buf[0] = @intCast(desc.codepoint);
+            text_buf[1] = 0;
+            text_len = 1;
+        }
+
+        // Get system locale
+        var locale_buf: [85]u16 = undefined; // LOCALE_NAME_MAX_LENGTH = 85
+        const locale_len = GetUserDefaultLocaleName(&locale_buf, 85);
+        if (locale_len <= 0) break :map_chars;
+        locale_buf[@intCast(locale_len - 1)] = 0; // ensure null-terminated
+
+        // Create analysis source
+        var source = SimpleTextAnalysisSource.init(
+            &text_buf,
+            text_len,
+            @ptrCast(&locale_buf),
+        );
+
+        const base_family = comptime std.unicode.utf8ToUtf16LeStringLiteral("Segoe UI");
+
+        var mapped_length: u32 = 0;
+        var mapped_font_raw: ?*anyopaque = null;
+        var scale: f32 = 1.0;
+        const result = fb.mapCharacters(
+            @ptrCast(&source),
+            0,
+            text_len,
+            self.collection,
+            @ptrCast(@constCast(base_family)),
+            if (desc.bold) DWRITE_FONT_WEIGHT_BOLD else 400,
+            if (desc.italic) DWRITE_FONT_STYLE_ITALIC else DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_MEDIUM,
+            &mapped_length,
+            &mapped_font_raw,
+            &scale,
+        );
+        result catch break :map_chars;
+
+        if (mapped_font_raw == null) break :map_chars;
+        const mapped_font: *IDWriteFont = @ptrCast(@alignCast(mapped_font_raw.?));
+
+        const list = try alloc.alloc(*IDWriteFont, 1);
+        list[0] = mapped_font;
+
+        return .{
+            .alloc = alloc,
+            .fonts = list,
+            .variations = desc.variations,
+            .i = 0,
+        };
+    }
+
+    // Fallback: brute-force codepoint search
     return try self.discover(alloc, desc);
 }
 
@@ -713,18 +559,24 @@ fn enumerateAll(
     desc: Descriptor,
     results: *std.ArrayList(*IDWriteFont),
 ) !void {
-    const family_count = self.collection.getFontFamilyCount();
+    const family_count = self.collection.lpVtbl.GetFontFamilyCount(self.collection);
     for (0..family_count) |fi| {
-        const family = self.collection.getFontFamily(@intCast(fi)) catch continue;
-        defer _ = family.release();
+        var family_raw: ?*anyopaque = null;
+        self.collection.getFontFamily(@intCast(fi), &family_raw) catch continue;
+        if (family_raw == null) continue;
+        const family: *IDWriteFontFamily = @ptrCast(@alignCast(family_raw.?));
+        defer family.release();
 
-        const count = family.getFontCount();
+        const count = family.lpVtbl.GetFontCount(family);
         for (0..count) |i| {
-            const dw_font = family.getFont(@intCast(i)) catch continue;
-            errdefer _ = dw_font.release();
+            var dw_font_raw: ?*anyopaque = null;
+            if (family.lpVtbl.GetFont(family, @intCast(i), &dw_font_raw) < 0) continue;
+            if (dw_font_raw == null) continue;
+            const dw_font: *IDWriteFont = @ptrCast(@alignCast(dw_font_raw.?));
+            errdefer dw_font.release();
 
             if (!fontMatchesDesc(dw_font, desc)) {
-                _ = dw_font.release();
+                dw_font.release();
                 continue;
             }
 
@@ -740,16 +592,22 @@ fn collectFontsFromFamily(
     desc: Descriptor,
     results: *std.ArrayList(*IDWriteFont),
 ) !void {
-    const family = self.collection.getFontFamily(family_index) catch return;
-    defer _ = family.release();
+    var family_raw: ?*anyopaque = null;
+    self.collection.getFontFamily(family_index, &family_raw) catch return;
+    if (family_raw == null) return;
+    const family: *IDWriteFontFamily = @ptrCast(@alignCast(family_raw.?));
+    defer family.release();
 
-    const count = family.getFontCount();
+    const count = family.lpVtbl.GetFontCount(family);
     for (0..count) |i| {
-        const dw_font = family.getFont(@intCast(i)) catch continue;
-        errdefer _ = dw_font.release();
+        var dw_font_raw: ?*anyopaque = null;
+        if (family.lpVtbl.GetFont(family, @intCast(i), &dw_font_raw) < 0) continue;
+        if (dw_font_raw == null) continue;
+        const dw_font: *IDWriteFont = @ptrCast(@alignCast(dw_font_raw.?));
+        errdefer dw_font.release();
 
         if (!fontMatchesDesc(dw_font, desc)) {
-            _ = dw_font.release();
+            dw_font.release();
             continue;
         }
 
@@ -763,32 +621,46 @@ fn searchByCodepoint(
     desc: Descriptor,
     results: *std.ArrayList(*IDWriteFont),
 ) !void {
-    const family_count = self.collection.getFontFamilyCount();
+    const family_count = self.collection.lpVtbl.GetFontFamilyCount(self.collection);
     for (0..family_count) |fi| {
-        const family = self.collection.getFontFamily(@intCast(fi)) catch continue;
-        defer _ = family.release();
+        var family_raw: ?*anyopaque = null;
+        self.collection.getFontFamily(@intCast(fi), &family_raw) catch continue;
+        if (family_raw == null) continue;
+        const family: *IDWriteFontFamily = @ptrCast(@alignCast(family_raw.?));
+        defer family.release();
 
         // Check first font in family for the codepoint
-        const first_font = family.getFont(0) catch continue;
-        const has_cp = first_font.hasCharacter(desc.codepoint);
-        _ = first_font.release();
-        if (!has_cp) continue;
+        var first_font_raw: ?*anyopaque = null;
+        if (family.lpVtbl.GetFont(family, 0, &first_font_raw) < 0) continue;
+        if (first_font_raw == null) continue;
+        const first_font: *IDWriteFont = @ptrCast(@alignCast(first_font_raw.?));
+        var exists: BOOL = 0;
+        first_font.hasCharacter(desc.codepoint, &exists) catch {};
+        first_font.release();
+        if (exists == 0) continue;
 
         // This family has the codepoint - collect matching fonts
-        const count = family.getFontCount();
+        const count = family.lpVtbl.GetFontCount(family);
         for (0..count) |i| {
-            const dw_font = family.getFont(@intCast(i)) catch continue;
-            errdefer _ = dw_font.release();
+            var dw_font_raw: ?*anyopaque = null;
+            if (family.lpVtbl.GetFont(family, @intCast(i), &dw_font_raw) < 0) continue;
+            if (dw_font_raw == null) continue;
+            const dw_font: *IDWriteFont = @ptrCast(@alignCast(dw_font_raw.?));
+            errdefer dw_font.release();
 
             if (!fontMatchesDesc(dw_font, desc)) {
-                _ = dw_font.release();
+                dw_font.release();
                 continue;
             }
 
             // Verify the specific font also has the codepoint
-            if (desc.codepoint > 0 and !dw_font.hasCharacter(desc.codepoint)) {
-                _ = dw_font.release();
-                continue;
+            if (desc.codepoint > 0) {
+                var dw_exists: BOOL = 0;
+                dw_font.hasCharacter(desc.codepoint, &dw_exists) catch {};
+                if (dw_exists == 0) {
+                    dw_font.release();
+                    continue;
+                }
             }
 
             try results.append(alloc, dw_font);
@@ -801,17 +673,19 @@ fn searchByCodepoint(
 
 fn fontMatchesDesc(dw_font: *IDWriteFont, desc: Descriptor) bool {
     // Filter by bold
+    const weight = dw_font.lpVtbl.GetWeight(dw_font);
     if (desc.bold) {
-        if (dw_font.getWeight() < DWRITE_FONT_WEIGHT_BOLD) return false;
+        if (weight < DWRITE_FONT_WEIGHT_BOLD) return false;
     } else {
-        if (dw_font.getWeight() >= DWRITE_FONT_WEIGHT_BOLD) return false;
+        if (weight >= DWRITE_FONT_WEIGHT_BOLD) return false;
     }
 
     // Filter by italic
+    const style = dw_font.lpVtbl.GetStyle(dw_font);
     if (desc.italic) {
-        if (dw_font.getStyle() == DWRITE_FONT_STYLE_NORMAL) return false;
+        if (style == DWRITE_FONT_STYLE_NORMAL) return false;
     } else {
-        if (dw_font.getStyle() != DWRITE_FONT_STYLE_NORMAL) return false;
+        if (style != DWRITE_FONT_STYLE_NORMAL) return false;
     }
 
     // Note: desc.monospace is not filtered here. Fontconfig also doesn't
