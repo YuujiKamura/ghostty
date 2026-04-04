@@ -1,6 +1,6 @@
 param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
-# test-02a-tabview  EVerify TabView exists and has at least 1 tab item.
+# test-02a-tabview — Verify TabView exists and has at least 1 tab item.
 # Uses UIA Tab/TabItem detection with Custom control and HWND fallbacks.
 
 $ErrorActionPreference = 'Stop'

@@ -1,16 +1,16 @@
 param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
-# test-02d-control-plane  EVerify control plane DLL responds via deckpilot.
+# test-02d-control-plane  EVerify control plane DLL responds via agent-deck.
 # Requires: GHOSTTY_CONTROL_PLANE=1 env var on the shared ghostty process,
-# and deckpilot built at ~/deckpilot/deckpilot.exe.
+# and agent-deck built at ~/agent-deck/agent-deck.exe.
 
 $ErrorActionPreference = 'Stop'
 $testName = "test-02d-control-plane"
 
-# Find deckpilot binary
-$agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
+# Find agent-deck binary
+$agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
 if (-not (Test-Path $agentDeck)) {
-    Write-Host "SKIP: $testName  Edeckpilot.exe not found at $agentDeck" -ForegroundColor Yellow
+    Write-Host "SKIP: $testName  Eagent-deck.exe not found at $agentDeck" -ForegroundColor Yellow
     return
 }
 
@@ -56,11 +56,11 @@ if ($outputContent -match $marker) {
     $passChecks++
     Write-Host "  SEND+READ ............... PASS" -ForegroundColor Green
 } elseif (-not $sendOk) {
-    Write-Host "  SEND+READ ............... SKIP (send failed  Edeckpilot send bug)" -ForegroundColor Yellow
+    Write-Host "  SEND+READ ............... SKIP (send failed  Eagent-deck send bug)" -ForegroundColor Yellow
 } else {
     $failChecks++
     Write-Host "  SEND+READ ............... FAIL (marker '$marker' not found)" -ForegroundColor Red
 }
 
-Test-Assert -Condition ($failChecks -eq 0) -Message "$testName - deckpilot CP smoke passed ($passChecks checks, 0 failures)"
-Write-Host "PASS: $testName - control plane responds to deckpilot (session=$sessionName)" -ForegroundColor Green
+Test-Assert -Condition ($failChecks -eq 0) -Message "$testName - agent-deck CP smoke passed ($passChecks checks, 0 failures)"
+Write-Host "PASS: $testName - control plane responds to agent-deck (session=$sessionName)" -ForegroundColor Green

@@ -11,7 +11,7 @@ if (-not $ExePath) {
     $ExePath = Join-Path $PSScriptRoot "..\..\zig-out-winui3\bin\ghostty.exe"
 }
 
-# Standalone tests (Phase 3) manage their own process  Edon't launch ghostty for them.
+# Standalone tests (Phase 3) manage their own process — don't launch ghostty for them.
 $standaloneTests = @("test-05-ghost-demo")
 if ($TestName -in $standaloneTests) {
     Write-Host "Standalone test: $TestName (manages its own ghostty process)"

@@ -1,16 +1,16 @@
 param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
-# test-02e-agent-roundtrip  ELaunch claude -p via control plane, verify output.
+# test-02e-agent-roundtrip — Launch claude -p via control plane, verify output.
 # End-to-end: send command -> wait for completion -> read buffer -> check output.
-# Requires: GHOSTTY_CONTROL_PLANE=1 and deckpilot built.
+# Requires: GHOSTTY_CONTROL_PLANE=1 and agent-deck built.
 
 $ErrorActionPreference = 'Stop'
 $testName = "test-02e-agent-roundtrip"
 
-# Find deckpilot binary
-$agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
+# Find agent-deck binary
+$agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
 if (-not (Test-Path $agentDeck)) {
-    Write-Host "SKIP: $testName - deckpilot.exe not found" -ForegroundColor Yellow
+    Write-Host "SKIP: $testName - agent-deck.exe not found" -ForegroundColor Yellow
     return
 }
 
@@ -32,7 +32,7 @@ Write-Host "  Sending: $testPrompt" -ForegroundColor DarkGray
 $sendOk = Send-GhosttyInput -SessionName $sessionName -Text $testPrompt
 
 if (-not $sendOk) {
-    Write-Host "SKIP: $testName - send failed (deckpilot send bug, no direct pipe fallback)" -ForegroundColor Yellow
+    Write-Host "SKIP: $testName - send failed (agent-deck send bug, no direct pipe fallback)" -ForegroundColor Yellow
     return
 }
 

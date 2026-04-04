@@ -1,4 +1,4 @@
-# test-05-ghost-demo.ps1  EGhost animation rendering verification
+# test-05-ghost-demo.ps1 — Ghost animation rendering verification
 # Launches ghostty, runs play.py at 60fps (auto-scales to fit), verifies D3D11 rendering.
 
 $ErrorActionPreference = 'Continue'
@@ -15,7 +15,7 @@ if (-not (Test-Path $exePath)) {
 
 $logPath = Join-Path $env:TEMP "ghostty_debug.log"
 
-# NOTE: Do NOT kill all ghostty processes  Eother sessions (deckpilot agents) may be running.
+# NOTE: Do NOT kill all ghostty processes — other sessions (deckpilot agents) may be running.
 # We only kill our own process at cleanup (line ~110).
 Start-Sleep -Seconds 1
 
@@ -36,7 +36,7 @@ Start-Sleep -Seconds 6
 $proc.Refresh()
 Test-Assert -Condition (-not $proc.HasExited) -Message "$testName - process alive after 6s"
 
-# Register + find CP session via deckpilot
+# Register + find CP session via agent-deck
 $sessionName = Register-GhosttyCP -ProcessId $procId
 if (-not $sessionName) {
     $sessionName = Find-GhosttyCP -ProcessId $procId
@@ -45,7 +45,7 @@ if (-not $sessionName) {
 if ($sessionName) {
     Write-Host "  CP session: $sessionName" -ForegroundColor DarkGray
 
-    # Send play.py  Eit auto-scales to fit any terminal size
+    # Send play.py — it auto-scales to fit any terminal size
     $playPy = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) "tools\ghost-demo\play.py"
     $sendOk = Send-GhosttyInput -SessionName $sessionName -Text "python `"$playPy`" --fps 60"
     if ($sendOk) {

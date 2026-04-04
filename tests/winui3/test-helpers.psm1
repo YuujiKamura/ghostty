@@ -1096,14 +1096,14 @@ function Send-GhosttyInput {
     if (Test-Path $agentDeck) {
         $prev = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
-        $sendResult = & $agentDeck send $SessionName $Text 2>&1
+        $sendResult = & $agentDeck send $SessionName $Text --no-wait 2>&1
         $sendExit = $LASTEXITCODE
         $ErrorActionPreference = $prev
         if ($sendExit -eq 0) { return $true }
 
         # Try session send as fallback
         $ErrorActionPreference = 'Continue'
-        $sendResult = & $agentDeck send $SessionName $Text 2>&1
+        $sendResult = & $agentDeck session send $SessionName $Text --no-wait 2>&1
         $sendExit = $LASTEXITCODE
         $ErrorActionPreference = $prev
         if ($sendExit -eq 0) { return $true }
@@ -1139,7 +1139,7 @@ function Send-GhosttyPipeInput {
         $b64 = [Convert]::ToBase64String($bytes)
                 # format: INPUT|from|b64|raw
         # raw=0 (false) for normal text input
-        $request = "INPUT|test-script|$b64
+        $request = "INPUT|test-script|$b64|0
 "
         $requestBytes = [System.Text.Encoding]::UTF8.GetBytes($request)
 
@@ -1185,7 +1185,7 @@ function Get-GhosttyOutput {
     $prev = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        $output = & $agentDeck show $SessionName 2>$null
+        $output = & $agentDeck session output $SessionName -q 2>$null
         return ($output | Out-String)
     } catch {
         return ""

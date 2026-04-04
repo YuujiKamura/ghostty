@@ -1,6 +1,6 @@
 param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
-# test-08-profile-menu  EVerify profile dropdown menu is populated with shell entries.
+# test-08-profile-menu — Verify profile dropdown menu is populated with shell entries.
 # Uses UIA to find the SplitButton and MenuFlyoutItem elements.
 
 $ErrorActionPreference = 'Stop'
@@ -63,7 +63,7 @@ Test-Assert -Condition ($splitButton -ne $null) -Message "$testName - SplitButto
 Write-Host "  SplitButton found: Name='$($splitButton.Current.Name)' AutomationId='$($splitButton.Current.AutomationId)'" -ForegroundColor Green
 
 # ============================================================
-# 3. Find MenuItem elements (ControlType.MenuItem)  Eprofile entries
+# 3. Find MenuItem elements (ControlType.MenuItem) — profile entries
 #    These are the MenuFlyoutItems populated by populateProfileMenu().
 #    Note: MenuFlyoutItems may only be visible after expanding the flyout.
 # ============================================================
@@ -204,7 +204,7 @@ foreach ($item in $profileMenuItems) {
     }
 }
 
-# MenuFlyoutItem detection is best-effort  EXAML Islands SplitButton secondary
+# MenuFlyoutItem detection is best-effort — XAML Islands SplitButton secondary
 # button is not reliably accessible via UIA (no ExpandCollapse pattern, Invoke
 # triggers the primary action, not the dropdown). The critical assertions are:
 # 1. SplitButton exists (already passed above)
@@ -213,6 +213,6 @@ if ($profileMenuItems.Count -ge 1) {
     Test-Assert -Condition $cmdPromptFound -Message "$testName - 'Command Prompt' profile found in menu"
     Write-Host "  $testName PASSED: $($profileMenuItems.Count) profile(s) in dropdown" -ForegroundColor Green
 } else {
-    Write-Host "  $testName INFO: MenuFlyoutItems not visible (flyout may not have opened  EXAML Islands UIA limitation)" -ForegroundColor Yellow
+    Write-Host "  $testName INFO: MenuFlyoutItems not visible (flyout may not have opened — XAML Islands UIA limitation)" -ForegroundColor Yellow
     Write-Host "  $testName PASSED: SplitButton exists, profiles populated at build time (zig test profiles.zig verifies detection)" -ForegroundColor Green
 }

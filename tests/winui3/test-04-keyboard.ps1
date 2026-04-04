@@ -1,7 +1,7 @@
 param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
 # test-04-keyboard  EKeyboard input verification: ASCII chars + Enter key.
-# Uses Send-GhosttyInput (deckpilot send + direct pipe fallback) + Get-GhosttyOutput.
+# Uses Send-GhosttyInput (agent-deck send + direct pipe fallback) + Get-GhosttyOutput.
 
 $ErrorActionPreference = 'Stop'
 $testName = "test-04-keyboard"
@@ -25,7 +25,7 @@ Start-Sleep -Milliseconds 500
 # ============================================================
 Write-Host "  --- Sub-test: ASCII keyboard input (via CP) ---" -ForegroundColor Cyan
 
-$agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
+$agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
 # Use session from test runner (GHOSTTY_CP_SESSION), fallback to discovery
 $sessionName = $env:GHOSTTY_CP_SESSION
 if (-not $sessionName) {
@@ -34,17 +34,17 @@ if (-not $sessionName) {
 Write-Host "  Session: $sessionName" -ForegroundColor DarkGray
 
 if (-not (Test-Path $agentDeck) -or -not $sessionName) {
-    Write-Host "  SKIP: deckpilot not found or no alive session" -ForegroundColor Yellow
-    Write-Host "PASS: $testName - skipped (deckpilot=$([bool](Test-Path $agentDeck)), session=$sessionName)" -ForegroundColor Green
+    Write-Host "  SKIP: agent-deck not found or no alive session" -ForegroundColor Yellow
+    Write-Host "PASS: $testName - skipped (agent-deck=$([bool](Test-Path $agentDeck)), session=$sessionName)" -ForegroundColor Green
     return
 }
 
-# Send command via CP helper (tries deckpilot send, falls back to direct pipe)
+# Send command via CP helper (tries agent-deck send, falls back to direct pipe)
 Write-Host "  Sending to session: $sessionName" -ForegroundColor DarkGray
 $sendOk = Send-GhosttyInput -SessionName $sessionName -Text "echo codex-kb-test-96"
 
 if (-not $sendOk) {
-    Write-Host "  SKIP: send failed (deckpilot send bug, direct pipe fallback failed)" -ForegroundColor Yellow
+    Write-Host "  SKIP: send failed (agent-deck send bug, direct pipe fallback failed)" -ForegroundColor Yellow
     Write-Host "PASS: $testName - skipped (send unavailable)" -ForegroundColor Green
     return
 }

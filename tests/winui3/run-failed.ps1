@@ -1,4 +1,4 @@
-# run-failed.ps1  ERe-run only previously failed tests
+# run-failed.ps1 — Re-run only previously failed tests
 # Usage: pwsh.exe -File run-failed.ps1 [-ExePath path]
 
 param(

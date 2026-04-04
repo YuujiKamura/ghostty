@@ -134,12 +134,12 @@ if (-not $usedTransform) {
 }
 
 # ============================================================
-# SUB-TEST 3: Maximize  ESKIPPED (causes instability, not needed for agent use)
+# SUB-TEST 3: Maximize — SKIPPED (causes instability, not needed for agent use)
 # ============================================================
 Write-Host "  --- Sub-test: Maximize --- SKIPPED" -ForegroundColor Yellow
 
 # ============================================================
-# SUB-TEST 4: Restore (from maximized)  ESKIPPED
+# SUB-TEST 4: Restore (from maximized) — SKIPPED
 # ============================================================
 Write-Host "  --- Sub-test: Restore from maximize --- SKIPPED" -ForegroundColor Yellow
 
