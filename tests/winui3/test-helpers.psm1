@@ -1011,7 +1011,7 @@ function Dump-UIATree {
 function Register-GhosttyCP {
     <#
     .SYNOPSIS
-        Register a ghostty CP session with deckpilot by PID.
+        Confirm a ghostty CP session is discovered by deckpilot.
         Returns the session name (e.g. "ghostty-12345") or $null.
     #>
     [CmdletBinding()]
@@ -1020,26 +1020,16 @@ function Register-GhosttyCP {
     $agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
     if (-not (Test-Path $agentDeck)) { return $null }
 
-    $sessionName = "ghostty-$ProcessId"
-
-    # Register (ignore errors if already registered)
-    $prev = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    try {
-        & $agentDeck session add $sessionName --tool shell 2>$null | Out-Null
-    } finally {
-        $ErrorActionPreference = $prev
-    }
-    Start-Sleep -Milliseconds 500
-
-    return $sessionName
+    $json = & $agentDeck list --json 2>$null | ConvertFrom-Json
+    $session = $json | Where-Object { $_.pid -eq $ProcessId }
+    return $session.name
 }
 
 function Find-GhosttyCP {
     <#
     .SYNOPSIS
         Find a ghostty CP session via deckpilot list --json.
-        Returns the session title or $null.
+        Returns the session name or $null.
     .PARAMETER ProcessId
         If provided, prefer session matching this PID.
     #>
@@ -1050,23 +1040,16 @@ function Find-GhosttyCP {
     if (-not (Test-Path $agentDeck)) { return $null }
 
     try {
-        $lsJson = & $agentDeck ls --json 2>$null
-        if (-not $lsJson) { return $null }
-        $parsed = $lsJson | ConvertFrom-Json
-        $cpSessions = @($parsed | Where-Object {
-            $_.PSObject.Properties['tool'] -and $_.tool -eq "ghostty"
-        })
-        # Try matching PID first
+        $json = & $agentDeck list --json 2>$null | ConvertFrom-Json
+        if (-not $json) { return $null }
+        
         if ($ProcessId -gt 0) {
-            foreach ($s in $cpSessions) {
-                if ($s.PSObject.Properties['pid'] -and $s.pid -eq $ProcessId) {
-                    return $s.title
-                }
-            }
+            $session = $json | Where-Object { $_.pid -eq $ProcessId }
+            return $session.name
         }
         # Fallback: most recent
-        if ($cpSessions.Count -gt 0) {
-            return $cpSessions[-1].title
+        if ($json.Count -gt 0) {
+            return $json[-1].name
         }
     } catch {
         # Silently ignore
