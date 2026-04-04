@@ -59,7 +59,7 @@
 ### 実行コマンド
 
 ```powershell
-cd C:\Users\yuuji\ghostty-win
+cd .
 zig build -Dapp-runtime=winui3 -Drenderer=d3d11
 pwsh -File .\scripts\winui3-foundation-matrix.ps1
 ```

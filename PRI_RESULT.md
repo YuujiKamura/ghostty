@@ -5,7 +5,7 @@ Implemented manual PRI file loading for XAML Islands using MRT Core's ResourceMa
 ## Changes
 
 1. **PRI File Deployment**:
-   - Copied `MinimalXaml.pri` from `C:\Users\yuuji\zig-xaml-compiler\bin\x64\Debug\net9.0-windows10.0.22621.0\MinimalXaml.pri` to `C:\Users\yuuji\ghostty-win\zig-out-winui3-islands\bin\MinimalXaml.pri`.
+   - Copied `MinimalXaml.pri` from `<zig-xaml-compiler>/bin/x64/Debug/net9.0-windows10.0.22621.0/MinimalXaml.pri` to `zig-out-winui3-islands/bin/MinimalXaml.pri`.
 
 2. **WinRT Bindings (com_generated.zig)**:
    - Added `IResourceManagerFactory` interface definition (IID: `11ee6370-8585-40f0-9c43-265c34443a51`) with `CreateInstance(priPath: HSTRING)` method.
@@ -22,7 +22,7 @@ Implemented manual PRI file loading for XAML Islands using MRT Core's ResourceMa
 
 4. **Build Verification**:
    - Successfully built the project using `./build-winui3-islands.sh`.
-   - Output binary: `C:\Users\yuuji\ghostty-win\zig-out-winui3-islands\bin\ghostty.exe`.
+   - Output binary: `zig-out-winui3-islands/bin/ghostty.exe`.
    - PRI file exists in the same directory as the executable.
 
 ## Verification

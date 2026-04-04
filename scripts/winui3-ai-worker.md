@@ -15,25 +15,25 @@
 ### Codex + Git Bash
 
 ```powershell
-pwsh -NoLogo -NoProfile -File C:\Users\yuuji\ghostty-win\scripts\winui3-ai-worker.ps1 -Action start -Agent codex -Shell gitbash -Session wt-ai-codex
+pwsh -NoLogo -NoProfile -File .\scripts\winui3-ai-worker.ps1 -Action start -Agent codex -Shell gitbash -Session wt-ai-codex
 ```
 
 ```powershell
-pwsh -NoLogo -NoProfile -File C:\Users\yuuji\ghostty-win\scripts\winui3-ai-worker.ps1 -Action send -Agent codex -Shell gitbash -Session wt-ai-codex -Text "やらせたい内容"
+pwsh -NoLogo -NoProfile -File .\scripts\winui3-ai-worker.ps1 -Action send -Agent codex -Shell gitbash -Session wt-ai-codex -Text "やらせたい内容"
 ```
 
 ```powershell
-pwsh -NoLogo -NoProfile -File C:\Users\yuuji\ghostty-win\scripts\winui3-ai-worker.ps1 -Action status -Agent codex -Shell gitbash -Session wt-ai-codex
+pwsh -NoLogo -NoProfile -File .\scripts\winui3-ai-worker.ps1 -Action status -Agent codex -Shell gitbash -Session wt-ai-codex
 ```
 
 ```powershell
-pwsh -NoLogo -NoProfile -File C:\Users\yuuji\ghostty-win\scripts\winui3-ai-worker.ps1 -Action stop -Agent codex -Shell gitbash -Session wt-ai-codex
+pwsh -NoLogo -NoProfile -File .\scripts\winui3-ai-worker.ps1 -Action stop -Agent codex -Shell gitbash -Session wt-ai-codex
 ```
 
 ### Gemini + PowerShell
 
 ```powershell
-pwsh -NoLogo -NoProfile -File C:\Users\yuuji\ghostty-win\scripts\winui3-ai-worker.ps1 -Action start -Agent gemini -Shell powershell -Session wt-ai-gemini
+pwsh -NoLogo -NoProfile -File .\scripts\winui3-ai-worker.ps1 -Action start -Agent gemini -Shell powershell -Session wt-ai-gemini
 ```
 
 ## 補足

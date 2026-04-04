@@ -4,10 +4,10 @@
 
 `ghostty-win` is the WinUI3 consumer of the external `win-zig-bindgen` and `win-zig-core` workflow.
 
-Read [NON-NEGOTIABLES.md](C:\Users\yuuji\ghostty-win\NON-NEGOTIABLES.md) first.
+Read [NON-NEGOTIABLES.md](NON-NEGOTIABLES.md) first.
 Then read:
-- [docs/winui3-playbook.md](C:\Users\yuuji\ghostty-win\docs\winui3-playbook.md)
-- [docs/winui3-known-good-apis.md](C:\Users\yuuji\ghostty-win\docs\winui3-known-good-apis.md)
+- [docs/winui3-playbook.md](docs/winui3-playbook.md)
+- [docs/winui3-known-good-apis.md](docs/winui3-known-good-apis.md)
 
 ## Primary Commands
 

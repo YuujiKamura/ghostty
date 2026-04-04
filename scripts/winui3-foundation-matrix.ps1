@@ -1,5 +1,5 @@
 param(
-    [string]$ExePath = "C:\Users\yuuji\ghostty-win\zig-out\bin\ghostty.exe",
+    [string]$ExePath = (Join-Path (Split-Path -Parent $PSScriptRoot) "zig-out\bin\ghostty.exe"),
     [int]$WaitSeconds = 8
 )
 

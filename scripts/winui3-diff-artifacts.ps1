@@ -3,7 +3,7 @@ param(
     [string]$ReferenceJson,
     [Parameter(Mandatory = $true)]
     [string]$TargetJson,
-    [string]$OutReport = "C:\Users\yuuji\ghostty-win\tmp\winui3-artifact-diff.md"
+    [string]$OutReport = (Join-Path (Split-Path -Parent $PSScriptRoot) "tmp\winui3-artifact-diff.md")
 )
 
 $ErrorActionPreference = "Stop"

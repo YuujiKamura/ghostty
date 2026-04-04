@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
-Import-Module "C:/Users/yuuji/ghostty-win/tests/winui3/test-helpers.psm1" -Force -WarningAction SilentlyContinue
+Import-Module (Join-Path $PSScriptRoot "../winui3/test-helpers.psm1") -Force -WarningAction SilentlyContinue
 $out = New-Object System.Collections.Generic.List[string]
 function L([string]$s){ $out.Add($s) | Out-Null }
 function Send-KeyChord([uint16[]]$DownVks,[uint16]$KeyVk){
@@ -22,7 +22,8 @@ function Sample-Selection([IntPtr]$hwnd,[int]$rx,[int]$ry){
   if($null -eq $clip){$clip=''}
   return @{ x=$x; y=$y; clip=$clip }
 }
-$exe='C:/Users/yuuji/ghostty-win/zig-out-winui3/bin/ghostty.exe'
+$_repoRoot = (Resolve-Path "$PSScriptRoot/../..").Path
+$exe=Join-Path $_repoRoot 'zig-out-winui3/bin/ghostty.exe'
 $proc=Start-Ghostty -ExePath $exe
 try{
   $hwnd=Find-GhosttyWindow -ProcessId $proc.Id -TimeoutMs 15000
@@ -55,6 +56,6 @@ try{
 finally{
   if($proc -and -not $proc.HasExited){ Stop-Ghostty -Process $proc }
 }
-$log='C:/Users/yuuji/ghostty-win/tests/self_diagnosis/selection_check_run.log'
+$log=Join-Path $PSScriptRoot "selection_check_run.log"
 $out | Set-Content -Path $log -Encoding UTF8
 Write-Output $log

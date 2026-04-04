@@ -1,6 +1,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
-Import-Module "C:/Users/yuuji/ghostty-win/tests/winui3/test-helpers.psm1" -Force -WarningAction SilentlyContinue
+$_repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+Import-Module (Join-Path $_repoRoot "tests/winui3/test-helpers.psm1") -Force -WarningAction SilentlyContinue
 function Send-CPRaw([string]$pipe,[string]$cmd){
   $client=New-Object System.IO.Pipes.NamedPipeClientStream('.', $pipe, [System.IO.Pipes.PipeDirection]::InOut)
   $client.Connect(7000)
@@ -14,7 +15,7 @@ function Send-CPRaw([string]$pipe,[string]$cmd){
 $out = New-Object System.Collections.Generic.List[string]
 function L([string]$s){ $out.Add($s) | Out-Null }
 
-$exe='C:/Users/yuuji/ghostty-win/zig-out-winui3/bin/ghostty.exe'
+$exe=Join-Path $_repoRoot 'zig-out-winui3/bin/ghostty.exe'
 $proc=Start-Ghostty -ExePath $exe
 try{
   $hwnd=Find-GhosttyWindow -ProcessId $proc.Id -TimeoutMs 15000
@@ -93,6 +94,6 @@ try{
 finally{
   if($proc -and -not $proc.HasExited){ Stop-Ghostty -Process $proc }
 }
-$log='C:/Users/yuuji/ghostty-win/tests/self_diagnosis/selection_state_check_run.log'
+$log=Join-Path $PSScriptRoot 'selection_state_check_run.log'
 $out | Set-Content -Path $log -Encoding UTF8
 Write-Output $log

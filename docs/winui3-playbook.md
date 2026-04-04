@@ -34,7 +34,7 @@ The WinUI3 stack here is split into three layers.
 
 Owned primarily by:
 
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig)
+- [Surface.zig](../src/apprt/winui3/Surface.zig)
 
 Current rules:
 
@@ -44,18 +44,18 @@ Current rules:
 
 Evidence:
 
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):177
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):199
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):235
+- [Surface.zig](../src/apprt/winui3/Surface.zig):177
+- [Surface.zig](../src/apprt/winui3/Surface.zig):199
+- [Surface.zig](../src/apprt/winui3/Surface.zig):235
 
 ### 2. Input / focus ownership layer
 
 Owned primarily by:
 
-- [input_runtime.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\input_runtime.zig)
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig)
-- [ime.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\ime.zig)
-- [event_handlers.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\event_handlers.zig)
+- [input_runtime.zig](../src/apprt/winui3/input_runtime.zig)
+- [Surface.zig](../src/apprt/winui3/Surface.zig)
+- [ime.zig](../src/apprt/winui3/ime.zig)
+- [event_handlers.zig](../src/apprt/winui3/event_handlers.zig)
 
 Current rules:
 
@@ -66,18 +66,18 @@ Current rules:
 
 Evidence:
 
-- [input_runtime.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\input_runtime.zig):32
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):889
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):914
-- [ime.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\ime.zig):124
+- [input_runtime.zig](../src/apprt/winui3/input_runtime.zig):32
+- [Surface.zig](../src/apprt/winui3/Surface.zig):889
+- [Surface.zig](../src/apprt/winui3/Surface.zig):914
+- [ime.zig](../src/apprt/winui3/ime.zig):124
 
 ### 3. COM / interop boundary
 
 Owned primarily by:
 
-- [com_generated.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\com_generated.zig)
-- [com_native.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\com_native.zig)
-- [native_interop.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\native_interop.zig)
+- [com_generated.zig](../src/apprt/winui3/com_generated.zig)
+- [com_native.zig](../src/apprt/winui3/com_native.zig)
+- [native_interop.zig](../src/apprt/winui3/native_interop.zig)
 
 Current rules:
 
@@ -111,8 +111,8 @@ Current known-good example:
 
 Evidence:
 
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):295
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):304
+- [Surface.zig](../src/apprt/winui3/Surface.zig):295
+- [Surface.zig](../src/apprt/winui3/Surface.zig):304
 
 ### Keep native interop when
 
@@ -129,9 +129,9 @@ This repo can build layout-only XAML at runtime without XBF/PRI/compiler tooling
 
 Evidence:
 
-- [com_native.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\com_native.zig):487
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):177
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):199
+- [com_native.zig](../src/apprt/winui3/com_native.zig):487
+- [Surface.zig](../src/apprt/winui3/Surface.zig):177
+- [Surface.zig](../src/apprt/winui3/Surface.zig):199
 
 Scope limit:
 
@@ -146,7 +146,7 @@ For the current ScrollBar implementation:
 
 Evidence:
 
-- [winui3-scrollbar-smoke.ps1](C:\Users\yuuji\ghostty-win\scripts\winui3-scrollbar-smoke.ps1)
+- [winui3-scrollbar-smoke.ps1](../scripts/winui3-scrollbar-smoke.ps1)
 - [ghostty #57](https://github.com/YuujiKamura/ghostty/issues/57)
 
 ### Input routing is intentionally unified
@@ -171,8 +171,8 @@ Likely causes:
 
 Check:
 
-- [input_runtime.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\input_runtime.zig)
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):889
+- [input_runtime.zig](../src/apprt/winui3/input_runtime.zig)
+- [Surface.zig](../src/apprt/winui3/Surface.zig):889
 
 ### 2. UIA says a control is offscreen, but visuals look correct
 

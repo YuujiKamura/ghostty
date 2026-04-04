@@ -159,7 +159,7 @@ function Resolve-LogPath {
 }
 
 function Resolve-DeskpilotExe {
-    $repo = "C:\Users\yuuji\windows-screenshot-mcp-server"
+    $repo = Join-Path $HOME "windows-screenshot-mcp-server"
     if (-not (Test-Path $repo)) { return $null }
 
     $candidates = @(

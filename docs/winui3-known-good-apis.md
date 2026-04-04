@@ -20,9 +20,9 @@ Every entry here should stay evidence-backed and repo-specific.
 
 ### Evidence
 
-- [com_native.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\com_native.zig):487
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):177
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):199
+- [com_native.zig](../src/apprt/winui3/com_native.zig):487
+- [Surface.zig](../src/apprt/winui3/Surface.zig):177
+- [Surface.zig](../src/apprt/winui3/Surface.zig):199
 - [ghostty #57](https://github.com/YuujiKamura/ghostty/issues/57)
 
 ### Known-good usage conditions
@@ -49,8 +49,8 @@ Every entry here should stay evidence-backed and repo-specific.
 
 ### Evidence
 
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):294
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):889
+- [Surface.zig](../src/apprt/winui3/Surface.zig):294
+- [Surface.zig](../src/apprt/winui3/Surface.zig):889
 
 ### Known-good usage conditions
 
@@ -69,8 +69,8 @@ Every entry here should stay evidence-backed and repo-specific.
 
 ### Evidence
 
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):303
-- [Surface.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\Surface.zig):914
+- [Surface.zig](../src/apprt/winui3/Surface.zig):303
+- [Surface.zig](../src/apprt/winui3/Surface.zig):914
 
 ### Known-good usage conditions
 
@@ -90,9 +90,9 @@ Every entry here should stay evidence-backed and repo-specific.
 
 ### Evidence
 
-- [input_overlay.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\input_overlay.zig):82
-- [input_overlay.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\input_overlay.zig):92
-- [input_runtime.zig](C:\Users\yuuji\ghostty-win\src\apprt\winui3\input_runtime.zig):32
+- [input_overlay.zig](../src/apprt/winui3/input_overlay.zig):82
+- [input_overlay.zig](../src/apprt/winui3/input_overlay.zig):92
+- [input_runtime.zig](../src/apprt/winui3/input_runtime.zig):32
 
 ### Known-good usage conditions
 
@@ -115,7 +115,7 @@ Every entry here should stay evidence-backed and repo-specific.
 
 ### Evidence
 
-- [winui3-scrollbar-smoke.ps1](C:\Users\yuuji\ghostty-win\scripts\winui3-scrollbar-smoke.ps1)
+- [winui3-scrollbar-smoke.ps1](../scripts/winui3-scrollbar-smoke.ps1)
 - [ghostty #57](https://github.com/YuujiKamura/ghostty/issues/57)
 
 ### Known-good usage conditions

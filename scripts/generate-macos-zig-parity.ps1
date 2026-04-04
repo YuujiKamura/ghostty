@@ -1,6 +1,6 @@
 param(
-    [string]$UpstreamRoot = "C:\Users\yuuji\ghostty-upstream",
-    [string]$TargetRoot = "C:\Users\yuuji\ghostty-win"
+    [string]$UpstreamRoot = (Join-Path (Split-Path -Parent $PSScriptRoot) "..\ghostty-upstream"),
+    [string]$TargetRoot = (Split-Path -Parent $PSScriptRoot)
 )
 
 $ErrorActionPreference = "Stop"

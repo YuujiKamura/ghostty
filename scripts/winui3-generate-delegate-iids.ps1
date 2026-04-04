@@ -1,6 +1,6 @@
 param(
-    [string]$RepoRoot = "C:\Users\yuuji\ghostty-win",
-    [string]$ExePath = "C:\Users\yuuji\ghostty-win\zig-out\bin\ghostty.exe",
+    [string]$RepoRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$ExePath = (Join-Path (Split-Path -Parent $PSScriptRoot) "zig-out\bin\ghostty.exe"),
     [int]$WaitSeconds = 6,
     [switch]$BuildFirst
 )

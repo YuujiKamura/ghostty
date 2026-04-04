@@ -1,12 +1,12 @@
 //! --- WinRT Binding Provenance ---
 //! Generator: win-zig-bindgen (master (WIP))
-//! Primary WinMD: C:/Users/yuuji/.nuget/packages/microsoft.windows.sdk.win32metadata/70.0.11-preview/Windows.Win32.winmd
+//! Primary WinMD: Windows.Win32.winmd (auto-generated from microsoft.windows.sdk.win32metadata)
 //!   - SHA256: 6aec29be3359468d9eba03c3ae932591b39960f1812b6d25d33c0d9f14a6d665
-//! Companion WinMD: C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.26100.0\Windows.winmd
+//! Companion WinMD: Windows.winmd (Windows Kits UnionMetadata)
 //!   - SHA256: e2dee80d011cb9fc1276a0bd9f244f7a58d5ca72fe906a56e90d61c68cf8601a
-//! Companion WinMD: C:\Users\yuuji\.nuget\packages\microsoft.windowsappsdk\1.6.250108002\lib\uap10.0.18362\Microsoft.UI.winmd
+//! Companion WinMD: Microsoft.UI.winmd (microsoft.windowsappsdk)
 //!   - SHA256: 8ebbf9ef154241f7e3faa07230050cae6acbb587943909111f02a5914ab2d3ed
-//! Command: C:\Users\yuuji\win-zig-bindgen\zig-out\bin\win-zig-bindgen.exe --winmd C:/Users/yuuji/.nuget/packages/microsoft.windows.sdk.win32metadata/70.0.11-preview/Windows.Win32.winmd --deploy ghostty-win/src/font/dwrite_generated.zig --iface Windows.Win32.Graphics.DirectWrite.IDWriteFactory --iface Windows.Win32.Graphics.DirectWrite.IDWriteFactory2 --iface Windows.Win32.Graphics.DirectWrite.IDWriteFontFallback --iface Windows.Win32.Graphics.DirectWrite.IDWriteFontCollection --iface Windows.Win32.Graphics.DirectWrite.IDWriteFont --iface Windows.Win32.Graphics.DirectWrite.IDWriteFontFamily --iface Windows.Win32.Graphics.DirectWrite.IDWriteFontFace --iface Windows.Win32.Graphics.DirectWrite.IDWriteLocalizedStrings --iface Windows.Win32.Graphics.DirectWrite.IDWriteFontFile --iface Windows.Win32.Graphics.DirectWrite.IDWriteTextAnalysisSource --iface Windows.Win32.Graphics.DirectWrite.IDWriteFontFileLoader --iface Windows.Win32.Graphics.DirectWrite.IDWriteLocalFontFileLoader
+//! Command: win-zig-bindgen --winmd Windows.Win32.winmd --deploy ghostty-win/src/font/dwrite_generated.zig --iface Windows.Win32.Graphics.DirectWrite.IDWriteFactory --iface Windows.Win32.Graphics.DirectWrite.IDWriteFactory2 --iface Windows.Win32.Graphics.DirectWrite.IDWriteFontFallback --iface Windows.Win32.Graphics.DirectWrite.IDWriteFontCollection --iface Windows.Win32.Graphics.DirectWrite.IDWriteFont --iface Windows.Win32.Graphics.DirectWrite.IDWriteFontFamily --iface Windows.Win32.Graphics.DirectWrite.IDWriteFontFace --iface Windows.Win32.Graphics.DirectWrite.IDWriteLocalizedStrings --iface Windows.Win32.Graphics.DirectWrite.IDWriteFontFile --iface Windows.Win32.Graphics.DirectWrite.IDWriteTextAnalysisSource --iface Windows.Win32.Graphics.DirectWrite.IDWriteFontFileLoader --iface Windows.Win32.Graphics.DirectWrite.IDWriteLocalFontFileLoader
 //! --------------------------------
 
 //! WinUI 3 COM interface definitions for Zig.

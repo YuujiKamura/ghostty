@@ -5,7 +5,7 @@ param(
     [string]$AuditReport = "tmp/winui3-test-parity-audit.md",
     [string]$Mapping = "",
     [string]$Backend = "gemini",
-    [string]$AiCodeReviewRoot = "C:/Users/yuuji/ai-code-review"
+    [string]$AiCodeReviewRoot = (Join-Path $HOME "ai-code-review")
 )
 
 Set-StrictMode -Version Latest

@@ -14,7 +14,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $outAbs = Join-Path $repoRoot $OutDir
 $runTmpDir = Join-Path $repoRoot "tmp\ime-foreground-e2e-run"
-$debugLogPath = "C:\Users\yuuji\ghostty_debug.log"
+$debugLogPath = Join-Path $env:USERPROFILE "ghostty_debug.log"
 
 New-Item -ItemType Directory -Path $outAbs -Force | Out-Null
 New-Item -ItemType Directory -Path $runTmpDir -Force | Out-Null

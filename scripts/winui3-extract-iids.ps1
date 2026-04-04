@@ -1,6 +1,6 @@
 param(
-    [string]$LogPath = "C:\Users\yuuji\ghostty-win\debug.log",
-    [string]$OutJson = "C:\Users\yuuji\ghostty-win\tmp\winui3-iids.json"
+    [string]$LogPath = (Join-Path (Split-Path -Parent $PSScriptRoot) "debug.log"),
+    [string]$OutJson = (Join-Path (Split-Path -Parent $PSScriptRoot) "tmp\winui3-iids.json")
 )
 
 $ErrorActionPreference = "Stop"

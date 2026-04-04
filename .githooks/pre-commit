@@ -1,0 +1,12 @@
+#!/bin/bash
+# Reject commits containing hardcoded user/home paths in public repo
+PATTERNS='C:\Users\|C:/Users/|/c/Users/|/home/[a-z]|/Users/[A-Z]|%USERPROFILE%|%HOMEPATH%|%APPDATA%|\マイドライブ|H:/マイドライブ'
+ADDED=$(git diff --cached --diff-filter=ACMR -- ':!.githooks/*' ':!go.sum' ':!go.mod' ':!Cargo.lock' | grep '^+' | grep -v '^+++')
+if echo "$ADDED" | grep -qE "$PATTERNS"; then
+    echo "ERROR: Staged ADDED lines contain hardcoded paths."
+    echo ""
+    echo "$ADDED" | grep -E "$PATTERNS" | head -15
+    echo ""
+    echo "Replace with dynamic resolution."
+    exit 1
+fi

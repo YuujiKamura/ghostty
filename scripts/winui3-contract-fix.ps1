@@ -1,5 +1,5 @@
 param(
-    [string]$RepoRoot = "C:\Users\yuuji\ghostty-win"
+    [string]$RepoRoot = (Split-Path -Parent $PSScriptRoot)
 )
 
 $ErrorActionPreference = "Stop"

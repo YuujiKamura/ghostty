@@ -4,7 +4,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = 'C:/Users/yuuji/ghostty-win'
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $stableExe = Join-Path $repoRoot 'zig-out-winui3/bin/ghostty.exe'
 $stagingDir = Join-Path $repoRoot 'zig-out-winui3-staging'
 $sessionDir = Join-Path $env:LOCALAPPDATA 'ghostty/control-plane/winui3/sessions'

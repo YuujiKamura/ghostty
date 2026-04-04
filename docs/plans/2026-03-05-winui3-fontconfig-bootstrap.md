@@ -142,7 +142,7 @@ git commit -m "build: install bundled fontconfig config for windows"
 
 **Files:**
 - No code changes expected
-- Verify logs: `C:/Users/yuuji/ghostty-win/debug.log`
+- Verify logs: `./debug.log`
 
 **Step 1: Write the failing test**
 
@@ -216,8 +216,8 @@ Plan complete and saved to `docs/plans/2026-03-05-winui3-fontconfig-bootstrap.md
 
 ### Task 4 verification logs
 
-- TabView enabled run log: `C:/Users/yuuji/ghostty-win/debug_tab_true.log`
-- TabView disabled run log: `C:/Users/yuuji/ghostty-win/debug_tab_false.log`
+- TabView enabled run log: `./debug_tab_true.log`
+- TabView disabled run log: `./debug_tab_false.log`
 
 Commands used:
 

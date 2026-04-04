@@ -29,7 +29,7 @@ Slot 11 is `GetChildrenCount`.
 
 ## Comparison with tmp_visualtree_full.zig
 
-The structure in `C:\Users\yuuji\win-zig-bindgen\tmp_visualtree_full.zig` matches exactly.
+The structure in `<win-zig-bindgen>/tmp_visualtree_full.zig` matches exactly.
 
 ## Error 0x80040154 (REGDB_E_CLASSNOTREG) Analysis
 

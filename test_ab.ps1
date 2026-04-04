@@ -20,7 +20,8 @@ $env:GHOSTTY_WINUI3_TABVIEW_SELECT_FIRST = $selectfirst
 Write-Host "=== TEST: $TestName ==="
 Write-Host "  handlers=$handlers close=$close addtab=$addtab selection=$selection append=$append selectfirst=$selectfirst"
 
-$p = Start-Process -FilePath "C:\Users\yuuji\ghostty-win\zig-out\bin\ghostty.exe" -PassThru
+$repoRoot = Split-Path -Parent $PSCommandPath
+$p = Start-Process -FilePath (Join-Path $repoRoot "zig-out\bin\ghostty.exe") -PassThru
 Start-Sleep -Seconds $WaitSec
 
 if ($p.HasExited) {

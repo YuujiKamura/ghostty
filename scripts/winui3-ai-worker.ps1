@@ -117,7 +117,7 @@ function Get-WorkerProcess {
 
 function Get-DevWorkerProcesses {
     Get-Process WindowsTerminal -ErrorAction SilentlyContinue |
-        Where-Object { $_.Path -like 'C:\Users\yuuji\WindowsTerminal\src\cascadia\CascadiaPackage\bin\x64\Debug\*' }
+        Where-Object { $_.Path -like (Join-Path $env:USERPROFILE 'WindowsTerminal\src\cascadia\CascadiaPackage\bin\x64\Debug\*') }
 }
 
 function Stop-DevWorkerProcesses {

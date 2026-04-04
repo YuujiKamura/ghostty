@@ -13,27 +13,27 @@
 
 ```powershell
 pwsh -File .\scripts\winui3-capture-artifacts.ps1 `
-  -Root "C:\Users\yuuji\winui3-reference" `
-  -OutFile "C:\Users\yuuji\ghostty-win\tmp\ref-artifacts.json"
+  -Root "..\winui3-reference" `
+  -OutFile ".\tmp\ref-artifacts.json"
 ```
 
 ## 2. ghostty-win 生成物の収集
 
 ```powershell
-cd C:\Users\yuuji\ghostty-win
+cd .
 zig build -Dapp-runtime=winui3 -Drenderer=d3d11
 pwsh -File .\scripts\winui3-capture-artifacts.ps1 `
-  -Root "C:\Users\yuuji\ghostty-win" `
-  -OutFile "C:\Users\yuuji\ghostty-win\tmp\ghostty-artifacts.json"
+  -Root "." `
+  -OutFile ".\tmp\ghostty-artifacts.json"
 ```
 
 ## 3. 差分レポート生成
 
 ```powershell
 pwsh -File .\scripts\winui3-diff-artifacts.ps1 `
-  -ReferenceJson "C:\Users\yuuji\ghostty-win\tmp\ref-artifacts.json" `
-  -TargetJson "C:\Users\yuuji\ghostty-win\tmp\ghostty-artifacts.json" `
-  -OutReport "C:\Users\yuuji\ghostty-win\tmp\winui3-artifact-diff.md"
+  -ReferenceJson ".\tmp\ref-artifacts.json" `
+  -TargetJson ".\tmp\ghostty-artifacts.json" `
+  -OutReport ".\tmp\winui3-artifact-diff.md"
 ```
 
 ## 4. 優先順位

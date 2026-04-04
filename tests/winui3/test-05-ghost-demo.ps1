@@ -46,7 +46,7 @@ if ($sessionName) {
     Write-Host "  CP session: $sessionName" -ForegroundColor DarkGray
 
     # Send play.py — it auto-scales to fit any terminal size
-    $playPy = "C:\Users\yuuji\ghostty-win\tools\ghost-demo\play.py"
+    $playPy = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) "tools\ghost-demo\play.py"
     $sendOk = Send-GhosttyInput -SessionName $sessionName -Text "python `"$playPy`" --fps 60"
     if ($sendOk) {
         Write-Host "  Sent play.py --fps 60 (auto-scale)" -ForegroundColor DarkGray

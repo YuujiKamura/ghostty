@@ -1,9 +1,9 @@
 param(
-    [string]$RepoRoot = "C:\Users\yuuji\ghostty-win",
-    [string]$RefRoot = "C:\Users\yuuji\winui3-reference",
-    [string]$ContractPath = "C:\Users\yuuji\ghostty-win\contracts\winui-contract.json",
+    [string]$RepoRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$RefRoot = (Join-Path (Split-Path -Parent $PSScriptRoot) "..\winui3-reference"),
+    [string]$ContractPath = (Join-Path (Split-Path -Parent $PSScriptRoot) "contracts\winui-contract.json"),
     [switch]$Build,
-    [string]$OutReport = "C:\Users\yuuji\ghostty-win\tmp\winui3-contract-report.md"
+    [string]$OutReport = (Join-Path (Split-Path -Parent $PSScriptRoot) "tmp\winui3-contract-report.md")
 )
 
 $ErrorActionPreference = "Stop"

@@ -671,7 +671,7 @@ function Start-Phase6Session {
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
     Clear-OldLogs -TmpDir $tmpDir -KeepCount 10
 
-    $debugLogPath = "C:\Users\yuuji\ghostty_debug.log"
+    $debugLogPath = Join-Path $env:USERPROFILE "ghostty_debug.log"
     "" | Set-Content -Path $debugLogPath -Encoding utf8
 
     $backup = Set-Phase6Env -Map $Env

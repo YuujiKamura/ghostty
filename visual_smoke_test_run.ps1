@@ -1,7 +1,7 @@
 param(
-    [string]$OutFile = "C:\Users\yuuji\ghostty-win\visual_smoke_test_new.png",
-    [string]$AuditLog = "C:\Users\yuuji\ghostty-win\multitab_audit.log",
-    [string]$DebugLog = "C:\Users\yuuji\ghostty-win\debug.log",
+    [string]$OutFile = (Join-Path $PSScriptRoot "visual_smoke_test_new.png"),
+    [string]$AuditLog = (Join-Path $PSScriptRoot "multitab_audit.log"),
+    [string]$DebugLog = (Join-Path $PSScriptRoot "debug.log"),
     [int]$WaitSec = 8,
     [ValidateSet("winui3","win32")][string]$Runtime = "winui3",
     [switch]$NoBuild,

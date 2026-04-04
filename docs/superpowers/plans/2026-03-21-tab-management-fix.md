@@ -62,7 +62,7 @@ pub fn onSelectionChanged(self: anytype, sender_obj: ?*anyopaque, args_obj: ?*an
 
 - [ ] **Step 3: Build and verify**
 
-Run: `cd /c/Users/yuuji/ghostty-win && ./build-winui3.sh`
+Run: `cd . && ./build-winui3.sh`
 Expected: Build succeeds with no errors.
 
 - [ ] **Step 4: Commit**
@@ -129,7 +129,7 @@ In `src/apprt/winui3/tab_manager.zig`, replace lines 77-100 (from `// Add to Tab
 
 - [ ] **Step 2: Build and verify**
 
-Run: `cd /c/Users/yuuji/ghostty-win && ./build-winui3.sh`
+Run: `cd . && ./build-winui3.sh`
 Expected: Build succeeds.
 
 - [ ] **Step 3: Commit**
@@ -198,7 +198,7 @@ Also set the guard for the early-return path (lines 138-152, the `surfaces.items
 
 - [ ] **Step 2: Build and verify**
 
-Run: `cd /c/Users/yuuji/ghostty-win && ./build-winui3.sh`
+Run: `cd . && ./build-winui3.sh`
 Expected: Build succeeds.
 
 - [ ] **Step 3: Commit**
@@ -249,7 +249,7 @@ Note: `surface` is already `self.surfaces.items[idx]` from line 46. The `rebindS
 
 - [ ] **Step 2: Build and verify**
 
-Run: `cd /c/Users/yuuji/ghostty-win && ./build-winui3.sh`
+Run: `cd . && ./build-winui3.sh`
 Expected: Build succeeds.
 
 - [ ] **Step 3: Commit**
@@ -305,7 +305,7 @@ pub fn auditActiveTabBinding(self: anytype) void {
 
 - [ ] **Step 2: Build and verify**
 
-Run: `cd /c/Users/yuuji/ghostty-win && ./build-winui3.sh`
+Run: `cd . && ./build-winui3.sh`
 Expected: Build succeeds.
 
 - [ ] **Step 3: Commit**
@@ -337,7 +337,7 @@ Keep the `focusCallback(true)` and `focusKeyboardTarget` calls — those are sti
 
 - [ ] **Step 2: Build and verify**
 
-Run: `cd /c/Users/yuuji/ghostty-win && ./build-winui3.sh`
+Run: `cd . && ./build-winui3.sh`
 Expected: Build succeeds.
 
 - [ ] **Step 3: Commit**
@@ -355,7 +355,7 @@ Now handled inside attachSurfaceToTabItem (Issue #128)."
 
 - [ ] **Step 1: Build ReleaseFast**
 
-Run: `cd /c/Users/yuuji/ghostty-win && ./build-winui3.sh`
+Run: `cd . && ./build-winui3.sh`
 
 - [ ] **Step 2: Launch and test tab operations**
 
