@@ -127,6 +127,9 @@ pub fn Surface(comptime App: type) type {
         /// Flag to prevent feedback loops when programmatically updating scrollbar.
         is_internal_scroll_update: bool = false,
 
+        /// Timestamp of the last scrollbar UI update to enable throttling.
+        last_scrollbar_update_ns: i128 = 0,
+
         /// Touch scroll anchor point (set on touch press, cleared on release).
         /// Used to convert touch drag distance into scroll rows, matching
         /// Windows Terminal's ControlInteractivity::TouchMoved pattern.
@@ -2000,6 +2003,14 @@ pub fn Surface(comptime App: type) type {
 
         /// Called from App.performAction(.scrollbar) on the UI thread.
         pub fn updateScrollbarUi(self: *Self, total: usize, offset: usize, len: usize) void {
+            const now = std.time.nanoTimestamp();
+            const min_interval_ns = 16 * std.time.ns_per_ms; // ~60Hz
+            if (now - self.last_scrollbar_update_ns < min_interval_ns) {
+                // Throttle: avoid clogging the UI thread with rapid scrollbar property changes.
+                return;
+            }
+            self.last_scrollbar_update_ns = now;
+
             log.debug("updateScrollbarUi: total={} offset={} len={}", .{ total, offset, len });
             const sb = self.scroll_bar_insp orelse return;
             self.is_internal_scroll_update = true;
