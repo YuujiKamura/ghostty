@@ -12,8 +12,8 @@ $testName = "test-06-ime-input"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-# --- Prerequisite: agent-deck + session ---
-$agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+# --- Prerequisite: deckpilot + session ---
+$agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
 $sessionName = $env:GHOSTTY_CP_SESSION
 if (-not $sessionName) {
     $sessionName = Find-GhosttyCP -ProcessId $ProcessId
@@ -21,7 +21,7 @@ if (-not $sessionName) {
 Write-Host "  Session: $sessionName" -ForegroundColor DarkGray
 
 if (-not (Test-Path $agentDeck) -or -not $sessionName) {
-    Write-Host "  SKIP: agent-deck not found or no alive session" -ForegroundColor Yellow
+    Write-Host "  SKIP: deckpilot not found or no alive session" -ForegroundColor Yellow
     Write-Host "PASS: $testName - skipped (no CP)" -ForegroundColor Green
     return
 }
@@ -35,11 +35,11 @@ $marker = "ime-test-$(Get-Random -Minimum 1000 -Maximum 9999)"
 $jpText = [char]0x30C6 + [char]0x30B9 + [char]0x30C8  # ƒeƒXƒg
 $echoCmd = "echo ${marker}-${jpText}"
 
-# Send via CP helper (agent-deck send + direct pipe fallback)
+# Send via CP helper (deckpilot send + direct pipe fallback)
 $sendOk = Send-GhosttyInput -SessionName $sessionName -Text $echoCmd
 
 if (-not $sendOk) {
-    Write-Host "  SKIP: send failed (agent-deck send bug, direct pipe fallback failed)" -ForegroundColor Yellow
+    Write-Host "  SKIP: send failed (deckpilot send bug, direct pipe fallback failed)" -ForegroundColor Yellow
     Write-Host "PASS: $testName - skipped (send unavailable)" -ForegroundColor Green
     return
 }

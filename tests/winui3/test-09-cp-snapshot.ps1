@@ -2,15 +2,15 @@ param([IntPtr]$Hwnd, [int]$ProcessId = 0)
 
 # test-09-cp-snapshot -- Issue #142: Verify coalesced CP snapshot queries.
 # Tests: STATE returns all expected fields, rapid TAIL polling doesn't ghost window.
-# Requires: GHOSTTY_CONTROL_PLANE=1 and agent-deck built.
+# Requires: GHOSTTY_CONTROL_PLANE=1 and deckpilot built.
 
 $ErrorActionPreference = 'Stop'
 $testName = "test-09-cp-snapshot"
 
-# Find agent-deck binary
-$agentDeck = Join-Path $env:USERPROFILE "agent-deck\agent-deck.exe"
+# Find deckpilot binary
+$agentDeck = Join-Path $env:USERPROFILE "deckpilot\deckpilot.exe"
 if (-not (Test-Path $agentDeck)) {
-    Write-Host "SKIP: $testName - agent-deck.exe not found at $agentDeck" -ForegroundColor Yellow
+    Write-Host "SKIP: $testName - deckpilot.exe not found at $agentDeck" -ForegroundColor Yellow
     return
 }
 

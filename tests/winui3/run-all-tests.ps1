@@ -1,4 +1,4 @@
-# run-all-tests.ps1 — winui3 integration test runner (reorganized)
+# run-all-tests.ps1  Ewinui3 integration test runner (reorganized)
 # Usage: pwsh.exe -File run-all-tests.ps1
 #
 # test-01-lifecycle runs FIRST and SEPARATELY (manages its own process).

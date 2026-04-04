@@ -1,10 +1,10 @@
-# test-01-lifecycle.ps1 — Startup -> shutdown lifecycle test
+# test-01-lifecycle.ps1  EStartup -> shutdown lifecycle test
 # Manages its own process. Does NOT use UIA. Does NOT depend on the runner's ghostty.
 # Verifies process starts, XAML init completes via log markers, and process exits cleanly.
 #
 # NOTE: Timer-based shutdown (CLOSE_TAB_AFTER_MS) bypasses WM_CLOSE, so XAML child
 # windows (SiteBridge, drag bar) may linger briefly after process exit. This is
-# expected in the test path — normal user-initiated close via WM_CLOSE cleans up properly.
+# expected in the test path  Enormal user-initiated close via WM_CLOSE cleans up properly.
 
 $ErrorActionPreference = 'Stop'
 $testName = "test-01-lifecycle"
@@ -75,7 +75,7 @@ Write-Host "  Process exited with code $exitCode" -ForegroundColor DarkGray
 # Verify exit code is not a crash (segfault = negative codes like -2147483645)
 # Debug builds may have this, so WARN not FAIL
 if ($exitCode -lt 0) {
-    Write-Host "  WARN: Negative exit code $exitCode — possible crash in Debug build" -ForegroundColor Yellow
+    Write-Host "  WARN: Negative exit code $exitCode  Epossible crash in Debug build" -ForegroundColor Yellow
 } else {
     Write-Host "  PASS: Exit code $exitCode (not a crash)" -ForegroundColor Green
 }
