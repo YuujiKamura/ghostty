@@ -352,12 +352,12 @@ if (-not (Test-Path $deckpilot)) {
                 throw "No CP session available"
             }
 
-            & $deckpilot send $sessionName "echo テスト" 2>&1 | Out-Null
+            & $deckpilot send $sessionName "echo $([char]0x30C6)$([char]0x30B9)$([char]0x30C8)" 2>&1 | Out-Null
             Start-Sleep -Seconds 3
 
             $buffer = & $deckpilot show $sessionName 2>&1
             $bufferText = $buffer -join "`n"
-            Test-Assert -Condition ($bufferText -match "テスト") -Message "phase3-japanese-input - Japanese text found in buffer"
+            Test-Assert -Condition ($bufferText -match "$([char]0x30C6)$([char]0x30B9)$([char]0x30C8)") -Message "phase3-japanese-input - Japanese text found in buffer"
         }
     } else {
         Write-Host "  SKIP: phase3-japanese-input" -ForegroundColor DarkGray
