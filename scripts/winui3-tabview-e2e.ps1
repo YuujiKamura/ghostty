@@ -160,16 +160,7 @@ if (-not $NoBuild) {
     Out-Line "[BUILD] OK" "Green"
 }
 
-$baseEnv = @{
-    "GHOSTTY_WINUI3_ENABLE_TABVIEW" = "1"
-    "GHOSTTY_WINUI3_ENABLE_XAML_RESOURCES" = "1"
-    "GHOSTTY_WINUI3_ENABLE_TABVIEW_HANDLERS" = "1"
-    "GHOSTTY_WINUI3_TABVIEW_EMPTY" = "0"
-    "GHOSTTY_WINUI3_TABVIEW_ITEM_NO_CONTENT" = "0"
-    "GHOSTTY_WINUI3_TABVIEW_APPEND_ITEM" = "1"
-    "GHOSTTY_WINUI3_TABVIEW_SELECT_FIRST" = "1"
-    "GHOSTTY_WINUI3_CLOSE_AFTER_MS" = "3500"
-}
+$baseEnv = @{}
 
 $results = @()
 
@@ -182,7 +173,6 @@ $results += Run-Case -Id "E2E-1" -Name "TabView parity bootstrap" -Env $baseEnv 
 }
 
 $envAdd = $baseEnv.Clone()
-$envAdd["GHOSTTY_WINUI3_NEW_TAB_ON_INIT"] = "1"
 $results += Run-Case -Id "E2E-2" -Name "Tab added on init" -Env $envAdd -AssertBlock {
     param($session)
     Wait-LogLineAny -Session $session -Pattern "newTab completed: idx=1 total=2" -TimeoutMs $TimeoutMs | Out-Null
@@ -190,7 +180,6 @@ $results += Run-Case -Id "E2E-2" -Name "Tab added on init" -Env $envAdd -AssertB
 }
 
 $envClose = $envAdd.Clone()
-$envClose["GHOSTTY_WINUI3_CLOSE_AFTER_MS"] = "5000"
 $results += Run-Case -Id "E2E-3" -Name "Close one tab keeps app alive" -Env $envClose -AssertBlock {
     param($session)
     Wait-LogLineAny -Session $session -Pattern "newTab completed: idx=1 total=2" -TimeoutMs $TimeoutMs | Out-Null

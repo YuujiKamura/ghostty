@@ -50,17 +50,6 @@ function Parse-UnknownIids([string]$Path) {
 
 function Run-Probe([string]$Name, [string]$Close, [string]$AddTab, [string]$Selection) {
     Write-Host "=== Probe: $Name (close=$Close addtab=$AddTab selection=$Selection) ==="
-    $env:GHOSTTY_WINUI3_ENABLE_TABVIEW = "1"
-    $env:GHOSTTY_WINUI3_ENABLE_XAML_RESOURCES = "1"
-    $env:GHOSTTY_WINUI3_ENABLE_TABVIEW_HANDLERS = "1"
-    $env:GHOSTTY_WINUI3_HANDLER_CLOSE = $Close
-    $env:GHOSTTY_WINUI3_HANDLER_ADDTAB = $AddTab
-    $env:GHOSTTY_WINUI3_HANDLER_SELECTION = $Selection
-    $env:GHOSTTY_WINUI3_TABVIEW_EMPTY = "0"
-    $env:GHOSTTY_WINUI3_TABVIEW_ITEM_NO_CONTENT = "0"
-    $env:GHOSTTY_WINUI3_TABVIEW_APPEND_ITEM = "1"
-    $env:GHOSTTY_WINUI3_TABVIEW_SELECT_FIRST = "1"
-
     $p = Start-Process -FilePath $ExePath -PassThru -WindowStyle Hidden
     Start-Sleep -Seconds $WaitSeconds
     if (-not $p.HasExited) {

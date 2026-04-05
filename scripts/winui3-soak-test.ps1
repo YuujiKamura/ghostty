@@ -43,8 +43,6 @@ if (Test-Path $debugLog) {
 
 # --- Launch ---
 Write-Host "[soak] Launching ghostty (soak $Duration sec)..." -ForegroundColor Cyan
-$env:GHOSTTY_WINUI3_ENABLE_TABVIEW = "1"
-$env:GHOSTTY_WINUI3_ENABLE_TABVIEW_HANDLERS = "1"
 $proc = Start-Process -FilePath $exe -PassThru
 
 # Wait for window

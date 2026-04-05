@@ -29,12 +29,6 @@ pub fn createRoot(
     comptime tabview_class_name: [:0]const u8,
 ) !?*com.ITabView {
     _ = tabview_class_name;
-    if (comptime builtin.mode == .Debug) {
-        if (!self.debug_cfg.enable_tabview) {
-            log.debug("initXaml step 7.5: SKIPPED (GHOSTTY_WINUI3_ENABLE_TABVIEW=false)", .{});
-            return null;
-        }
-    }
 
     log.info("initXaml step 7.5: Creating RootGrid + TabView from TabViewRoot.xbf (Issue #28 architecture)...", .{});
 

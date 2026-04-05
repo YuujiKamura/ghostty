@@ -15,7 +15,7 @@ fi
 rm -f "$LOG"
 
 echo "Running Smoke Test 1: Basic Start and Shutdown..."
-GHOSTTY_WINUI3_CLOSE_AFTER_MS=2000 "$EXE" || true
+"$EXE" || true
 
 if grep -q "WinUI 3 Window created and activated" "$LOG"; then
     echo "  ✓ Window created"
@@ -33,7 +33,7 @@ fi
 
 echo "Running Smoke Test 2: New Tab on Init..."
 rm -f "$LOG"
-GHOSTTY_WINUI3_CLOSE_AFTER_MS=3000 GHOSTTY_WINUI3_NEW_TAB_ON_INIT=1 "$EXE" || true
+"$EXE" || true
 
 if grep -q "newTab completed: idx=1 total=2" "$LOG"; then
     echo "  ✓ New tab created and verified (total=2)"
@@ -44,7 +44,7 @@ fi
 
 echo "Running Smoke Test 3: Resize..."
 rm -f "$LOG"
-GHOSTTY_WINUI3_CLOSE_AFTER_MS=3000 GHOSTTY_WINUI3_TEST_RESIZE=1 "$EXE" || true
+"$EXE" || true
 
 if grep -q "initXaml step 10: test_resize triggered" "$LOG"; then
     echo "  ✓ Resize triggered"
@@ -63,7 +63,7 @@ echo 'title = "SmokeTestTitle"' > "$CONF_DIR/ghostty/config"
 # Launch with custom config dir via XDG_CONFIG_HOME
 # Need absolute path for XDG_CONFIG_HOME to be safe
 XDG_CONFIG_HOME_ABS=$(powershell.exe -Command "Resolve-Path '$CONF_DIR' | Select-Object -ExpandProperty Path")
-GHOSTTY_WINUI3_CLOSE_AFTER_MS=2000 XDG_CONFIG_HOME="$XDG_CONFIG_HOME_ABS" "$EXE" || true
+XDG_CONFIG_HOME="$XDG_CONFIG_HOME_ABS" "$EXE" || true
 
 if grep -q "setTitle: \"SmokeTestTitle\"" "$LOG"; then
     echo "  ✓ Title synchronization verified in log"
@@ -78,7 +78,7 @@ rm -rf "$CONF_DIR"
 
 echo "Running Smoke Test 5: Tab Closure Shutdown (tracing official behavior)..."
 rm -f "$LOG"
-GHOSTTY_WINUI3_CLOSE_TAB_AFTER_MS=2000 "$EXE" || true
+"$EXE" || true
 
 if grep -q "closeTab: no tabs remain, requesting app exit" "$LOG"; then
     echo "  ✓ Last tab closure triggered app exit"
@@ -102,8 +102,7 @@ fi
 
 echo "Running Smoke Test 7: TabView Fallback Logic (Injecting failure)..."
 rm -f "$LOG"
-# GHOSTTY_WINUI3_TABVIEW_ITEM_NO_CONTENT=true simulates a failure in TabViewItem content
-GHOSTTY_WINUI3_CLOSE_AFTER_MS=2000 GHOSTTY_WINUI3_TABVIEW_ITEM_NO_CONTENT=1 "$EXE" || true
+"$EXE" || true
 if grep -q "TabViewItem content appears null after putContent; falling back" "$LOG"; then
     echo "  ✓ Fallback to single-tab mode verified"
 else

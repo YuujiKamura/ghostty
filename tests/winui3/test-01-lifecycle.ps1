@@ -2,7 +2,7 @@
 # Manages its own process. Does NOT use UIA. Does NOT depend on the runner's ghostty.
 # Verifies process starts, XAML init completes via log markers, and process exits cleanly.
 #
-# NOTE: Timer-based shutdown (CLOSE_TAB_AFTER_MS) bypasses WM_CLOSE, so XAML child
+# NOTE: The test uses Stop-Process to terminate the process. XAML child
 # windows (SiteBridge, drag bar) may linger briefly after process exit. This is
 # expected in the test path — normal user-initiated close via WM_CLOSE cleans up properly.
 
@@ -26,20 +26,13 @@ if (Test-Path $logPath) {
     $logOffsetBefore = (Get-Item $logPath).Length
 }
 
-Write-Host "  Launching $exePath with GHOSTTY_WINUI3_CLOSE_TAB_AFTER_MS=5000 ..." -ForegroundColor DarkGray
+Write-Host "  Launching $exePath ..." -ForegroundColor DarkGray
 
-# Launch with the env var that triggers an automatic tab close after N ms.
-# NOTE: In ReleaseFast builds, env vars are ignored (comptime Debug gate in debug_harness.zig).
-# The test uses Stop-Process as a fallback to ensure the process exits regardless.
+# The test uses Stop-Process as a fallback to ensure the process exits.
 $proc = $null
-try {
-    $env:GHOSTTY_WINUI3_CLOSE_TAB_AFTER_MS = "5000"
-    $env:GHOSTTY_CONTROL_PLANE = $null
-    $env:WINDOWS_TERMINAL_CONTROL_PLANE = $null
-    $proc = Start-Process -FilePath $exePath -PassThru
-} finally {
-    $env:GHOSTTY_WINUI3_CLOSE_TAB_AFTER_MS = $null
-}
+$env:GHOSTTY_CONTROL_PLANE = $null
+$env:WINDOWS_TERMINAL_CONTROL_PLANE = $null
+$proc = Start-Process -FilePath $exePath -PassThru
 
 $procId = $proc.Id
 Write-Host "  PID = $procId" -ForegroundColor DarkGray
@@ -47,8 +40,8 @@ Write-Host "  PID = $procId" -ForegroundColor DarkGray
 # Verify process starts (PID exists)
 Test-Assert -Condition ($procId -gt 0) -Message "$testName - process started (PID=$procId)"
 
-# Wait up to 10 seconds for the process to exit on its own (Debug build auto-close).
-# If it doesn't exit (ReleaseFast build), forcefully terminate it.
+# Wait up to 10 seconds for the process to exit on its own.
+# If it doesn't exit, forcefully terminate it.
 $exited = $false
 $deadline = [DateTime]::UtcNow.AddMilliseconds(10000)
 while ([DateTime]::UtcNow -lt $deadline) {
@@ -60,14 +53,14 @@ while ([DateTime]::UtcNow -lt $deadline) {
 }
 
 if (-not $exited) {
-    Write-Host "  Auto-close timer did not fire (expected in ReleaseFast). Stopping process..." -ForegroundColor Yellow
+    Write-Host "  Process did not exit on its own. Stopping process..." -ForegroundColor Yellow
     $proc | Stop-Process -Force -ErrorAction SilentlyContinue
     # Give it a moment to actually terminate
     Start-Sleep -Milliseconds 1000
     $exited = $proc.HasExited
 }
 
-Test-Assert -Condition $exited -Message "$testName - process exited (auto-close or Stop-Process)"
+Test-Assert -Condition $exited -Message "$testName - process exited (Stop-Process)"
 
 $exitCode = $proc.ExitCode
 Write-Host "  Process exited with code $exitCode" -ForegroundColor DarkGray

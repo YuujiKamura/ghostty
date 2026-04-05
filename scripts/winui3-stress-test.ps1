@@ -70,9 +70,6 @@ if (Test-Path $debugLog) {
 
 # --- Launch ghostty ---
 Write-Host "[stress] Launching ghostty ($Duration sec)..." -ForegroundColor Cyan
-$env:GHOSTTY_WINUI3_ENABLE_TABVIEW = "1"
-$env:GHOSTTY_WINUI3_ENABLE_TABVIEW_HANDLERS = "1"
-
 $proc = Start-Process -FilePath $exe -PassThru
 
 # Wait for window to appear

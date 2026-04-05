@@ -29,7 +29,6 @@ const gen = @import("com_generated.zig");
 const os = @import("os.zig");
 const com_aggregation = @import("com_aggregation.zig");
 const ime = @import("ime.zig");
-const debug_harness = @import("debug_harness.zig");
 const tabview_runtime = @import("tabview_runtime.zig");
 const profile_menu = @import("profile_menu.zig");
 const tab_index = @import("tab_index.zig");
@@ -126,7 +125,6 @@ const ResourceManagerRequestedHandler = gen.TypedEventHandlerImpl(App, *const fn
 
 /// The core application.
 core_app: *CoreApp,
-debug_cfg: if (builtin.mode == .Debug) debug_harness.RuntimeDebugConfig else void = if (builtin.mode == .Debug) .{} else {},
 /// COM aggregation outer object that implements IXamlMetadataProvider.
 /// Must be kept alive for the lifetime of the Application.
 app_outer: AppOuter = undefined,
@@ -333,18 +331,11 @@ pub fn init(
 
     self.* = .{
         .core_app = core_app,
-        .debug_cfg = if (comptime builtin.mode == .Debug) debug_harness.RuntimeDebugConfig.load() else {},
         .surfaces = .{},
         .running = true,
         .dq_controller = dq_controller,
         .dispatcher_queue = null,
     };
-    if (comptime builtin.mode == .Debug) {
-        log.info("winui3 xaml_metadata_provider={s}", .{
-            if (self.debug_cfg.use_ixaml_metadata_provider) "on" else "off",
-        });
-        self.debug_cfg.log(log);
-    }
 
     // Window/UI creation happens inside run() via Application.Start(callback).
     // WinUI 3 requires Window creation on the XAML thread which is set up by Start().
@@ -772,30 +763,6 @@ fn scheduleDebugActions(self: *App) !void {
             self.last_polled_tab_items_size = try self.currentTabItemsSize();
             _ = os.SetTimer(self.hwnd.?, CLOSE_TAB_POLL_TIMER_ID, TAB_CLOSE_POLL_INTERVAL_MS, null);
         }
-
-        if (self.debug_cfg.new_tab_on_init) {
-            log.info("initXaml step 10: new_tab_on_init triggered", .{});
-            self.newTab() catch |err| log.warn("new_tab_on_init failed: {}", .{err});
-        }
-
-        if (self.debug_cfg.test_resize) {
-            log.info("initXaml step 10: test_resize triggered", .{});
-            var rect: os.RECT = .{};
-            _ = os.GetClientRect(self.hwnd.?, &rect);
-            const new_w: u32 = @intCast(rect.right - rect.left + 10);
-            const new_h: u32 = @intCast(rect.bottom - rect.top + 10);
-            _ = postMessageWarn(self.hwnd.?, os.WM_SIZE, 0, @bitCast(@as(usize, (new_h << 16) | new_w)), "WM_SIZE");
-        }
-
-        if (self.debug_cfg.close_after_ms) |ms| {
-            log.info("initXaml step 10: close_after_ms={}ms scheduled", .{ms});
-            _ = os.SetTimer(self.hwnd.?, CLOSE_TIMER_ID, ms, null);
-        }
-
-        if (self.debug_cfg.close_tab_after_ms) |ms| {
-            log.info("initXaml step 10: close_tab_after_ms={}ms scheduled", .{ms});
-            _ = os.SetTimer(self.hwnd.?, CLOSE_TAB_TIMER_ID, ms, null);
-        }
     }
 }
 
@@ -914,12 +881,6 @@ fn createTabViewRoot(self: *App, xaml_source: *com.IDesktopWindowXamlSource) !?*
 
 fn createInitialSurfaceContent(self: *App, tab_view: ?*com.ITabView) !void {
     const alloc = self.core_app.alloc;
-    if (comptime builtin.mode == .Debug) {
-        if (self.debug_cfg.tabview_empty and tab_view != null) {
-            log.info("initXaml step 8: SKIPPED (GHOSTTY_WINUI3_TABVIEW_EMPTY=true)", .{});
-            return;
-        }
-    }
 
     log.info("initXaml step 8: Creating initial Surface...", .{});
     var config = try configpkg.Config.load(alloc);
@@ -974,8 +935,7 @@ fn createInitialSurfaceContent(self: *App, tab_view: ?*com.ITabView) !void {
         try tvi.SetIsClosable(true);
 
         // Set dummy Border as TabViewItem.Content (required for drag-drop, not for rendering).
-        const use_content = if (comptime builtin.mode == .Debug) !self.debug_cfg.tabview_item_no_content else true;
-        if (use_content) {
+        {
             var cc_guard = winrt.ComRef(com.IContentControl).init(try tvi_inspectable.queryInterface(com.IContentControl));
             defer cc_guard.deinit();
             const border_class = try winrt.hstring(XamlClass.Border);
@@ -986,13 +946,6 @@ fn createInitialSurfaceContent(self: *App, tab_view: ?*com.ITabView) !void {
             log.info("initXaml step 8: TabViewItem dummy Border content set", .{});
         }
 
-        if (comptime builtin.mode == .Debug) {
-            if (!self.debug_cfg.tabview_append_item) {
-                log.info("initXaml step 8: STOP at level 1 (no append)", .{});
-                return;
-            }
-        }
-
         const tab_items_ptr: *com.IVector = @ptrCast(@alignCast(try tv.TabItems()));
         var tab_items_guard = winrt.ComRef(com.IVector).init(tab_items_ptr);
         defer tab_items_guard.deinit();
@@ -1001,13 +954,6 @@ fn createInitialSurfaceContent(self: *App, tab_view: ?*com.ITabView) !void {
 
         const items_size = try tab_items_guard.get().getSize();
         log.info("initXaml step 8: TabViewItem appended, TabItems.size={}", .{items_size});
-
-        if (comptime builtin.mode == .Debug) {
-            if (!self.debug_cfg.tabview_select_first) {
-                log.info("initXaml step 8: STOP at level 2 (no selectedIndex)", .{});
-                return;
-            }
-        }
 
         try tv.SetSelectedIndex(0);
 
@@ -1022,32 +968,22 @@ fn createInitialSurfaceContent(self: *App, tab_view: ?*com.ITabView) !void {
 }
 
 fn registerTabViewHandlers(self: *App, tab_view: ?*com.ITabView) !void {
-    const enable_handlers = if (comptime builtin.mode == .Debug) self.debug_cfg.enable_tabview_handlers else true;
-    if (tab_view != null and enable_handlers) {
+    if (tab_view != null) {
         const alloc = self.core_app.alloc;
-        const enable_close = if (comptime builtin.mode == .Debug) self.debug_cfg.enable_handler_close else true;
-        if (enable_close) {
-            self.tab_close_handler = try TypedHandler.createWithIid(alloc, self, &onTabCloseRequested, &com.IID_TypedEventHandler_TabCloseRequested);
-            log.debug(
-                "registerTabViewHandlers: AddTabCloseRequested start tab_view=0x{x} handler=0x{x}",
-                .{ @intFromPtr(tab_view.?), @intFromPtr(self.tab_close_handler.?) },
-            );
-            self.tab_close_token = try tab_view.?.AddTabCloseRequested(self.tab_close_handler.?.comPtr());
-            log.debug("registerTabViewHandlers: AddTabCloseRequested success token={}", .{self.tab_close_token.?});
-            log.info("initXaml step 7.5: TabCloseRequested handler registered", .{});
-        }
-        const enable_addtab = if (comptime builtin.mode == .Debug) self.debug_cfg.enable_handler_addtab else true;
-        if (enable_addtab) {
-            self.add_tab_handler = try TypedHandler.createWithIid(alloc, self, &onAddTabButtonClick, &com.IID_TypedEventHandler_AddTabButtonClick);
-            self.add_tab_token = try tab_view.?.AddAddTabButtonClick(self.add_tab_handler.?.comPtr());
-            log.info("initXaml step 7.5: AddTabButtonClick handler registered", .{});
-        }
-        const enable_selection = if (comptime builtin.mode == .Debug) self.debug_cfg.enable_handler_selection else true;
-        if (enable_selection) {
-            self.selection_changed_handler = try SelectionHandler.createWithIid(alloc, self, &onSelectionChanged, &com.IID_SelectionChangedEventHandler);
-            self.selection_changed_token = try tab_view.?.AddSelectionChanged(self.selection_changed_handler.?.comPtr());
-            log.info("initXaml step 7.5: SelectionChanged handler registered", .{});
-        }
+        self.tab_close_handler = try TypedHandler.createWithIid(alloc, self, &onTabCloseRequested, &com.IID_TypedEventHandler_TabCloseRequested);
+        log.debug(
+            "registerTabViewHandlers: AddTabCloseRequested start tab_view=0x{x} handler=0x{x}",
+            .{ @intFromPtr(tab_view.?), @intFromPtr(self.tab_close_handler.?) },
+        );
+        self.tab_close_token = try tab_view.?.AddTabCloseRequested(self.tab_close_handler.?.comPtr());
+        log.debug("registerTabViewHandlers: AddTabCloseRequested success token={}", .{self.tab_close_token.?});
+        log.info("initXaml step 7.5: TabCloseRequested handler registered", .{});
+        self.add_tab_handler = try TypedHandler.createWithIid(alloc, self, &onAddTabButtonClick, &com.IID_TypedEventHandler_AddTabButtonClick);
+        self.add_tab_token = try tab_view.?.AddAddTabButtonClick(self.add_tab_handler.?.comPtr());
+        log.info("initXaml step 7.5: AddTabButtonClick handler registered", .{});
+        self.selection_changed_handler = try SelectionHandler.createWithIid(alloc, self, &onSelectionChanged, &com.IID_SelectionChangedEventHandler);
+        self.selection_changed_token = try tab_view.?.AddSelectionChanged(self.selection_changed_handler.?.comPtr());
+        log.info("initXaml step 7.5: SelectionChanged handler registered", .{});
 
         // WT: _OnDragBarSizeChanged — re-position drag bar after XAML layout.
         self.layout_updated_handler = try TypedHandler.createWithIid(alloc, self, &onLayoutUpdated, &com.IID_EventHandler_LayoutUpdated);
@@ -1056,15 +992,7 @@ fn registerTabViewHandlers(self: *App, tab_view: ?*com.ITabView) !void {
         self.layout_updated_token = try fe.AddLayoutUpdated(self.layout_updated_handler.?.comPtr());
         log.info("initXaml step 7.5: LayoutUpdated handler registered (drag bar repositioning)", .{});
 
-        log.info("initXaml step 7.5 OK: TabView event handlers registered (close={} addtab={} selection={})", .{
-            enable_close,
-            enable_addtab,
-            enable_selection,
-        });
-    } else if (tab_view != null) {
-        if (comptime builtin.mode == .Debug) {
-            log.info("initXaml step 7.5: TabView event handlers SKIPPED (GHOSTTY_WINUI3_ENABLE_TABVIEW_HANDLERS=false)", .{});
-        }
+        log.info("initXaml step 7.5 OK: TabView event handlers registered", .{});
     }
 }
 
@@ -1126,23 +1054,21 @@ fn validateIslandsParity(self: *App) !void {
         };
 
         // Canonical Step 1: RootGrid set as XamlSource content, tab_content_grid exists.
-        if (self.debug_cfg.enable_tabview) {
-            _ = self.tab_view orelse {
-                log.err("PARITY_FAIL: step1_create_tabview_root", .{});
-                return error.ParityFail;
-            };
-            _ = self.tab_content_grid orelse {
-                log.err("PARITY_FAIL: step1_tab_content_grid_exists", .{});
-                return error.ParityFail;
-            };
-            log.info("validate: [PASS] step1_rootgrid_architecture", .{});
-        }
+        _ = self.tab_view orelse {
+            log.err("PARITY_FAIL: step1_create_tabview_root", .{});
+            return error.ParityFail;
+        };
+        _ = self.tab_content_grid orelse {
+            log.err("PARITY_FAIL: step1_tab_content_grid_exists", .{});
+            return error.ParityFail;
+        };
+        log.info("validate: [PASS] step1_rootgrid_architecture", .{});
 
         // Canonical Step 2: register handlers before first tab realization.
-        if (self.tab_view != null and self.debug_cfg.enable_tabview_handlers) {
+        if (self.tab_view != null) {
             const close_ok = self.tab_close_token != null;
             const add_ok = self.add_tab_token != null;
-            const selection_ok = if (self.debug_cfg.enable_handler_selection) self.selection_changed_token != null else true;
+            const selection_ok = self.selection_changed_token != null;
             if (!(close_ok and add_ok and selection_ok)) {
                 log.err("PARITY_FAIL: step2_handlers_registered_before_first_tab", .{});
                 return error.ParityFail;
@@ -1171,7 +1097,7 @@ fn validateIslandsParity(self: *App) !void {
         }
 
         // Canonical Step 6: Loaded/SizeChanged lifecycle tokens exist on initial surface.
-        if (self.debug_cfg.enable_tabview and self.surfaces_snapshot.len > 0) {
+        if (self.surfaces_snapshot.len > 0) {
             const surf = self.surfaces_snapshot[0];
 
             if (surf.loaded_token == 0 or surf.size_changed_token == 0) {

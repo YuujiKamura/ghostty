@@ -29,24 +29,10 @@ function Run-Case {
     [pscustomobject]$result
 }
 
-$baseEnv = @{
-    "GHOSTTY_WINUI3_ENABLE_TABVIEW" = "1"
-    "GHOSTTY_WINUI3_ENABLE_XAML_RESOURCES" = "1"
-    "GHOSTTY_WINUI3_ENABLE_TABVIEW_HANDLERS" = "1"
-    "GHOSTTY_WINUI3_TABVIEW_EMPTY" = "0"
-    "GHOSTTY_WINUI3_TABVIEW_ITEM_NO_CONTENT" = "0"
-    "GHOSTTY_WINUI3_TABVIEW_APPEND_ITEM" = "1"
-    "GHOSTTY_WINUI3_TABVIEW_SELECT_FIRST" = "1"
-}
+$baseEnv = @{}
 
 $cases = @(
-    @{ name = "baseline"; env = $baseEnv },
-    @{ name = "tabview_off"; env = $baseEnv.Clone(); patch = @{ "GHOSTTY_WINUI3_ENABLE_TABVIEW" = "0" } },
-    @{ name = "handlers_off"; env = $baseEnv.Clone(); patch = @{ "GHOSTTY_WINUI3_ENABLE_TABVIEW_HANDLERS" = "0" } },
-    @{ name = "empty_tabview"; env = $baseEnv.Clone(); patch = @{ "GHOSTTY_WINUI3_TABVIEW_EMPTY" = "1" } },
-    @{ name = "item_no_content"; env = $baseEnv.Clone(); patch = @{ "GHOSTTY_WINUI3_TABVIEW_ITEM_NO_CONTENT" = "1" } },
-    @{ name = "no_append"; env = $baseEnv.Clone(); patch = @{ "GHOSTTY_WINUI3_TABVIEW_APPEND_ITEM" = "0" } },
-    @{ name = "no_select"; env = $baseEnv.Clone(); patch = @{ "GHOSTTY_WINUI3_TABVIEW_SELECT_FIRST" = "0" } }
+    @{ name = "baseline"; env = $baseEnv }
 )
 
 $rows = @()

@@ -166,39 +166,8 @@ if (-not (Test-Path $exePath)) {
 
 $profiles = @(
     @{
-        Name = "single_provider_off"
-        Env = @{
-            "GHOSTTY_WINUI3_ENABLE_TABVIEW" = "0"
-            "GHOSTTY_WINUI3_USE_IXAML_METADATA_PROVIDER" = "0"
-            "GHOSTTY_WINUI3_ENABLE_XAML_RESOURCES" = "1"
-            "GHOSTTY_WINUI3_ENABLE_TABVIEW_HANDLERS" = "1"
-        }
-    },
-    @{
-        Name = "tab_provider_off"
-        Env = @{
-            "GHOSTTY_WINUI3_ENABLE_TABVIEW" = "1"
-            "GHOSTTY_WINUI3_USE_IXAML_METADATA_PROVIDER" = "0"
-            "GHOSTTY_WINUI3_ENABLE_XAML_RESOURCES" = "1"
-            "GHOSTTY_WINUI3_ENABLE_TABVIEW_HANDLERS" = "1"
-            "GHOSTTY_WINUI3_TABVIEW_EMPTY" = "0"
-            "GHOSTTY_WINUI3_TABVIEW_ITEM_NO_CONTENT" = "0"
-            "GHOSTTY_WINUI3_TABVIEW_APPEND_ITEM" = "1"
-            "GHOSTTY_WINUI3_TABVIEW_SELECT_FIRST" = "1"
-        }
-    },
-    @{
-        Name = "tab_provider_on"
-        Env = @{
-            "GHOSTTY_WINUI3_ENABLE_TABVIEW" = "1"
-            "GHOSTTY_WINUI3_USE_IXAML_METADATA_PROVIDER" = "1"
-            "GHOSTTY_WINUI3_ENABLE_XAML_RESOURCES" = "1"
-            "GHOSTTY_WINUI3_ENABLE_TABVIEW_HANDLERS" = "1"
-            "GHOSTTY_WINUI3_TABVIEW_EMPTY" = "0"
-            "GHOSTTY_WINUI3_TABVIEW_ITEM_NO_CONTENT" = "0"
-            "GHOSTTY_WINUI3_TABVIEW_APPEND_ITEM" = "1"
-            "GHOSTTY_WINUI3_TABVIEW_SELECT_FIRST" = "1"
-        }
+        Name = "baseline"
+        Env = @{}
     }
 )
 
@@ -211,7 +180,6 @@ foreach ($profile in $profiles) {
 
     $envMap = @{}
     foreach ($k in $profile.Env.Keys) { $envMap[$k] = $profile.Env[$k] }
-    $envMap["GHOSTTY_WINUI3_CLOSE_AFTER_MS"] = "0"
     $backup = Set-EnvMap -Map $envMap
 
     $session = $null
