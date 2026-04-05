@@ -1,12 +1,12 @@
 //! --- WinRT Binding Provenance ---
 //! Generator: win-zig-bindgen (master (WIP))
-//! Primary WinMD: <NUGET_PACKAGES>/microsoft.windowsappsdk/1.4.230822000/lib/uap10.0/Microsoft.UI.Xaml.winmd
+//! Primary WinMD: C:\Users\yuuji\.nuget\packages\microsoft.windowsappsdk\1.4.230822000\lib\uap10.0\Microsoft.UI.Xaml.winmd
 //!   - SHA256: d1cd0598079d035712a64f3ebcbc82b5792d7e4a562c040aaf2bcb87ba3001a7
 //! Companion WinMD: C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.26100.0\Windows.winmd
 //!   - SHA256: e2dee80d011cb9fc1276a0bd9f244f7a58d5ca72fe906a56e90d61c68cf8601a
-//! Companion WinMD: <NUGET_PACKAGES>/microsoft.windowsappsdk/1.6.250108002/lib/uap10.0.18362/Microsoft.UI.winmd
+//! Companion WinMD: C:\Users\yuuji\.nuget\packages\microsoft.windowsappsdk\1.6.250108002\lib\uap10.0.18362\Microsoft.UI.winmd
 //!   - SHA256: 8ebbf9ef154241f7e3faa07230050cae6acbb587943909111f02a5914ab2d3ed
-//! Command: win-zig-bindgen --winmd Microsoft.Windows.ApplicationModel.Resources.winmd --winmd Microsoft.UI.Xaml.winmd --deploy ghostty-win/src/apprt/winui3/com_generated.zig --winrt-import winrt.zig --iface Microsoft.UI.Xaml.IApplication --iface Microsoft.UI.Xaml.IApplicationFactory --iface Microsoft.UI.Xaml.IApplicationStatics --iface Microsoft.UI.Xaml.IWindow --iface Microsoft.UI.Xaml.IUIElement --iface Microsoft.UI.Xaml.IFrameworkElement --iface Microsoft.UI.Xaml.Controls.IContentControl --iface Microsoft.UI.Xaml.Controls.IControl --iface Microsoft.UI.Xaml.Controls.IPanel --iface Microsoft.UI.Xaml.Controls.IGrid --iface Microsoft.UI.Xaml.Controls.IGridStatics --iface Microsoft.UI.Xaml.Controls.IRowDefinition --iface Microsoft.UI.Xaml.Controls.ITextBox --iface Microsoft.UI.Xaml.Controls.ITabView --iface Microsoft.UI.Xaml.Controls.ITabViewItem --iface Microsoft.UI.Xaml.Controls.ITabViewTabCloseRequestedEventArgs --iface Microsoft.UI.Xaml.Controls.Primitives.IRangeBase --iface Microsoft.UI.Xaml.Controls.Primitives.IScrollBar --iface Microsoft.UI.Xaml.Controls.Primitives.IScrollEventArgs --iface Microsoft.UI.Xaml.Controls.Primitives.IColumnDefinition --iface Microsoft.UI.Xaml.Media.ISolidColorBrush --iface Microsoft.UI.Xaml.IResourceDictionary --iface Microsoft.UI.Xaml.Markup.IXamlMetadataProvider --iface Microsoft.UI.Xaml.Markup.IXamlType --iface Microsoft.UI.Xaml.Markup.IXamlReaderStatics --iface Microsoft.UI.Xaml.Input.IKeyRoutedEventArgs --iface Microsoft.UI.Xaml.Input.ICharacterReceivedRoutedEventArgs --iface Microsoft.UI.Xaml.Input.IPointerRoutedEventArgs --iface Microsoft.UI.Input.IPointerPoint --iface Microsoft.UI.Input.IPointerPointProperties --iface Microsoft.Windows.ApplicationModel.Resources.IResourceManager --iface Microsoft.Windows.ApplicationModel.Resources.IResourceManagerFactory --iface Microsoft.UI.Xaml.Media.IVisualTreeHelperStatics --iface Microsoft.UI.Composition.ICompositionObject --iface Microsoft.UI.Composition.IVisual --iface Microsoft.UI.Xaml.RoutedEventHandler --iface Microsoft.UI.Xaml.SizeChangedEventHandler --iface Microsoft.UI.Xaml.Controls.SelectionChangedEventHandler --iface Microsoft.UI.Xaml.Controls.Primitives.ScrollEventHandler --iface Microsoft.UI.Xaml.Controls.Orientation --iface Microsoft.UI.Xaml.Controls.Primitives.ScrollEventType --iface Microsoft.UI.Xaml.Controls.Primitives.ScrollingIndicatorMode --iface Microsoft.UI.Xaml.GridUnitType --iface Microsoft.UI.Xaml.HorizontalAlignment --iface Microsoft.UI.Xaml.VerticalAlignment --iface Microsoft.UI.Xaml.Visibility --iface Microsoft.UI.Xaml.GridLength --iface Windows.Foundation.Point --iface Windows.Foundation.Rect
+//! Command: .\.zig-cache\o\8acbd23d565265455fa5808ef5328162\win-zig-bindgen.exe --winmd C:\Users\yuuji\.nuget\packages\microsoft.windowsappsdk\1.4.230822000\lib\uap10.0\Microsoft.Windows.ApplicationModel.Resources.winmd --winmd C:\Users\yuuji\.nuget\packages\microsoft.windowsappsdk\1.4.230822000\lib\uap10.0\Microsoft.UI.Xaml.winmd --deploy C:\Users\yuuji\ghostty-win\src\apprt\winui3\com_generated.zig --winrt-import winrt.zig --iface Microsoft.UI.Xaml.IApplication --iface Microsoft.UI.Xaml.IApplicationFactory --iface Microsoft.UI.Xaml.IApplicationStatics --iface Microsoft.UI.Xaml.IWindow --iface Microsoft.UI.Xaml.IUIElement --iface Microsoft.UI.Xaml.IFrameworkElement --iface Microsoft.UI.Xaml.Controls.IContentControl --iface Microsoft.UI.Xaml.Controls.IControl --iface Microsoft.UI.Xaml.Controls.IPanel --iface Microsoft.UI.Xaml.Controls.IGrid --iface Microsoft.UI.Xaml.Controls.IGridStatics --iface Microsoft.UI.Xaml.Controls.IRowDefinition --iface Microsoft.UI.Xaml.Controls.ITextBox --iface Microsoft.UI.Xaml.Controls.ITabView --iface Microsoft.UI.Xaml.Controls.ITabViewItem --iface Microsoft.UI.Xaml.Controls.ITabViewTabCloseRequestedEventArgs --iface Microsoft.UI.Xaml.Controls.Primitives.IRangeBase --iface Microsoft.UI.Xaml.Controls.Primitives.IScrollBar --iface Microsoft.UI.Xaml.Controls.Primitives.IScrollEventArgs --iface Microsoft.UI.Xaml.Controls.Primitives.IColumnDefinition --iface Microsoft.UI.Xaml.Media.ISolidColorBrush --iface Microsoft.UI.Xaml.IResourceDictionary --iface Microsoft.UI.Xaml.Markup.IXamlMetadataProvider --iface Microsoft.UI.Xaml.Markup.IXamlType --iface Microsoft.UI.Xaml.Markup.IXamlReaderStatics --iface Microsoft.UI.Xaml.Input.IKeyRoutedEventArgs --iface Microsoft.UI.Xaml.Input.ICharacterReceivedRoutedEventArgs --iface Microsoft.UI.Xaml.Input.IPointerRoutedEventArgs --iface Microsoft.UI.Input.IPointerPoint --iface Microsoft.UI.Input.IPointerPointProperties --iface Microsoft.Windows.ApplicationModel.Resources.IResourceManager --iface Microsoft.Windows.ApplicationModel.Resources.IResourceManagerFactory --iface Microsoft.UI.Xaml.Media.IVisualTreeHelperStatics --iface Microsoft.UI.Composition.ICompositionObject --iface Microsoft.UI.Composition.IVisual --iface Microsoft.UI.Xaml.RoutedEventHandler --iface Microsoft.UI.Xaml.SizeChangedEventHandler --iface Microsoft.UI.Xaml.Controls.SelectionChangedEventHandler --iface Microsoft.UI.Xaml.Controls.Primitives.ScrollEventHandler --iface Windows.Foundation.EventHandler --iface Microsoft.UI.Xaml.Controls.Orientation --iface Microsoft.UI.Xaml.Controls.Primitives.ScrollEventType --iface Microsoft.UI.Xaml.Controls.Primitives.ScrollingIndicatorMode --iface Microsoft.UI.Xaml.GridUnitType --iface Microsoft.UI.Xaml.HorizontalAlignment --iface Microsoft.UI.Xaml.VerticalAlignment --iface Microsoft.UI.Xaml.Visibility --iface Microsoft.UI.Xaml.GridLength --iface Windows.Foundation.Point --iface Windows.Foundation.Rect
 //! --------------------------------
 
 //! WinUI 3 COM interface definitions for Zig.
@@ -965,6 +965,7 @@ pub const IFrameworkElement = extern struct {
 };
 
 pub const IID_TypedEventHandler_DataContextChanged = GUID{ .data1 = 0x4e4ec708, .data2 = 0xdef4, .data3 = 0x5d93, .data4 = .{ 0x86, 0x90, 0xdf, 0xc5, 0xf9, 0x23, 0x3c, 0x53 } };
+pub const IID_EventHandler_LayoutUpdated = GUID{ .data1 = 0xf04f0896, .data2 = 0xe31a, .data3 = 0x5c83, .data4 = .{ 0xa4, 0x3f, 0x6c, 0xfa, 0x4c, 0x75, 0x2e, 0xe6 } };
 pub const IID_TypedEventHandler_Loading = GUID{ .data1 = 0x53876073, .data2 = 0xbe4f, .data3 = 0x5dac, .data4 = .{ 0x9a, 0xe0, 0x01, 0x5d, 0xb6, 0xe4, 0x0c, 0x74 } };
 pub const IID_TypedEventHandler_ActualThemeChanged = GUID{ .data1 = 0x53876073, .data2 = 0xbe4f, .data3 = 0x5dac, .data4 = .{ 0x9a, 0xe0, 0x01, 0x5d, 0xb6, 0xe4, 0x0c, 0x74 } };
 pub const IID_TypedEventHandler_EffectiveViewportChanged = GUID{ .data1 = 0x276f9f20, .data2 = 0x9e38, .data3 = 0x5aed, .data4 = .{ 0xb5, 0xa8, 0x68, 0xb2, 0x5e, 0xc4, 0x09, 0xc2 } };
@@ -2857,6 +2858,148 @@ pub fn ScrollEventHandlerImpl(comptime Context: type, comptime CallbackFn: type)
     };
 }
 pub const IID_ScrollEventHandler = ScrollEventHandler.IID;
+
+pub const EventHandler = extern struct {
+    pub const IID = GUID{ .data1 = 0x9de1c535, .data2 = 0x6ae1, .data3 = 0x11e0, .data4 = .{ 0x84, 0xe1, 0x18, 0xa9, 0x05, 0xbc, 0xc5, 0x3f } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void { comRelease(self); }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
+    pub fn invoke(self: *@This(), sender: ?*anyopaque, args: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, args)); }
+    pub fn Invoke(self: *@This(), sender: ?*anyopaque, args: ?*anyopaque) !void { try self.invoke(sender, args); }
+    pub fn new() !*@This() { @compileError("use EventHandlerImpl instead"); }
+};
+
+pub fn EventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
+    return struct {
+        const Self = @This();
+        const Delegate = EventHandler;
+
+        pub const ComHeader = extern struct {
+            lpVtbl: *const Delegate.VTable,
+        };
+
+        com: ComHeader,
+        allocator: @import("std").mem.Allocator,
+        ref_count: @import("std").atomic.Value(u32),
+        context: *Context,
+        callback: CallbackFn,
+        delegate_iid: ?*const GUID = null,
+
+        const S_OK: HRESULT = 0;
+        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
+
+        const vtable_instance = Delegate.VTable{
+            .QueryInterface = &queryInterfaceFn,
+            .AddRef = &addRefFn,
+            .Release = &releaseFn,
+            .Invoke = &invokeFn,
+        };
+
+        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+            };
+            return self;
+        }
+
+        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
+            const self = try allocator.create(Self);
+            self.* = .{
+                .com = .{ .lpVtbl = &vtable_instance },
+                .allocator = allocator,
+                .ref_count = @import("std").atomic.Value(u32).init(1),
+                .context = context,
+                .callback = callback,
+                .delegate_iid = iid,
+            };
+            return self;
+        }
+
+        pub fn comPtr(self: *Self) *anyopaque {
+            return @ptrCast(&self.com);
+        }
+
+        pub fn release(self: *Self) void {
+            _ = self.com.lpVtbl.Release(self.comPtr());
+        }
+
+        fn fromComPtr(ptr: *anyopaque) *Self {
+            const header: *ComHeader = @ptrCast(@alignCast(ptr));
+            return @fieldParentPtr("com", header);
+        }
+
+        fn guidEql(a: *const GUID, b: *const GUID) bool {
+            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
+        }
+
+        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
+            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
+            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
+            const self = fromComPtr(this);
+            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
+                ppv.* = this;
+                _ = self.ref_count.fetchAdd(1, .monotonic);
+                return S_OK;
+            }
+            if (self.delegate_iid) |iid| {
+                if (guidEql(riid, iid)) {
+                    ppv.* = this;
+                    _ = self.ref_count.fetchAdd(1, .monotonic);
+                    return S_OK;
+                }
+            }
+            ppv.* = null;
+            return E_NOINTERFACE;
+        }
+
+        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            return self.ref_count.fetchAdd(1, .monotonic) + 1;
+        }
+
+        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
+            const self = fromComPtr(this);
+            const prev = self.ref_count.fetchSub(1, .monotonic);
+            const next = prev - 1;
+            if (next == 0) self.allocator.destroy(self);
+            return next;
+        }
+
+        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
+            const self = fromComPtr(this);
+            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
+            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
+            const sender_t = fn_info.params[1].type.?;
+            const args_t = fn_info.params[2].type.?;
+            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
+                self.callback(self.context, sender, args);
+            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
+                const a = args orelse return S_OK;
+                self.callback(self.context, sender, a);
+            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
+                const s = sender orelse return S_OK;
+                self.callback(self.context, s, args);
+            } else {
+                const s = sender orelse return S_OK;
+                const a = args orelse return S_OK;
+                self.callback(self.context, s, a);
+            }
+            return S_OK;
+        }
+    };
+}
+pub const IID_EventHandler = EventHandler.IID;
 
 pub const Orientation = struct {
     pub const Vertical: i32 = 0;
@@ -5376,6 +5519,9 @@ pub const IFlyoutBase = extern struct {
     pub fn TryInvokeKeyboardAccelerator(self: *@This(), args: ?*anyopaque) !void { try self.tryInvokeKeyboardAccelerator(args); }
 };
 
+pub const IID_EventHandler_Opened = GUID{ .data1 = 0xf04f0896, .data2 = 0xe31a, .data3 = 0x5c83, .data4 = .{ 0xa4, 0x3f, 0x6c, 0xfa, 0x4c, 0x75, 0x2e, 0xe6 } };
+pub const IID_EventHandler_Closed = GUID{ .data1 = 0xf04f0896, .data2 = 0xe31a, .data3 = 0x5c83, .data4 = .{ 0xa4, 0x3f, 0x6c, 0xfa, 0x4c, 0x75, 0x2e, 0xe6 } };
+pub const IID_EventHandler_Opening = GUID{ .data1 = 0xf04f0896, .data2 = 0xe31a, .data3 = 0x5c83, .data4 = .{ 0xa4, 0x3f, 0x6c, 0xfa, 0x4c, 0x75, 0x2e, 0xe6 } };
 pub const IID_TypedEventHandler_Closing = GUID{ .data1 = 0x4451ca06, .data2 = 0x3e60, .data3 = 0x5c62, .data4 = .{ 0x87, 0x49, 0x26, 0x60, 0x90, 0x7f, 0xb8, 0x6c } };
 pub const ElementCompositeMode = struct {
     pub const Inherit: i32 = 0;
@@ -8630,148 +8776,6 @@ pub const IDataContextChangedEventArgs = extern struct {
     pub fn SetHandled(self: *@This(), value: bool) !void { try hrCheck(self.lpVtbl.SetHandled(self, value)); }
 };
 
-pub const EventHandler = extern struct {
-    pub const IID = GUID{ .data1 = 0x9de1c535, .data2 = 0x6ae1, .data3 = 0x11e0, .data4 = .{ 0x84, 0xe1, 0x18, 0xa9, 0x05, 0xbc, 0xc5, 0x3f } };
-    lpVtbl: *const VTable,
-    pub const VTable = extern struct {
-        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
-        Release: *const fn (*anyopaque) callconv(.winapi) u32,
-        Invoke: *const fn (*anyopaque, ?*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
-    };
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn invoke(self: *@This(), sender: ?*anyopaque, args: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Invoke(self, sender, args)); }
-    pub fn Invoke(self: *@This(), sender: ?*anyopaque, args: ?*anyopaque) !void { try self.invoke(sender, args); }
-    pub fn new() !*@This() { @compileError("use EventHandlerImpl instead"); }
-};
-
-pub fn EventHandlerImpl(comptime Context: type, comptime CallbackFn: type) type {
-    return struct {
-        const Self = @This();
-        const Delegate = EventHandler;
-
-        pub const ComHeader = extern struct {
-            lpVtbl: *const Delegate.VTable,
-        };
-
-        com: ComHeader,
-        allocator: @import("std").mem.Allocator,
-        ref_count: @import("std").atomic.Value(u32),
-        context: *Context,
-        callback: CallbackFn,
-        delegate_iid: ?*const GUID = null,
-
-        const S_OK: HRESULT = 0;
-        const E_NOINTERFACE: HRESULT = @bitCast(@as(u32, 0x80004002));
-
-        const vtable_instance = Delegate.VTable{
-            .QueryInterface = &queryInterfaceFn,
-            .AddRef = &addRefFn,
-            .Release = &releaseFn,
-            .Invoke = &invokeFn,
-        };
-
-        pub fn create(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn) !*Self {
-            const self = try allocator.create(Self);
-            self.* = .{
-                .com = .{ .lpVtbl = &vtable_instance },
-                .allocator = allocator,
-                .ref_count = @import("std").atomic.Value(u32).init(1),
-                .context = context,
-                .callback = callback,
-            };
-            return self;
-        }
-
-        pub fn createWithIid(allocator: @import("std").mem.Allocator, context: *Context, callback: CallbackFn, iid: *const GUID) !*Self {
-            const self = try allocator.create(Self);
-            self.* = .{
-                .com = .{ .lpVtbl = &vtable_instance },
-                .allocator = allocator,
-                .ref_count = @import("std").atomic.Value(u32).init(1),
-                .context = context,
-                .callback = callback,
-                .delegate_iid = iid,
-            };
-            return self;
-        }
-
-        pub fn comPtr(self: *Self) *anyopaque {
-            return @ptrCast(&self.com);
-        }
-
-        pub fn release(self: *Self) void {
-            _ = self.com.lpVtbl.Release(self.comPtr());
-        }
-
-        fn fromComPtr(ptr: *anyopaque) *Self {
-            const header: *ComHeader = @ptrCast(@alignCast(ptr));
-            return @fieldParentPtr("com", header);
-        }
-
-        fn guidEql(a: *const GUID, b: *const GUID) bool {
-            return a.data1 == b.data1 and a.data2 == b.data2 and a.data3 == b.data3 and @import("std").mem.eql(u8, &a.data4, &b.data4);
-        }
-
-        fn queryInterfaceFn(this: *anyopaque, riid: *const GUID, ppv: *?*anyopaque) callconv(.winapi) HRESULT {
-            const IID_IUnknown = GUID{ .data1 = 0x00000000, .data2 = 0x0000, .data3 = 0x0000, .data4 = .{ 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
-            const IID_IAgileObject = GUID{ .data1 = 0x94ea2b94, .data2 = 0xe9cc, .data3 = 0x49e0, .data4 = .{ 0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90 } };
-            const self = fromComPtr(this);
-            if (guidEql(riid, &IID_IUnknown) or guidEql(riid, &IID_IAgileObject)) {
-                ppv.* = this;
-                _ = self.ref_count.fetchAdd(1, .monotonic);
-                return S_OK;
-            }
-            if (self.delegate_iid) |iid| {
-                if (guidEql(riid, iid)) {
-                    ppv.* = this;
-                    _ = self.ref_count.fetchAdd(1, .monotonic);
-                    return S_OK;
-                }
-            }
-            ppv.* = null;
-            return E_NOINTERFACE;
-        }
-
-        fn addRefFn(this: *anyopaque) callconv(.winapi) u32 {
-            const self = fromComPtr(this);
-            return self.ref_count.fetchAdd(1, .monotonic) + 1;
-        }
-
-        fn releaseFn(this: *anyopaque) callconv(.winapi) u32 {
-            const self = fromComPtr(this);
-            const prev = self.ref_count.fetchSub(1, .monotonic);
-            const next = prev - 1;
-            if (next == 0) self.allocator.destroy(self);
-            return next;
-        }
-
-        fn invokeFn(this: *anyopaque, sender: ?*anyopaque, args: ?*anyopaque) callconv(.winapi) HRESULT {
-            const self = fromComPtr(this);
-            const cb_ptr_info = @typeInfo(CallbackFn).pointer;
-            const fn_info = @typeInfo(cb_ptr_info.child).@"fn";
-            const sender_t = fn_info.params[1].type.?;
-            const args_t = fn_info.params[2].type.?;
-            if (sender_t == ?*anyopaque and args_t == ?*anyopaque) {
-                self.callback(self.context, sender, args);
-            } else if (sender_t == ?*anyopaque and args_t == *anyopaque) {
-                const a = args orelse return S_OK;
-                self.callback(self.context, sender, a);
-            } else if (sender_t == *anyopaque and args_t == ?*anyopaque) {
-                const s = sender orelse return S_OK;
-                self.callback(self.context, s, args);
-            } else {
-                const s = sender orelse return S_OK;
-                const a = args orelse return S_OK;
-                self.callback(self.context, s, a);
-            }
-            return S_OK;
-        }
-    };
-}
-pub const IID_EventHandler = EventHandler.IID;
-
 pub const EffectiveViewportChangedEventArgs = extern struct {
     pub const IID = IEffectiveViewportChangedEventArgs.IID;
     lpVtbl: *const VTable,
@@ -10590,6 +10594,7 @@ pub const ICommand = extern struct {
     pub fn Execute(self: *@This(), parameter: ?*anyopaque) !void { try self.execute(parameter); }
 };
 
+pub const IID_EventHandler_CanExecuteChanged = GUID{ .data1 = 0xf04f0896, .data2 = 0xe31a, .data3 = 0x5c83, .data4 = .{ 0xa4, 0x3f, 0x6c, 0xfa, 0x4c, 0x75, 0x2e, 0xe6 } };
 pub const TabView = extern struct {
     pub const IID = ITabView.IID;
     lpVtbl: *const VTable,
@@ -20807,6 +20812,7 @@ pub const IPopup2 = extern struct {
     pub fn RemoveActualPlacementChanged(self: *@This(), token: EventRegistrationToken) !void { try hrCheck(self.lpVtbl.RemoveActualPlacementChanged(self, token)); }
 };
 
+pub const IID_EventHandler_ActualPlacementChanged = GUID{ .data1 = 0xf04f0896, .data2 = 0xe31a, .data3 = 0x5c83, .data4 = .{ 0xa4, 0x3f, 0x6c, 0xfa, 0x4c, 0x75, 0x2e, 0xe6 } };
 pub const IPopup3 = extern struct {
     pub const IID = GUID{ .data1 = 0x03736c25, .data2 = 0xdd36, .data3 = 0x5344, .data4 = .{ 0x9a, 0x8d, 0x3f, 0x4e, 0x8e, 0x61, 0x6c, 0xba } };
     lpVtbl: *const VTable,

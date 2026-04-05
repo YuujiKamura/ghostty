@@ -1,10 +1,8 @@
 //! Windows Terminal-style caption buttons (minimize, maximize, close).
 //!
-//! Creates a horizontal StackPanel with 3 Border+TextBlock glyphs using
-//! XamlReader.Load(), then sets it as TabView.TabStripFooter.
-//!
-//! Uses Border+TextBlock instead of Button because Button requires
-//! XamlControlsResources theme dictionary (XAML compiler + PRI).
+//! Registers Tapped + PointerEntered/Exited handlers on Border elements
+//! defined in TabViewRoot.xaml (Column 2 of the titlebar Grid).
+//! Close button gets red hover (#C42B1C), others get subtle white overlay.
 
 const std = @import("std");
 const com = @import("com.zig");
@@ -23,130 +21,87 @@ fn postMessageWarn(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LP
     return true;
 }
 
-/// Module-level HWND for event callbacks.
 var g_hwnd: ?os.HWND = null;
 
-/// XAML string for the caption button panel.
-/// Three TextBlocks inside Borders: minimize (E921), maximize (E922), close (E8BB).
-/// Uses Segoe MDL2 Assets font, 46x40px per button (same as Windows Terminal).
-const CAPTION_XAML =
-    \\<StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    \\            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    \\            Orientation="Horizontal"
-    \\            HorizontalAlignment="Right"
-    \\            VerticalAlignment="Stretch"
-    \\            Height="40">
-    \\  <Border x:Name="MinimizeButton"
-    \\          Width="46" Height="40"
-    \\          Background="Transparent">
-    \\    <TextBlock Text="&#xE921;"
-    \\               FontFamily="Segoe MDL2 Assets" FontSize="10"
-    \\               Foreground="White"
-    \\               HorizontalAlignment="Center"
-    \\               VerticalAlignment="Center"/>
-    \\  </Border>
-    \\  <Border x:Name="MaximizeButton"
-    \\          Width="46" Height="40"
-    \\          Background="Transparent">
-    \\    <TextBlock Text="&#xE922;"
-    \\               FontFamily="Segoe MDL2 Assets" FontSize="10"
-    \\               Foreground="White"
-    \\               HorizontalAlignment="Center"
-    \\               VerticalAlignment="Center"/>
-    \\  </Border>
-    \\  <Border x:Name="CloseButton"
-    \\          Width="46" Height="40"
-    \\          Background="Transparent">
-    \\    <TextBlock Text="&#xE8BB;"
-    \\               FontFamily="Segoe MDL2 Assets" FontSize="10"
-    \\               Foreground="White"
-    \\               HorizontalAlignment="Center"
-    \\               VerticalAlignment="Center"/>
-    \\  </Border>
-    \\</StackPanel>
-;
+const ButtonKind = enum { minimize, maximize, close };
 
-/// Dummy context for Tapped event delegates (HWND stored in module global).
-const CaptionContext = struct {
-    action: Action,
-
-    const Action = enum { minimize, maximize, close };
+const ButtonCtx = struct {
+    kind: ButtonKind,
+    panel: ?*gen.IPanel = null, // Grid → IPanel for SetBackground
 };
 
-/// Static contexts — must live for the lifetime of the app.
-var ctx_minimize = CaptionContext{ .action = .minimize };
-var ctx_maximize = CaptionContext{ .action = .maximize };
-var ctx_close = CaptionContext{ .action = .close };
+var ctx_minimize = ButtonCtx{ .kind = .minimize };
+var ctx_maximize = ButtonCtx{ .kind = .maximize };
+var ctx_close = ButtonCtx{ .kind = .close };
 
-const XamlDelegate = gen.TappedEventHandlerImpl(CaptionContext, *const fn (*CaptionContext, ?*anyopaque, ?*anyopaque) void);
+// --- Tapped handler ---
 
-fn onCaptionTapped(ctx: *CaptionContext, _: ?*anyopaque, _: ?*anyopaque) void {
+const TappedDelegate = gen.TappedEventHandlerImpl(ButtonCtx, *const fn (*ButtonCtx, ?*anyopaque, ?*anyopaque) void);
+
+fn onTapped(ctx: *ButtonCtx, _: ?*anyopaque, _: ?*anyopaque) void {
     const hwnd = g_hwnd orelse return;
-    switch (ctx.action) {
+    switch (ctx.kind) {
         .minimize => {
-            log.info("caption: minimize clicked", .{});
-            _ = postMessageWarn(hwnd, os.WM_SYSCOMMAND, os.SC_MINIMIZE, 0, "WM_SYSCOMMAND");
+            _ = postMessageWarn(hwnd, os.WM_SYSCOMMAND, os.SC_MINIMIZE, 0, "SC_MINIMIZE");
         },
         .maximize => {
-            const sc = if (os.IsZoomed(hwnd) != 0) os.SC_RESTORE else os.SC_MAXIMIZE;
-            log.info("caption: maximize/restore clicked (zoomed={})", .{os.IsZoomed(hwnd) != 0});
-            _ = postMessageWarn(hwnd, os.WM_SYSCOMMAND, sc, 0, "WM_SYSCOMMAND");
+            const sc: usize = if (os.IsZoomed(hwnd) != 0) os.SC_RESTORE else os.SC_MAXIMIZE;
+            _ = postMessageWarn(hwnd, os.WM_SYSCOMMAND, sc, 0, "SC_MAXIMIZE");
         },
         .close => {
-            log.info("caption: close clicked", .{});
-            _ = postMessageWarn(hwnd, os.WM_SYSCOMMAND, os.SC_CLOSE, 0, "WM_SYSCOMMAND");
+            _ = postMessageWarn(hwnd, os.WM_SYSCOMMAND, os.SC_CLOSE, 0, "SC_CLOSE");
         },
     }
 }
 
-/// Creates the caption button panel and attaches it to the TabView footer.
-pub fn install(tab_view: *com.ITabView, hwnd: os.HWND) void {
+// --- PointerEntered/Exited handlers ---
+
+const PointerDelegate = gen.PointerEventHandlerImpl(ButtonCtx, *const fn (*ButtonCtx, ?*anyopaque, ?*anyopaque) void);
+
+fn onPointerEntered(ctx: *ButtonCtx, _: ?*anyopaque, _: ?*anyopaque) void {
+    const panel = ctx.panel orelse return;
+    const brush = createBrush(switch (ctx.kind) {
+        .close => gen.Color{ .A = 255, .R = 0xC4, .G = 0x2B, .B = 0x1C }, // WT close red
+        else => gen.Color{ .A = 30, .R = 255, .G = 255, .B = 255 }, // subtle white
+    }) catch return;
+    defer brush.release();
+    panel.SetBackground(@ptrCast(brush)) catch {};
+}
+
+fn onPointerExited(ctx: *ButtonCtx, _: ?*anyopaque, _: ?*anyopaque) void {
+    const panel = ctx.panel orelse return;
+    panel.SetBackground(null) catch {};
+}
+
+fn createBrush(color: gen.Color) !*gen.ISolidColorBrush {
+    const class = try winrt.hstring("Microsoft.UI.Xaml.Media.SolidColorBrush");
+    defer winrt.deleteHString(class);
+    const insp = try winrt.activateInstance(class);
+    defer _ = insp.release();
+    const brush = try insp.queryInterface(gen.ISolidColorBrush);
+    try brush.SetColor(color);
+    return brush;
+}
+
+// --- Install ---
+
+pub fn install(root_grid: *winrt.IInspectable, hwnd: os.HWND) void {
     g_hwnd = hwnd;
 
-    const reader_class = winrt.hstring("Microsoft.UI.Xaml.Markup.XamlReader") catch |err| {
-        log.err("caption_buttons: hstring failed: {}", .{@intFromError(err)});
-        return;
-    };
-    defer winrt.deleteHString(reader_class);
-    const reader = winrt.getActivationFactory(com.IXamlReaderStatics, reader_class) catch |err| {
-        log.err("caption_buttons: getActivationFactory failed: {}", .{@intFromError(err)});
-        return;
-    };
-    defer reader.release();
-
-    const xaml_str = winrt.hstring(CAPTION_XAML) catch |err| {
-        log.err("caption_buttons: xaml hstring failed: {}", .{@intFromError(err)});
-        return;
-    };
-    defer winrt.deleteHString(xaml_str);
-
-    const panel_insp = reader.Load(xaml_str) catch |err| {
-        log.err("caption_buttons: XamlReader.Load FAILED: {}", .{@intFromError(err)});
-        return;
-    };
-    defer _ = panel_insp.release(); // Release local ref; TabView holds its own.
-
-    // Set as TabStripFooter.
-    tab_view.SetTabStripFooter(@ptrCast(panel_insp)) catch |err| {
-        log.err("caption_buttons: SetTabStripFooter FAILED: {}", .{@intFromError(err)});
-        return;
-    };
-
-    // Find named children and register Tapped handlers.
-    const fe = panel_insp.queryInterface(com.IFrameworkElement) catch |err| {
+    const fe = root_grid.queryInterface(com.IFrameworkElement) catch |err| {
         log.err("caption_buttons: QI IFrameworkElement failed: {}", .{@intFromError(err)});
         return;
     };
     defer fe.release();
 
-    registerTapped(fe, "MinimizeButton", &ctx_minimize);
-    registerTapped(fe, "MaximizeButton", &ctx_maximize);
-    registerTapped(fe, "CloseButton", &ctx_close);
+    registerButton(fe, "MinimizeButton", &ctx_minimize);
+    registerButton(fe, "MaximizeButton", &ctx_maximize);
+    registerButton(fe, "CloseButton", &ctx_close);
 
-    log.info("caption_buttons: installed with click handlers", .{});
+    log.info("caption_buttons: installed with Tapped + hover handlers", .{});
 }
 
-fn registerTapped(fe: *com.IFrameworkElement, comptime name: [:0]const u8, ctx: *CaptionContext) void {
+fn registerButton(fe: *com.IFrameworkElement, comptime name: [:0]const u8, ctx: *ButtonCtx) void {
     const name_hs = winrt.hstring(name) catch return;
     defer winrt.deleteHString(name_hs);
 
@@ -162,17 +117,31 @@ fn registerTapped(fe: *com.IFrameworkElement, comptime name: [:0]const u8, ctx: 
     };
     defer ui_elem.release();
 
+    // Store IControl reference for SetBackground in hover handlers.
+    ctx.panel = child_insp.queryInterface(gen.IPanel) catch null;
+
     const alloc = std.heap.page_allocator;
-    const delegate = XamlDelegate.createWithIid(alloc, ctx, &onCaptionTapped, &com.IID_TappedEventHandler) catch |err| {
-        log.err("caption_buttons: createDelegate for {s} failed: {}", .{ name, @intFromError(err) });
-        return;
-    };
-    defer delegate.release();
 
-    _ = ui_elem.AddTapped(delegate.comPtr()) catch |err| {
-        log.err("caption_buttons: AddTapped for {s} failed: {}", .{ name, @intFromError(err) });
-        return;
-    };
+    // Tapped
+    {
+        const d = TappedDelegate.createWithIid(alloc, ctx, &onTapped, &com.IID_TappedEventHandler) catch return;
+        defer d.release();
+        _ = ui_elem.AddTapped(d.comPtr()) catch return;
+    }
 
-    log.info("caption_buttons: {s} Tapped handler registered", .{name});
+    // PointerEntered
+    {
+        const d = PointerDelegate.createWithIid(alloc, ctx, &onPointerEntered, &gen.IID_PointerEventHandler) catch return;
+        defer d.release();
+        _ = ui_elem.AddPointerEntered(d.comPtr()) catch return;
+    }
+
+    // PointerExited
+    {
+        const d = PointerDelegate.createWithIid(alloc, ctx, &onPointerExited, &gen.IID_PointerEventHandler) catch return;
+        defer d.release();
+        _ = ui_elem.AddPointerExited(d.comPtr()) catch return;
+    }
+
+    log.info("caption_buttons: {s} handlers registered", .{name});
 }

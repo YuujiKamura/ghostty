@@ -31,11 +31,6 @@ island: IslandWindow,
 /// WT: _dragBarWindow (wil::unique_hwnd)
 drag_bar_hwnd: ?os.HWND = null,
 
-/// Tab area right edge in pixels (client coords relative to parent left).
-/// Updated by App.onLayoutUpdated based on actual XAML layout.
-/// Used by dragBarNcHitTest to return HTTRANSPARENT for the tab region.
-tab_area_right_px: c_int align(4) = 0,
-
 /// Whether the window is currently maximized.
 /// WT: _isMaximized
 is_maximized: bool = false,
@@ -104,10 +99,9 @@ pub fn createDragBarIfNeeded(self: *NonClientIslandWindow) void {
     if (self.drag_bar_hwnd != null) return;
     self.drag_bar_hwnd = self.createDragBarWindow();
     if (self.drag_bar_hwnd != null) {
-        // Force interop HWND to BOTTOM so drag bar receives mouse events.
-        if (self.island.interop_hwnd) |ih| {
-            _ = os.SetWindowPos(ih, os.HWND_BOTTOM, 0, 0, 0, 0, os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOACTIVATE);
-        }
+        // WT: interop HWND stays at default z-order. The drag bar (HWND_TOP)
+        // sits above it only where it's positioned (after tabs). The tab area
+        // is not covered, so XAML receives input there directly.
         // Show the drag bar at the correct position.
         var rect: os.RECT = .{};
         _ = os.GetClientRect(self.island.hwnd, &rect);
@@ -228,33 +222,30 @@ pub fn onNcCalcSize(hwnd: os.HWND, wparam: os.WPARAM, lparam: os.LPARAM) os.LRES
 pub fn onNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
     const App = @import("App.zig");
 
-    const lp: usize = @bitCast(lparam);
-    const mouse_x = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp)))));
-    const mouse_y = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp >> 16)))));
-
     const original_ret = os.DefWindowProcW(hwnd, os.WM_NCHITTEST, 0, lparam);
     if (original_ret != os.HTCLIENT) {
         return original_ret;
     }
 
+    const lp: usize = @bitCast(lparam);
+    const mouse_x = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp)))));
+    const mouse_y = @as(c_int, @as(i16, @bitCast(@as(u16, @truncate(lp >> 16)))));
+
     var wrect: os.RECT = .{};
     _ = os.GetWindowRect(hwnd, &wrect);
 
     const resize_h = getResizeHandleHeight(hwnd);
-    const is_on_resize_border = mouse_y < wrect.top + resize_h;
-
-    // WT: the top of the drag bar is used to resize the window (full width)
-    if (os.IsZoomed(hwnd) == 0 and is_on_resize_border) {
+    if (os.IsZoomed(hwnd) == 0 and mouse_y < wrect.top + resize_h) {
         return os.HTTOP;
     }
 
-    // Manual Hit-Test Sync: Use tab_area_right_px from the left.
-    // In the titlebar region but LEFT of tab_area_right_px → let XAML handle it
+    // Tab area: return HTCLIENT so clicks reach the XAML island.
+    // Drag area (after tabs): return HTCAPTION for window dragging.
     const app_ptr_raw = os.GetWindowLongPtrW(hwnd, os.GWLP_USERDATA);
     if (app_ptr_raw != 0) {
-        const app: *App = @ptrFromInt(app_ptr_raw);
+        const app: *App = @ptrFromInt(@as(usize, @bitCast(app_ptr_raw)));
         if (app.nci_window) |nci| {
-            const tab_right = @atomicLoad(c_int, &nci.tab_area_right_px, .acquire);
+            const tab_right = nci.getDragAreaLeft();
             if (mouse_x < wrect.left + tab_right) {
                 return os.HTCLIENT;
             }
@@ -282,16 +273,17 @@ pub fn updateIslandPosition(self: *NonClientIslandWindow, width: c_int, height: 
     const top_offset = if (original_top == 0) @as(c_int, -1) else original_top;
     const content_height = if (height > top_offset) height - top_offset else 0;
 
-    // WT: position interop HWND at HWND_BOTTOM so the drag bar stays on top.
-    const z_after = os.HWND_BOTTOM;
+    // Position interop HWND. Don't force HWND_BOTTOM — the drag bar
+    // only covers the area after tabs (HWND_TOP), so the tab region
+    // needs XAML island to receive input at its natural z-order.
     _ = os.SetWindowPos(
         ih,
-        z_after,
+        null,
         0,
         top_offset,
         width,
         content_height,
-        os.SWP_SHOWWINDOW | os.SWP_NOACTIVATE,
+        os.SWP_SHOWWINDOW | os.SWP_NOACTIVATE | os.SWP_NOZORDER,
     );
 
     // Resize drag bar to match new width.
@@ -299,38 +291,43 @@ pub fn updateIslandPosition(self: *NonClientIslandWindow, width: c_int, height: 
     self.resizeDragBarWindow(width);
 }
 
-/// WT: _ResizeDragBarWindow
-/// Positions drag bar at HWND_TOP, covering the titlebar area.
-/// Uses alpha=255 (opaque) — WS_EX_NOREDIRECTIONBITMAP makes it
-/// composited-transparent (DWM sees no content → shows through).
+/// WT: _ResizeDragBarWindow + _GetDragAreaRect
+/// Positions drag bar at HWND_TOP, starting from the tab area's right edge
+/// so that tabs receive XAML input directly (no HTTRANSPARENT needed).
 pub fn resizeDragBarWindow(self: *NonClientIslandWindow, width_px: c_int) void {
     const drag_bar_hwnd = self.drag_bar_hwnd orelse return;
     const top_offset = getTopBorderHeight(self.island.hwnd);
 
-    // WT: _GetDragAreaRect() returns the full width, titlebar height.
-    // We use the full client width and the titlebar height from the window.
     const dpi = os.GetDpiForWindow(self.island.hwnd);
-    const resize_h = getResizeHandleHeight(self.island.hwnd);
-    // Use the frame top height as the titlebar area (same as updateFrameMargins).
     var frame: os.RECT = .{};
     const style = os.GetWindowLongPtrW(self.island.hwnd, os.GWL_STYLE);
     _ = os.AdjustWindowRectExForDpi(&frame, @truncate(@as(usize, @bitCast(style))), 0, 0, dpi);
     const titlebar_h: c_int = -frame.top;
-    _ = resize_h; // used by getResizeHandleHeight for top border
 
-    log.debug("resizeDragBarWindow: width={} titlebar_h={} frame.top={} top_offset={} style=0x{x}", .{
-        width_px, titlebar_h, frame.top, top_offset, @as(usize, @bitCast(style)),
+    // WT: _GetDragAreaRect — compute tab area right edge via XAML layout.
+    // Drag bar starts AFTER the tabs so tabs receive input directly.
+    const tab_right_px = self.getDragAreaLeft();
+
+    // WT: drag bar ends before the DWM caption buttons (right-aligned).
+    // Subtract frame border + caption button zone so drag bar doesn't
+    // cover the DWM-rendered Min/Max/Close buttons.
+    const scale: f32 = @as(f32, @floatFromInt(dpi)) / 96.0;
+    const caption_buttons_w: c_int = @intFromFloat(@as(f32, @floatFromInt(CAPTION_BUTTON_ZONE_96DPI)) * scale);
+    const border_w = os.GetSystemMetricsForDpi(os.SM_CXSIZEFRAME, dpi) +
+        os.GetSystemMetricsForDpi(os.SM_CXPADDEDBORDER, dpi);
+
+    log.debug("resizeDragBarWindow: width={} titlebar_h={} tab_right={} caption_w={} top_offset={}", .{
+        width_px, titlebar_h, tab_right_px, caption_buttons_w, top_offset,
     });
 
-    if (width_px > 0 and titlebar_h > 0) {
-        // Drag bar covers the FULL titlebar width.
-        // Tab clicks pass through via HTTRANSPARENT in dragBarNcHitTest.
+    const drag_width = width_px - tab_right_px - caption_buttons_w - border_w;
+    if (drag_width > 0 and titlebar_h > 0) {
         _ = os.SetWindowPos(
             drag_bar_hwnd,
             os.HWND_TOP,
-            0,
+            tab_right_px,
             top_offset,
-            width_px,
+            drag_width,
             titlebar_h,
             os.SWP_NOACTIVATE | os.SWP_SHOWWINDOW | os.SWP_NOSENDCHANGING,
         );
@@ -344,6 +341,34 @@ pub fn resizeDragBarWindow(self: *NonClientIslandWindow, width_px: c_int) void {
     } else {
         _ = os.SetWindowPos(drag_bar_hwnd, os.HWND_BOTTOM, 0, 0, 0, 0, os.SWP_HIDEWINDOW | os.SWP_NOMOVE | os.SWP_NOSIZE | os.SWP_NOSENDCHANGING);
     }
+}
+
+/// WT: _GetDragAreaRect().X — returns the left edge of the drag area in pixels.
+/// Uses DragBar XAML element's TransformToVisual to find where tabs end.
+/// DragBar is in Column 1 (Width="*") next to TabView in Column 0 (Width="Auto").
+pub fn getDragAreaLeft(self: *NonClientIslandWindow) c_int {
+    const App = @import("App.zig");
+    const com = @import("com.zig");
+
+    const app_ptr_raw = os.GetWindowLongPtrW(self.island.hwnd, os.GWLP_USERDATA);
+    if (app_ptr_raw == 0) return 0;
+    const app: *App = @ptrFromInt(@as(usize, @bitCast(app_ptr_raw)));
+
+    const drag_bar = app.drag_bar orelse return 0;
+    const root_grid = app.root_grid orelse return 0;
+
+    const root_ui: *com.IUIElement = com.comQueryInterface(root_grid, com.IUIElement) catch return 0;
+    defer com.comRelease(root_ui);
+
+    // WT: _dragBar.TransformToVisual(_rootGrid)
+    const transform = drag_bar.TransformToVisual(@ptrCast(root_ui)) catch return 0;
+    defer transform.release();
+
+    const origin = transform.TransformPoint(.{ .X = 0, .Y = 0 }) catch return 0;
+
+    const dpi = os.GetDpiForWindow(self.island.hwnd);
+    const scale: f32 = @as(f32, @floatFromInt(dpi)) / 96.0;
+    return @intFromFloat(origin.X * scale);
 }
 
 // ---------------------------------------------------------------------------
@@ -594,23 +619,9 @@ fn dragBarNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
         return os.HTTOP;
     }
 
-    // Full-width drag bar: everything is draggable (HTCAPTION).
-    // Tab clicks are handled by XAML via the interop island which sits below
-    // the drag bar in z-order. The OS routes input to the drag bar first;
-    // for the tab region we return HTTRANSPARENT so clicks fall through to XAML.
-    //
-    // Tab width heuristic: the TabView occupies the left portion.
-    // We use the stored tab_area_right_px value (updated via LayoutUpdated).
-    // If it's 0 (not yet measured), we return HTCAPTION so the titlebar is draggable.
-    const self_ptr = os.GetWindowLongPtrW(hwnd, os.GWLP_USERDATA);
-    if (self_ptr != 0) {
-        const self: *NonClientIslandWindow = @ptrFromInt(@as(usize, @bitCast(self_ptr)));
-        const tab_right = @atomicLoad(c_int, &self.tab_area_right_px, .acquire);
-        if (tab_right > 0 and pt.x < parent_rect.left + tab_right) {
-            return os.HTTRANSPARENT;
-        }
-    }
-
+    // WT: not on a caption button or resize border → draggable caption area.
+    // Tabs are not covered by the drag bar (getDragAreaLeft positions it after tabs),
+    // so no HTTRANSPARENT needed — XAML receives tab input directly.
     return os.HTCAPTION;
 }
 
@@ -630,10 +641,10 @@ fn nonclientWndProc(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.L
         return os.DefWindowProcW(hwnd, msg, wparam, lparam);
     }
 
-    // DwmDefWindowProc handles DWM caption button rendering/hit-testing.
-    // We use XAML caption buttons (via caption_buttons.zig) instead, so
-    // skip DwmDefWindowProc for WM_NCHITTEST to prevent DWM from drawing
-    // its own buttons that conflict with the DXWS visual layer.
+    // DwmDefWindowProc handles DWM caption button rendering and hit-testing.
+    // Skip WM_NCHITTEST so our custom onNcHitTest (drag bar + tab area logic)
+    // takes precedence. DWM still renders buttons at the right edge via other
+    // messages (WM_NCPAINT etc).
     if (msg != os.WM_NCHITTEST) {
         var dwm_result: os.LRESULT = 0;
         if (os.DwmDefWindowProc(hwnd, msg, wparam, lparam, &dwm_result) != 0) {

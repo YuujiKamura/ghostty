@@ -1,4 +1,4 @@
-//! WinUI 3 COM interface facade.
+﻿//! WinUI 3 COM interface facade.
 //! Combines generated definitions with hand-written native interfaces.
 
 const gen = @import("com_generated.zig");
@@ -30,6 +30,7 @@ pub const IID_TextChangedEventHandler = gen.TextChangedEventHandler.IID;
 pub const IID_TextCompositionStartedHandler = gen.IID_TypedEventHandler_TextCompositionStarted;
 pub const IID_TextCompositionChangedHandler = gen.IID_TypedEventHandler_TextCompositionChanged;
 pub const IID_TextCompositionEndedHandler = gen.IID_TypedEventHandler_TextCompositionEnded;
+pub const IID_EventHandler_LayoutUpdated = gen.IID_EventHandler_LayoutUpdated;
 
 // --- Base interfaces (from generated) ---
 pub const IUnknown = gen.IUnknown;
@@ -59,6 +60,9 @@ pub const IGrid = gen.IGrid;
 pub const IGridStatics = gen.IGridStatics;
 pub const IRowDefinition = gen.IRowDefinition;
 pub const IVisualTreeHelperStatics = gen.IVisualTreeHelperStatics;
+pub const IGeneralTransform = gen.IGeneralTransform;
+pub const IIterable = gen.IIterable;
+pub const IIterator = gen.IIterator;
 pub const IResourceDictionary = gen.IResourceDictionary;
 pub const IColumnDefinition = gen.IColumnDefinition;
 pub const IRangeBase = gen.IRangeBase;
@@ -113,3 +117,5 @@ pub const IDesktopWindowXamlSource = native.IDesktopWindowXamlSource;
 pub const IDesktopWindowXamlSourceFactory = native.IDesktopWindowXamlSourceFactory;
 pub const IDesktopChildSiteBridge = native.IDesktopChildSiteBridge;
 pub const IClosable = native.IClosable;
+
+pub const IID_EventHandler = gen.IID_EventHandler;

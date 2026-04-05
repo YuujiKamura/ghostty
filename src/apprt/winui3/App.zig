@@ -178,6 +178,8 @@ cp_last_notify_ts: i64 = 0,
 tab_view: ?*com.ITabView = null,
 add_tab_split_button: ?*com.ISplitButton = null,
 profile_menu_flyout: ?*com.IMenuFlyout = null,
+/// WT: _dragBar — XAML Border between tabs and caption buttons.
+drag_bar: ?*com.IUIElement = null,
 last_polled_tab_items_size: ?u32 = null,
 
 /// The root grid (XamlSource.Content) — must be explicitly sized on WM_SIZE.
@@ -213,13 +215,16 @@ saved_placement: os.WINDOWPLACEMENT = .{},
 tab_close_handler: ?*TypedHandler = null,
 add_tab_handler: ?*TypedHandler = null,
 selection_changed_handler: ?*SelectionHandler = null,
-layout_updated_handler: ?*gen.EventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void) = null,
+layout_updated_handler: ?*TypedHandler = null,
 resource_manager_requested_handler: ?*ResourceManagerRequestedHandler = null,
 tab_close_token: ?i64 = null,
 add_tab_token: ?i64 = null,
 selection_changed_token: ?i64 = null,
 layout_updated_token: ?i64 = null,
 resource_manager_requested_token: ?i64 = null,
+
+/// Cached VisualTreeHelper statics for hit-testing in drag bar.
+vth_statics: ?*com.IVisualTreeHelperStatics = null,
 /// Optional side-channel control plane for session-aware automation.
 /// Uses the Zig-native control plane (replaces Rust DLL).
 control_plane: ?*ControlPlaneNative = null,
@@ -443,9 +448,12 @@ fn initXaml(self: *App) !void {
     try self.scheduleDebugActions();
     self.syncVisualDiagnostics();
 
-    // Install caption buttons (minimize, maximize, close) in the TabView footer.
-    if (self.tab_view) |tv| {
-        caption_buttons_mod.install(tv, self.hwnd.?);
+    // Register Tapped handlers on XAML caption buttons (Min/Max/Close).
+    // DWM does NOT render caption buttons when WM_NCCALCSIZE removes the NC area.
+    // We must draw them ourselves (Pattern A: WT/Magpie approach).
+    // Buttons are defined in TabViewRoot.xaml alongside AddTabSplitButton.
+    if (self.root_grid) |rg| {
+        caption_buttons_mod.install(rg, self.hwnd.?);
     }
 
     // Step 6.5: Re-assert drag bar Z-order after XAML content is set.
@@ -463,6 +471,16 @@ fn initXaml(self: *App) !void {
 
     // Step 7: Create native input windows (input overlay for IME).
     self.setupNativeInputWindows();
+
+    // Step 7.5: Cache VisualTreeHelper for hit-testing in drag bar.
+    const vth_class = winrt.hstring(XamlClass.VisualTreeHelper) catch null;
+    if (vth_class) |vc| {
+        defer winrt.deleteHString(vc);
+        self.vth_statics = winrt.getActivationFactory(com.IVisualTreeHelperStatics, vc) catch null;
+        if (self.vth_statics != null) {
+            log.info("initXaml: VisualTreeHelper statics cached for hit-testing", .{});
+        }
+    }
 
     input_runtime.focusKeyboardTarget(self);
     self.startup_bootstrapped = true;
@@ -1034,12 +1052,12 @@ fn registerTabViewHandlers(self: *App, tab_view: ?*com.ITabView) !void {
             log.info("initXaml step 7.5: SelectionChanged handler registered", .{});
         }
 
-        // Handle LayoutUpdated to sync drag region (Manual Hit-Test Sync).
-        self.layout_updated_handler = try gen.EventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void).createWithIid(alloc, self, &onLayoutUpdated, &com.IID_EventHandler);
+        // WT: _OnDragBarSizeChanged — re-position drag bar after XAML layout.
+        self.layout_updated_handler = try TypedHandler.createWithIid(alloc, self, &onLayoutUpdated, &com.IID_EventHandler_LayoutUpdated);
         const fe = try tab_view.?.queryInterface(com.IFrameworkElement);
         defer fe.release();
         self.layout_updated_token = try fe.AddLayoutUpdated(self.layout_updated_handler.?.comPtr());
-        log.info("initXaml step 7.5: LayoutUpdated handler registered", .{});
+        log.info("initXaml step 7.5: LayoutUpdated handler registered (drag bar repositioning)", .{});
 
         log.info("initXaml step 7.5 OK: TabView event handlers registered (close={} addtab={} selection={})", .{
             enable_close,
@@ -1325,6 +1343,15 @@ fn fullCleanup(self: *App) void {
     if (self.selection_changed_handler) |h| h.release();
     if (self.layout_updated_handler) |h| h.release();
     if (self.resource_manager_requested_handler) |h| h.release();
+
+    if (self.vth_statics) |vth| {
+        vth.release();
+        self.vth_statics = null;
+    }
+    if (self.drag_bar) |db| {
+        db.release();
+        self.drag_bar = null;
+    }
 
     if (self.root_grid) |rg| {
         _ = rg.release();

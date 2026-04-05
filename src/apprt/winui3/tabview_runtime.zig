@@ -101,6 +101,14 @@ pub fn createRoot(
     self.add_tab_split_button = try spltbtn_inspectable.queryInterface(com.ISplitButton);
     log.info("initXaml step 7.5: Found AddTabSplitButton", .{});
 
+    // Find DragBar (Border between tabs and caption buttons)
+    const dragbar_name = try winrt.hstring("DragBar");
+    defer winrt.deleteHString(dragbar_name);
+    const dragbar_inspectable = try root_fe.FindName(dragbar_name);
+    defer _ = dragbar_inspectable.release();
+    self.drag_bar = try dragbar_inspectable.queryInterface(com.IUIElement);
+    log.info("initXaml step 7.5: Found DragBar", .{});
+
     // Find ProfileFlyout
     const proflyout_name = try winrt.hstring("ProfileFlyout");
     defer winrt.deleteHString(proflyout_name); // Corrected from prof_name

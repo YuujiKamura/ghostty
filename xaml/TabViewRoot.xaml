@@ -9,16 +9,41 @@
         <RowDefinition Height="40"/>
         <RowDefinition Height="*"/>
     </Grid.RowDefinitions>
-    <controls:TabView x:Name="TabView" Grid.Row="0"
-                      HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                      IsAddTabButtonVisible="False">
-        <controls:TabView.TabStripFooter>
-            <controls:SplitButton x:Name="AddTabSplitButton">
-                <controls:SplitButton.Flyout>
-                    <controls:MenuFlyout x:Name="ProfileFlyout"/>
-                </controls:SplitButton.Flyout>
-            </controls:SplitButton>
-        </controls:TabView.TabStripFooter>
-    </controls:TabView>
+    <Grid Grid.Row="0">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <controls:TabView x:Name="TabView" Grid.Column="0"
+                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                          IsAddTabButtonVisible="False">
+            <controls:TabView.TabStripFooter>
+                <controls:SplitButton x:Name="AddTabSplitButton">
+                    <controls:SplitButton.Flyout>
+                        <controls:MenuFlyout x:Name="ProfileFlyout"/>
+                    </controls:SplitButton.Flyout>
+                </controls:SplitButton>
+            </controls:TabView.TabStripFooter>
+        </controls:TabView>
+        <Border x:Name="DragBar" Grid.Column="1"
+                HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                Background="Transparent" IsHitTestVisible="False"/>
+        <StackPanel x:Name="CaptionButtons" Grid.Column="2"
+                    Orientation="Horizontal" VerticalAlignment="Stretch" Height="40">
+            <Grid x:Name="MinimizeButton" Width="46" Height="40" Background="Transparent">
+                <TextBlock Text="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10"
+                           Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+            <Grid x:Name="MaximizeButton" Width="46" Height="40" Background="Transparent">
+                <TextBlock Text="&#xE922;" FontFamily="Segoe MDL2 Assets" FontSize="10"
+                           Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+            <Grid x:Name="CloseButton" Width="46" Height="40" Background="Transparent">
+                <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10"
+                           Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+        </StackPanel>
+    </Grid>
     <Grid x:Name="TabContentGrid" Grid.Row="1"/>
 </Grid>
