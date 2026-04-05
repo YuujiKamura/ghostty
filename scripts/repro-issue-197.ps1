@@ -34,7 +34,7 @@ if (-not $NoBuild) {
     Push-Location $repoRoot; bash -c "./build-winui3.sh" 2>&1 | Select-Object -Last 3; Pop-Location
 }
 
-$exe = Join-Path $repoRoot $ExePath
+$exe = if ([System.IO.Path]::IsPathRooted($ExePath)) { $ExePath } else { Join-Path $repoRoot $ExePath }
 $env:GHOSTTY_CONTROL_PLANE = "1"
 $proc = Start-Process -FilePath $exe -PassThru
 Start-Sleep -Seconds 5

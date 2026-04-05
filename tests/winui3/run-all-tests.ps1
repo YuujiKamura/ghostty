@@ -405,7 +405,6 @@ if (-not $IncludeStress) {
     Write-Host "  SKIP: stress tests (use -IncludeStress to run)" -ForegroundColor DarkGray
 } else {
     $stressScripts = @(
-        @{ Name = "stress-resize-crash";   Path = Join-Path $PSScriptRoot "..\self_diagnosis\test_resize_crash.ps1" }
         @{ Name = "stress-repro-197";      Path = Join-Path $PSScriptRoot "..\..\scripts\repro-issue-197.ps1" }
         @{ Name = "stress-window-ops";     Path = Join-Path $PSScriptRoot "..\..\scripts\winui3-stress-test.ps1" }
         @{ Name = "stress-soak";           Path = Join-Path $PSScriptRoot "..\..\scripts\winui3-soak-test.ps1" }

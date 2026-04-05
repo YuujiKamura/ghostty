@@ -55,7 +55,7 @@ if (-not $NoBuild) {
     Pop-Location
 }
 
-$exe = Join-Path $repoRoot $ExePath
+$exe = if ([System.IO.Path]::IsPathRooted($ExePath)) { $ExePath } else { Join-Path $repoRoot $ExePath }
 if (-not (Test-Path $exe)) {
     Write-Error "ghostty.exe not found at $exe"
     return
