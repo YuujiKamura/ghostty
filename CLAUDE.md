@@ -8,6 +8,8 @@
 ## Git
 - push先: `git push fork main`（`fork` = YuujiKamura/ghostty）
 - `origin` は ghostty-org/ghostty（upstream、push禁止）
+- **upstream（ghostty-org/ghostty）への PR 作成は明示的指示なしに禁止**
+- イシュー起票先: `YuujiKamura/ghostty`（fork側）。upstream への issue 作成も禁止
 
 ## ハードコードパス禁止
 ユーザープロファイルパス、ホームディレクトリ、ドライブレター付き絶対パスをコードに書くな。動的解決（相対パス、環境変数展開等）を使え。
