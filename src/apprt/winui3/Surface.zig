@@ -135,6 +135,12 @@ pub fn Surface(comptime App: type) type {
 
         /// Timestamp of the last scrollbar UI update to enable throttling.
         last_scrollbar_update_ns: i128 = 0,
+        /// Pending scrollbar values for coalescing rapid updates.
+        pending_scrollbar: ?struct { total: usize, offset: usize, len: usize } = null,
+        /// Counters for scrollbar update frequency measurement.
+        scrollbar_update_count: u32 = 0,
+        scrollbar_skip_count: u32 = 0,
+        last_scrollbar_log_ns: i128 = 0,
 
         /// Timestamp of the last window title update to enable throttling.
         last_title_update_ns: i128 = 0,
@@ -2048,16 +2054,42 @@ pub fn Surface(comptime App: type) type {
         }
 
         /// Called from App.performAction(.scrollbar) on the UI thread.
+        /// Coalesces rapid updates: if called within 16ms of the last update,
+        /// stores the latest values and applies them on the next eligible call.
         pub fn updateScrollbarUi(self: *Self, total: usize, offset: usize, len: usize) void {
             const now = std.time.nanoTimestamp();
             const min_interval_ns = 16 * std.time.ns_per_ms; // ~60Hz
+
+            // Frequency measurement (log_hot_path only).
+            if (comptime log_hot_path) {
+                self.scrollbar_update_count += 1;
+                const log_interval_ns = 1 * std.time.ns_per_s;
+                if (now - self.last_scrollbar_log_ns >= log_interval_ns) {
+                    log.info("scrollbar freq: {}/s applied, {}/s coalesced", .{
+                        self.scrollbar_update_count - self.scrollbar_skip_count,
+                        self.scrollbar_skip_count,
+                    });
+                    self.scrollbar_update_count = 0;
+                    self.scrollbar_skip_count = 0;
+                    self.last_scrollbar_log_ns = now;
+                }
+            }
+
             if (now - self.last_scrollbar_update_ns < min_interval_ns) {
-                // Throttle: avoid clogging the UI thread with rapid scrollbar property changes.
+                // Coalesce: save latest values instead of dropping them.
+                self.pending_scrollbar = .{ .total = total, .offset = offset, .len = len };
+                if (comptime log_hot_path) self.scrollbar_skip_count += 1;
                 return;
             }
             self.last_scrollbar_update_ns = now;
 
-            log.debug("updateScrollbarUi: total={} offset={} len={}", .{ total, offset, len });
+            // Apply coalesced pending values if available, otherwise use current args.
+            const eff_total = if (self.pending_scrollbar) |p| p.total else total;
+            const eff_offset = if (self.pending_scrollbar) |p| p.offset else offset;
+            const eff_len = if (self.pending_scrollbar) |p| p.len else len;
+            self.pending_scrollbar = null;
+
+            log.debug("updateScrollbarUi: total={} offset={} len={}", .{ eff_total, eff_offset, eff_len });
             _ = self.scroll_bar_insp orelse return;
             self.is_internal_scroll_update = true;
             defer {
@@ -2065,9 +2097,9 @@ pub fn Surface(comptime App: type) type {
             }
 
             const range_base = self.scroll_bar_range_base orelse return;
-            const total_f: f64 = @floatFromInt(total);
-            const offset_f: f64 = @floatFromInt(offset);
-            const len_f: f64 = @floatFromInt(len);
+            const total_f: f64 = @floatFromInt(eff_total);
+            const offset_f: f64 = @floatFromInt(eff_offset);
+            const len_f: f64 = @floatFromInt(eff_len);
             const maximum = if (total_f > len_f) total_f - len_f else 0.0;
 
             range_base.SetMinimum(0.0) catch {};
