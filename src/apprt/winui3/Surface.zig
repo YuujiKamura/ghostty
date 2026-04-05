@@ -118,6 +118,9 @@ pub fn Surface(comptime App: type) type {
         title_static_buf: [256]u8 = undefined,
         /// Fixed buffer for UTF-16 conversion of display titles (avoids heap allocation).
         title_utf16_buf: [512]u16 = undefined,
+        /// Cached previous display title (UTF-8) to skip redundant UTF-16/HSTRING/COM calls.
+        last_display_title_buf: [512]u8 = undefined,
+        last_display_title_len: usize = 0,
 
         /// Inner layout grid: col 0 = SwapChainPanel (1*), col 1 = ScrollBar (17px).
         surface_grid: ?*winrt.IInspectable = null,
@@ -140,14 +143,23 @@ pub fn Surface(comptime App: type) type {
         /// Flag to prevent feedback loops when programmatically updating scrollbar.
         is_internal_scroll_update: bool = false,
 
-        /// Timestamp of the last scrollbar UI update to enable throttling.
-        last_scrollbar_update_ns: i128 = 0,
+        dirty: DirtyFlags = .{},
+
         /// Pending scrollbar values for coalescing rapid updates.
         pending_scrollbar: ?struct { total: usize, offset: usize, len: usize } = null,
         /// Counters for scrollbar update frequency measurement.
         scrollbar_update_count: u32 = 0,
         scrollbar_skip_count: u32 = 0,
         last_scrollbar_log_ns: i128 = 0,
+
+        /// Pending mouse shape for batched application.
+        pending_mouse_shape: ?terminal.MouseShape = null,
+
+        /// Cached scrollbar values for diff-based COM call minimization.
+        scrollbar_initialized: bool = false,
+        last_scrollbar_maximum: f64 = -1.0,
+        last_scrollbar_value: f64 = -1.0,
+        last_scrollbar_viewport: f64 = -1.0,
 
         /// Timestamp of the last window title update to enable throttling.
         last_title_update_ns: i128 = 0,
@@ -180,6 +192,12 @@ pub fn Surface(comptime App: type) type {
         ///   .pending  -- WM_KEYDOWN deferred to WM_CHAR; merge physical key info
         ///               with the character text into one unified KeyEvent
         pending_keydown: PendingKeydown = .none,
+
+        /// Dirty flags for batched UI updates (flushed at end of drainMailbox).
+        const DirtyFlags = packed struct {
+            scrollbar: bool = false,
+            mouse_shape: bool = false,
+        };
 
         const PendingKeydown = union(enum) {
             /// No keydown state -- let WM_CHAR through as a standalone event.
@@ -946,6 +964,23 @@ pub fn Surface(comptime App: type) type {
             } else title;
             const display_owned = cp_active and display_title.ptr != title.ptr;
             defer if (display_owned) alloc.free(display_title);
+
+            // Skip UTF-16 conversion and COM call if display title hasn't changed.
+            const dt_bytes = display_title[0..display_title.len];
+            if (self.last_display_title_len == dt_bytes.len and
+                self.last_display_title_len <= self.last_display_title_buf.len and
+                std.mem.eql(u8, self.last_display_title_buf[0..self.last_display_title_len], dt_bytes))
+            {
+                return;
+            }
+            // Cache the new display title for future comparison.
+            if (dt_bytes.len <= self.last_display_title_buf.len) {
+                @memcpy(self.last_display_title_buf[0..dt_bytes.len], dt_bytes);
+                self.last_display_title_len = dt_bytes.len;
+            } else {
+                // Title too long for cache; set len to 0 so next call won't falsely match.
+                self.last_display_title_len = 0;
+            }
 
             // Actually update the TabViewItem UI using WinRT PropertyValue.
             // Use fixed UTF-16 buffer when possible to avoid heap allocation.
@@ -2116,15 +2151,27 @@ pub fn Surface(comptime App: type) type {
         }
 
         /// Called from App.performAction(.scrollbar) on the UI thread.
-        /// Coalesces rapid updates: if called within 16ms of the last update,
-        /// stores the latest values and applies them on the next eligible call.
+        /// Marks scrollbar dirty and stores the latest values; the actual COM
+        /// update is deferred to flushDirtyUi() at the end of drainMailbox.
         pub fn updateScrollbarUi(self: *Self, total: usize, offset: usize, len: usize) void {
-            const now = std.time.nanoTimestamp();
-            const min_interval_ns = 16 * std.time.ns_per_ms; // ~60Hz
-
             // Frequency measurement (log_hot_path only).
             if (comptime log_hot_path) {
                 self.scrollbar_update_count += 1;
+                // Count as coalesced if dirty flag is already set (multiple updates in one tick).
+                if (self.dirty.scrollbar) self.scrollbar_skip_count += 1;
+            }
+            self.pending_scrollbar = .{ .total = total, .offset = offset, .len = len };
+            self.dirty.scrollbar = true;
+        }
+
+        /// Apply pending scrollbar values to the XAML ScrollBar control.
+        /// Called once per drainMailbox cycle from flushDirtyUi().
+        fn applyScrollbarUi(self: *Self) void {
+            const sb = self.pending_scrollbar orelse return;
+            self.pending_scrollbar = null;
+
+            if (comptime log_hot_path) {
+                const now = std.time.nanoTimestamp();
                 const log_interval_ns = 1 * std.time.ns_per_s;
                 if (now - self.last_scrollbar_log_ns >= log_interval_ns) {
                     log.info("scrollbar freq: {}/s applied, {}/s coalesced", .{
@@ -2137,21 +2184,7 @@ pub fn Surface(comptime App: type) type {
                 }
             }
 
-            if (now - self.last_scrollbar_update_ns < min_interval_ns) {
-                // Coalesce: save latest values instead of dropping them.
-                self.pending_scrollbar = .{ .total = total, .offset = offset, .len = len };
-                if (comptime log_hot_path) self.scrollbar_skip_count += 1;
-                return;
-            }
-            self.last_scrollbar_update_ns = now;
-
-            // Apply coalesced pending values if available, otherwise use current args.
-            const eff_total = if (self.pending_scrollbar) |p| p.total else total;
-            const eff_offset = if (self.pending_scrollbar) |p| p.offset else offset;
-            const eff_len = if (self.pending_scrollbar) |p| p.len else len;
-            self.pending_scrollbar = null;
-
-            log.debug("updateScrollbarUi: total={} offset={} len={}", .{ eff_total, eff_offset, eff_len });
+            log.debug("applyScrollbarUi: total={} offset={} len={}", .{ sb.total, sb.offset, sb.len });
             _ = self.scroll_bar_insp orelse return;
             self.is_internal_scroll_update = true;
             defer {
@@ -2159,19 +2192,33 @@ pub fn Surface(comptime App: type) type {
             }
 
             const range_base = self.scroll_bar_range_base orelse return;
-            const total_f: f64 = @floatFromInt(eff_total);
-            const offset_f: f64 = @floatFromInt(eff_offset);
-            const len_f: f64 = @floatFromInt(eff_len);
+            const total_f: f64 = @floatFromInt(sb.total);
+            const offset_f: f64 = @floatFromInt(sb.offset);
+            const len_f: f64 = @floatFromInt(sb.len);
             const maximum = if (total_f > len_f) total_f - len_f else 0.0;
 
-            range_base.SetMinimum(0.0) catch {};
-            range_base.SetMaximum(maximum) catch {};
-            range_base.SetValue(offset_f) catch {};
-            range_base.SetLargeChange(len_f) catch {};
-            range_base.SetSmallChange(1.0) catch {};
+            // On first call, set constants and all values unconditionally.
+            if (!self.scrollbar_initialized) {
+                range_base.SetMinimum(0.0) catch {};
+                range_base.SetSmallChange(1.0) catch {};
+                self.scrollbar_initialized = true;
+            }
 
+            // Only call COM setters when the value actually changed.
+            if (maximum != self.last_scrollbar_maximum) {
+                range_base.SetMaximum(maximum) catch {};
+                self.last_scrollbar_maximum = maximum;
+            }
+            if (offset_f != self.last_scrollbar_value) {
+                range_base.SetValue(offset_f) catch {};
+                self.last_scrollbar_value = offset_f;
+            }
             const isb = self.scroll_bar_isb orelse return;
-            isb.SetViewportSize(len_f) catch {};
+            if (len_f != self.last_scrollbar_viewport) {
+                range_base.SetLargeChange(len_f) catch {};
+                isb.SetViewportSize(len_f) catch {};
+                self.last_scrollbar_viewport = len_f;
+            }
 
             if (comptime log_hot_path) {
                 const fe = self.scroll_bar_fe orelse return;
@@ -2309,19 +2356,42 @@ pub fn Surface(comptime App: type) type {
         /// Set the mouse cursor shape.  Deduplicates consecutive calls with
         /// the same shape to avoid redundant LoadCursorW / SetCursor calls and
         /// log spam on the hot mouse-move path.
+        /// Mark mouse shape dirty; actual cursor change is deferred to flushDirtyUi().
         pub fn setMouseShape(self: *Self, shape: terminal.MouseShape) void {
             if (self.last_mouse_shape) |prev| {
                 if (prev == shape) return;
             }
+            self.pending_mouse_shape = shape;
+            self.dirty.mouse_shape = true;
+        }
+
+        /// Apply pending mouse shape change.
+        /// Called once per drainMailbox cycle from flushDirtyUi().
+        fn applyMouseShape(self: *Self) void {
+            const shape = self.pending_mouse_shape orelse return;
+            self.pending_mouse_shape = null;
             self.last_mouse_shape = shape;
 
-            log.debug("Surface.setMouseShape: {s}", .{@tagName(shape)});
+            log.debug("Surface.applyMouseShape: {s}", .{@tagName(shape)});
             const cursor_id = cursorIdForShape(shape);
             const cursor = os.LoadCursorW(null, cursor_id) orelse {
-                log.warn("Surface.setMouseShape: LoadCursorW failed for shape={s}", .{@tagName(shape)});
+                log.warn("Surface.applyMouseShape: LoadCursorW failed for shape={s}", .{@tagName(shape)});
                 return;
             };
             _ = os.SetCursor(cursor);
+        }
+
+        /// Flush all dirty UI flags for this surface.
+        /// Called by App.flushDirtyUi() at the end of each drainMailbox cycle.
+        pub fn flushDirtyUi(self: *Self) void {
+            if (self.dirty.scrollbar) {
+                self.dirty.scrollbar = false;
+                self.applyScrollbarUi();
+            }
+            if (self.dirty.mouse_shape) {
+                self.dirty.mouse_shape = false;
+                self.applyMouseShape();
+            }
         }
 
         pub fn setProgressReport(self: *Self, value: terminal.osc.Command.ProgressReport) void {

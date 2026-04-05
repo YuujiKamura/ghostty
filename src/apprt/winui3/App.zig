@@ -229,9 +229,6 @@ vth_statics: ?*com.IVisualTreeHelperStatics = null,
 /// Uses the Zig-native control plane (replaces Rust DLL).
 control_plane: ?*ControlPlaneNative = null,
 
-/// Timestamp of the last window title update to enable throttling.
-last_title_update_ns: i128 = 0,
-
 /// Cached window title to prevent redundant SetWindowTextW calls.
 window_title: ?[:0]u8 = null,
 
@@ -2135,6 +2132,9 @@ pub fn drainMailbox(self: *App) void {
     };
     log.info("drainMailbox: tick done", .{});
 
+    // Flush batched UI updates accumulated during this tick.
+    self.flushDirtyUi();
+
     // CP push: drainMailbox is called when PTY output arrives (wakeup → WM_USER).
     // Emit "running" status, throttled to at most once per second.
     if (self.control_plane) |cp| {
@@ -2150,6 +2150,21 @@ pub fn drainMailbox(self: *App) void {
     diagnostic_tick_count += 1;
     if (diagnostic_tick_count % diagnostic_interval == 0) {
         self.logDiagnosticSnapshot();
+    }
+}
+
+/// Flush all batched UI updates accumulated during the current drainMailbox cycle.
+/// performAction sets dirty flags and stores pending values; this function
+/// applies them all at once — one scrollbar update, one mouse shape change
+/// per tick, regardless of how many times the core requested each action.
+///
+/// Note: window title is applied immediately in performAction because the
+/// title slice points into the mailbox message which is invalidated before
+/// flushDirtyUi runs.
+fn flushDirtyUi(self: *App) void {
+    const snapshot = self.surfaces_snapshot;
+    for (snapshot) |surface| {
+        surface.flushDirtyUi();
     }
 }
 
@@ -2233,15 +2248,8 @@ fn setTitle(self: *App, title: [:0]const u8) void {
 }
 
 /// Set the window title, using "Ghostty [session-name]" when CP is active.
+/// Redundant calls are deduplicated by setWindowTitle's cached-title check.
 fn setWindowTitleWithSession(self: *App, title: [:0]const u8) void {
-    const now = std.time.nanoTimestamp();
-    const min_interval_ns = 16 * std.time.ns_per_ms; // ~60Hz
-    if (now - self.last_title_update_ns < min_interval_ns) {
-        // Throttle window title updates to prevent UI thread saturation.
-        return;
-    }
-    self.last_title_update_ns = now;
-
     if (self.control_plane) |cp| {
         if (cp.session_name) |sn| {
             const alloc = self.core_app.alloc;
