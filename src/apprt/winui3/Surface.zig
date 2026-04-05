@@ -109,8 +109,15 @@ pub fn Surface(comptime App: type) type {
         /// The IInspectable of the TabViewItem this surface belongs to (for title updates).
         tab_view_item_inspectable: ?*winrt.IInspectable = null,
 
-        /// Current title of the surface, allocated dynamically.
-        title: ?[:0]u8 = null,
+        /// Current title of the surface.
+        /// Points into title_static_buf when short enough, otherwise heap-allocated.
+        title: ?[:0]const u8 = null,
+        /// True when `title` is heap-allocated and must be freed.
+        title_is_heap: bool = false,
+        /// Fixed buffer for short titles (avoids heap allocation on hot path).
+        title_static_buf: [256]u8 = undefined,
+        /// Fixed buffer for UTF-16 conversion of display titles (avoids heap allocation).
+        title_utf16_buf: [512]u16 = undefined,
 
         /// Inner layout grid: col 0 = SwapChainPanel (1*), col 1 = ScrollBar (17px).
         surface_grid: ?*winrt.IInspectable = null,
@@ -144,6 +151,11 @@ pub fn Surface(comptime App: type) type {
 
         /// Timestamp of the last window title update to enable throttling.
         last_title_update_ns: i128 = 0,
+
+        /// Last applied mouse cursor shape for deduplication.
+        last_mouse_shape: ?terminal.MouseShape = null,
+        /// Timestamp of the last bell notification to prevent audio spam.
+        last_bell_ns: i128 = 0,
 
         /// Touch scroll anchor point (set on touch press, cleared on release).
         /// Used to convert touch drag distance into scroll rows, matching
@@ -673,10 +685,14 @@ pub fn Surface(comptime App: type) type {
                 self.tab_view_item_inspectable = null;
             }
 
-            if (self.title) |t| {
-                self.app.core_app.alloc.free(t);
-                self.title = null;
+            if (self.title_is_heap) {
+                if (self.title) |t| {
+                    // title_is_heap means it was allocated with dupeZ; cast away const for free.
+                    self.app.core_app.alloc.free(@constCast(t));
+                }
             }
+            self.title = null;
+            self.title_is_heap = false;
         }
 
         pub fn core(self: *Self) *CoreSurface {
@@ -877,6 +893,8 @@ pub fn Surface(comptime App: type) type {
         }
 
         /// Update the TabViewItem header with the given title.
+        /// Hot-path optimized: uses fixed-size buffers when titles fit,
+        /// falling back to heap allocation for unusually long titles.
         pub fn setTabTitle(self: *Self, title: [:0]const u8) void {
             if (self.title) |old_title| {
                 if (std.mem.eql(u8, old_title, title)) {
@@ -894,13 +912,29 @@ pub fn Surface(comptime App: type) type {
             self.last_title_update_ns = now;
 
             const alloc = self.app.core_app.alloc;
-            if (self.title) |old_title| alloc.free(old_title);
 
-            // Store the title for getTitle() queries (original, without tab ID prefix)
-            self.title = alloc.dupeZ(u8, title) catch {
-                log.warn("setTabTitle: failed to allocate title copy (len={})", .{title.len});
-                return;
-            };
+            // Free old heap-allocated title if any.
+            if (self.title_is_heap) {
+                if (self.title) |old_title| alloc.free(@constCast(old_title));
+            }
+
+            // Store the title for getTitle() queries (original, without tab ID prefix).
+            // Use fixed buffer when possible to avoid heap allocation on hot path.
+            if (title.len < self.title_static_buf.len) {
+                @memcpy(self.title_static_buf[0..title.len], title[0..title.len]);
+                self.title_static_buf[title.len] = 0;
+                self.title = self.title_static_buf[0..title.len :0];
+                self.title_is_heap = false;
+            } else {
+                // Title too long for static buffer; fall back to heap allocation.
+                self.title = alloc.dupeZ(u8, title) catch {
+                    log.warn("setTabTitle: failed to allocate title copy (len={})", .{title.len});
+                    self.title = null;
+                    self.title_is_heap = false;
+                    return;
+                };
+                self.title_is_heap = true;
+            }
 
             // Build display title: prepend "PID:tab_id" when control plane is active.
             const cp_active = self.app.control_plane != null;
@@ -913,31 +947,59 @@ pub fn Surface(comptime App: type) type {
             const display_owned = cp_active and display_title.ptr != title.ptr;
             defer if (display_owned) alloc.free(display_title);
 
-            // Actually update the TabViewItem UI using WinRT PropertyValue
+            // Actually update the TabViewItem UI using WinRT PropertyValue.
+            // Use fixed UTF-16 buffer when possible to avoid heap allocation.
             if (self.tab_view_item_inspectable) |tvi_insp| {
                 if (tvi_insp.queryInterface(com.ITabViewItem)) |tvi| {
                     defer tvi.release();
-                    const utf16 = std.unicode.utf8ToUtf16LeAlloc(alloc, display_title) catch {
-                        log.warn("setTabTitle: utf8ToUtf16LeAlloc failed", .{});
-                        return;
-                    };
-                    defer alloc.free(utf16);
-                    if (winrt.createHString(utf16)) |hstr| {
-                        defer winrt.deleteHString(hstr);
-                        const util = @import("util.zig");
-                        if (util.boxString(hstr)) |boxed| {
-                            defer _ = boxed.release();
-                            _ = tvi.SetHeader(boxed) catch |err| {
-                                log.warn("setTabTitle: putHeader failed: {}", .{err});
-                            };
+
+                    // Try stack buffer first; fall back to heap for long titles.
+                    const utf16_result = self.convertDisplayTitleToUtf16(display_title, alloc);
+                    const utf16_slice = utf16_result.slice;
+                    const utf16_heap = utf16_result.heap_owned;
+                    defer if (utf16_heap) |h| alloc.free(h);
+
+                    if (utf16_slice) |utf16| {
+                        if (winrt.createHString(utf16)) |hstr| {
+                            defer winrt.deleteHString(hstr);
+                            const util = @import("util.zig");
+                            if (util.boxString(hstr)) |boxed| {
+                                defer _ = boxed.release();
+                                _ = tvi.SetHeader(boxed) catch |err| {
+                                    log.warn("setTabTitle: putHeader failed: {}", .{err});
+                                };
+                            } else |err| {
+                                log.warn("setTabTitle: boxString failed: {}", .{err});
+                            }
                         } else |err| {
-                            log.warn("setTabTitle: boxString failed: {}", .{err});
+                            log.warn("setTabTitle: createHString failed: {}", .{err});
                         }
-                    } else |err| {
-                        log.warn("setTabTitle: createHString failed: {}", .{err});
                     }
                 } else |_| {}
             }
+        }
+
+        /// Convert a display title to UTF-16, preferring the fixed buffer.
+        /// Returns the UTF-16 slice and an optional heap allocation to free.
+        fn convertDisplayTitleToUtf16(
+            self: *Self,
+            display_title: [:0]const u8,
+            alloc: std.mem.Allocator,
+        ) struct { slice: ?[]const u16, heap_owned: ?[]u16 } {
+            // Try fixed buffer first (covers the vast majority of titles).
+            if (display_title.len <= self.title_utf16_buf.len) {
+                const n = std.unicode.utf8ToUtf16Le(&self.title_utf16_buf, display_title) catch {
+                    log.warn("setTabTitle: utf8ToUtf16Le failed", .{});
+                    return .{ .slice = null, .heap_owned = null };
+                };
+                return .{ .slice = self.title_utf16_buf[0..n], .heap_owned = null };
+            }
+            // Fall back to heap allocation for very long titles.
+            const heap = std.unicode.utf8ToUtf16LeAlloc(alloc, display_title) catch {
+                log.warn("setTabTitle: utf8ToUtf16LeAlloc failed", .{});
+                return .{ .slice = null, .heap_owned = null };
+            };
+            return .{ .slice = heap, .heap_owned = heap };
         }
 
         // --- Event handlers called from WndProc ---
@@ -2244,9 +2306,16 @@ pub fn Surface(comptime App: type) type {
 
         // --- Parity Audit / Apprt interface methods ---
 
+        /// Set the mouse cursor shape.  Deduplicates consecutive calls with
+        /// the same shape to avoid redundant LoadCursorW / SetCursor calls and
+        /// log spam on the hot mouse-move path.
         pub fn setMouseShape(self: *Self, shape: terminal.MouseShape) void {
-            _ = self;
-            log.info("Surface.setMouseShape: {s}", .{@tagName(shape)});
+            if (self.last_mouse_shape) |prev| {
+                if (prev == shape) return;
+            }
+            self.last_mouse_shape = shape;
+
+            log.debug("Surface.setMouseShape: {s}", .{@tagName(shape)});
             const cursor_id = cursorIdForShape(shape);
             const cursor = os.LoadCursorW(null, cursor_id) orelse {
                 log.warn("Surface.setMouseShape: LoadCursorW failed for shape={s}", .{@tagName(shape)});
@@ -2277,13 +2346,19 @@ pub fn Surface(comptime App: type) type {
             return true;
         }
 
+        /// Ring the audible/visual bell.  Throttled to at most once per 100ms
+        /// so rapid \a sequences don't saturate the audio subsystem while still
+        /// keeping the notification perceptible.
         pub fn setBellRinging(self: *Self, value: bool) void {
-            _ = self;
-            if (value) {
-                log.info("Surface.setBellRinging: Ringing visual/audio bell", .{});
-                // Win32 MessageBeep or Visual flash
-                _ = os.MessageBeep(os.MB_OK);
-            }
+            if (!value) return;
+
+            const now = std.time.nanoTimestamp();
+            const min_interval_ns = 100 * std.time.ns_per_ms;
+            if (now - self.last_bell_ns < min_interval_ns) return;
+            self.last_bell_ns = now;
+
+            log.info("Surface.setBellRinging: Ringing visual/audio bell", .{});
+            _ = os.MessageBeep(os.MB_OK);
         }
 
         /// Compute a fraction [0.0, 1.0] from the supplied progress, which is clamped

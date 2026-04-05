@@ -520,9 +520,9 @@ pub const ControlPlane = struct {
     }
 
     // ── Provider callbacks ──
-    // Called from the pipe server thread. Read callbacks use SendMessageW
-    // (WM_APP_CP_QUERY) to execute on the UI thread, avoiding data races
-    // with App state (Issue #139 H1 fix).
+    // Called from the pipe server thread. Read callbacks acquire
+    // renderer_state.mutex directly (no SendMessageW round-trip).
+    // Mutations use PostMessageW to the UI thread (async, no deadlock).
 
     /// Atomic cmd_id counter for ACK tracking.
     var next_cmd_id: u32 = 1;
