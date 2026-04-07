@@ -51,14 +51,14 @@ jobs:
         run: |
           python xaml/prebuilt/manage_manifest.py --verify
 
-      - name: WinUI3 runtime contract (strict)
-        shell: pwsh
-        run: |
-          $env:GHOSTTY_WINUI3_PREBUILT_ONLY = "1"
-          ./scripts/test-winui3-runtime-contract.ps1 -Strict
-
       - name: Light Build Check (Prebuilt Mode)
         shell: pwsh
         run: |
           $env:GHOSTTY_WINUI3_PREBUILT_ONLY = "1"
           bash ./build-winui3.sh --release=fast -Dcpu=baseline
+
+      - name: WinUI3 runtime contract (strict)
+        shell: pwsh
+        run: |
+          $env:GHOSTTY_WINUI3_PREBUILT_ONLY = "1"
+          ./scripts/test-winui3-runtime-contract.ps1 -Strict
