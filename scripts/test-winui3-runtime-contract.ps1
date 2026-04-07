@@ -17,7 +17,7 @@ if ($isCI) {
     Write-Host "CI environment detected: skipping GUI smoke test, running static checks only."
 
     # Static check: verify built artifacts contain required DLLs
-    $binDirs = @("zig-out-winui3/bin", "zig-out-winui3-staging/bin") | ForEach-Object { Join-Path $repoRoot $_ } | Where-Object { Test-Path $_ }
+    $binDirs = @(@("zig-out-winui3/bin", "zig-out-winui3-staging/bin") | ForEach-Object { Join-Path $repoRoot $_ } | Where-Object { Test-Path $_ })
     if ($binDirs.Count -eq 0) {
         throw "Contract check failed: no build output directory found (zig-out-winui3/bin or staging)."
     }
