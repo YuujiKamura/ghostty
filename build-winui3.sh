@@ -91,25 +91,29 @@ pick_xaml_asset_dirs() {
 }
 
 check_prebuilt_stale() {
-    # If python3 is available, use manifest-based verification.
-    if command -v python >/dev/null 2>&1; then
-        if python xaml/prebuilt/manage_manifest.py --verify >/dev/null 2>&1; then
-            return 1 # Not stale
-        else
-            return 0 # Stale
-        fi
-    fi
-
-    # Fallback to simple timestamp check if python3 is missing.
     local pri_file="$1"
     local xbf_file="$2"
-    if find "$XAML_DIR" -type f \( -name "*.xaml" -o -name "*.resw" -o -name "*.csproj" \) -newer "$pri_file" -print -quit 2>/dev/null | grep -q .; then
-        return 0
+
+    # Always check XAML source timestamps vs prebuilt XBF — this is the ground truth.
+    if find "$XAML_DIR" -maxdepth 1 -type f \( -name "*.xaml" -o -name "*.resw" -o -name "*.csproj" \) -newer "$xbf_file" -print -quit 2>/dev/null | grep -q .; then
+        return 0 # Stale: XAML source is newer than XBF
     fi
-    if find "$XAML_DIR" -type f \( -name "*.xaml" -o -name "*.resw" -o -name "*.csproj" \) -newer "$xbf_file" -print -quit 2>/dev/null | grep -q .; then
-        return 0
-    fi
-    return 1
+
+    # Also check if xaml/obj/ has a different-sized XBF (rebuilt but not copied to prebuilt).
+    for candidate_dir in \
+        "$XAML_DIR/obj/x64/Debug/net9.0-windows10.0.22621.0" \
+        "$XAML_DIR/obj/x64/Release/net9.0-windows10.0.22621.0"; do
+        if [ -f "$candidate_dir/TabViewRoot.xbf" ]; then
+            local prebuilt_size obj_size
+            prebuilt_size="$(wc -c < "$XAML_PREBUILT/TabViewRoot.xbf" 2>/dev/null || echo 0)"
+            obj_size="$(wc -c < "$candidate_dir/TabViewRoot.xbf" 2>/dev/null || echo 0)"
+            if [ "$prebuilt_size" != "$obj_size" ]; then
+                return 0 # Stale: obj/ has different XBF
+            fi
+        fi
+    done
+
+    return 1 # Not stale
 }
 
 # Step 1: Build XAML (XBF + PRI) via MSBuild if xaml/ project exists
