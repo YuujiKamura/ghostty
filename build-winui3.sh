@@ -193,7 +193,14 @@ if pick_xaml_asset_dirs; then
             echo "[build-winui3] STALE XBF detected — auto-healing from $HEAL_SRC"
             cp -f "$HEAL_SRC"/*.xbf "$XAML_PREBUILT/" 2>/dev/null
             cp -f "$HEAL_SRC"/*.xbf "$PREFIX/bin/" 2>/dev/null
-            echo "[build-winui3] XBF auto-healed. Prebuilt updated."
+            # Update manifest to match new XBFs (CI verifies hash/size consistency).
+            if command -v python >/dev/null 2>&1 && [ -f "$XAML_PREBUILT/manage_manifest.py" ]; then
+                python "$XAML_PREBUILT/manage_manifest.py" --update >/dev/null 2>&1 && \
+                    echo "[build-winui3] XBF auto-healed + manifest updated." || \
+                    echo "[build-winui3] XBF auto-healed (manifest update failed, run manage_manifest.py --update manually)."
+            else
+                echo "[build-winui3] XBF auto-healed. Run 'python xaml/prebuilt/manage_manifest.py --update' to sync manifest."
+            fi
         else
             echo "[build-winui3] ERROR: prebuilt XBF/PRI are stale and no fresh build found in xaml/obj/"
             echo "[build-winui3] Fix: run './build-winui3.sh --release --update-prebuilt' with MSBuild,"
