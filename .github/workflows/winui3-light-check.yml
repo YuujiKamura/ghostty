@@ -62,3 +62,8 @@ jobs:
         run: |
           $env:GHOSTTY_WINUI3_PREBUILT_ONLY = "1"
           ./scripts/test-winui3-runtime-contract.ps1 -Strict
+
+      - name: Smoke Test (startup → init_complete)
+        shell: pwsh
+        run: |
+          ./scripts/winui3-smoke-test.ps1 -ExePath zig-out-winui3/bin/ghostty.exe -TimeoutSec 30
