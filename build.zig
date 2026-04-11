@@ -259,7 +259,13 @@ pub fn build(b: *std.Build) !void {
 
         const has_bootstrap = if (std.fs.accessAbsolute(bootstrap_dll_path, .{})) |_| true else |_| false;
         if (has_bootstrap) {
-            const src: std.Build.LazyPath = .{ .cwd_relative = bootstrap_dll_path };
+            const build_root = b.build_root.path orelse ".";
+            const bootstrap_rel = std.fs.path.relative(
+                b.allocator,
+                build_root,
+                bootstrap_dll_path,
+            ) catch unreachable;
+            const src: std.Build.LazyPath = .{ .cwd_relative = bootstrap_rel };
             const cp = b.addInstallBinFile(src, "Microsoft.WindowsAppRuntime.Bootstrap.dll");
             b.getInstallStep().dependOn(&cp.step);
         } else {
@@ -271,11 +277,11 @@ pub fn build(b: *std.Build) !void {
             "pwsh",
             "-NoProfile",
             "-File",
-            b.pathFromRoot("scripts/verify-vtable-manifest.ps1"),
+            "scripts/verify-vtable-manifest.ps1",
             "-ComGenPath",
-            b.pathFromRoot("src/apprt/winui3/com_generated.zig"),
+            "src/apprt/winui3/com_generated.zig",
             "-ManifestPath",
-            b.pathFromRoot("contracts/vtable_manifest.json"),
+            "contracts/vtable_manifest.json",
         });
         const check_contracts_step = b.step("check-contracts", "Verify vtable manifest contracts");
         check_contracts_step.dependOn(&vtable_cmd.step);
@@ -290,7 +296,7 @@ pub fn build(b: *std.Build) !void {
                 "-ExecutionPolicy",
                 "Bypass",
                 "-File",
-                b.pathFromRoot("tests/winui3/run-all-tests.ps1"),
+                "tests/winui3/run-all-tests.ps1",
             });
             run_all.step.dependOn(&exe_install.step);
 
@@ -319,7 +325,7 @@ pub fn build(b: *std.Build) !void {
                     "-ExecutionPolicy",
                     "Bypass",
                     "-File",
-                    b.pathFromRoot("tests/winui3/run-single-test.ps1"),
+                    "tests/winui3/run-single-test.ps1",
                     "-TestName",
                     entry[1],
                 });

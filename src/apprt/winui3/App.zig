@@ -285,7 +285,7 @@ pub fn init(
 
     // Allocate a debug console so log output is visible for GUI apps.
     os.attachDebugConsole();
-    log.debug("App.init: after attachDebugConsole", .{});
+    log.info("App.init: after attachDebugConsole", .{});
 
     // WT: BufferedPaintInit() — required once before BeginBufferedPaint in WM_PAINT.
     _ = os.BufferedPaintInit();
@@ -293,13 +293,13 @@ pub fn init(
     // Install a Vectored Exception Handler to capture details of
     // STATUS_STOWED_EXCEPTION before the process terminates.
     _ = os.AddVectoredExceptionHandler(1, &stowedExceptionHandler);
-    log.debug("App.init: after VEH install", .{});
+    log.info("App.init: after VEH install", .{});
 
     // Request 1ms timer resolution for smooth animation timing.
     _ = os.timeBeginPeriod(1);
 
     logPackageIdentity();
-    log.debug("App.init: after logPackageIdentity", .{});
+    log.info("App.init: after logPackageIdentity", .{});
 
     // Step 1: Bootstrap the Windows App SDK runtime.
     bootstrap.init() catch |err| {
@@ -307,7 +307,7 @@ pub fn init(
         log.err("Windows App SDK bootstrap failed: {}", .{err});
         return error.AppInitFailed;
     };
-    log.debug("App.init: after bootstrap.init", .{});
+    log.info("App.init: after bootstrap.init", .{});
 
     // Step 2: Initialize WinRT.
     winrt.hrCheck(winrt.RoInitialize(winrt.RO_INIT_SINGLETHREADED)) catch |err| {
@@ -315,7 +315,7 @@ pub fn init(
         log.err("RoInitialize failed: {}", .{err});
         return error.AppInitFailed;
     };
-    log.debug("App.init: after RoInitialize", .{});
+    log.info("App.init: after RoInitialize", .{});
 
     // Step 3: Create a DispatcherQueue for the current thread.
     // This is required before creating any XAML objects.
@@ -325,7 +325,7 @@ pub fn init(
         log.err("CreateDispatcherQueueController failed: {}", .{err});
         return error.AppInitFailed;
     };
-    log.debug("App.init: after DispatcherQueue", .{});
+    log.info("App.init: after DispatcherQueue", .{});
 
     // IDispatcherQueue QI is deferred to initXaml — XAML must be initialized first.
 

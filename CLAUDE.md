@@ -14,6 +14,27 @@
 ## ハードコードパス禁止
 ユーザープロファイルパス、ホームディレクトリ、ドライブレター付き絶対パスをコードに書くな。動的解決（相対パス、環境変数展開等）を使え。
 
+## 生成物が古いときはジェネレーター側を疑え（最頻出バグ）
+XBF, PRI, com_generated.zig などの生成物と XAML/WinMD ソースの乖離は **最も頻繁に起きるバグ** である。
+ランタイムエラー（特に WinRTFailed, RPC_E_WRONG_THREAD, FindName null）が出たら、
+コードを疑う **前に** 以下の機械的チェックを実行しろ:
+
+```bash
+# 1. prebuilt XBF のタイムスタンプとXAMLソースの最終変更コミットを比較
+ls -la xaml/prebuilt/*.xbf
+git log --oneline -1 -- xaml/TabViewRoot.xaml xaml/Surface.xaml
+
+# 2. XBF のサイズが XAML の要素数と釣り合ってるか（古いと小さい）
+wc -c xaml/prebuilt/*.xbf xaml/obj/x64/Debug/net9.0-windows10.0.22621.0/*.xbf
+
+# 3. 不一致なら再生成コピー（MSBuild 済みの obj/ から）
+cp xaml/obj/x64/Debug/net9.0-windows10.0.22621.0/*.xbf xaml/prebuilt/
+```
+
+- XBF/PRI 再ビルド: `./build-winui3.sh --release --update-prebuilt` または `zig-xaml-xbf`
+- com_generated.zig: `win-zig-bindgen` で再生成
+- **不一致なら生成し直せ。コード側をいじるな**
+
 ## COM バインディング生成チェーン
 
 ### com_generated.zig は手書き禁止

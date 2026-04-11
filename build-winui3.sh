@@ -7,6 +7,17 @@ PREFIX_STAGING="zig-out-winui3-staging"
 PREFIX_BUILD="zig-out-winui3-build"
 PREFIX="$PREFIX_STABLE"
 XAML_DIR="xaml"
+
+# Zig 0.15.2 RunStep.convertPathArg() asserts relative paths, which fails when
+# the global cache (F:\) and project (C:\) are on different Windows drives.
+# Force global cache onto the same drive as the project to avoid cross-drive panics.
+PROJECT_DRIVE="$(cd "$(dirname "$0")" && pwd -W 2>/dev/null | cut -c1 || echo C)"
+CACHE_DRIVE="$(echo "${ZIG_GLOBAL_CACHE_DIR:-}" | cut -c1)"
+if [ -n "$ZIG_GLOBAL_CACHE_DIR" ] && [ "$CACHE_DRIVE" != "$PROJECT_DRIVE" ]; then
+    export ZIG_GLOBAL_CACHE_DIR="${PROJECT_DRIVE}:/Users/${USERNAME:-$USER}/.zig-cache"
+fi
+: "${ZIG_GLOBAL_CACHE_DIR:=${PROJECT_DRIVE}:/Users/${USERNAME:-$USER}/.zig-cache}"
+export ZIG_GLOBAL_CACHE_DIR
 PREBUILT_ONLY="${GHOSTTY_WINUI3_PREBUILT_ONLY:-0}"
 PREBUILT_STRICT="${GHOSTTY_WINUI3_PREBUILT_STRICT:-0}"
 
@@ -156,16 +167,39 @@ if pick_xaml_asset_dirs; then
     cp -f "$COPY_OBJ"/*.xbf "$PREFIX/bin/" 2>/dev/null && echo "[build-winui3] Copied XBF files ($COPY_LABEL)"
     cp -f "$COPY_BIN"/ghostty.pri "$PREFIX/bin/resources.pri" 2>/dev/null && echo "[build-winui3] Copied PRI file ($COPY_LABEL)"
 
-    # Stale detection for prebuilt mode / no-MSBuild mode.
+    # Stale detection — auto-heal or fail hard.
     xbf_sample="$(ls -1 "$COPY_OBJ"/*.xbf 2>/dev/null | head -n1 || true)"
     pri_file="$COPY_BIN/ghostty.pri"
     if [ -n "$xbf_sample" ] && [ -f "$pri_file" ] && check_prebuilt_stale "$pri_file" "$xbf_sample"; then
-        msg="[build-winui3] WARNING: prebuilt XBF/PRI may be stale against current xaml/ sources"
-        if [ "$PREBUILT_STRICT" = "1" ]; then
-            echo "$msg (strict mode: failing)"
+        # Try auto-heal: if xaml/obj/ has XBFs with different content (size), use them.
+        HEAL_SRC=""
+        prebuilt_size="$(wc -c < "$XAML_PREBUILT/TabViewRoot.xbf" 2>/dev/null || echo 0)"
+        for candidate_dir in \
+            "$XAML_DIR/obj/x64/Debug/net9.0-windows10.0.22621.0" \
+            "$XAML_DIR/obj/x64/Release/net9.0-windows10.0.22621.0" \
+            "$XAML_DIR/bin/x64/Debug/net9.0-windows10.0.22621.0/ghostty" \
+            "$XAML_DIR/bin/x64/Release/net9.0-windows10.0.22621.0/ghostty"; do
+            candidate_xbf="$candidate_dir/TabViewRoot.xbf"
+            if [ -f "$candidate_xbf" ]; then
+                candidate_size="$(wc -c < "$candidate_xbf" 2>/dev/null || echo 0)"
+                if [ "$candidate_size" -ne "$prebuilt_size" ] || [ "$candidate_size" -gt "$prebuilt_size" ]; then
+                    HEAL_SRC="$candidate_dir"
+                    break
+                fi
+            fi
+        done
+
+        if [ -n "$HEAL_SRC" ]; then
+            echo "[build-winui3] STALE XBF detected — auto-healing from $HEAL_SRC"
+            cp -f "$HEAL_SRC"/*.xbf "$XAML_PREBUILT/" 2>/dev/null
+            cp -f "$HEAL_SRC"/*.xbf "$PREFIX/bin/" 2>/dev/null
+            echo "[build-winui3] XBF auto-healed. Prebuilt updated."
+        else
+            echo "[build-winui3] ERROR: prebuilt XBF/PRI are stale and no fresh build found in xaml/obj/"
+            echo "[build-winui3] Fix: run './build-winui3.sh --release --update-prebuilt' with MSBuild,"
+            echo "[build-winui3]   or copy fresh XBFs from xaml/obj/*/  to xaml/prebuilt/"
             exit 2
         fi
-        echo "$msg"
     fi
 
     # Step 4: Update prebuilt if requested (Developer mode)
