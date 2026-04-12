@@ -1,51 +1,75 @@
 # Test Audit Report — ghostty-win
 
-Generated: 2026-03-27
+最終更新: 2026-03-27
+次回更新期限: 2026-04-26
+
+> **注意**: 最終更新から 30 日以上経過している場合、このドキュメントは陳腐化している可能性があります。
+> 「更新手順」セクションに従って状態を再確認してください。
+
+## 0. 更新手順
+
+### 静的テストの実行と記録
+
+```powershell
+# self_diagnosis/ の静的テストを一括実行
+Get-ChildItem tests/self_diagnosis/test_*.ps1 | ForEach-Object {
+    $result = pwsh -File $_.FullName 2>&1
+    $status = if ($LASTEXITCODE -eq 0) { "パス" } else { "フェイル" }
+    Write-Host "$($_.Name): $status"
+}
+```
+
+### 更新後の記録方法
+
+1. 上記コマンドを実行する
+2. 各テストの結果を「テスト一覧」の「現在の状態」列に記録する
+3. 先頭の「最終更新」日付を更新する
+4. 「推奨アクション」セクションを見直し、解決済みの問題を削除する
 
 ## 1. テスト一覧
 
 ### tests/self_diagnosis/ (20 files)
 
-| # | ファイル | 種別 | テスト対象 | 関連Issue |
-|---|---------|------|-----------|----------|
-| 1 | cursor_test.ps1 | 手動 | カーソル位置の目視確認 | — |
-| 2 | diagnose.ps1 | 統合 | CP全機能(PING/STATE/TAIL/INPUT)、並列PING、メモリ、耐久300s | — |
-| 3 | test_bg_color_blend.ps1 | 静的 | HLSL bg_color alpha blend簡素化（global_bgとの合成） | — |
-| 4 | test_crd_ime_passthrough.ps1 | 静的+RT | VK_OEM_CLEAR(0xFF)のIMEパススルー（CRD対応） | #133 |
-| 5 | test_cursor.py | 手動 | カーソル移動の目視確認（Python版） | — |
-| 6 | test_cursor_blink.ps1 | RT | アイドル時のカーソルブリンク（CPU時間計測） | #131 |
-| 7 | test_cursor_color_override.ps1 | 静的 | CPUサイドカーソルカラーオーバーライド削除の回帰防止 | #133 |
-| 8 | test_cursor_d3d11_inversion.ps1 | 静的 | D3D11シェーダーによるカーソルテキスト反転（cursor_pos/color/wide） | #130 |
-| 9 | test_diagnose_ps1_syntax.ps1 | 静的 | diagnose.ps1他の構文エラー検出、$Pid→$ProcessIdリネーム | — |
-| 10 | test_eraseline_firstchar.ps1 | RT | 履歴リコール時の先頭文字消失（CP INPUT→TAIL検証） | #133 |
-| 11 | test_ime_char_handler.ps1 | 静的+RT | WM_IME_CHAR(0x0286)ハンドラ存在＋TSFインジェクト | #133 |
-| 12 | test_lefthook_config.ps1 | 静的 | lefthook設定（zig-fmt、vtable-manifest、pre-push） | — |
-| 13 | test_preedit_dirty.ps1 | 静的 | preedit dirtyフラグのコード内存在確認 | #133 |
-| 14 | test_resize_crash.ps1 | RT | リサイズ中のクラッシュ（SetWindowPos×50回） | #86 |
-| 15 | test_surface_refactor.ps1 | 静的 | Surface.zig init/deinit分割の関数存在確認 | — |
-| 16 | test_tab_closetab_fix.ps1 | 静的 | closeTabのCOM indexOf使用、stale indexOfScalar排除 | #129 |
-| 17 | test_text_selection.ps1 | 静的+RT | XAML CapturePointer使用、Win32 SetCapture不使用 | #132 |
-| 18 | test_touch_scroll.ps1 | 静的 | PointerDeviceType分岐、touch_anchorフィールド | #134 |
-| 19 | test_tsf_setfocus_null_guard.ps1 | 静的 | TSF focus() nullガード、WM_ACTIVATE移行 | #135 |
-| 20 | test_zig_native_cp.ps1 | 静的 | Zig-native CP移行完了（Rust DLL参照なし、named pipe IPC） | — |
+| # | ファイル | 種別 | テスト対象 | 関連Issue | 現在の状態 |
+|---|---------|------|-----------|----------|-----------|
+| 1 | cursor_test.ps1 | 手動 | カーソル位置の目視確認 | — | 未実行（手動） |
+| 2 | diagnose.ps1 | 統合 | CP全機能(PING/STATE/TAIL/INPUT)、並列PING、メモリ、耐久300s | — | 未実行（要Ghostty起動） |
+| 3 | test_bg_color_blend.ps1 | 静的 | HLSL bg_color alpha blend簡素化（global_bgとの合成） | — | 未実行（静的） |
+| 4 | test_crd_ime_passthrough.ps1 | 静的+RT | VK_OEM_CLEAR(0xFF)のIMEパススルー（CRD対応） | #133 | 未実行（静的+RT） |
+| 5 | test_cursor.py | 手動 | カーソル移動の目視確認（Python版） | — | 未実行（手動） |
+| 6 | test_cursor_blink.ps1 | RT | アイドル時のカーソルブリンク（CPU時間計測） | #131 | 未実行（要Ghostty起動） |
+| 7 | test_cursor_color_override.ps1 | 静的 | CPUサイドカーソルカラーオーバーライド削除の回帰防止 | #133 | 未実行（静的） |
+| 8 | test_cursor_d3d11_inversion.ps1 | 静的 | D3D11シェーダーによるカーソルテキスト反転（cursor_pos/color/wide） | #130 | 未実行（静的） |
+| 9 | test_diagnose_ps1_syntax.ps1 | 静的 | diagnose.ps1他の構文エラー検出、$Pid→$ProcessIdリネーム | — | 未実行（静的） |
+| 10 | test_eraseline_firstchar.ps1 | RT | 履歴リコール時の先頭文字消失（CP INPUT→TAIL検証） | #133 | 未実行（要Ghostty起動） |
+| 11 | test_ime_char_handler.ps1 | 静的+RT | WM_IME_CHAR(0x0286)ハンドラ存在＋TSFインジェクト | #133 | 未実行（静的+RT） |
+| 12 | test_lefthook_config.ps1 | 静的 | lefthook設定（zig-fmt、vtable-manifest、pre-push） | — | 未実行（静的） |
+| 13 | test_preedit_dirty.ps1 | 静的 | preedit dirtyフラグのコード内存在確認 | #133 | 未実行（静的） |
+| 14 | test_resize_crash.ps1 | RT | リサイズ中のクラッシュ（SetWindowPos×50回） | #86 | 未実行（要Ghostty起動） |
+| 15 | test_surface_refactor.ps1 | 静的 | Surface.zig init/deinit分割の関数存在確認 | — | 未実行（静的） |
+| 16 | test_tab_closetab_fix.ps1 | 静的 | closeTabのCOM indexOf使用、stale indexOfScalar排除 | #129 | 未実行（静的） |
+| 17 | test_text_selection.ps1 | 静的+RT | XAML CapturePointer使用、Win32 SetCapture不使用 | #132 | 未実行（静的+RT） |
+| 18 | test_touch_scroll.ps1 | 静的 | PointerDeviceType分岐、touch_anchorフィールド | #134 | 未実行（静的） |
+| 19 | test_tsf_setfocus_null_guard.ps1 | 静的 | TSF focus() nullガード、WM_ACTIVATE移行 | #135 | 未実行（静的） |
+| 20 | test_zig_native_cp.ps1 | 静的 | Zig-native CP移行完了（Rust DLL参照なし、named pipe IPC） | — | 未実行（静的） |
 
 ### tests/winui3/ (13 test files + 5 runners + 1 helper)
 
-| # | ファイル | Phase | テスト対象 | CP必要 | UIA必要 |
-|---|---------|-------|-----------|--------|---------|
-| 1 | test-01-lifecycle.ps1 | 1 | 起動→XAML init→シャットダウン（ログ検証） | No | No |
-| 2 | test-02a-tabview.ps1 | 2 | TabView/TabItem存在（UIA） | No | Yes |
-| 3 | test-02b-ime-overlay.ps1 | 2 | GhosttyInputOverlay HWND（WS_CHILD+VISIBLE+TRANSPARENT） | No | No |
-| 4 | test-02c-drag-bar.ps1 | 2 | GhosttyDragBar DPIスケーリング | No | No |
-| 5 | test-02d-control-plane.ps1 | 2b | CP smoke test (agent-ctl) | Yes | No |
-| 6 | test-02e-agent-roundtrip.ps1 | 2b | claude -p PINEAPPLE 実行→バッファ確認 | Yes | No |
-| 7 | test-03-window-ops.ps1 | 2 | 移動/リサイズ/最大化/最小化/復元 | No | Yes |
-| 8 | test-04-keyboard.ps1 | 2b | echo via CP→バッファ検証 | Yes | No |
-| 9 | test-05-ghost-demo.ps1 | 3 | D3D11 Present、play.py 235フレーム | Yes | No |
-| 10 | test-06-ime-input.ps1 | 2b | 日本語UTF-8ラウンドトリップ、IME composing state | Yes | No |
-| 11 | test-07-tsf-ime.ps1 | 2b | ESC[TSF:インジェクション、GotFocus再関連付け | Yes | No |
-| 12 | test-08-profile-menu.ps1 | 独立 | SplitButton+MenuFlyoutItem（プロファイル一覧） | No | Yes |
-| 13 | tsf-inject.sh | ユーティリティ | bash経由ESCバイト送信（PS文字化け回避） | — | — |
+| # | ファイル | Phase | テスト対象 | CP必要 | UIA必要 | 現在の状態 |
+|---|---------|-------|-----------|--------|---------|-----------|
+| 1 | test-01-lifecycle.ps1 | 1 | 起動→XAML init→シャットダウン（ログ検証） | No | No | 未実行（要Ghostty起動） |
+| 2 | test-02a-tabview.ps1 | 2 | TabView/TabItem存在（UIA） | No | Yes | 未実行（要Ghostty起動） |
+| 3 | test-02b-ime-overlay.ps1 | 2 | GhosttyInputOverlay HWND（WS_CHILD+VISIBLE+TRANSPARENT） | No | No | 未実行（要Ghostty起動） |
+| 4 | test-02c-drag-bar.ps1 | 2 | GhosttyDragBar DPIスケーリング | No | No | 未実行（要Ghostty起動） |
+| 5 | test-02d-control-plane.ps1 | 2b | CP smoke test (agent-ctl) | Yes | No | 環境依存（agent-deck 要インストール） |
+| 6 | test-02e-agent-roundtrip.ps1 | 2b | claude -p PINEAPPLE 実行→バッファ確認 | Yes | No | 環境依存（agent-deck 要インストール） |
+| 7 | test-03-window-ops.ps1 | 2 | 移動/リサイズ/最大化/最小化/復元 | No | Yes | 未実行（要Ghostty起動） |
+| 8 | test-04-keyboard.ps1 | 2b | echo via CP→バッファ検証 | Yes | No | 環境依存（agent-deck 要インストール） |
+| 9 | test-05-ghost-demo.ps1 | 3 | D3D11 Present、play.py 235フレーム | Yes | No | 環境依存（Python + agent-deck 要インストール） |
+| 10 | test-06-ime-input.ps1 | 2b | 日本語UTF-8ラウンドトリップ、IME composing state | Yes | No | 環境依存（agent-deck 要インストール） |
+| 11 | test-07-tsf-ime.ps1 | 2b | ESC[TSF:インジェクション、GotFocus再関連付け | Yes | No | 環境依存（MSYS2 bash + agent-deck 要インストール） |
+| 12 | test-08-profile-menu.ps1 | 独立 | SplitButton+MenuFlyoutItem（プロファイル一覧） | No | Yes | 未実行（要Ghostty起動） |
+| 13 | tsf-inject.sh | ユーティリティ | bash経由ESCバイト送信（PS文字化け回避） | — | — | ユーティリティ（直接実行不要） |
 
 ## 2. 重複・矛盾の検出
 

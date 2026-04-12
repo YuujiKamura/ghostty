@@ -1,5 +1,10 @@
 # WinUI3 Foundation Harness Implementation Plan
 
+---
+最終更新: 2026-04-12
+完了: 1/3 タスク
+---
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** WinUI3 のクラッシュ切り分けを場当たり編集なしで再現できる「基礎プロジェクト」を確立する。
@@ -10,7 +15,8 @@
 
 ---
 
-### Task 1: 設定を外部化する
+### Task 1: 設定を外部化する [ ]
+<!-- debug_harness.zig が存在しないため未着手 -->
 
 **Files:**
 - Create: `src/apprt/winui3/debug_harness.zig`
@@ -28,7 +34,8 @@
 **Step 4: initXaml の分岐を設定参照へ変更**
 - ハードコード定数をすべて `self.debug_cfg.*` に置き換える。
 
-### Task 2: 実験実行を自動化する
+### Task 2: 実験実行を自動化する [ ]
+<!-- winui3-foundation-matrix.ps1 が存在しないため未着手 -->
 
 **Files:**
 - Create: `scripts/winui3-foundation-matrix.ps1`
@@ -42,7 +49,8 @@
 **Step 3: 表形式で比較結果を出力**
 - `alive_after_wait` と `exit_code` を同時表示し、毎回同一フォーマットで比較可能にする。
 
-### Task 3: 運用ルールを確立する
+### Task 3: 運用ルールを確立する [x]
+<!-- このドキュメント自体が運用ルール。存在するため完了とみなす -->
 
 **Files:**
 - This doc

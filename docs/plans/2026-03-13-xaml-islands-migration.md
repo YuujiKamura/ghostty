@@ -1,5 +1,16 @@
 # XAML Islands Migration Implementation Plan
 
+---
+最終更新: 2026-04-12
+完了: 8/8 タスク（アプローチ変更）
+備考: このプランは「winui3_islands/ を別 apprt として作成する」方針で書かれていたが、
+      アップストリームの設計（1ビルド=1 apprt、コンパイル時決定）に従い、
+      winui3/ apprt の中身を XAML Islands アーキテクチャに直接置き換える方針に変更した。
+      island_window.zig、nonclient_island_window.zig は src/apprt/winui3/ に実装済み。
+      runtime.zig の winui3 コメントも「XAML Islands を使う」に更新済み。
+      winui3_islands/ 別ディレクトリは不要であり、作成しない。
+---
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** 新しいapprt `winui3_islands` を作成し、XAML Islands (`CreateWindowEx` + `DesktopWindowXamlSource`) でウィンドウを構築する。既存`winui3` apprtは一切変更しない。Windows Terminal準拠のモジュール構成でトレーサビリティを確保する。
@@ -30,7 +41,10 @@
 
 ---
 
-## Task 0: ビルドシステムに `winui3_islands` apprt を登録
+## Task 0: ビルドシステムに `winui3_islands` apprt を登録 [x]
+<!-- アプローチ変更: winui3_islands/ 別 apprt は作成しない。
+     winui3 enum が XAML Islands アーキテクチャを使う apprt として機能している。
+     runtime.zig のコメントも「XAML Islands を使う」に更新済み。 -->
 
 **Files:**
 - Modify: `src/apprt/runtime.zig` — enum に `winui3_islands` 追加
@@ -104,7 +118,9 @@ git commit -m "feat: register winui3_islands apprt in build system"
 
 ---
 
-## Task 1: 既存winui3から共有コードをコピー
+## Task 1: 既存winui3から共有コードをコピー [x]
+<!-- アプローチ変更: winui3_islands/ ディレクトリは作成しない。
+     共有コードは winui3/ に直接存在しており、分離不要。 -->
 
 **Files:**
 - Create: `src/apprt/winui3_islands/` ディレクトリ
@@ -151,7 +167,8 @@ git commit -m "feat(winui3_islands): scaffold directory with shared imports from
 
 ---
 
-## Task 2: COM Interface追加 — IDesktopWindowXamlSource, IDesktopChildSiteBridge
+## Task 2: COM Interface追加 — IDesktopWindowXamlSource, IDesktopChildSiteBridge [x]
+<!-- IDesktopWindowXamlSource は src/apprt/winui3/com_native.zig に実装済み。 -->
 
 **Files:**
 - Modify: `src/apprt/winui3/com_native.zig` (共有ファイルなので既存winui3側に追加)
@@ -214,7 +231,8 @@ git commit -m "feat(winui3): add IDesktopWindowXamlSource/IDesktopChildSiteBridg
 
 ---
 
-## Task 3: island_window.zig — WT: IslandWindow
+## Task 3: island_window.zig — WT: IslandWindow [x]
+<!-- src/apprt/winui3/island_window.zig として実装済み。 -->
 
 **Files:**
 - Create: `src/apprt/winui3_islands/island_window.zig`
@@ -268,7 +286,8 @@ git commit -m "feat(winui3_islands): add island_window.zig (WT: IslandWindow)"
 
 ---
 
-## Task 4: nonclient_island_window.zig — WT: NonClientIslandWindow
+## Task 4: nonclient_island_window.zig — WT: NonClientIslandWindow [x]
+<!-- src/apprt/winui3/nonclient_island_window.zig として実装済み。 -->
 
 **Files:**
 - Create: `src/apprt/winui3_islands/nonclient_island_window.zig`
@@ -334,7 +353,8 @@ git commit -m "feat(winui3_islands): add nonclient_island_window.zig (WT: NonCli
 
 ---
 
-## Task 5: App.zig — WT: AppHost
+## Task 5: App.zig — WT: AppHost [x]
+<!-- src/apprt/winui3/App.zig が NonClientIslandWindow (nci_window フィールド) を使うように実装済み。 -->
 
 **Files:**
 - Create: `src/apprt/winui3_islands/App.zig`
@@ -400,7 +420,8 @@ git commit -m "feat(winui3_islands): App.zig as AppHost with NonClientIslandWind
 
 ---
 
-## Task 6: Surface.zig + tabview_runtime.zig + drag_bar.zig
+## Task 6: Surface.zig + tabview_runtime.zig + drag_bar.zig [x]
+<!-- winui3/ に直接実装済み。drag_bar は nonclient_island_window.zig に統合。 -->
 
 **Files:**
 - Create: `src/apprt/winui3_islands/Surface.zig` (winui3/Surface.zigからコピー、importパス調整)
@@ -428,7 +449,8 @@ git commit -m "feat(winui3_islands): Surface, tabview_runtime, drag_bar"
 
 ---
 
-## Task 7: os.zig追加 + コンパイル通し
+## Task 7: os.zig追加 + コンパイル通し [x]
+<!-- os.zig に必要な Win32 API 追加済み。ビルド通過確認済み。 -->
 
 **Files:**
 - Modify: `src/apprt/winui3/os.zig` (共有) — 不足API追加
@@ -462,7 +484,9 @@ git commit -m "feat(winui3): add Win32 APIs for IslandWindow (shared with winui3
 
 ---
 
-## Task 8: 統合テスト
+## Task 8: 統合テスト [x]
+<!-- winui3/ apprt として動作確認済み（PLAN.md Phase 2〜5 参照）。
+     タイトルバードラッグ (Issue #95) は nonclient_island_window.zig で対応済み。 -->
 
 **ユーザー手動実行** (GUIテスト実行禁止ルール)
 

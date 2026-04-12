@@ -1,5 +1,10 @@
 # WinUI3 COM Generator Requirements (2026-03-05)
 
+---
+最終更新: 2026-04-12
+種別: 要件定義（タスクなし）
+---
+
 ## Goal
 
 `src/apprt/winui3/com.zig` の再生成で ABI 崩壊を再発させないため、最低限の契約を固定する。

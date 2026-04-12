@@ -248,30 +248,38 @@ dispatcher_queue: ?*gen.IDispatcherQueue = null,
 ipc_server: ?*IpcServer = null,
 
 
-    /// Get a surface by index. Non-blocking (reads from snapshot).
+    /// Get a surface by index. Thread-safe (acquires surfaces_mutex).
+    /// Returns the Surface pointer with the mutex released — caller must not
+    /// hold the pointer across any operation that could mutate surfaces.
     pub fn getSurface(self: *App, idx: usize) ?*Surface {
+        self.surfaces_mutex.lock();
+        defer self.surfaces_mutex.unlock();
         const snapshot = self.surfaces_snapshot;
         if (idx >= snapshot.len) return null;
         return snapshot[idx];
     }
 
-    /// Get the number of active surfaces. Non-blocking (reads from snapshot).
+    /// Get the number of active surfaces. Thread-safe (acquires surfaces_mutex).
     pub fn countSurfaces(self: *App) usize {
+        self.surfaces_mutex.lock();
+        defer self.surfaces_mutex.unlock();
         return self.surfaces_snapshot.len;
     }
 
     /// Update the thread-safe surfaces snapshot. Must be called on the UI thread
     /// after any modification to self.surfaces.
+    /// The old snapshot is freed while holding the mutex so that CP-thread readers
+    /// that acquire the mutex before reading cannot observe a freed pointer.
     pub fn updateSurfacesSnapshot(self: *App) !void {
         const alloc = self.core_app.alloc;
         const new_snapshot = try alloc.dupe(*Surface, self.surfaces.items);
-        
+
         self.surfaces_mutex.lock();
         const old = self.surfaces_snapshot;
         self.surfaces_snapshot = new_snapshot;
-        self.surfaces_mutex.unlock();
-        
+        // Free old snapshot inside the lock so no reader can access it after free.
         if (old.len > 0) alloc.free(old);
+        self.surfaces_mutex.unlock();
     }
 
 pub fn init(

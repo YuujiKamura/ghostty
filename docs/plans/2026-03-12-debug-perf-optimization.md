@@ -1,5 +1,10 @@
 # Debug Build Performance Optimization
 
+---
+最終更新: 2026-04-12
+完了: 3/5 タスク
+---
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** デバッグビルドでも日常使いできる速度にする（slow_runtime_safetyの制御オプション追加 + ホットパスログ最適化）
@@ -12,7 +17,8 @@
 
 ---
 
-### Task 1: ビルドオプション `-Dslow-safety` を追加
+### Task 1: ビルドオプション `-Dslow-safety` を追加 [x]
+<!-- src/build/Config.zig に slow_safety フィールドと -Dslow-safety オプション実装済み -->
 
 **Files:**
 - Modify: `src/build/Config.zig:66-110` (init関数)
@@ -75,7 +81,8 @@ git commit -m "feat(build): add -Dslow-safety option to control integrity checks
 
 ---
 
-### Task 2: build_config.zig を build_options 経由に統一
+### Task 2: build_config.zig を build_options 経由に統一 [-]
+<!-- 要確認: build_config.zig の slow_runtime_safety が build_options 経由かどうか未確認 -->
 
 **Files:**
 - Modify: `src/build_config.zig:75-81`
@@ -113,7 +120,8 @@ git commit -m "refactor(build): unify slow_runtime_safety with -Dslow-safety opt
 
 ---
 
-### Task 3: build-winui3.sh にデフォルトオプション追加
+### Task 3: build-winui3.sh にデフォルトオプション追加 [x]
+<!-- build-winui3.sh に -Dslow-safety=false が含まれていることを確認済み -->
 
 **Files:**
 - Modify: `build-winui3.sh`
@@ -150,7 +158,8 @@ git commit -m "perf(build): disable slow safety checks by default in WinUI3 debu
 
 ---
 
-### Task 4: ホットパスのログレベル最適化
+### Task 4: ホットパスのログレベル最適化 [-]
+<!-- 実装状態未確認 -->
 
 **Files:**
 - Modify: `src/apprt/winui3/Surface.zig` (スクロールバー更新のlog.debug)
@@ -182,7 +191,8 @@ git commit -m "perf(log): gate hot-path debug logs behind slow_runtime_safety (#
 
 ---
 
-### Task 5: 性能比較テスト
+### Task 5: 性能比較テスト [-]
+<!-- 手動実行タスク。実行未確認 -->
 
 **Step 1: 3モードでビルド**
 

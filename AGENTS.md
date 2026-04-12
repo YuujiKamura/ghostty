@@ -41,3 +41,34 @@ Then read:
 
 - Issue and PR operations must target fork repos only.
 - Do not open upstream issues or PRs from this fork workflow unless explicitly instructed.
+
+## Spec Management
+
+### 権威ある情報源
+
+| 情報の種類 | 参照先 |
+|-----------|--------|
+| 次に実装すべきタスク | `.kiro/specs/` の `tasks.md` |
+| 現在の作業フロンティア | `PLAN.md` の「現在の作業フロンティア」セクション |
+| WinUI3 の知見・動作 | `docs/winui3-playbook.md`、`docs/winui3-known-good-apis.md` |
+| 壊してはいけない定義 | `contracts/winui-contract.json`、`contracts/vtable_manifest.json` |
+| テスト実行可能状態 | `tests/TEST_AUDIT.md` |
+
+### スペック管理ルール
+
+1. **新しい実装タスクは `.kiro/specs/` にスペックを作成してから着手する。**
+   - `requirements.md` → `design.md` → `tasks.md` の順で作成する。
+   - スペックなしで実装を開始してはならない。
+
+2. **チャット記憶を WinUI3 の真実の源泉として使用してはならない。**
+   - 根拠は `docs/winui3-playbook.md`、テストスクリプト、または GitHub Issue に記録すること。
+   - 詳細は [NON-NEGOTIABLES.md](NON-NEGOTIABLES.md) を参照。
+
+3. **PLAN.md と .kiro/specs/ の使い分け:**
+   - `PLAN.md`: フェーズ単位の完了記録と現在の作業フロンティア（粗粒度）
+   - `.kiro/specs/`: 個別機能の詳細要件・設計・タスク（細粒度）
+   - 両者は補完関係であり、どちらか一方を廃止しない。
+
+4. **新しい WinUI3 の知見を発見したとき:**
+   - `docs/winui3-playbook.md` または `docs/winui3-known-good-apis.md` に追記する。
+   - テストスクリプトで検証可能な知見はテストとして `tests/` に追加する。
