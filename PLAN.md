@@ -13,21 +13,6 @@
 
 ---
 
-## 未完了タスク
-
-### Phase 6: 実機テスト — Status: 進行中 (2026-03-03)
-- [ ] IME 日本語入力の実機確認（infrastructure は実装済み）
-- [x] TabView の作成確認（ログ上は成功、IXamlType.ActivateInstance 経由）
-- [ ] TabView の表示・切り替え実機確認（ユーザー操作が必要）
-- [ ] タブタイトルがターミナルタイトルに追従するか確認
-- [ ] exit segfault が解消されたか確認（ユーザー操作が必要）
-- [ ] リサイズ動作確認（ユーザー操作が必要）
-- [x] ReleaseSafe ビルド動作確認（ログ上は全ステップ成功、安定動作）
-- [ ] Ctrl+T/Ctrl+W のタブ操作確認（ユーザー操作が必要）
-- [x] Debug ビルド動作確認（TabView + Surface + D3D11 + cmd.exe 起動）
-
----
-
 ## 完了済みフェーズ
 
 ### Phase 0: 手書き COM vtable で WinUI3 ウィンドウ表示 — Status: 完了 (2026-03-02)
@@ -77,6 +62,21 @@
 - COM参照リーク修正（errdefer 追加）
 - フォーカスコールバック追加（WM_SETFOCUS/WM_KILLFOCUS）
 - タブタイトル更新（IPropertyValueStatics + boxString()）
+
+---
+
+## 未完了タスク
+
+### Phase 6: 実機テスト — Status: 進行中 (2026-03-03)
+- [ ] IME 日本語入力の実機確認（infrastructure は実装済み）
+- [x] TabView の作成確認（ログ上は成功、IXamlType.ActivateInstance 経由）
+- [ ] TabView の表示・切り替え実機確認（ユーザー操作が必要）
+- [ ] タブタイトルがターミナルタイトルに追従するか確認
+- [ ] exit segfault が解消されたか確認（ユーザー操作が必要）
+- [ ] リサイズ動作確認（ユーザー操作が必要）
+- [x] ReleaseSafe ビルド動作確認（ログ上は全ステップ成功、安定動作）
+- [ ] Ctrl+T/Ctrl+W のタブ操作確認（ユーザー操作が必要）
+- [x] Debug ビルド動作確認（TabView + Surface + D3D11 + cmd.exe 起動）
 
 ---
 

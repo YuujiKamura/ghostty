@@ -2,13 +2,7 @@
 
 ---
 最終更新: 2026-04-12
-完了: 8/8 タスク（アプローチ変更）
-備考: このプランは「winui3_islands/ を別 apprt として作成する」方針で書かれていたが、
-      アップストリームの設計（1ビルド=1 apprt、コンパイル時決定）に従い、
-      winui3/ apprt の中身を XAML Islands アーキテクチャに直接置き換える方針に変更した。
-      island_window.zig、nonclient_island_window.zig は src/apprt/winui3/ に実装済み。
-      runtime.zig の winui3 コメントも「XAML Islands を使う」に更新済み。
-      winui3_islands/ 別ディレクトリは不要であり、作成しない。
+完了: 8/8 タスク
 ---
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
