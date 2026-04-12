@@ -233,9 +233,9 @@ window_title: ?[:0]u8 = null,
 /// TSF (Text Services Framework) implementation for IME composition.
 tsf_impl: ?Tsf.TsfImplementation = null,
 
-/// Set by tsfHandleOutput when committed text is sent. Cleared by the next
-/// PreviewKeyDown for VK_RETURN so the confirmation Enter doesn't leak
-/// a raw newline into the PTY.
+/// Set by tsfHandleOutput when committed text is sent. Consumed by the next
+/// CharacterReceived to suppress duplicated non-ASCII text that may also
+/// arrive through the XAML input path after a TSF commit.
 tsf_just_committed: bool = false,
 
 /// DispatcherQueueController — must be kept alive for the lifetime of the app.
@@ -833,9 +833,9 @@ fn tsfHandleOutput(userdata: ?*anyopaque, utf8: []const u8) void {
     // and silently drop the first character — causing "kanji missing" bug.
     surface.pending_keydown = .none;
 
-    // Fix 3: Signal that TSF just committed text. The next VK_RETURN in
-    // PreviewKeyDown will be suppressed to avoid a raw Enter leaking
-    // into the PTY after IME confirmation.
+    // Signal that TSF just committed text. If XAML also delivers the same
+    // finalized non-ASCII characters via CharacterReceived, suppress that
+    // duplicate path and keep TSF output as the sole source of committed text.
     app.tsf_just_committed = true;
 
     // Decode UTF-8 into codepoints and send each as a UTF-16 char event,

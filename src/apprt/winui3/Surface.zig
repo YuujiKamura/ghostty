@@ -1482,15 +1482,6 @@ pub fn Surface(comptime App: type) type {
                     }
                 }
             }
-            // Fix 3: After TSF commits text (Enter confirmation), suppress the trailing
-            // VK_RETURN that arrives once the composition has already ended.
-            // Without this, a raw newline leaks into the PTY after every IME commit.
-            // Logic extracted to tsf_logic for testability.
-            if (tsf_logic.shouldSuppressAfterCommit(&self.app.tsf_just_committed, vk_u32)) {
-                log.debug("PreviewKeyDown: VK_RETURN SUPPRESSED (tsf_just_committed)", .{});
-                ea.SetHandled(true) catch {};
-                return;
-            }
             self.handleKeyEvent(@intCast(@as(u32, @bitCast(vk))), true);
             if (self.closed) return;
             // For text-producing keys, handleKeyEvent defers to CharacterReceived by
@@ -1522,14 +1513,14 @@ pub fn Surface(comptime App: type) type {
                     log.debug("xaml_surface: CharacterReceived SUPPRESSED (TSF composition active)", .{});
                     return;
                 }
-                // Fix 4: After TSF commits text via tsfHandleOutput, the same characters may
-                // also arrive here via the XAML CharacterReceived path. Suppress non-
-                // ASCII chars while the just-committed flag is set to avoid doubles.
+                // After TSF commits text via tsfHandleOutput, the same finalized
+                // non-ASCII characters may also arrive via CharacterReceived.
+                // Suppress that duplicate XAML path and rely on TSF output alone.
                 // Logic extracted to tsf_logic for testability.
                 if (self.app.tsf_just_committed) {
                     const ea_peek: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
                     const ch_peek = ea_peek.Character() catch return;
-                    if (tsf_logic.shouldSuppressCharAfterCommit(true, ch_peek)) {
+                    if (tsf_logic.shouldSuppressCharAfterCommit(&self.app.tsf_just_committed, ch_peek)) {
                         log.debug("xaml_surface: CharacterReceived ch=0x{x} SUPPRESSED (tsf_just_committed, non-ASCII)", .{ch_peek});
                         return;
                     }

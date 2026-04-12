@@ -38,32 +38,17 @@ pub fn decodeAndEmitUtf16(utf8: []const u8, emit_fn: *const fn (u16) void) usize
     return count;
 }
 
-// ---------------------------------------------------------------
-// tsf_just_committed state machine
-// ---------------------------------------------------------------
-
-/// After TSF commits text, `tsf_just_committed` is true.
-/// In PreviewKeyDown, VK_RETURN (0x0D) should be *suppressed* so that
-/// the Enter that confirmed the composition doesn't leak a raw newline.
-/// Any other key just clears the flag without suppression.
-///
-/// Returns `true` when the key should be suppressed (i.e. handled = true).
-pub fn shouldSuppressAfterCommit(tsf_just_committed: *bool, vk: u32) bool {
-    if (tsf_just_committed.* and vk == 0x0D) { // VK_RETURN
-        tsf_just_committed.* = false;
-        return true;
-    }
-    tsf_just_committed.* = false;
-    return false;
-}
-
 /// After TSF commits text, the same characters may also arrive via
 /// CharacterReceived (WM_CHAR). Non-ASCII chars should be suppressed
 /// while `tsf_just_committed` is true to avoid doubled characters.
+/// The flag is consumed by the first CharacterReceived after the commit,
+/// regardless of whether that event is suppressed.
 ///
 /// Returns `true` when the character event should be suppressed.
-pub fn shouldSuppressCharAfterCommit(tsf_just_committed: bool, char_code: u16) bool {
-    return tsf_just_committed and char_code > 0x7F;
+pub fn shouldSuppressCharAfterCommit(tsf_just_committed: *bool, char_code: u16) bool {
+    const should_suppress = tsf_just_committed.* and char_code > 0x7F;
+    tsf_just_committed.* = false;
+    return should_suppress;
 }
 
 // ===================================================================
@@ -145,55 +130,33 @@ test "decodeAndEmitUtf16 - empty input" {
     try std.testing.expectEqual(@as(usize, 0), test_emit_count);
 }
 
-// ---------------------------------------------------------------
-// shouldSuppressAfterCommit tests
-// ---------------------------------------------------------------
-
-test "shouldSuppressAfterCommit - VK_RETURN suppressed when flag set" {
-    var flag: bool = true;
-    try std.testing.expect(shouldSuppressAfterCommit(&flag, 0x0D));
-    try std.testing.expect(!flag); // flag cleared
-}
-
-test "shouldSuppressAfterCommit - non-Enter clears flag, no suppression" {
-    var flag: bool = true;
-    try std.testing.expect(!shouldSuppressAfterCommit(&flag, 0x41)); // 'A'
-    try std.testing.expect(!flag); // flag still cleared
-}
-
-test "shouldSuppressAfterCommit - flag already false, VK_RETURN not suppressed" {
-    var flag: bool = false;
-    try std.testing.expect(!shouldSuppressAfterCommit(&flag, 0x0D));
-    try std.testing.expect(!flag);
-}
-
-test "shouldSuppressAfterCommit - flag already false, other key" {
-    var flag: bool = false;
-    try std.testing.expect(!shouldSuppressAfterCommit(&flag, 0x41));
-    try std.testing.expect(!flag);
-}
-
-// ---------------------------------------------------------------
-// shouldSuppressCharAfterCommit tests
-// ---------------------------------------------------------------
-
 test "shouldSuppressCharAfterCommit - non-ASCII suppressed when flag set" {
-    try std.testing.expect(shouldSuppressCharAfterCommit(true, 0x30C6)); // テ
+    var flag = true;
+    try std.testing.expect(shouldSuppressCharAfterCommit(&flag, 0x30C6)); // テ
+    try std.testing.expect(!flag);
 }
 
 test "shouldSuppressCharAfterCommit - ASCII not suppressed even when flag set" {
-    try std.testing.expect(!shouldSuppressCharAfterCommit(true, 0x41)); // 'A'
+    var flag = true;
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&flag, 0x41)); // 'A'
+    try std.testing.expect(!flag);
 }
 
 test "shouldSuppressCharAfterCommit - boundary 0x7F not suppressed" {
-    try std.testing.expect(!shouldSuppressCharAfterCommit(true, 0x7F)); // DEL
+    var flag = true;
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&flag, 0x7F)); // DEL
+    try std.testing.expect(!flag);
 }
 
 test "shouldSuppressCharAfterCommit - boundary 0x80 suppressed" {
-    try std.testing.expect(shouldSuppressCharAfterCommit(true, 0x80));
+    var flag = true;
+    try std.testing.expect(shouldSuppressCharAfterCommit(&flag, 0x80));
+    try std.testing.expect(!flag);
 }
 
 test "shouldSuppressCharAfterCommit - flag false, nothing suppressed" {
-    try std.testing.expect(!shouldSuppressCharAfterCommit(false, 0x30C6));
-    try std.testing.expect(!shouldSuppressCharAfterCommit(false, 0x41));
+    var flag = false;
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&flag, 0x30C6));
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&flag, 0x41));
+    try std.testing.expect(!flag);
 }

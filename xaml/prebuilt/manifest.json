@@ -6,12 +6,12 @@
   },
   "prebuilt": {
     "Surface.xbf": {
-      "sha256": "f95602e6205da19d45d0de74ffea620ae869fd971a254be8a69e7efabe25d0d5",
-      "size": 658
+      "sha256": "a72919ff66ce7e7cee182ef7aeafc517cbd6ae42a40e45e284ff2a2ec38bf474",
+      "size": 733
     },
     "TabViewRoot.xbf": {
-      "sha256": "504cd4c3cdeef4cebbe16d2233302b01caeacdfff5136bf6a8c6b291c66b9aed",
-      "size": 1876
+      "sha256": "5c7010f30fdedff1f96e749157befe7ae6dadf8151f10eb42cd75892c0428b68",
+      "size": 2158
     },
     "ghostty.pri": {
       "sha256": "3d985c7746ce212fef24e3777c2f578d200bc3b58ed3b70f07b7342979cec92c",
