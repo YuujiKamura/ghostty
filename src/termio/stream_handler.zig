@@ -226,18 +226,33 @@ pub const StreamHandler = struct {
             .cursor_right => self.terminal.cursorRight(value.value),
             .cursor_pos => {
                 @branchHint(.likely);
+                log.debug("TUI cursor update: CSI H ({d},{d})", .{ value.row, value.col });
                 self.terminal.setCursorPos(value.row, value.col);
             },
-            .cursor_col => self.terminal.setCursorPos(self.terminal.screens.active.cursor.y + 1, value.value),
-            .cursor_row => self.terminal.setCursorPos(value.value, self.terminal.screens.active.cursor.x + 1),
-            .cursor_col_relative => self.terminal.setCursorPos(
-                self.terminal.screens.active.cursor.y + 1,
-                self.terminal.screens.active.cursor.x + 1 +| value.value,
-            ),
-            .cursor_row_relative => self.terminal.setCursorPos(
-                self.terminal.screens.active.cursor.y + 1 +| value.value,
-                self.terminal.screens.active.cursor.x + 1,
-            ),
+            .cursor_col => {
+                log.debug("TUI cursor col: {d}", .{value.value});
+                self.terminal.setCursorPos(self.terminal.screens.active.cursor.y + 1, value.value);
+            },
+            .cursor_row => {
+                log.debug("TUI cursor row: {d}", .{value.value});
+                self.terminal.setCursorPos(value.value, self.terminal.screens.active.cursor.x + 1);
+            },
+            .cursor_col_relative => {
+                const new_col = self.terminal.screens.active.cursor.x + 1 +| value.value;
+                log.debug("TUI cursor col_rel: +{d} -> {d}", .{ value.value, new_col });
+                self.terminal.setCursorPos(
+                    self.terminal.screens.active.cursor.y + 1,
+                    new_col,
+                );
+            },
+            .cursor_row_relative => {
+                const new_row = self.terminal.screens.active.cursor.y + 1 +| value.value;
+                log.debug("TUI cursor row_rel: +{d} -> {d}", .{ value.value, new_row });
+                self.terminal.setCursorPos(
+                    new_row,
+                    self.terminal.screens.active.cursor.x + 1,
+                );
+            },
             .cursor_style => try self.setCursorStyle(value),
             .erase_display_below => self.terminal.eraseDisplay(.below, value),
             .erase_display_above => self.terminal.eraseDisplay(.above, value),

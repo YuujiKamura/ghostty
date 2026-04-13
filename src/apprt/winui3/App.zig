@@ -868,13 +868,28 @@ fn tsfGetCursorRect(userdata: ?*anyopaque) os.RECT {
     const app: *App = @ptrCast(@alignCast(userdata orelse return os.RECT{}));
     const surface = app.activeSurface() orelse return os.RECT{};
     const hwnd = app.hwnd orelse return os.RECT{};
+
+    // Get cursor position for logging
+    surface.core_surface.renderer_state.mutex.lock();
+    const cursor_x = surface.core_surface.renderer_state.terminal.screens.active.cursor.x;
+    const cursor_y = surface.core_surface.renderer_state.terminal.screens.active.cursor.y;
+    surface.core_surface.renderer_state.mutex.unlock();
+
     const ime_pos = surface.core_surface.imePoint();
     // imePoint returns pixel coordinates relative to the client area.
     // Convert to screen coordinates for TSF.
     var pt = os.POINT{ .x = @intFromFloat(ime_pos.x), .y = @intFromFloat(ime_pos.y) };
+    const client_pt = pt;
     _ = os.ClientToScreen(hwnd, &pt);
     // Use the actual cell height from imePoint for accurate positioning.
     const cell_height: i32 = if (ime_pos.height > 0) @intFromFloat(ime_pos.height) else 20;
+
+    log.info("TSF GetTextExt: cursor=({d},{d}) ime_pos=({d:.2},{d:.2}) client=({d},{d}) screen=({d},{d}) size=({d:.2}x{d:.2}) cell_h={d} hwnd=0x{x}", .{
+        cursor_x, cursor_y, ime_pos.x, ime_pos.y,
+        client_pt.x, client_pt.y, pt.x, pt.y,
+        ime_pos.width, ime_pos.height, cell_height, @intFromPtr(hwnd)
+    });
+
     return os.RECT{
         .left = pt.x,
         .top = pt.y,

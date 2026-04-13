@@ -2148,9 +2148,16 @@ fn resolvePathForOpening(
 /// Returns the x/y coordinate of where the IME (Input Method Editor)
 /// keyboard should be rendered.
 pub fn imePoint(self: *const Surface) apprt.IMEPos {
+    // Capture all necessary state under mutex protection to prevent race conditions
     self.renderer_state.mutex.lock();
     const cursor = self.renderer_state.terminal.screens.active.cursor;
     const preedit_width: usize = if (self.renderer_state.preedit) |preedit| preedit.width() else 0;
+    // Capture size-related fields under mutex protection
+    const cell_width = self.size.cell.width;
+    const cell_height = self.size.cell.height;
+    const padding_left = self.size.padding.left;
+    const padding_top = self.size.padding.top;
+    const terminal_width = self.size.terminal().width;
     self.renderer_state.mutex.unlock();
 
     // TODO: need to handle when scrolling and the cursor is not
@@ -2161,10 +2168,10 @@ pub fn imePoint(self: *const Surface) apprt.IMEPos {
 
     const x: f64 = x: {
         // Simple x * cell width gives the top-left corner, then add padding offset
-        var x: f64 = @floatFromInt(cursor.x * self.size.cell.width + self.size.padding.left);
+        var x: f64 = @floatFromInt(cursor.x * cell_width + padding_left);
 
         // We want the midpoint
-        x += @as(f64, @floatFromInt(self.size.cell.width)) / 2;
+        x += @as(f64, @floatFromInt(cell_width)) / 2;
 
         // And scale it
         x /= content_scale.x;
@@ -2174,10 +2181,10 @@ pub fn imePoint(self: *const Surface) apprt.IMEPos {
 
     const y: f64 = y: {
         // Simple y * cell height gives the top-left corner, then add padding offset
-        var y: f64 = @floatFromInt(cursor.y * self.size.cell.height + self.size.padding.top);
+        var y: f64 = @floatFromInt(cursor.y * cell_height + padding_top);
 
         // We want the bottom
-        y += @floatFromInt(self.size.cell.height);
+        y += @floatFromInt(cell_height);
 
         // And scale it
         y /= content_scale.y;
@@ -2188,18 +2195,18 @@ pub fn imePoint(self: *const Surface) apprt.IMEPos {
     // Our height for now is always just the cell height because our preedit
     // rendering only renders in a single line.
     const height: f64 = height: {
-        var height: f64 = @floatFromInt(self.size.cell.height);
+        var height: f64 = @floatFromInt(cell_height);
         height /= content_scale.y;
         break :height height;
     };
     const width: f64 = width: {
-        var width: f64 = @floatFromInt(preedit_width * self.size.cell.width);
+        var width: f64 = @floatFromInt(preedit_width * cell_width);
 
         // Our max width is the remaining screen width after the cursor.
         // We don't have to deal with wrapping because the preedit doesn't
         // wrap right now.
-        const screen_width: f64 = @floatFromInt(self.size.terminal().width);
-        const x_offset: f64 = @floatFromInt((cursor.x + 1) * self.size.cell.width);
+        const screen_width: f64 = @floatFromInt(terminal_width);
+        const x_offset: f64 = @floatFromInt((cursor.x + 1) * cell_width);
         const max = screen_width - x_offset;
         width = @min(width, max);
 
@@ -2210,6 +2217,11 @@ pub fn imePoint(self: *const Surface) apprt.IMEPos {
 
         break :width width;
     };
+
+    log.info("imePoint: cursor=({d},{d}) cell=({d}x{d}) padding=({d},{d}) scale=({d:.2},{d:.2}) result=({d:.2},{d:.2})", .{
+        cursor.x, cursor.y, cell_width, cell_height,
+        padding_left, padding_top, content_scale.x, content_scale.y, x, y
+    });
 
     return .{
         .x = x,

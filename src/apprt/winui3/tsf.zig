@@ -692,11 +692,14 @@ pub const TsfImplementation = struct {
     /// Matches WT Implementation::GetTextExt().
     fn ctxOwnerGetTextExt(this: *anyopaque, _: i32, _: i32, prc: *gen.RECT, pfClipped: *gen.BOOL) callconv(.winapi) HRESULT {
         const self = selfFromContextOwner(this);
+
         if (self._getCursorRect) |getCursorRect| {
             const r = getCursorRect(self._userdata);
             prc.* = .{ .left = r.left, .top = r.top, .right = r.right, .bottom = r.bottom };
+            log.info("TSF GetTextExt called: returning RECT({d},{d},{d},{d})", .{ r.left, r.top, r.right, r.bottom });
         } else {
             prc.* = .{ .left = 0, .top = 0, .right = 0, .bottom = 0 };
+            log.warn("TSF GetTextExt called: no getCursorRect callback, returning zero RECT", .{});
         }
         pfClipped.* = 0; // FALSE
         return S_OK;
@@ -805,7 +808,7 @@ pub const TsfImplementation = struct {
         const self = selfFromCompositionSink(this);
         self._compositions += 1;
         pfOk.* = 1; // TRUE
-        log.debug("TSF: OnStartComposition (compositions={})", .{self._compositions});
+        log.info("TSF: OnStartComposition (compositions={}) - IME composition starting", .{self._compositions});
         return S_OK;
     }
 
@@ -814,7 +817,7 @@ pub const TsfImplementation = struct {
     /// requesting an edit session. Preedit updates are handled by OnEndEdit.
     fn compSinkOnUpdateComposition(this: *anyopaque, _: ?*anyopaque, _: ?*anyopaque) callconv(.winapi) HRESULT {
         const self = selfFromCompositionSink(this);
-        log.debug("TSF: OnUpdateComposition (compositions={})", .{self._compositions});
+        log.info("TSF: OnUpdateComposition (compositions={}) - composition text changing", .{self._compositions});
         return S_OK;
     }
 
@@ -824,9 +827,10 @@ pub const TsfImplementation = struct {
         if (self._compositions <= 0) return E_FAIL;
 
         self._compositions -= 1;
-        log.debug("TSF: OnEndComposition (compositions={})", .{self._compositions});
+        log.info("TSF: OnEndComposition (compositions={}) - composition ending", .{self._compositions});
 
         if (self._compositions == 0) {
+            log.info("TSF: OnEndComposition - all compositions ended, requesting edit session", .{});
             // WT: _request(_editSessionCompositionUpdate, TF_ES_READWRITE | TF_ES_ASYNC)
             _ = self.requestEditSession(tsf.TF_ES_READWRITE | tsf.TF_ES_ASYNC);
         }
