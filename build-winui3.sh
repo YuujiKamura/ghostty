@@ -232,6 +232,34 @@ else
     fi
 fi
 
+# Promotion Step: If we built to staging, promote it to stable (retail) 
+# using the Atomic Rename strategy to avoid "file in use" errors.
+if [ "$PREFIX" = "$PREFIX_STAGING" ]; then
+    echo "[build-winui3] Promoting $PREFIX_STAGING to $PREFIX_STABLE..."
+    
+    # Ensure stable bin directory exists
+    mkdir -p "$PREFIX_STABLE/bin"
+    
+    # Handle locked files in stable/bin/ via Rename-to-.old
+    for f in "$PREFIX_STABLE/bin"/*.exe "$PREFIX_STABLE/bin"/*.dll; do
+        [ -f "$f" ] || continue
+        [[ "$f" == *.old ]] && continue
+        
+        old_f="${f}.old"
+        rm -f "$old_f" 2>/dev/null || true
+        # Windows allows renaming even if the file is locked for execution.
+        mv -f "$f" "$old_f" 2>/dev/null || true
+    done
+    
+    # Copy staging contents to stable
+    cp -rf "$PREFIX_STAGING"/* "$PREFIX_STABLE/"
+    
+    # Cleanup .old files (will fail if still running, which is expected)
+    rm -f "$PREFIX_STABLE/bin"/*.old 2>/dev/null || true
+    
+    echo "[build-winui3] Finished promoting to $PREFIX_STABLE."
+fi
+
 # Staging is only a temporary fallback. Once a stable build succeeds again,
 # remove the stale staging directory so external tools always converge on stable.
 if [ "$PREFIX" = "$PREFIX_STABLE" ] && [ -d "$PREFIX_STAGING" ]; then
