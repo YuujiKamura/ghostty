@@ -48,6 +48,21 @@ const tsf_logic = @import("tsf_logic.zig");
 const IpcServer = @import("ipc.zig");
 const internal_os = @import("../../os/main.zig");
 
+/// IME coordinate caching system for Phase 3 stability improvements
+const IMECoordinateCache = struct {
+    last_cursor_x: u32 = 0,
+    last_cursor_y: u32 = 0,
+    last_screen_x: i32 = 0,
+    last_screen_y: i32 = 0,
+    last_ime_pos_x: f64 = 0,
+    last_ime_pos_y: f64 = 0,
+    last_update_time: i64 = 0,
+    cache_valid: bool = false,
+
+    const CACHE_DURATION_MS: i64 = 150; // Cache coordinates for 150ms
+    const MIN_POSITION_CHANGE: i32 = 5; // Minimum pixel movement to invalidate
+};
+
 const log = std.log.scoped(.winui3);
 
 fn postMessageWarn(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM, msg_name: []const u8) bool {
@@ -147,6 +162,9 @@ input_hwnd: ?os.HWND = null,
 /// SwapChainPanel — TSF is associated with the main HWND and handles
 /// IME composition directly without needing the TextBox.
 keyboard_focus_target: KeyboardFocusTarget = .xaml_surface,
+
+/// IME coordinate cache instance
+ime_coord_cache: IMECoordinateCache = .{},
 ime_composing: bool = false,
 ime_last_had_result: bool = false,
 
@@ -869,26 +887,69 @@ fn tsfGetCursorRect(userdata: ?*anyopaque) os.RECT {
     const surface = app.activeSurface() orelse return os.RECT{};
     const hwnd = app.hwnd orelse return os.RECT{};
 
-    // Get cursor position for logging
+    // Get cursor position for caching logic
     surface.core_surface.renderer_state.mutex.lock();
     const cursor_x = surface.core_surface.renderer_state.terminal.screens.active.cursor.x;
     const cursor_y = surface.core_surface.renderer_state.terminal.screens.active.cursor.y;
     surface.core_surface.renderer_state.mutex.unlock();
 
+    const current_time = std.time.milliTimestamp();
+
+    // Check cache validity (Phase 3 coordinate stabilization)
+    const cache = &app.ime_coord_cache;
+    const cache_expired = (current_time - cache.last_update_time) > IMECoordinateCache.CACHE_DURATION_MS;
+    const cursor_moved = (cursor_x != cache.last_cursor_x) or (cursor_y != cache.last_cursor_y);
+
+    if (cache.cache_valid and !cache_expired and !cursor_moved) {
+        const cell_height: i32 = if (cache.last_ime_pos_y > 0) @intFromFloat(cache.last_ime_pos_y - cache.last_ime_pos_y) else 20;
+        log.info("TSF GetTextExt: using cached coordinates cursor=({d},{d}) screen=({d},{d}) [CACHED]", .{
+            cursor_x, cursor_y, cache.last_screen_x, cache.last_screen_y
+        });
+        return os.RECT{
+            .left = cache.last_screen_x,
+            .top = cache.last_screen_y,
+            .right = cache.last_screen_x + 1,
+            .bottom = cache.last_screen_y + cell_height,
+        };
+    }
+
+    // Calculate fresh coordinates
     const ime_pos = surface.core_surface.imePoint();
-    // imePoint returns pixel coordinates relative to the client area.
-    // Convert to screen coordinates for TSF.
     var pt = os.POINT{ .x = @intFromFloat(ime_pos.x), .y = @intFromFloat(ime_pos.y) };
     const client_pt = pt;
     _ = os.ClientToScreen(hwnd, &pt);
-    // Use the actual cell height from imePoint for accurate positioning.
     const cell_height: i32 = if (ime_pos.height > 0) @intFromFloat(ime_pos.height) else 20;
 
-    log.info("TSF GetTextExt: cursor=({d},{d}) ime_pos=({d:.2},{d:.2}) client=({d},{d}) screen=({d},{d}) size=({d:.2}x{d:.2}) cell_h={d} hwnd=0x{x}", .{
-        cursor_x, cursor_y, ime_pos.x, ime_pos.y,
-        client_pt.x, client_pt.y, pt.x, pt.y,
-        ime_pos.width, ime_pos.height, cell_height, @intFromPtr(hwnd)
-    });
+    // Check if coordinates changed significantly (Phase 3 stabilization)
+    const significant_change = !cache.cache_valid or
+                              @abs(pt.x - cache.last_screen_x) > IMECoordinateCache.MIN_POSITION_CHANGE or
+                              @abs(pt.y - cache.last_screen_y) > IMECoordinateCache.MIN_POSITION_CHANGE;
+
+    if (significant_change) {
+        // Update cache with new coordinates
+        cache.last_cursor_x = cursor_x;
+        cache.last_cursor_y = cursor_y;
+        cache.last_screen_x = pt.x;
+        cache.last_screen_y = pt.y;
+        cache.last_ime_pos_x = ime_pos.x;
+        cache.last_ime_pos_y = ime_pos.y;
+        cache.last_update_time = current_time;
+        cache.cache_valid = true;
+
+        log.info("TSF GetTextExt: UPDATED cache cursor=({d},{d}) ime_pos=({d:.2},{d:.2}) client=({d},{d}) screen=({d},{d}) size=({d:.2}x{d:.2}) cell_h={d} hwnd=0x{x}", .{
+            cursor_x, cursor_y, ime_pos.x, ime_pos.y,
+            client_pt.x, client_pt.y, pt.x, pt.y,
+            ime_pos.width, ime_pos.height, cell_height, @intFromPtr(hwnd)
+        });
+    } else {
+        log.info("TSF GetTextExt: coordinate change too small ({d},{d}), using cached screen=({d},{d}) [STABILIZED]", .{
+            @abs(pt.x - cache.last_screen_x), @abs(pt.y - cache.last_screen_y),
+            cache.last_screen_x, cache.last_screen_y
+        });
+        // Use cached coordinates for stability
+        pt.x = cache.last_screen_x;
+        pt.y = cache.last_screen_y;
+    }
 
     return os.RECT{
         .left = pt.x,
