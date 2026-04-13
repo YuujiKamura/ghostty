@@ -39,6 +39,7 @@ slow_safety: bool = true,
 /// Ghostty exe properties
 exe_entrypoint: ExeEntrypoint = .ghostty,
 version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 0 },
+build_timestamp: []const u8 = "",
 
 /// Binary properties
 pie: bool = false,
@@ -501,6 +502,21 @@ pub fn init(b: *std.Build, appVersion: []const u8) !Config {
         }
     }
 
+    // Set build timestamp
+    const timestamp = std.time.timestamp();
+    const dt = std.time.epoch.EpochSeconds{ .secs = @intCast(timestamp) };
+    const day_seconds = dt.getDaySeconds();
+    const epoch_day = dt.getEpochDay();
+    const year_day = epoch_day.calculateYearDay();
+    const month_day = year_day.calculateMonthDay();
+
+    var timestamp_buf: [32]u8 = undefined;
+    const timestamp_str = try std.fmt.bufPrint(&timestamp_buf, "{d:0>4}-{d:0>2}-{d:0>2} {d:0>2}:{d:0>2}:{d:0>2} UTC", .{
+        year_day.year, @intFromEnum(month_day.month), month_day.day_index + 1,
+        day_seconds.getHoursIntoDay(), day_seconds.getMinutesIntoHour(), day_seconds.getSecondsIntoMinute(),
+    });
+    config.build_timestamp = b.dupe(timestamp_str);
+
     return config;
 }
 
@@ -541,6 +557,7 @@ pub fn addOptions(self: *const Config, step: *std.Build.Step.Options) !void {
             break :channel .tip;
         },
     );
+    step.addOption([]const u8, "build_timestamp", self.build_timestamp);
 }
 
 /// Returns the build options for the terminal module. This assumes a
