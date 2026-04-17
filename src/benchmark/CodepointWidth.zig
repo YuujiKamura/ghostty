@@ -7,7 +7,6 @@ const CodepointWidth = @This();
 
 const builtin = @import("builtin");
 const std = @import("std");
-const builtin = @import("builtin");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const Benchmark = @import("Benchmark.zig");

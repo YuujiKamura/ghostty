@@ -596,6 +596,8 @@ pub fn add(
         switch (self.config.app_runtime) {
             .none => {},
             .gtk => try self.addGtkNg(step),
+            // ghostty-win apprts: deps are wired in build.zig, not here.
+            .win32, .winui3 => {},
         }
     }
 
