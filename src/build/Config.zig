@@ -39,6 +39,11 @@ slow_safety: bool = true,
 /// Ghostty exe properties
 exe_entrypoint: ExeEntrypoint = .ghostty,
 version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 0 },
+/// libghostty-vt version. Tracked separately upstream; ghostty-win doesn't
+/// ship libghostty-vt as a primary artifact so this mirrors `version` unless
+/// overridden. Kept as a field so GhosttyZig.zig's upstream-origin code that
+/// reads `cfg.lib_version` compiles.
+lib_version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 0 },
 build_timestamp: []const u8 = "",
 
 /// Binary properties
@@ -301,6 +306,12 @@ pub fn init(b: *std.Build, appVersion: []const u8) !Config {
         };
     };
 
+    // lib_version mirrors version for ghostty-win (we don't ship libghostty-vt
+    // as a primary artifact). Upstream tracks this separately; see
+    // commit e51de8b58 "libghostty: Remove all libc++ and libc++ ABI
+    // dependencies" and surrounding changes.
+    config.lib_version = config.version;
+
     //---------------------------------------------------------------
     // Binary Properties
 
@@ -560,11 +571,13 @@ pub fn addOptions(self: *const Config, step: *std.Build.Step.Options) !void {
     step.addOption([]const u8, "build_timestamp", self.build_timestamp);
 }
 
-/// Returns the build options for the terminal module. This assumes a
-/// Ghostty executable being built. Callers should modify this as needed.
-pub fn terminalOptions(self: *const Config) TerminalBuildOptions {
+/// Returns the build options for the terminal module. Upstream added an
+/// `artifact` arg to distinguish .ghostty vs .lib (libghostty-vt). ghostty-win
+/// doesn't ship libghostty-vt as a primary artifact, but accept the arg and
+/// thread it through so callers that pass .lib don't crash.
+pub fn terminalOptions(self: *const Config, artifact: TerminalBuildOptions.Artifact) TerminalBuildOptions {
     return .{
-        .artifact = .ghostty,
+        .artifact = artifact,
         .simd = self.simd,
         .oniguruma = true,
         .c_abi = false,

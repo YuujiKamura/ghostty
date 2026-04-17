@@ -95,7 +95,7 @@ pub fn draw1CD00_1CDE5(
     // that this is static data that is embedded in the binary.
     const octants_len = octant_max - octant_min + 1;
     const octants: [octants_len]Octant = comptime octants: {
-        @setEvalBranchQuota(100_000);
+        @setEvalBranchQuota(10_000);
 
         var result: [octants_len]Octant = @splat(.{});
         var i: usize = 0;
@@ -105,7 +105,11 @@ pub fn draw1CD00_1CDE5(
         while (it.next()) |raw_line| {
             // Trim \r so this works with both LF and CRLF line endings,
             // since git may convert octants.txt to CRLF on Windows checkouts.
-            const line = std.mem.trim(u8, raw_line, " \r\t");
+            const line = if (raw_line.len > 0 and raw_line[raw_line.len - 1] == '\r')
+                raw_line[0 .. raw_line.len - 1]
+            else
+                raw_line;
+
             // Skip comments
             if (line.len == 0 or line[0] == '#') continue;
 

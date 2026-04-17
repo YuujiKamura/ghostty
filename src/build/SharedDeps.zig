@@ -133,7 +133,7 @@ pub fn add(
     step.root_module.addOptions("build_options", self.options);
 
     // Every exe needs the terminal options
-    self.config.terminalOptions().add(b, step.root_module);
+    self.config.terminalOptions(.ghostty).add(b, step.root_module);
 
     // C imports for locale constants and functions
     {
@@ -594,7 +594,7 @@ pub fn add(
         if (self.config.flatpak) step.linkSystemLibrary2("gtk4", dynamic_link_opts);
 
         switch (self.config.app_runtime) {
-            .none, .win32, .winui3 => {},
+            .none => {},
             .gtk => try self.addGtkNg(step),
         }
     }
@@ -753,6 +753,7 @@ pub fn addSimd(
 ) !void {
     const target = m.resolved_target.?;
     const optimize = m.optimize.?;
+    const system_highway = b.systemIntegrationOption("highway", .{ .default = false });
 
     // Simdutf
     if (b.systemIntegrationOption("simdutf", .{})) {
@@ -761,6 +762,7 @@ pub fn addSimd(
         if (b.lazyDependency("simdutf", .{
             .target = target,
             .optimize = optimize,
+            .no_libcxx = true,
         })) |simdutf_dep| {
             m.linkLibrary(simdutf_dep.artifact("simdutf"));
             if (static_libs) |v| try v.append(
@@ -771,7 +773,7 @@ pub fn addSimd(
     }
 
     // Highway
-    if (b.systemIntegrationOption("highway", .{ .default = false })) {
+    if (system_highway) {
         m.linkSystemLibrary("libhwy", dynamic_link_opts);
     } else {
         if (b.lazyDependency("highway", .{
@@ -784,18 +786,6 @@ pub fn addSimd(
                 highway_dep.artifact("highway").getEmittedBin(),
             );
         }
-    }
-
-    // utfcpp - This is used as a dependency on our hand-written C++ code
-    if (b.lazyDependency("utfcpp", .{
-        .target = target,
-        .optimize = optimize,
-    })) |utfcpp_dep| {
-        m.linkLibrary(utfcpp_dep.artifact("utfcpp"));
-        if (static_libs) |v| try v.append(
-            b.allocator,
-            utfcpp_dep.artifact("utfcpp").getEmittedBin(),
-        );
     }
 
     // SIMD C++ files
@@ -828,6 +818,22 @@ pub fn addSimd(
         try flags.append(
             b.allocator,
             "-std=c++17",
+        );
+
+        // Keep our SIMD sources in the same Highway header mode as the
+        // vendored package build so HWY's inline dispatch/runtime helpers
+        // have a consistent ABI.
+        if (!system_highway) try flags.append(
+            b.allocator,
+            "-DHWY_NO_LIBCXX",
+        );
+
+        // When using the vendored simdutf, build its headers in no-libcxx
+        // mode so we don't need C++ standard library headers at all.
+        // System simdutf headers may not support this define.
+        if (!b.systemIntegrationOption("simdutf", .{})) try flags.append(
+            b.allocator,
+            "-DSIMDUTF_NO_LIBCXX",
         );
 
         // Disable ubsan for MSVC to avoid undefined references to
