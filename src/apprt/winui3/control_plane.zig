@@ -455,18 +455,27 @@ pub const ControlPlane = struct {
 
             if (entry.cmd_id > max_cmd_id) max_cmd_id = entry.cmd_id;
 
-            if (entry.raw) {
-                const msg = termio.Message.writeReq(self.allocator, entry.text) catch |err| {
-                    log.warn("failed to create raw write message: {}", .{err});
-                    continue;
-                };
-                surface.queueIo(msg, .unlocked);
-            } else {
-                surface.textCallback(entry.text) catch |err| {
-                    log.warn("failed to apply control-plane input: {}", .{err});
-                    continue;
-                };
-            }
+            // Route ALL CP-originated text through queueIo, never textCallback.
+            //
+            // textCallback → completeClipboardPaste acquires renderer_state.mutex
+            // on the UI thread. Under heavy CP input bursts (deckpilot send-text
+            // storms) this serializes every keystroke through the renderer mutex,
+            // letting a PTY-busy renderer stall the UI. queueIo hands the bytes
+            // to termio's own queue, which drains off-UI.
+            //
+            // The CP protocol layer (vendor/zig-control-plane) already applies
+            // bracketed-paste wrapping for .paste requests before they reach us,
+            // so we never need to go through the clipboard-paste path here. Both
+            // .input (raw=false) and .raw_input (raw=true) are written verbatim;
+            // `entry.raw` is retained only for logging/symmetry. writeReq copies
+            // the bytes (small-inline or alloc.dupe), so the `defer free` above
+            // cleanly releases our owned buffer without double-free.
+            _ = entry.raw;
+            const msg = termio.Message.writeReq(self.allocator, entry.text) catch |err| {
+                log.warn("failed to create cp write message: {}", .{err});
+                continue;
+            };
+            surface.queueIo(msg, .unlocked);
         }
 
         // Update last drained cmd_id for ACK polling
