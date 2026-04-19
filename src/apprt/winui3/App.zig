@@ -2186,12 +2186,38 @@ fn enableDebugSettings(_: *App, xa: *com.IApplication) void {
 var diagnostic_tick_count: u32 = 0;
 const diagnostic_interval: u32 = 500; // ~every 500 ticks
 
+/// Budget for a single UI-thread tick slice. ~4ms ≈ one 240Hz frame.
+/// If a single core_app.tick exceeds this, we log and re-post WM_USER so
+/// subsequent drain work runs on a fresh pump turn, yielding to repaints /
+/// input / other WM_* that have accumulated during the long tick.
+const tick_slice_warn_ns: u64 = 4 * std.time.ns_per_ms;
+
 pub fn drainMailbox(self: *App) void {
     log.info("drainMailbox: tick...", .{});
+    const t_start = std.time.nanoTimestamp();
     self.core_app.tick(self) catch |err| {
         log.warn("tick error: {}", .{err});
     };
+    const elapsed_ns: u64 = @intCast(@max(0, std.time.nanoTimestamp() - t_start));
     log.info("drainMailbox: tick done", .{});
+
+    // UI-thread non-blocking invariant (Tier 4 / issue #212 P1 #1):
+    // core_app.tick drains the full core→apprt mailbox in one shot. Under a
+    // PTY/CP storm that can be hundreds of performAction calls monopolizing
+    // this UI-thread callback. We can't bound the tick internally (apprt
+    // layer), but if it blew the slice budget we re-post WM_USER so any new
+    // messages enqueued during the long tick run on a fresh pump turn instead
+    // of chaining back-to-back — letting repaints / input interleave.
+    if (elapsed_ns > tick_slice_warn_ns) {
+        const ms = elapsed_ns / std.time.ns_per_ms;
+        log.warn("ui tick long_ms={} (slice budget={}ms) — re-posting WM_USER to yield", .{
+            ms,
+            tick_slice_warn_ns / std.time.ns_per_ms,
+        });
+        if (self.hwnd) |hwnd| {
+            _ = postMessageWarn(hwnd, os.WM_USER, 0, 0, "WM_USER(yield)");
+        }
+    }
 
     // Flush batched UI updates accumulated during this tick.
     self.flushDirtyUi();
