@@ -85,6 +85,9 @@ const CONTEXT_MENU_NEW_TAB: usize = 1001;
 const CONTEXT_MENU_CLOSE_TAB: usize = 1002;
 const CONTEXT_MENU_PASTE: usize = 1003;
 const CONTEXT_MENU_CLOSE_WINDOW: usize = 1004;
+const HEARTBEAT_TIMER_ID: usize = 1000;
+const HEARTBEAT_INTERVAL_MS: u32 = 100;
+const UI_STALL_THRESHOLD_NS: i128 = 3 * std.time.ns_per_s;
 const APPMODEL_ERROR_NO_PACKAGE: i32 = 15700;
 const XamlClass = struct {
     const Application = "Microsoft.UI.Xaml.Application";
@@ -265,6 +268,15 @@ dispatcher_queue: ?*gen.IDispatcherQueue = null,
 /// Named Pipe IPC server for cross-process communication.
 ipc_server: ?*IpcServer = null,
 
+/// UI-thread heartbeat watchdog (Tier 1, issue #212).
+/// Updated from the UI thread on every HEARTBEAT_TIMER_ID tick (~100ms).
+/// Read from the watchdog background thread to detect UI-thread stalls.
+last_ui_heartbeat_ns: std.atomic.Value(i128) = std.atomic.Value(i128).init(0),
+last_ui_stall_ms: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+ui_stalled_reported: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+watchdog_stop: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+watchdog_thread: ?std.Thread = null,
+
 
     /// Get a surface by index. Thread-safe (acquires surfaces_mutex).
     /// Returns the Surface pointer with the mutex released — caller must not
@@ -362,6 +374,7 @@ pub fn init(
         .dq_controller = dq_controller,
         .dispatcher_queue = null,
     };
+    self.last_ui_heartbeat_ns.store(std.time.nanoTimestamp(), .release);
 
     // Window/UI creation happens inside run() via Application.Start(callback).
     // WinUI 3 requires Window creation on the XAML thread which is set up by Start().
@@ -559,6 +572,36 @@ fn initXaml(self: *App) !void {
     // Use SetTimer with 500ms delay so XAML has time to measure+arrange.
     if (comptime builtin.mode == .Debug) {
         _ = os.SetTimer(self.hwnd.?, DUMP_VT_TIMER_ID, 500, null);
+    }
+
+    // Tier 1 UI-thread heartbeat (issue #212). Arm WM_TIMER for heartbeat
+    // updates, then spawn a background poller that flags stalls.
+    self.last_ui_heartbeat_ns.store(std.time.nanoTimestamp(), .release);
+    _ = os.SetTimer(self.hwnd.?, HEARTBEAT_TIMER_ID, HEARTBEAT_INTERVAL_MS, null);
+    self.watchdog_thread = std.Thread.spawn(.{}, watchdogLoop, .{self}) catch |err| blk: {
+        log.warn("watchdog spawn failed: {}", .{err});
+        break :blk null;
+    };
+}
+
+/// Background poller that detects UI-thread stalls by comparing now against
+/// the last heartbeat timestamp. Runs until watchdog_stop is set.
+fn watchdogLoop(self: *App) void {
+    while (!self.watchdog_stop.load(.acquire)) {
+        std.Thread.sleep(1 * std.time.ns_per_s);
+        if (self.watchdog_stop.load(.acquire)) break;
+
+        const last = self.last_ui_heartbeat_ns.load(.acquire);
+        if (last == 0) continue;
+        const now = std.time.nanoTimestamp();
+        const delta: i128 = now - last;
+        if (delta >= UI_STALL_THRESHOLD_NS) {
+            const stall_ms: u64 = @intCast(@divTrunc(delta, std.time.ns_per_ms));
+            self.last_ui_stall_ms.store(stall_ms, .release);
+            if (!self.ui_stalled_reported.swap(true, .acq_rel)) {
+                log.warn("ui_stall detected stall_ms={} threshold_ms=3000", .{stall_ms});
+            }
+        }
     }
 }
 
@@ -1240,6 +1283,14 @@ pub fn terminate(self: *App) void {
     if (self.control_plane) |cp| {
         cp.destroy();
         self.control_plane = null;
+    }
+    self.watchdog_stop.store(true, .release);
+    if (self.watchdog_thread) |t| {
+        t.join();
+        self.watchdog_thread = null;
+    }
+    if (self.hwnd) |h| {
+        _ = os.KillTimer(h, HEARTBEAT_TIMER_ID);
     }
     self.setExitIntent(.terminate);
     self.running = false;
@@ -2538,6 +2589,13 @@ fn handleTimer(self: *App, hwnd: os.HWND, wparam: os.WPARAM) os.LRESULT {
             if (self.pending_size) |ps| {
                 self.applySizeChange(ps.width, ps.height);
             }
+            return 0;
+        },
+        HEARTBEAT_TIMER_ID => {
+            // UI-thread heartbeat: we're alive — stamp timestamp and clear
+            // the stall-reported latch so a future re-stall can re-fire.
+            self.last_ui_heartbeat_ns.store(std.time.nanoTimestamp(), .release);
+            self.ui_stalled_reported.store(false, .release);
             return 0;
         },
         CLOSE_TAB_POLL_TIMER_ID => {
