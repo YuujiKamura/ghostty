@@ -930,16 +930,44 @@ fn tsfGetCursorRect(userdata: ?*anyopaque) os.RECT {
     const surface = app.activeSurface() orelse return os.RECT{};
     const hwnd = app.hwnd orelse return os.RECT{};
 
-    // Get cursor position for caching logic
-    surface.core_surface.renderer_state.mutex.lock();
-    const cursor_x = surface.core_surface.renderer_state.terminal.screens.active.cursor.x;
-    const cursor_y = surface.core_surface.renderer_state.terminal.screens.active.cursor.y;
-    surface.core_surface.renderer_state.mutex.unlock();
-
+    // Get cursor position for caching logic.
+    //
+    // UI-thread non-blocking invariant (#212 Tier 4 P0 #1):
+    // renderer_state.mutex is held by the renderer thread every frame and by
+    // termio during PTY parsing. Under load, a blocking lock() here can stall
+    // the UI thread for seconds (this callback runs on the UI thread from
+    // WM_KEYDOWN / TSF advise sink). Use tryLock and fall back to the last
+    // cached RECT on contention — the IME candidate window will be positioned
+    // at the last-known-good coordinates instead of freezing the UI.
+    const cache = &app.ime_coord_cache;
     const current_time = std.time.milliTimestamp();
 
+    var cursor_x: u32 = cache.last_cursor_x;
+    var cursor_y: u32 = cache.last_cursor_y;
+    const got_lock = surface.core_surface.renderer_state.mutex.tryLock();
+    if (got_lock) {
+        cursor_x = surface.core_surface.renderer_state.terminal.screens.active.cursor.x;
+        cursor_y = surface.core_surface.renderer_state.terminal.screens.active.cursor.y;
+        surface.core_surface.renderer_state.mutex.unlock();
+    } else if (cache.cache_valid) {
+        // Lock contended; return cached RECT immediately so the UI thread
+        // doesn't block on the renderer/termio mutex.
+        const cell_height_cached: i32 =
+            if (cache.last_ime_pos_y > 0) @intFromFloat(cache.last_ime_pos_y - cache.last_ime_pos_y) else 20;
+        log.debug("TSF GetTextExt: mutex contended, returning cached RECT screen=({d},{d}) [TRYLOCK-FALLBACK]", .{
+            cache.last_screen_x, cache.last_screen_y,
+        });
+        return os.RECT{
+            .left = cache.last_screen_x,
+            .top = cache.last_screen_y,
+            .right = cache.last_screen_x + 1,
+            .bottom = cache.last_screen_y + cell_height_cached,
+        };
+    }
+    // else: lock contended AND no cache yet — fall through; imePoint() below
+    // does not require the renderer mutex, so we can still produce a RECT.
+
     // Check cache validity (Phase 3 coordinate stabilization)
-    const cache = &app.ime_coord_cache;
     const cache_expired = (current_time - cache.last_update_time) > IMECoordinateCache.CACHE_DURATION_MS;
     const cursor_moved = (cursor_x != cache.last_cursor_x) or (cursor_y != cache.last_cursor_y);
 
