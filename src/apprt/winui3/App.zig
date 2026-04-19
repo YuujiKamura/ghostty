@@ -277,6 +277,16 @@ ui_stalled_reported: std.atomic.Value(bool) = std.atomic.Value(bool).init(false)
 watchdog_stop: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 watchdog_thread: ?std.Thread = null,
 
+/// Cached configuration snapshot (Tier 4, issue #212 P0 #4).
+/// configpkg.Config.load performs synchronous disk I/O (XDG config dirs,
+/// platform-specific app-data dirs, theme dir scans) which deterministically
+/// stalls the UI thread on Ctrl+T. We load once at App.init, serve newTab
+/// from this cache via clone-under-lock, and refresh on .reload_config on a
+/// background thread.
+cached_config: ?configpkg.Config = null,
+cached_config_lock: std.Thread.Mutex = .{},
+cached_config_epoch: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+
 
     /// Get a surface by index. Thread-safe (acquires surfaces_mutex).
     /// Returns the Surface pointer with the mutex released — caller must not
@@ -294,6 +304,59 @@ watchdog_thread: ?std.Thread = null,
         self.surfaces_mutex.lock();
         defer self.surfaces_mutex.unlock();
         return self.surfaces_snapshot.len;
+    }
+
+    /// Clone the cached Config under the cache lock for use on the UI thread.
+    /// Caller owns the returned Config and must call deinit().
+    /// Falls back to a synchronous Config.load if the cache is empty (e.g.
+    /// init-time load failed). Issue #212 P0 #4.
+    pub fn cloneCachedConfig(self: *App) !configpkg.Config {
+        const alloc = self.core_app.alloc;
+        self.cached_config_lock.lock();
+        if (self.cached_config) |*cached| {
+            const cloned = cached.clone(alloc) catch |err| {
+                self.cached_config_lock.unlock();
+                log.warn("cloneCachedConfig: clone failed err={} — falling back to sync Config.load", .{err});
+                return try configpkg.Config.load(alloc);
+            };
+            self.cached_config_lock.unlock();
+            return cloned;
+        }
+        self.cached_config_lock.unlock();
+        log.warn("cloneCachedConfig: cache miss — falling back to sync Config.load", .{});
+        return try configpkg.Config.load(alloc);
+    }
+
+    /// Reload the cached Config on a detached background thread and swap it
+    /// atomically. Safe to call from the UI thread — returns immediately.
+    /// Issue #212 P0 #4.
+    pub fn reloadConfigAsync(self: *App) void {
+        const thread = std.Thread.spawn(.{}, reloadConfigThreadMain, .{self}) catch |err| {
+            log.warn("reloadConfigAsync: spawn failed err={} — running reload inline", .{err});
+            reloadConfigThreadMain(self);
+            return;
+        };
+        thread.detach();
+    }
+
+    fn reloadConfigThreadMain(self: *App) void {
+        const alloc = self.core_app.alloc;
+        const new_config = configpkg.Config.load(alloc) catch |err| {
+            log.warn("reloadConfigThreadMain: Config.load failed err={}", .{err});
+            return;
+        };
+
+        self.cached_config_lock.lock();
+        var old_opt = self.cached_config;
+        self.cached_config = new_config;
+        _ = self.cached_config_epoch.fetchAdd(1, .acq_rel);
+        self.cached_config_lock.unlock();
+
+        if (old_opt) |*old| old.deinit();
+
+        log.info("reloadConfigThreadMain: config cache refreshed (epoch={d})", .{
+            self.cached_config_epoch.load(.acquire),
+        });
     }
 
     /// Update the thread-safe surfaces snapshot. Must be called on the UI thread
@@ -375,6 +438,18 @@ pub fn init(
         .dispatcher_queue = null,
     };
     self.last_ui_heartbeat_ns.store(std.time.nanoTimestamp(), .release);
+
+    // Prime the config cache synchronously at init so the UI thread never has
+    // to touch disk on the newTab hot path (issue #212 P0 #4). The cost here
+    // is the same disk I/O that would happen on first Ctrl+T anyway, just
+    // moved to startup where a one-time stall is expected.
+    if (configpkg.Config.load(core_app.alloc)) |loaded| {
+        self.cached_config = loaded;
+        self.cached_config_epoch.store(1, .release);
+        log.info("App.init: config cache primed (epoch=1)", .{});
+    } else |err| {
+        log.warn("App.init: config cache prime failed err={} — newTab will fall back to sync load", .{err});
+    }
 
     // Window/UI creation happens inside run() via Application.Start(callback).
     // WinUI 3 requires Window creation on the XAML thread which is set up by Start().
@@ -1010,7 +1085,7 @@ fn createInitialSurfaceContent(self: *App, tab_view: ?*com.ITabView) !void {
     const alloc = self.core_app.alloc;
 
     log.info("initXaml step 8: Creating initial Surface...", .{});
-    var config = try configpkg.Config.load(alloc);
+    var config = try self.cloneCachedConfig();
     defer config.deinit();
 
     var surface = try alloc.create(Surface);
@@ -1450,6 +1525,17 @@ fn fullCleanup(self: *App) void {
     // BufferedPaint cleanup (paired with BufferedPaintInit in init).
     _ = os.BufferedPaintUnInit();
 
+    // Deinit cached Config snapshot (issue #212 P0 #4). Take under the lock
+    // to avoid racing a detached reload thread.
+    {
+        self.cached_config_lock.lock();
+        defer self.cached_config_lock.unlock();
+        if (self.cached_config) |*cfg| {
+            cfg.deinit();
+            self.cached_config = null;
+        }
+    }
+
     log.info("Cleanup complete.", .{});
 }
 
@@ -1573,14 +1659,20 @@ pub fn performAction(
         },
         .reload_config => {
             log.info("performAction: reload_config", .{});
-            const alloc = self.core_app.alloc;
-            var config = try configpkg.Config.load(alloc);
+            // Apply current cache immediately so the caller sees a consistent
+            // result, and kick off a disk reload on a background thread so the
+            // UI thread never blocks on file I/O. Issue #212 P0 #4.
+            var config = try self.cloneCachedConfig();
             defer config.deinit();
 
             switch (target) {
                 .app => try self.core_app.updateConfig(self, &config),
                 .surface => |core| try core.updateConfig(&config),
             }
+
+            // Refresh cache asynchronously. Next reload_config (or next new tab)
+            // picks up any on-disk changes without having stalled this call.
+            self.reloadConfigAsync();
             return true;
         },
         .ring_bell => {
