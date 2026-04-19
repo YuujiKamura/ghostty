@@ -49,7 +49,9 @@ pub fn newTabWithProfile(
     profile_opt: ?profiles.Profile,
 ) !void {
     const alloc = self.core_app.alloc;
-    var config = try configpkg.Config.load(alloc);
+    // Use the cached Config (populated at App.init) to avoid synchronous disk
+    // I/O on the UI thread Ctrl+T hot path. Issue #212 P0 #4.
+    var config = try self.cloneCachedConfig();
     defer config.deinit();
 
     var surface = try alloc.create(Surface);
