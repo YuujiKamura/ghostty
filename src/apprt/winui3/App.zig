@@ -288,14 +288,6 @@ watchdog_thread: ?std.Thread = null,
 // full mailbox on every invocation.
 wakeup_pending: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 
-// TEMP-DIAG (issue #214 stall mitigation): opt-in counters emitted from
-// watchdogLoop at 1 Hz when GHOSTTY_WINUI3_DISPATCHER_DIAG=1 is set at
-// process start. All removed in step 8 of hypothesis-log-reproduce-verify.
-diag_wakeup_calls: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
-diag_drain_ticks: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
-diag_long_ticks: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
-diag_cumulative_tick_ns: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
-diag_log_handle: ?windows.HANDLE = null,
 
 /// Cached configuration snapshot (Tier 4, issue #212 P0 #4).
 /// configpkg.Config.load performs synchronous disk I/O (XDG config dirs,
@@ -458,10 +450,6 @@ pub fn init(
         .dispatcher_queue = null,
     };
     self.last_ui_heartbeat_ns.store(std.time.nanoTimestamp(), .release);
-
-    // TEMP-DIAG (issue #214): open 1 Hz stall-diagnostic log if env var set.
-    // Path: %LOCALAPPDATA%\ghostty\dispatcher-stall-diag-<pid>.log. Opt-in only.
-    self.diag_log_handle = openDiagLogHandle(core_app.alloc);
 
     // Prime the config cache synchronously at init so the UI thread never has
     // to touch disk on the newTab hot path (issue #212 P0 #4). The cost here
@@ -686,12 +674,6 @@ fn initXaml(self: *App) !void {
 /// Background poller that detects UI-thread stalls by comparing now against
 /// the last heartbeat timestamp. Runs until watchdog_stop is set.
 fn watchdogLoop(self: *App) void {
-    // TEMP-DIAG (issue #214): prior-sample snapshots for delta computation.
-    var prev_wakeups: u64 = 0;
-    var prev_drains: u64 = 0;
-    var prev_long_ticks: u64 = 0;
-    var prev_tick_ns: u64 = 0;
-
     while (!self.watchdog_stop.load(.acquire)) {
         std.Thread.sleep(1 * std.time.ns_per_s);
         if (self.watchdog_stop.load(.acquire)) break;
@@ -700,7 +682,6 @@ fn watchdogLoop(self: *App) void {
         if (last == 0) continue;
         const now = std.time.nanoTimestamp();
         const delta: i128 = now - last;
-        const hb_age_ms: u64 = @intCast(@divTrunc(@max(delta, 0), std.time.ns_per_ms));
         if (delta >= UI_STALL_THRESHOLD_NS) {
             const stall_ms: u64 = @intCast(@divTrunc(delta, std.time.ns_per_ms));
             self.last_ui_stall_ms.store(stall_ms, .release);
@@ -708,85 +689,7 @@ fn watchdogLoop(self: *App) void {
                 log.warn("ui_stall detected stall_ms={} threshold_ms=3000", .{stall_ms});
             }
         }
-
-        // TEMP-DIAG (issue #214): emit per-second counter deltas when enabled.
-        if (self.diag_log_handle) |h| {
-            const cur_wakeups = self.diag_wakeup_calls.load(.monotonic);
-            const cur_drains = self.diag_drain_ticks.load(.monotonic);
-            const cur_long = self.diag_long_ticks.load(.monotonic);
-            const cur_tick_ns = self.diag_cumulative_tick_ns.load(.monotonic);
-            const d_wakeups = cur_wakeups -% prev_wakeups;
-            const d_drains = cur_drains -% prev_drains;
-            const d_long = cur_long -% prev_long_ticks;
-            const d_tick_ns = cur_tick_ns -% prev_tick_ns;
-            prev_wakeups = cur_wakeups;
-            prev_drains = cur_drains;
-            prev_long_ticks = cur_long;
-            prev_tick_ns = cur_tick_ns;
-
-            const avg_tick_us: u64 = if (d_drains == 0) 0 else (d_tick_ns / d_drains) / std.time.ns_per_us;
-            const t_ms: u64 = @intCast(std.time.milliTimestamp());
-            var buf: [384]u8 = undefined;
-            const line = std.fmt.bufPrint(
-                &buf,
-                "DIAG t_ms={d} pid={d} hb_age_ms={d} stalled={d} wakeups={d} drains={d} long_ticks={d} tick_ns={d} avg_tick_us={d}\n",
-                .{
-                    t_ms,
-                    windows.GetCurrentProcessId(),
-                    hb_age_ms,
-                    @intFromBool(delta >= UI_STALL_THRESHOLD_NS),
-                    d_wakeups,
-                    d_drains,
-                    d_long,
-                    d_tick_ns,
-                    avg_tick_us,
-                },
-            ) catch continue;
-            var written: windows.DWORD = 0;
-            _ = windows.kernel32.WriteFile(h, line.ptr, @intCast(line.len), &written, null);
-        }
     }
-}
-
-// TEMP-DIAG (issue #214): opt-in diagnostic log file. Returns null unless
-// GHOSTTY_WINUI3_DISPATCHER_DIAG=1 is set at process start. Logs to
-// %LOCALAPPDATA%\ghostty\dispatcher-stall-diag-<pid>.log. Removed in step 8.
-fn openDiagLogHandle(alloc: Allocator) ?windows.HANDLE {
-    const env_on = blk: {
-        const v = std.process.getEnvVarOwned(alloc, "GHOSTTY_WINUI3_DISPATCHER_DIAG") catch break :blk false;
-        defer alloc.free(v);
-        break :blk std.mem.eql(u8, v, "1");
-    };
-    if (!env_on) return null;
-
-    var arena = std.heap.ArenaAllocator.init(alloc);
-    defer arena.deinit();
-    const a = arena.allocator();
-
-    const localappdata = std.process.getEnvVarOwned(a, "LOCALAPPDATA") catch return null;
-    const dir = std.fs.path.join(a, &.{ localappdata, "ghostty" }) catch return null;
-    std.fs.makeDirAbsolute(dir) catch {};
-    const pid = windows.GetCurrentProcessId();
-    const fname = std.fmt.allocPrint(a, "dispatcher-stall-diag-{d}.log", .{pid}) catch return null;
-    const full = std.fs.path.join(a, &.{ dir, fname }) catch return null;
-    const wname = std.unicode.utf8ToUtf16LeAllocZ(a, full) catch return null;
-
-    const GENERIC_WRITE: windows.DWORD = 0x40000000;
-    const FILE_SHARE_READ: windows.DWORD = 0x00000001;
-    const CREATE_ALWAYS: windows.DWORD = 2;
-    const FILE_ATTRIBUTE_NORMAL: windows.DWORD = 0x00000080;
-    const h = windows.kernel32.CreateFileW(
-        wname.ptr,
-        GENERIC_WRITE,
-        FILE_SHARE_READ,
-        null,
-        CREATE_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL,
-        null,
-    );
-    if (h == windows.INVALID_HANDLE_VALUE) return null;
-    log.info("diag: dispatcher-stall diagnostic log opened at {s}", .{full});
-    return h;
 }
 
 fn dumpVisualTreeRoot(self: *App) void {
@@ -1501,11 +1404,6 @@ pub fn terminate(self: *App) void {
         t.join();
         self.watchdog_thread = null;
     }
-    // TEMP-DIAG (issue #214): close opt-in diagnostic log handle.
-    if (self.diag_log_handle) |h| {
-        windows.CloseHandle(h);
-        self.diag_log_handle = null;
-    }
     if (self.hwnd) |h| {
         _ = os.KillTimer(h, HEARTBEAT_TIMER_ID);
     }
@@ -1684,8 +1582,6 @@ fn fullCleanup(self: *App) void {
 /// Thread-safe wakeup: any thread can call this to unblock the event loop.
 /// Uses DispatcherQueue.TryEnqueue to avoid OS deprioritization of background windows.
 pub fn wakeup(self: *App) void {
-    // TEMP-DIAG (issue #214): count every wakeup call for flood detection.
-    _ = self.diag_wakeup_calls.fetchAdd(1, .monotonic);
     if (self.dispatcher_queue) |dq| {
         // Coalesce: if a drainMailbox is already scheduled, skip TryEnqueue.
         // drainMailbox clears the flag at entry, so any wakeup during tick
@@ -2441,15 +2337,12 @@ pub fn drainMailbox(self: *App) void {
     // message written before this store is visible to the tick below, and any
     // message written after the store will cause a new drain to be scheduled.
     self.wakeup_pending.store(false, .release);
-    // TEMP-DIAG (issue #214): count every drain callback to measure coalescing.
-    _ = self.diag_drain_ticks.fetchAdd(1, .monotonic);
     log.info("drainMailbox: tick...", .{});
     const t_start = std.time.nanoTimestamp();
     self.core_app.tick(self) catch |err| {
         log.warn("tick error: {}", .{err});
     };
     const elapsed_ns: u64 = @intCast(@max(0, std.time.nanoTimestamp() - t_start));
-    _ = self.diag_cumulative_tick_ns.fetchAdd(elapsed_ns, .monotonic);
     log.info("drainMailbox: tick done", .{});
 
     // UI-thread non-blocking invariant (Tier 4 / issue #212 P1 #1):
@@ -2460,8 +2353,6 @@ pub fn drainMailbox(self: *App) void {
     // messages enqueued during the long tick run on a fresh pump turn instead
     // of chaining back-to-back — letting repaints / input interleave.
     if (elapsed_ns > tick_slice_warn_ns) {
-        // TEMP-DIAG (issue #214)
-        _ = self.diag_long_ticks.fetchAdd(1, .monotonic);
         const ms = elapsed_ns / std.time.ns_per_ms;
         log.warn("ui tick long_ms={} (slice budget={}ms) — re-posting WM_USER to yield", .{
             ms,

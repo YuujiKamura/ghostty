@@ -330,13 +330,32 @@ Inferences (NOT fact):
 
 ---
 
-## Step 8 — Re-measure + remove diag (pending)
+## Step 8 — Re-measure + remove diag (done)
 
-After mitigation:
-- Repro script run, expect p95 drop.
-- Remove diag counters (step 4 edits reverted or gated to Debug-only).
-- Single mitigation commit + single diag-removal commit (or squash).
-- `git push fork p1-task-214-dispatcher-stall-mitigation`. No PR — Team PR-Curator's responsibility.
+Performed in two commits on `p1-task-214-dispatcher-stall-mitigation`:
+
+1. `00beecf28 fix(winui3): coalesce wakeup TryEnqueue to end Dispatcher flood (#214)` — the
+   mitigation itself (wakeup_pending flag on App, CAS in wakeup(), store(false) at drainMailbox
+   entry). Re-measurement data inline in the commit message and in Step 7 above.
+
+2. A follow-up commit removing every `TEMP-DIAG` line from `src/apprt/winui3/App.zig`
+   (`diag_wakeup_calls`, `diag_drain_ticks`, `diag_long_ticks`, `diag_cumulative_tick_ns`,
+   `diag_log_handle` fields, `openDiagLogHandle` helper, the watchdogLoop DIAG-emit block,
+   the `GHOSTTY_WINUI3_DISPATCHER_DIAG` env var plumbing, and the CloseHandle in terminate).
+   Verified removal with `grep -n "TEMP-DIAG\|diag_\|openDiagLogHandle" src/apprt/winui3/App.zig`
+   → no matches. Build green (`./build-winui3.sh --release=fast` exit 0). Smoke test (5K burst,
+   label=smoke, pid=20612) passes with no diag file created — the opt-in code path is gone:
+   `[diag] source C:\Users\yuuji\AppData\Local\ghostty\dispatcher-stall-diag-20612.log missing
+   (env var not set at spawn?)` — correct behavior: the script prints "missing" exactly when the
+   code that would have written it is no longer compiled in.
+   Probe p95 STATE=1ms, CAPABILITIES=1ms — consistent with the post-mitigation run.
+
+Branch state at end:
+- `p1-task-214-dispatcher-stall-mitigation`, three commits ahead of base `e4d99ae8b`:
+  - `4d1375549 diag(winui3): TEMP-DIAG counters + repro for dispatcher-stall (#214)`
+  - `00beecf28 fix(winui3): coalesce wakeup TryEnqueue to end Dispatcher flood (#214)`
+  - (this commit) `cleanup(winui3): remove TEMP-DIAG counters; mitigation stands alone`
+- Pushed to `fork` (YuujiKamura/ghostty). No PR opened — Team PR-Curator owns upstream threading.
 
 ---
 
@@ -349,4 +368,25 @@ After mitigation:
 
 ## Progress log
 
-- 2026-04-20: brief received, branch `p1-task-214-dispatcher-stall-mitigation` created off `e4d99ae8b`. Steps 1–4 drafted in this report. Next: implement diag counters (step 4), write repro script (step 5).
+- 2026-04-20: brief received, branch `p1-task-214-dispatcher-stall-mitigation` created off `e4d99ae8b`. Steps 1–4 drafted in this report.
+- 2026-04-20 23:56: first valid 10K burst run (pid=29360) captured — H1 signature (wakeups≈drains, 8288:8279). H2 minor (8 long_ticks). H3/H4 refuted. H5 undetermined.
+- 2026-04-21 00:19: mitigation committed (`00beecf28`). Post-mitigation 10K burst (pid=21628) shows 67% drop in UI thread drain CPU, long_ticks 8→0.
+- 2026-04-21 00:25: TEMP-DIAG removed; final build + smoke test (pid=20612) green.
+
+## In-scope findings (one-line summary for PR curator)
+
+1. **Primary fix (landed)**: `DispatcherQueue.TryEnqueue` does not coalesce, causing wakeup floods
+   under PTY bursts. Added `wakeup_pending` CAS at `wakeup()` entry cleared on drainMailbox entry.
+   At a measured 8.3 kHz wakeup rate: tick_ns −67%, long_ticks −100%, avg_tick −60%.
+
+2. **Undetermined / deferred**: H5 (`log.info("drainMailbox: tick...")` flood on stderr in release
+   builds) not measured in isolation. Will naturally diminish as drain count falls with H1 fix.
+   Standalone A/B by gating those two `log.info` to `.debug` remains available if any residual
+   stall persists under higher-rate (Claude xhigh) real-world load.
+
+3. **Out-of-scope finding** (flagging for a separate team, NOT touching in this commit):
+   `error starting IO thread: error.InvalidUtf8` at ghostty startup, observed in 3 of 4
+   heavy-burst repro attempts. Triggers a full UI-thread freeze (hb_age_ms grows monotonically
+   past 40s, wakeups=0, drains=0). Captured diag logs at
+   `.dispatch/dispatcher-stall-diag-{pre-heavy,pre-50k,canonical}-*.log`. This is an init-time
+   problem, distinct from the brief's runtime-stall scope.
