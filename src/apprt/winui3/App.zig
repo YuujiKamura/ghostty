@@ -277,6 +277,17 @@ ui_stalled_reported: std.atomic.Value(bool) = std.atomic.Value(bool).init(false)
 watchdog_stop: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 watchdog_thread: ?std.Thread = null,
 
+// Wakeup coalescing (issue #214). Under high-frequency producer wakeups
+// (e.g. PTY byte storm during Claude xhigh thinking bursts) DispatcherQueue
+// .TryEnqueue does NOT coalesce identical handler instances — each wakeup
+// stacks another drainMailbox callback, so the UI thread spends time on
+// redundant empty drains instead of other pump work. This flag elides
+// redundant enqueues: wakeup() only calls TryEnqueue when CAS(false→true)
+// wins; drainMailbox clears the flag at entry so a wakeup concurrent with
+// tick still schedules a fresh drain. Safe because core_app.tick drains the
+// full mailbox on every invocation.
+wakeup_pending: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+
 // TEMP-DIAG (issue #214 stall mitigation): opt-in counters emitted from
 // watchdogLoop at 1 Hz when GHOSTTY_WINUI3_DISPATCHER_DIAG=1 is set at
 // process start. All removed in step 8 of hypothesis-log-reproduce-verify.
@@ -1676,8 +1687,15 @@ pub fn wakeup(self: *App) void {
     // TEMP-DIAG (issue #214): count every wakeup call for flood detection.
     _ = self.diag_wakeup_calls.fetchAdd(1, .monotonic);
     if (self.dispatcher_queue) |dq| {
+        // Coalesce: if a drainMailbox is already scheduled, skip TryEnqueue.
+        // drainMailbox clears the flag at entry, so any wakeup during tick
+        // will re-arm this path and schedule a fresh drain.
+        if (self.wakeup_pending.cmpxchgStrong(false, true, .acq_rel, .monotonic)) |_| return;
         WakeupHandler.g_app.store(self, .release);
         _ = dq.tryEnqueue(@ptrCast(&WakeupHandler.instance)) catch {
+            // TryEnqueue failed — clear the flag so future wakeups retry,
+            // then fall back to the Win32 path.
+            self.wakeup_pending.store(false, .release);
             if (self.hwnd) |hwnd| _ = postMessageWarn(hwnd, os.WM_USER, 0, 0, "WM_USER");
         };
     } else {
@@ -2418,6 +2436,11 @@ const diagnostic_interval: u32 = 500; // ~every 500 ticks
 const tick_slice_warn_ns: u64 = 4 * std.time.ns_per_ms;
 
 pub fn drainMailbox(self: *App) void {
+    // Clear wakeup_pending at entry so any wakeup that races with this tick
+    // schedules a fresh drain. core_app.tick drains the full mailbox, so any
+    // message written before this store is visible to the tick below, and any
+    // message written after the store will cause a new drain to be scheduled.
+    self.wakeup_pending.store(false, .release);
     // TEMP-DIAG (issue #214): count every drain callback to measure coalescing.
     _ = self.diag_drain_ticks.fetchAdd(1, .monotonic);
     log.info("drainMailbox: tick...", .{});

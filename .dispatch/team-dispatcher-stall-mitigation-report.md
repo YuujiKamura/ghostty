@@ -253,15 +253,80 @@ proportionally regardless.
 
 ---
 
-## Step 7 — Mitigation choice (pending step 6)
+## Step 7 — Mitigation chosen: (a) wakeup-level coalescing
 
-Brief offers:
-- **(a) UI update coalescing** — reduces H1/H3 amplitude by folding redundant enqueues. Simplest: set a `wakeup_pending` atomic flag; `wakeup()` skips `TryEnqueue` if already set; `drainMailbox` clears it after the first tick. Side effect: if drainMailbox doesn't actually drain everything, a second wakeup might be missed — but since drain always calls `core_app.tick` which drains fully, this is safe.
-- **(b) Priority lane** — split input/CP vs render, requires two DispatcherQueues or WM_APP priority slots. Bigger change.
-- **(c) Stall-detect force-yield** — workaround.
-- **(d) Circuit breaker** — workaround.
+Given the step-6 classification — H1 dominant (no-coalescing wakeup flood), H2 minor (8 long ticks out of 8288 drains), H3/H4 refuted at this load — the minimal correct fix is **(a) UI update coalescing applied at `wakeup()` entry**, not at the XAML element layer. The XAML-element coalescing variant in the brief addresses render pressure, which our data did NOT implicate; the flood is at the `DispatcherQueue.TryEnqueue` scheduling layer, so coalescing there is where the redundancy lives.
 
-Hypothesis (to be confirmed by step 6): H1 is the primary cause, (a) is the minimal correct fix.
+### Implementation (src/apprt/winui3/App.zig)
+
+Three edits:
+
+1. New field on `App`:
+```zig
+wakeup_pending: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+```
+
+2. `wakeup()` becomes edge-triggered on `wakeup_pending`:
+```zig
+if (self.wakeup_pending.cmpxchgStrong(false, true, .acq_rel, .monotonic)) |_| return;
+// ... existing TryEnqueue ...
+// on TryEnqueue failure: wakeup_pending.store(false, .release); then fall back to WM_USER.
+```
+
+3. `drainMailbox()` clears the flag at entry (before `core_app.tick`):
+```zig
+self.wakeup_pending.store(false, .release);
+// ... existing tick + flush ...
+```
+
+### Why this is safe
+
+Invariant: every message written to the core→apprt mailbox must eventually be consumed by a `core_app.tick` invocation.
+
+- Producer writes `msgX` to mailbox (mailbox's own acquire/release semantics handle visibility), then calls `wakeup()`.
+- If `wakeup_pending` was `false`: CAS wins → TryEnqueue schedules a drain. That drain's `tick` will see `msgX` (mailbox ordering).
+- If `wakeup_pending` was `true`: CAS fails, wakeup returns. But the in-flight drain, when it reaches its `tick`, reads the mailbox after its `flag.store(false, .release)`; `msgX` was written before the wakeup's CAS, which happens-before any concurrent `flag.store(false)`. Either the tick's mailbox read sees `msgX` (caught), or `msgX` arrives after the store and the CAS re-wins on the next wakeup — scheduling a fresh drain.
+- No lost messages; at most one extra empty drain per flag-cycle.
+
+### Re-measurement (step-7 A/B)
+
+Post-mitigation run at 10K burst (label=`post`, pid=21628):
+```
+DIAG t_ms=1776698376119 pid=21628 hb_age_ms=23 stalled=0 wakeups=2528 drains=2293 long_ticks=0 tick_ns=24429200 avg_tick_us=10
+DIAG t_ms=1776698377119 pid=21628 hb_age_ms=36 stalled=0 wakeups=7552 drains=6895 long_ticks=0 tick_ns=71169900 avg_tick_us=10
+DIAG t_ms=1776698378120 pid=21628 hb_age_ms=47 stalled=0 wakeups=0    drains=0    long_ticks=0 tick_ns=0         avg_tick_us=0
+...
+```
+
+| Metric | Pre (pid 29360) | Post (pid 21628) | Δ |
+|--------|-----------------|------------------|---|
+| Peak wakeups / 1s | 8279 | 7552 | -9% (load roughly unchanged — expected) |
+| Peak drains / 1s | **8288** | **6895** | **-17%** (drain/wakeup ratio 100% → 91%) |
+| long_ticks during burst | **8** | **0** | **-100%** (H2's blowout rate eliminated at this load) |
+| tick_ns during burst | **215 487 000** | **71 169 900** | **-67%** (UI thread drain CPU: 21.5% → 7.1% of 1s) |
+| avg_tick_us during burst | 25 | 10 | -60% (less entry overhead per drain) |
+| probe p95 STATE | 2 ms | 1 ms | idle-level, no regression |
+| probe p95 CAPABILITIES | 1 ms | 1 ms | same |
+| max hb_age_ms | 106 | 107 | unchanged (never stalled) |
+
+Inferences (NOT fact):
+- 67% reduction in UI-thread drain CPU at identical producer load. Extrapolated to Claude xhigh rates
+  (3–10× higher producer wakeup frequency), this converts a 60–100% UI-thread-saturation scenario into a
+  20–33% one, restoring pump headroom for WM_TIMER / WM_NCHITTEST / CP-pipe handling.
+- The 91% (vs 100%) drain/wakeup ratio indicates coalescing wins when the drain-scheduling interval
+  happens to overlap a new wakeup — not when wakeups arrive faster than TryEnqueue can schedule them.
+  This is the correct behavior: coalescing is opportunistic; it strengthens as load rises.
+- long_ticks going to 0 at this load is a secondary win: since each drain now carries less overhead,
+  the 4 ms slice bound is rarely tripped, so the P1 #1 `WM_USER(yield)` re-post fires less often,
+  reducing pump pressure too.
+
+### What this mitigation does NOT fix
+
+- The `error starting IO thread: error.InvalidUtf8` shell-launch race observed in 3 of 4 heavy-burst
+  repro attempts. That is an init-time failure, out of scope for this team, and left for a follow-up.
+- Higher-fanout sources of Dispatcher traffic (tab title changes, scrollbar updates, XAML layout passes
+  triggered by large bursts). Those did not surface as stall contributors in our data but would need
+  their own coalescing at the Surface-dirty-flag layer if they do in the future.
 
 ---
 
