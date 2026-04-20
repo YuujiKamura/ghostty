@@ -88,6 +88,10 @@ pub const ControlPlane = struct {
     pub const CaptureTailFn = *const fn (ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) anyerror!?[]u8;
     pub const CaptureHistoryFn = *const fn (ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) anyerror!?[]u8;
     pub const CaptureTabListFn = *const fn (ctx: *anyopaque, allocator: Allocator) anyerror!?[]u8;
+    /// Team G (issue #214): returns a single-line OK| payload describing the
+    /// current dispatcher-watchdog state. Callee must return allocator-owned
+    /// memory; pipeHandler will return it directly to the client.
+    pub const CaptureWatchdogFn = *const fn (ctx: *anyopaque, allocator: Allocator) anyerror![]u8;
 
     allocator: Allocator,
     hwnd: os.HWND,
@@ -114,6 +118,7 @@ pub const ControlPlane = struct {
     capture_tail_fn: ?CaptureTailFn = null,
     capture_history_fn: ?CaptureHistoryFn = null,
     capture_tab_list_fn: ?CaptureTabListFn = null,
+    capture_watchdog_fn: ?CaptureWatchdogFn = null,
     max_pending_inputs: usize = default_max_pending_inputs,
     max_inflight_data_requests: u32 = default_max_inflight_data_requests,
     inflight_data_requests: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
@@ -140,6 +145,7 @@ pub const ControlPlane = struct {
         capture_tail_fn: ?CaptureTailFn,
         capture_history_fn: ?CaptureHistoryFn,
         capture_tab_list_fn: ?CaptureTabListFn,
+        capture_watchdog_fn: ?CaptureWatchdogFn,
     ) !*ControlPlane {
         const self = try allocator.create(ControlPlane);
         errdefer allocator.destroy(self);
@@ -152,6 +158,7 @@ pub const ControlPlane = struct {
             .capture_tail_fn = capture_tail_fn,
             .capture_history_fn = capture_history_fn,
             .capture_tab_list_fn = capture_tab_list_fn,
+            .capture_watchdog_fn = capture_watchdog_fn,
         };
         self.cache.ttl_ns = self.loadCacheTtlNs();
         self.max_pending_inputs = self.loadMaxPendingInputs();
@@ -237,6 +244,20 @@ pub const ControlPlane = struct {
                 },
             ) catch return "ERR|oom\n";
         }
+        // Team G (issue #214): WATCHDOG pull command — returns current
+        // dispatcher-watchdog state (pulse / stall) to external monitors.
+        // deckpilot polls this to detect which session's UI thread is stuck.
+        if (std.ascii.eqlIgnoreCase(commandName(req), "WATCHDOG")) {
+            if (self.capture_watchdog_fn) |fn_ptr| {
+                if (self.callback_ctx) |cbx| {
+                    return fn_ptr(cbx, allocator) catch |err| blk: {
+                        log.warn("WATCHDOG capture failed: {}", .{err});
+                        break :blk allocator.dupe(u8, "ERR|watchdog_capture_failed\n") catch "ERR|watchdog_capture_failed\n";
+                    };
+                }
+            }
+            return allocator.dupe(u8, "ERR|watchdog_unavailable\n") catch "ERR|watchdog_unavailable\n";
+        }
         if (self.cp) |*cp| {
             return self.handleRequestWith(request, allocator, cp, cpBackend);
         }
@@ -255,7 +276,7 @@ pub const ControlPlane = struct {
         if (std.mem.eql(u8, cmd, "CAPABILITIES")) {
             return std.fmt.allocPrint(
                 allocator,
-                "OK|{s}|CAPABILITIES|transport=polling|reads=STATE,CAPTURE_PANE,TAIL,HISTORY,WAIT_FOR,PANE_PID,CURSOR_POS,PANE_TITLE,LIST_TABS|writes=INPUT,RAW_INPUT,PASTE,SEND_KEYS,ACK_POLL|control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS\n",
+                "OK|{s}|CAPABILITIES|transport=polling|reads=STATE,CAPTURE_PANE,TAIL,HISTORY,WAIT_FOR,PANE_PID,CURSOR_POS,PANE_TITLE,LIST_TABS,WATCHDOG|writes=INPUT,RAW_INPUT,PASTE,SEND_KEYS,ACK_POLL|control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS\n",
                 .{self.session_name orelse "ghostty"},
             ) catch "ERR|oom\n";
         }

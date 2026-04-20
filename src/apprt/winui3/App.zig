@@ -40,6 +40,8 @@ const surface_binding = @import("surface_binding.zig");
 const event_handlers = @import("event_handlers.zig");
 const control_plane_mod = @import("control_plane.zig");
 const ControlPlaneNative = control_plane_mod.ControlPlane;
+const watchdog_mod = @import("watchdog.zig");
+const DispatcherWatchdog = watchdog_mod.DispatcherWatchdog;
 
 const nonclient_island_window = @import("nonclient_island_window.zig");
 const NonClientIslandWindow = nonclient_island_window.NonClientIslandWindow;
@@ -88,6 +90,16 @@ const CONTEXT_MENU_CLOSE_WINDOW: usize = 1004;
 const HEARTBEAT_TIMER_ID: usize = 1000;
 const HEARTBEAT_INTERVAL_MS: u32 = 100;
 const UI_STALL_THRESHOLD_NS: i128 = 3 * std.time.ns_per_s;
+/// 1 Hz dispatcher pulse timer (Team G, issue #214). Emits one PULSE entry
+/// per second to the dispatcher-watchdog-<pid>.log sink for external monitors.
+const DISPATCHER_PULSE_TIMER_ID: usize = 1005;
+const DISPATCHER_PULSE_INTERVAL_MS: u32 = 1000;
+/// Dev fixture: if `GHOSTTY_WINUI3_WATCHDOG_TEST_STALL` is set, the UI thread
+/// blocks for this many milliseconds ~5s after init so the log sink can be
+/// verified. Production builds never read this env var at runtime except once
+/// during initXaml.
+const WATCHDOG_TEST_STALL_MS: u32 = 5_000;
+const WATCHDOG_TEST_TRIGGER_TIMER_ID: usize = 1006;
 const APPMODEL_ERROR_NO_PACKAGE: i32 = 15700;
 const XamlClass = struct {
     const Application = "Microsoft.UI.Xaml.Application";
@@ -276,6 +288,16 @@ last_ui_stall_ms: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
 ui_stalled_reported: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 watchdog_stop: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 watchdog_thread: ?std.Thread = null,
+
+/// Dispatcher watchdog log sink (Team G, issue #214). Writes one PULSE entry
+/// per second from the UI thread and one STALL entry from the background
+/// watchdog thread whenever the heartbeat is stale for >= 3s. Owned by the
+/// App; deinit'd in terminate(). `null` if the log file could not be opened.
+watchdog_log: ?*DispatcherWatchdog = null,
+/// Unix-ms timestamp of the last PULSE entry written, stamped from the UI
+/// thread. Read by the watchdog background thread so STALL entries can cite
+/// the last known-good pulse time.
+last_pulse_t_ms: std.atomic.Value(i64) = std.atomic.Value(i64).init(0),
 
 
     /// Get a surface by index. Thread-safe (acquires surfaces_mutex).
@@ -538,6 +560,7 @@ fn initXaml(self: *App) !void {
                 controlPlaneCaptureTail,
                 controlPlaneCaptureHistory,
                 controlPlaneCaptureTabList,
+                controlPlaneCaptureWatchdog,
             ) catch |err| blk: {
                 log.err("control_plane: create FAILED err={s}", .{@errorName(err)});
                 break :blk null;
@@ -578,10 +601,34 @@ fn initXaml(self: *App) !void {
     // updates, then spawn a background poller that flags stalls.
     self.last_ui_heartbeat_ns.store(std.time.nanoTimestamp(), .release);
     _ = os.SetTimer(self.hwnd.?, HEARTBEAT_TIMER_ID, HEARTBEAT_INTERVAL_MS, null);
+
+    // Team G (issue #214): open dispatcher-watchdog log sink, arm the 1 Hz
+    // PULSE timer, and — if the test-fixture env var is set — arm a one-shot
+    // timer that synthesises a stall so the log path can be verified.
+    const pid = std.os.windows.GetCurrentProcessId();
+    self.watchdog_log = DispatcherWatchdog.init(self.core_app.alloc, pid) catch |err| blk: {
+        log.warn("dispatcher-watchdog log init failed: {} — continuing log-less", .{err});
+        break :blk null;
+    };
+    self.last_pulse_t_ms.store(std.time.milliTimestamp(), .release);
+    _ = os.SetTimer(self.hwnd.?, DISPATCHER_PULSE_TIMER_ID, DISPATCHER_PULSE_INTERVAL_MS, null);
+    if (watchdogTestStallRequested(self.core_app.alloc)) {
+        log.warn("watchdog test-stall fixture active — UI thread will block for {d}ms after 5s", .{WATCHDOG_TEST_STALL_MS});
+        _ = os.SetTimer(self.hwnd.?, WATCHDOG_TEST_TRIGGER_TIMER_ID, 5_000, null);
+    }
+
     self.watchdog_thread = std.Thread.spawn(.{}, watchdogLoop, .{self}) catch |err| blk: {
         log.warn("watchdog spawn failed: {}", .{err});
         break :blk null;
     };
+}
+
+fn watchdogTestStallRequested(allocator: std.mem.Allocator) bool {
+    const value = std.process.getEnvVarOwned(allocator, "GHOSTTY_WINUI3_WATCHDOG_TEST_STALL") catch return false;
+    defer allocator.free(value);
+    return std.mem.eql(u8, value, "1") or
+        std.ascii.eqlIgnoreCase(value, "true") or
+        std.ascii.eqlIgnoreCase(value, "yes");
 }
 
 /// Background poller that detects UI-thread stalls by comparing now against
@@ -600,6 +647,9 @@ fn watchdogLoop(self: *App) void {
             self.last_ui_stall_ms.store(stall_ms, .release);
             if (!self.ui_stalled_reported.swap(true, .acq_rel)) {
                 log.warn("ui_stall detected stall_ms={} threshold_ms=3000", .{stall_ms});
+                if (self.watchdog_log) |wl| {
+                    wl.writeStall(stall_ms, self.last_pulse_t_ms.load(.acquire));
+                }
             }
         }
     }
@@ -1319,6 +1369,12 @@ pub fn terminate(self: *App) void {
     }
     if (self.hwnd) |h| {
         _ = os.KillTimer(h, HEARTBEAT_TIMER_ID);
+        _ = os.KillTimer(h, DISPATCHER_PULSE_TIMER_ID);
+        _ = os.KillTimer(h, WATCHDOG_TEST_TRIGGER_TIMER_ID);
+    }
+    if (self.watchdog_log) |wl| {
+        wl.deinit();
+        self.watchdog_log = null;
     }
     self.setExitIntent(.terminate);
     self.running = false;
@@ -1877,7 +1933,7 @@ fn controlPlaneCaptureTabList(ctx: *anyopaque, allocator: Allocator) !?[]u8 {
     errdefer buf.deinit(allocator);
     const writer = buf.writer(allocator);
     try writer.print("LIST_TABS|{d}|{d}\n", .{ tab_count, self.active_surface_idx });
-    
+
     var i: usize = 0;
     while (i < tab_count) : (i += 1) {
         if (self.getSurface(i)) |surface| {
@@ -1895,6 +1951,37 @@ fn controlPlaneCaptureTabList(ctx: *anyopaque, allocator: Allocator) !?[]u8 {
         }
     }
     return try buf.toOwnedSlice(allocator);
+}
+
+/// Team G (issue #214): CP WATCHDOG pull — returns current dispatcher-watchdog
+/// state so external monitors (deckpilot) can observe which session's UI
+/// thread is pumping. Single-line `OK|...` response, CRLF-free.
+fn controlPlaneCaptureWatchdog(ctx: *anyopaque, allocator: Allocator) ![]u8 {
+    const self: *App = @ptrCast(@alignCast(ctx));
+    const pid = std.os.windows.GetCurrentProcessId();
+    const last_hb_ns = self.last_ui_heartbeat_ns.load(.acquire);
+    const last_pulse_t_ms = self.last_pulse_t_ms.load(.acquire);
+    const last_stall_ms = self.last_ui_stall_ms.load(.acquire);
+    const stalled = self.ui_stalled_reported.load(.acquire);
+    const hb_age_ms: u64 = if (last_hb_ns == 0)
+        0
+    else blk: {
+        const delta: i128 = std.time.nanoTimestamp() - last_hb_ns;
+        if (delta < 0) break :blk 0;
+        break :blk @intCast(@divTrunc(delta, std.time.ns_per_ms));
+    };
+    return std.fmt.allocPrint(
+        allocator,
+        "OK|WATCHDOG|pid={d}|t_ms={d}|last_pulse_t_ms={d}|hb_age_ms={d}|stalled={d}|last_stall_ms={d}|threshold_ms=3000\n",
+        .{
+            pid,
+            std.time.milliTimestamp(),
+            last_pulse_t_ms,
+            hb_age_ms,
+            @as(u8, if (stalled) 1 else 0),
+            last_stall_ms,
+        },
+    );
 }
 
 // ---------------------------------------------------------------
@@ -2650,6 +2737,35 @@ fn handleTimer(self: *App, hwnd: os.HWND, wparam: os.WPARAM) os.LRESULT {
             // the stall-reported latch so a future re-stall can re-fire.
             self.last_ui_heartbeat_ns.store(std.time.nanoTimestamp(), .release);
             self.ui_stalled_reported.store(false, .release);
+            return 0;
+        },
+        DISPATCHER_PULSE_TIMER_ID => {
+            // Team G (issue #214): 1 Hz dispatcher pulse.
+            // `hb_age_ms` is the delta between now and the last 100ms
+            // heartbeat stamp, so a healthy pulse shows hb_age_ms < ~200.
+            const now_ns = std.time.nanoTimestamp();
+            const last_hb = self.last_ui_heartbeat_ns.load(.acquire);
+            const hb_age_ms: u64 = if (last_hb == 0)
+                0
+            else blk: {
+                const delta: i128 = now_ns - last_hb;
+                if (delta < 0) break :blk 0;
+                break :blk @intCast(@divTrunc(delta, std.time.ns_per_ms));
+            };
+            const stalled = self.ui_stalled_reported.load(.acquire);
+            self.last_pulse_t_ms.store(std.time.milliTimestamp(), .release);
+            if (self.watchdog_log) |wl| {
+                wl.writePulse(hb_age_ms, stalled);
+            }
+            return 0;
+        },
+        WATCHDOG_TEST_TRIGGER_TIMER_ID => {
+            // Dev fixture: one-shot — kill the timer and synthesise a UI-thread
+            // stall so the log sink and watchdog thread can be verified.
+            _ = os.KillTimer(hwnd, WATCHDOG_TEST_TRIGGER_TIMER_ID);
+            log.warn("watchdog test-stall: blocking UI thread for {d}ms", .{WATCHDOG_TEST_STALL_MS});
+            std.Thread.sleep(@as(u64, WATCHDOG_TEST_STALL_MS) * std.time.ns_per_ms);
+            log.warn("watchdog test-stall: resumed", .{});
             return 0;
         },
         CLOSE_TAB_POLL_TIMER_ID => {
