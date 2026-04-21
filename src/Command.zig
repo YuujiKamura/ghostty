@@ -258,11 +258,17 @@ fn startPosix(self: *Command, arena: Allocator) !void {
 }
 
 fn startWindows(self: *Command, arena: Allocator) !void {
-    const application_w = try std.unicode.utf8ToUtf16LeAllocZ(arena, self.path);
-    const cwd_w = if (self.cwd) |cwd| try std.unicode.utf8ToUtf16LeAllocZ(arena, cwd) else null;
+    // WTF-8 round-trip: std.process.getEnvMap on Windows returns WTF-8
+    // (permits unpaired UTF-16 surrogate halves encoded as 3 bytes), and
+    // self.path / self.cwd / self.args may include values that were read
+    // via the same WTF-8 path. Strict utf8ToUtf16Le rejects surrogate
+    // halves with error.InvalidUtf8, which surfaces to the user as
+    // "error starting IO thread". wtf8ToWtf16Le round-trips them.
+    const application_w = try std.unicode.wtf8ToWtf16LeAllocZ(arena, self.path);
+    const cwd_w = if (self.cwd) |cwd| try std.unicode.wtf8ToWtf16LeAllocZ(arena, cwd) else null;
     const command_line_w = if (self.args.len > 0) b: {
         const command_line = try windowsCreateCommandLine(arena, self.args);
-        break :b try std.unicode.utf8ToUtf16LeAllocZ(arena, command_line);
+        break :b try std.unicode.wtf8ToWtf16LeAllocZ(arena, command_line);
     } else null;
     const env_w = if (self.env) |env_map| try createWindowsEnvBlock(arena, env_map) else null;
 
@@ -484,10 +490,13 @@ fn createWindowsEnvBlock(allocator: mem.Allocator, env_map: *const EnvMap) ![]u1
     var it = env_map.iterator();
     var i: usize = 0;
     while (it.next()) |pair| {
-        i += try std.unicode.utf8ToUtf16Le(result[i..], pair.key_ptr.*);
+        // WTF-8: getEnvMap returns WTF-8 encoding that may contain unpaired
+        // surrogate halves; wtf8ToWtf16Le preserves them while strict
+        // utf8ToUtf16Le would return error.InvalidUtf8 here.
+        i += try std.unicode.wtf8ToWtf16Le(result[i..], pair.key_ptr.*);
         result[i] = '=';
         i += 1;
-        i += try std.unicode.utf8ToUtf16Le(result[i..], pair.value_ptr.*);
+        i += try std.unicode.wtf8ToWtf16Le(result[i..], pair.value_ptr.*);
         result[i] = 0;
         i += 1;
     }
