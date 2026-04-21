@@ -1586,7 +1586,17 @@ pub fn wakeup(self: *App) void {
         // Coalesce: if a drainMailbox is already scheduled, skip TryEnqueue.
         // drainMailbox clears the flag at entry, so any wakeup during tick
         // will re-arm this path and schedule a fresh drain.
-        if (self.wakeup_pending.cmpxchgStrong(false, true, .acq_rel, .monotonic)) |_| return;
+        if (self.wakeup_pending.cmpxchgStrong(false, true, .acq_rel, .monotonic)) |_| {
+            // Someone else already scheduled a drain, but we cannot prove the
+            // dispatcher callback will actually fire (shutdown race, COM
+            // reentry cancellation, spurious drop). Post WM_USER as a
+            // belt-and-suspenders fallback: Windows coalesces posted messages
+            // per-window/per-message, so this does not re-flood the
+            // Dispatcher while still guaranteeing at least one delivery path
+            // survives callback-dropped races.
+            if (self.hwnd) |hwnd| _ = postMessageWarn(hwnd, os.WM_USER, 0, 0, "WM_USER");
+            return;
+        }
         WakeupHandler.g_app.store(self, .release);
         _ = dq.tryEnqueue(@ptrCast(&WakeupHandler.instance)) catch {
             // TryEnqueue failed — clear the flag so future wakeups retry,
