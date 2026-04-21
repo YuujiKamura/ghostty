@@ -33,6 +33,8 @@ const File = std.fs.File;
 const EnvMap = std.process.EnvMap;
 const apprt = @import("apprt.zig");
 
+const log = std.log.scoped(.command);
+
 /// Function prototype for a function executed /in the child process/ after the
 /// fork, but before exec'ing the command. If the function returns a u8, the
 /// child process will be exited with that error code.
@@ -258,17 +260,24 @@ fn startPosix(self: *Command, arena: Allocator) !void {
 }
 
 fn startWindows(self: *Command, arena: Allocator) !void {
-    // WTF-8 round-trip: std.process.getEnvMap on Windows returns WTF-8
-    // (permits unpaired UTF-16 surrogate halves encoded as 3 bytes), and
-    // self.path / self.cwd / self.args may include values that were read
-    // via the same WTF-8 path. Strict utf8ToUtf16Le rejects surrogate
-    // halves with error.InvalidUtf8, which surfaces to the user as
-    // "error starting IO thread". wtf8ToWtf16Le round-trips them.
-    const application_w = try std.unicode.wtf8ToWtf16LeAllocZ(arena, self.path);
-    const cwd_w = if (self.cwd) |cwd| try std.unicode.wtf8ToWtf16LeAllocZ(arena, cwd) else null;
+    // getEnvMap on Windows returns WTF-8 (surrogate halves allowed).
+    // wtf8ToWtf16Le accepts that superset. If any of these self-owned
+    // strings still fails validation, log the content so we can see
+    // exactly what's malformed rather than just a bare InvalidWtf8.
+    const application_w = std.unicode.wtf8ToWtf16LeAllocZ(arena, self.path) catch |err| {
+        log.err("startWindows: encode path failed err={} path='{s}'", .{ err, self.path });
+        return err;
+    };
+    const cwd_w = if (self.cwd) |cwd| (std.unicode.wtf8ToWtf16LeAllocZ(arena, cwd) catch |err| {
+        log.err("startWindows: encode cwd failed err={} cwd='{s}'", .{ err, cwd });
+        return err;
+    }) else null;
     const command_line_w = if (self.args.len > 0) b: {
         const command_line = try windowsCreateCommandLine(arena, self.args);
-        break :b try std.unicode.wtf8ToWtf16LeAllocZ(arena, command_line);
+        break :b std.unicode.wtf8ToWtf16LeAllocZ(arena, command_line) catch |err| {
+            log.err("startWindows: encode command_line failed err={} cmd='{s}'", .{ err, command_line });
+            return err;
+        };
     } else null;
     const env_w = if (self.env) |env_map| try createWindowsEnvBlock(arena, env_map) else null;
 
@@ -489,17 +498,33 @@ fn createWindowsEnvBlock(allocator: mem.Allocator, env_map: *const EnvMap) ![]u1
 
     var it = env_map.iterator();
     var i: usize = 0;
+    var skipped: usize = 0;
     while (it.next()) |pair| {
-        // WTF-8: getEnvMap returns WTF-8 encoding that may contain unpaired
-        // surrogate halves; wtf8ToWtf16Le preserves them while strict
-        // utf8ToUtf16Le would return error.InvalidUtf8 here.
-        i += try std.unicode.wtf8ToWtf16Le(result[i..], pair.key_ptr.*);
+        // Defensive: inherited environment may contain entries whose bytes
+        // aren't valid WTF-8 (e.g., third-party apps writing raw code-page
+        // bytes into env vars). Skip such entries rather than failing the
+        // whole spawn — losing one env var is better than a non-functional
+        // terminal.
+        const entry_start = i;
+        const key_len = std.unicode.wtf8ToWtf16Le(result[i..], pair.key_ptr.*) catch |err| {
+            log.warn("env skip: invalid key err={} key_len={d}", .{ err, pair.key_ptr.len });
+            skipped += 1;
+            continue;
+        };
+        i += key_len;
         result[i] = '=';
         i += 1;
-        i += try std.unicode.wtf8ToWtf16Le(result[i..], pair.value_ptr.*);
+        const val_len = std.unicode.wtf8ToWtf16Le(result[i..], pair.value_ptr.*) catch |err| {
+            log.warn("env skip: invalid value err={} key='{s}' val_len={d}", .{ err, pair.key_ptr.*, pair.value_ptr.len });
+            skipped += 1;
+            i = entry_start; // rewind past the partially-written key + '='
+            continue;
+        };
+        i += val_len;
         result[i] = 0;
         i += 1;
     }
+    if (skipped > 0) log.warn("createWindowsEnvBlock: skipped {d} env var(s) with invalid encoding", .{skipped});
     result[i] = 0;
     i += 1;
     result[i] = 0;

@@ -1554,6 +1554,14 @@ fn execCommand(
         .direct => |_| (try command.clone(alloc)).direct,
 
         .shell => |v| shell: {
+            // v borrows from caller config. Dupe into our arena so its
+            // lifetime is detached from the caller — otherwise the caller
+            // may free their config before the subprocess spawns, and in
+            // ReleaseSafe the freed memory is filled with 0xAA poison,
+            // producing InvalidWtf8 at CreateProcessW. The .direct arm
+            // above already does this via command.clone(alloc).
+            const v_owned = try alloc.dupeZ(u8, v);
+
             var args: std.ArrayList([:0]const u8) = try .initCapacity(alloc, 4);
             defer args.deinit(alloc);
 
@@ -1589,7 +1597,7 @@ fn execCommand(
                 try args.append(alloc, "-c");
             }
 
-            try args.append(alloc, v);
+            try args.append(alloc, v_owned);
             break :shell try args.toOwnedSlice(alloc);
         },
     };
