@@ -4180,6 +4180,8 @@ pub fn mouseButtonCallback(
         // clicked link will swallow the event.
         if (self.mouse.over_link) {
             const pos = try self.rt_surface.getCursorPos();
+            self.renderer_state.mutex.lock();
+            defer self.renderer_state.mutex.unlock();
             if (self.processLinks(pos)) |processed| {
                 if (processed) return true;
             } else |err| {
