@@ -272,6 +272,11 @@ ipc_server: ?*IpcServer = null,
 /// UI-thread heartbeat watchdog (Tier 1, issue #212).
 /// Updated from the UI thread on every HEARTBEAT_TIMER_ID tick (~100ms).
 /// Read from the watchdog background thread to detect UI-thread stalls.
+///
+/// DEPRECATED (#235): The i128 type cannot be atomic-stored on x86_64 MSVC
+/// ReleaseFast (no native 16-byte atomic, no libcall fallback). All write
+/// sites and the watchdogLoop reader use `last_ui_heartbeat_ns_i64` below.
+/// Field retained to avoid struct-layout churn; remove in a follow-up.
 last_ui_heartbeat_ns: std.atomic.Value(i128) = std.atomic.Value(i128).init(0),
 last_ui_stall_ms: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
 ui_stalled_reported: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
@@ -460,7 +465,9 @@ pub fn init(
     };
     {
         const ts = std.time.nanoTimestamp();
-        self.last_ui_heartbeat_ns.store(ts, .release);
+        // Skip i128 atomic .store: x86_64 MSVC has no native 16-byte atomic
+        // store and ReleaseFast won't libcall (#235). The i64 mirror is what
+        // the Phase 4 watchdog actually consumes.
         self.last_ui_heartbeat_ns_i64.store(@as(i64, @truncate(ts)), .release);
     }
 
@@ -678,7 +685,7 @@ fn initXaml(self: *App) !void {
     // updates, then spawn a background poller that flags stalls.
     {
         const ts = std.time.nanoTimestamp();
-        self.last_ui_heartbeat_ns.store(ts, .release);
+        // Skip i128 atomic .store on x86_64 MSVC ReleaseFast (#235).
         self.last_ui_heartbeat_ns_i64.store(@as(i64, @truncate(ts)), .release);
     }
     _ = os.SetTimer(self.hwnd.?, HEARTBEAT_TIMER_ID, HEARTBEAT_INTERVAL_MS, null);
@@ -715,8 +722,12 @@ fn watchdogLoop(self: *App) void {
         std.Thread.sleep(1 * std.time.ns_per_s);
         if (self.watchdog_stop.load(.acquire)) break;
 
-        const last = self.last_ui_heartbeat_ns.load(.acquire);
-        if (last == 0) continue;
+        // Read the i64 mirror (#235): x86_64 MSVC ReleaseFast can't atomic-
+        // load i128. The i64 truncation is safe because nanoTimestamp() is
+        // only ~292 years before it overflows i64 (year 2262).
+        const last_i64 = self.last_ui_heartbeat_ns_i64.load(.acquire);
+        if (last_i64 == 0) continue;
+        const last: i128 = last_i64;
         const now = std.time.nanoTimestamp();
         const delta: i128 = now - last;
         if (delta >= UI_STALL_THRESHOLD_NS) {
@@ -2873,7 +2884,7 @@ fn handleTimer(self: *App, hwnd: os.HWND, wparam: os.WPARAM) os.LRESULT {
             // UI-thread heartbeat: we're alive — stamp timestamp and clear
             // the stall-reported latch so a future re-stall can re-fire.
             const ts = std.time.nanoTimestamp();
-            self.last_ui_heartbeat_ns.store(ts, .release);
+            // Skip i128 atomic .store on x86_64 MSVC ReleaseFast (#235).
             self.last_ui_heartbeat_ns_i64.store(@as(i64, @truncate(ts)), .release);
             self.ui_stalled_reported.store(false, .release);
             return 0;
