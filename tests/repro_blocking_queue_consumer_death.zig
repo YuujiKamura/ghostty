@@ -86,6 +86,48 @@ test "issue #220: shutdown() unblocks .forever push waiter" {
     try testing.expectEqual(@as(u32, 0), ctx.result.load(.seq_cst));
 }
 
+const PopCtx = struct {
+    queue: *Q,
+    started: std.atomic.Value(bool) = .init(false),
+    finished: std.atomic.Value(bool) = .init(false),
+    got_value: std.atomic.Value(bool) = .init(false),
+
+    fn run(self: *PopCtx) void {
+        self.started.store(true, .seq_cst);
+        const r = self.queue.popBlocking(.{ .forever = {} });
+        self.got_value.store(r != null, .seq_cst);
+        self.finished.store(true, .seq_cst);
+    }
+};
+
+test "issue #220: shutdown() unblocks .forever popBlocking waiter" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const q = try Q.create(alloc);
+    defer q.destroy(alloc);
+
+    // Queue is empty — popBlocking(.forever) will park.
+    var ctx: PopCtx = .{ .queue = q };
+    const t = try std.Thread.spawn(.{}, PopCtx.run, .{&ctx});
+
+    try testing.expect(waitForFlag(&ctx.started, 100 * std.time.ns_per_ms));
+    std.Thread.sleep(100 * std.time.ns_per_ms);
+    try testing.expect(!ctx.finished.load(.seq_cst));
+
+    q.shutdown();
+
+    const drained = waitForFlag(&ctx.finished, 100 * std.time.ns_per_ms);
+    if (!drained) {
+        t.detach();
+        try testing.expect(false);
+        return;
+    }
+    t.join();
+
+    try testing.expect(!ctx.got_value.load(.seq_cst));
+}
+
 test "issue #220: push after shutdown returns 0 immediately" {
     const testing = std.testing;
     const alloc = testing.allocator;
