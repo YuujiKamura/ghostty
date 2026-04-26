@@ -12,6 +12,12 @@ pre-commit:
 
 pre-push:
   commands:
+    zig-fmt-check:
+      # Catches fmt drift before it reaches main (issue #229).
+      # Mirrors the CI check in .github/workflows/ci.yml so direct
+      # pushes to main can't bypass the gate that PRs go through.
+      run: bash -c "find src -name '*.zig' | head -500 | xargs zig fmt --check"
+      fail_text: "zig fmt violations detected. Run 'find src -name \"*.zig\" | xargs zig fmt' to fix."
     build-check:
       run: ./build-winui3.sh
     deadlock-lint:

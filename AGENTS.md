@@ -41,6 +41,9 @@ Then read:
 
 - Issue and PR operations must target fork repos only.
 - Do not open upstream issues or PRs from this fork workflow unless explicitly instructed.
+- Recommended GitHub branch protection settings for `main` are documented in
+  [docs/fork-branch-protection.md](docs/fork-branch-protection.md). They prevent
+  the `zig fmt` drift class of regression tracked in issue #229.
 
 ## Spec Management
 

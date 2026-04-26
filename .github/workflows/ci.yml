@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [winui3-apprt]
+    # `main` is included so direct pushes (which bypass the PR fmt gate)
+    # still trigger the formatter check. See issue #229: 27k lines of fmt
+    # drift accumulated on main because CI only ran on PRs.
+    branches: [main, winui3-apprt]
     paths:
       - "src/**/*.zig"
       - "build.zig"
