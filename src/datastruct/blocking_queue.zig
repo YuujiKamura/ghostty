@@ -65,10 +65,24 @@ pub fn BlockingQueue(
         mutex: std.Thread.Mutex = .{},
 
         /// A CV for being notified when the queue is no longer full. This is
-        /// used for writing. Note we DON'T have a CV for waiting on the
-        /// queue not being EMPTY because we use external notifiers for that.
+        /// used for writing. We also have an analogous CV for the queue no
+        /// longer being empty; in normal operation popping is driven by an
+        /// external notifier (eventfd etc.) but having the condvar here lets
+        /// `shutdown()` unblock any caller that opted into `popBlocking`.
         cond_not_full: std.Thread.Condition = .{},
         not_full_waiters: usize = 0,
+
+        /// CV for being notified when the queue is non-empty. Used by
+        /// `popBlocking` and broadcast by `shutdown()`.
+        cond_not_empty: std.Thread.Condition = .{},
+        not_empty_waiters: usize = 0,
+
+        /// Set by `shutdown()`. Once true, all waiters drop out and all
+        /// future push/popBlocking calls return immediately. Atomic so it
+        /// can be read by waiters via the `while (... and !closed)` guard
+        /// without holding the mutex (the mutex protects the CV, the atomic
+        /// gives us a clean release fence on the writer side).
+        closed: std.atomic.Value(bool) = .init(false),
 
         /// Allocate the blocking queue on the heap.
         pub fn create(alloc: Allocator) Allocator.Error!*Self {
@@ -83,6 +97,9 @@ pub fn BlockingQueue(
                 .mutex = .{},
                 .cond_not_full = .{},
                 .not_full_waiters = 0,
+                .cond_not_empty = .{},
+                .not_empty_waiters = 0,
+                .closed = .init(false),
             };
 
             return ptr;
@@ -95,14 +112,42 @@ pub fn BlockingQueue(
             alloc.destroy(self);
         }
 
+        /// Signal that the queue is shutting down. Any threads parked in
+        /// `push(.forever)` or `popBlocking(.forever)` will observe this
+        /// and bail out (returning 0 / null respectively) rather than wait
+        /// indefinitely. Subsequent push and popBlocking calls also fail
+        /// fast. Idempotent and safe to call from any thread.
+        ///
+        /// This is the structural defence against the "consumer death =
+        /// permanent producer hang" failure mode described in #220: the
+        /// orchestrator that knows the consumer is gone calls shutdown()
+        /// and every blocked producer is freed.
+        pub fn shutdown(self: *Self) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+            self.closed.store(true, .seq_cst);
+            self.cond_not_full.broadcast();
+            self.cond_not_empty.broadcast();
+        }
+
+        /// Returns true if shutdown() has been called. Lock-free.
+        pub fn isClosed(self: *const Self) bool {
+            return self.closed.load(.seq_cst);
+        }
+
         /// Push a value to the queue. This returns the total size of the
         /// queue (unread items) after the push. A return value of zero
-        /// means that the push failed.
+        /// means that the push failed (queue full + non-blocking timeout,
+        /// or the queue has been shut down).
         pub fn push(self: *Self, value: T, timeout: Timeout) Size {
             self.mutex.lock();
             defer self.mutex.unlock();
 
-            // The
+            // Shutdown short-circuits even if there's free capacity: callers
+            // need to learn the consumer is gone, not silently enqueue into
+            // a queue nobody is draining.
+            if (self.closed.load(.seq_cst)) return 0;
+
             if (self.full()) {
                 switch (timeout) {
                     // If we're not waiting, then we failed to write.
@@ -111,13 +156,19 @@ pub fn BlockingQueue(
                     .forever => {
                         self.not_full_waiters += 1;
                         defer self.not_full_waiters -= 1;
-                        self.cond_not_full.wait(&self.mutex);
+                        // Loop on (full AND !closed). Spurious wake-ups
+                        // re-park; shutdown wakes us and we drop out.
+                        while (self.full() and !self.closed.load(.seq_cst)) {
+                            self.cond_not_full.wait(&self.mutex);
+                        }
+                        if (self.closed.load(.seq_cst)) return 0;
                     },
 
                     .ns => |ns| {
                         self.not_full_waiters += 1;
                         defer self.not_full_waiters -= 1;
                         self.cond_not_full.timedWait(&self.mutex, ns) catch return 0;
+                        if (self.closed.load(.seq_cst)) return 0;
                     },
                 }
 
@@ -131,6 +182,9 @@ pub fn BlockingQueue(
             self.write += 1;
             if (self.write >= bounds) self.write -= bounds;
             self.len += 1;
+
+            // Wake any blocking popper waiting for data.
+            if (self.not_empty_waiters > 0) self.cond_not_empty.signal();
 
             return self.len;
         }
@@ -151,6 +205,57 @@ pub fn BlockingQueue(
             self.len -= 1;
 
             // If we have consumers waiting on a full queue, notify.
+            if (self.not_full_waiters > 0) self.cond_not_full.signal();
+
+            return self.data[n];
+        }
+
+        /// Pop a value from the queue, optionally blocking. Returns null
+        /// when the queue is empty AND the timeout expires, OR when the
+        /// queue has been shut down. Symmetrical with `push` so that
+        /// `shutdown()` can unblock parked consumers in the same way it
+        /// unblocks parked producers (see #220).
+        ///
+        /// Most ghostty call sites should keep using the non-blocking
+        /// `pop()` paired with an external eventfd-style notifier. This
+        /// API exists for callers that want a self-contained wait without
+        /// wiring up a separate notifier — and to give `shutdown()`
+        /// somewhere meaningful to broadcast `cond_not_empty`.
+        pub fn popBlocking(self: *Self, timeout: Timeout) ?T {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            if (self.closed.load(.seq_cst)) return null;
+
+            if (self.len == 0) {
+                switch (timeout) {
+                    .instant => return null,
+
+                    .forever => {
+                        self.not_empty_waiters += 1;
+                        defer self.not_empty_waiters -= 1;
+                        while (self.len == 0 and !self.closed.load(.seq_cst)) {
+                            self.cond_not_empty.wait(&self.mutex);
+                        }
+                        if (self.closed.load(.seq_cst)) return null;
+                    },
+
+                    .ns => |ns| {
+                        self.not_empty_waiters += 1;
+                        defer self.not_empty_waiters -= 1;
+                        self.cond_not_empty.timedWait(&self.mutex, ns) catch return null;
+                        if (self.closed.load(.seq_cst)) return null;
+                    },
+                }
+
+                if (self.len == 0) return null;
+            }
+
+            const n = self.read;
+            self.read += 1;
+            if (self.read >= bounds) self.read -= bounds;
+            self.len -= 1;
+
             if (self.not_full_waiters > 0) self.cond_not_full.signal();
 
             return self.data[n];
