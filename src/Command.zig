@@ -413,6 +413,61 @@ fn setupFd(src: File.Handle, target: i32) !void {
     }
 }
 
+/// Default grace period (in milliseconds) for waitTimeout() before
+/// escalating to TerminateProcess. See YuujiKamura/ghostty#221: a
+/// kernel-frozen / suspended child must not be allowed to hang
+/// ghostty's shutdown indefinitely.
+pub const default_wait_timeout_ms: u32 = 5000;
+
+/// Windows-only: wait up to `timeout_ms` for the child handle to be
+/// signalled. If the wait times out, TerminateProcess is called and
+/// we briefly wait for the kernel to flush the handle so we can
+/// observe an exit code. This is the fix for YuujiKamura/ghostty#221:
+/// the previous unbounded WaitForSingleObject(INFINITE) would hang
+/// shutdown forever if the child was suspended / debugger-attached /
+/// otherwise unable to reach exit.
+pub fn waitTimeout(self: Command, timeout_ms: u32) !Exit {
+    if (comptime builtin.os.tag != .windows) {
+        @compileError("waitTimeout is Windows-only; use wait() on POSIX");
+    }
+
+    const handle = self.pid.?;
+    const result = windows.kernel32.WaitForSingleObject(handle, timeout_ms);
+    if (result == windows.WAIT_FAILED) {
+        return windows.unexpectedError(windows.kernel32.GetLastError());
+    }
+
+    if (result == std.os.windows.WAIT_TIMEOUT) {
+        // Child is unresponsive within the grace period. This is the
+        // #221 case: kernel-frozen, suspended, or otherwise unable to
+        // reach exit. We must escalate by force-terminating, otherwise
+        // ghostty's shutdown hangs forever.
+        log.warn(
+            "child unresponsive after {}ms; calling TerminateProcess",
+            .{timeout_ms},
+        );
+        if (windows.kernel32.TerminateProcess(handle, 1) == 0) {
+            return windows.unexpectedError(windows.kernel32.GetLastError());
+        }
+
+        // Brief wait for the kernel to actually flush the process so
+        // GetExitCodeProcess returns a real status instead of
+        // STILL_ACTIVE. 1s is generous for a forced termination.
+        const post_kill = windows.kernel32.WaitForSingleObject(handle, 1000);
+        if (post_kill == windows.WAIT_FAILED) {
+            return windows.unexpectedError(windows.kernel32.GetLastError());
+        }
+    }
+
+    var exit_code: windows.DWORD = undefined;
+    const has_code = windows.kernel32.GetExitCodeProcess(handle, &exit_code) != 0;
+    if (!has_code) {
+        return windows.unexpectedError(windows.kernel32.GetLastError());
+    }
+
+    return .{ .Exited = exit_code };
+}
+
 /// Wait for the command to exit and return information about how it exited.
 pub fn wait(self: Command, block: bool) !Exit {
     if (comptime builtin.os.tag == .windows) {
@@ -934,4 +989,52 @@ fn testingStart(self: *Command) !void {
         }
         return err;
     };
+}
+
+// Repro for YuujiKamura/ghostty#221:
+//   src/Command.zig wait() (Windows path) called WaitForSingleObject with
+//   INFINITE, so a kernel-frozen / suspended child would hang ghostty's
+//   shutdown forever. The fix is a bounded wait + TerminateProcess
+//   escalation, exposed via waitTimeout(). This test spawns a long-running
+//   ping (~60s) and proves waitTimeout() returns within the bounded grace
+//   instead of waiting for the child to exit naturally, and that the child
+//   is reaped after escalation.
+test "Command: wait timeout terminates unresponsive child (#221)" {
+    if (builtin.os.tag != .windows) return error.SkipZigTest;
+
+    var cmd: Command = .{
+        // ping -n 60 127.0.0.1 keeps the child alive ~60s. From our wait's
+        // point of view that handle is "stuck" for the duration of the test
+        // grace, which is the same code-path a kernel-suspended child takes:
+        // WaitForSingleObject returns WAIT_TIMEOUT and we must escalate.
+        .path = "C:\\Windows\\System32\\ping.exe",
+        .args = &.{ "C:\\Windows\\System32\\ping.exe", "-n", "60", "127.0.0.1" },
+        .os_pre_exec = null,
+        .rt_pre_exec = null,
+        .rt_post_fork = null,
+        .rt_pre_exec_info = undefined,
+        .rt_post_fork_info = undefined,
+    };
+
+    try cmd.testingStart();
+    try testing.expect(cmd.pid != null);
+
+    const grace_ms: u32 = 500;
+    var timer = try std.time.Timer.start();
+    const exit = try cmd.waitTimeout(grace_ms);
+    const elapsed_ns = timer.read();
+
+    // Must return within grace + slack (allow 4s for TerminateProcess +
+    // post-terminate cleanup wait + scheduler jitter on a busy CI box).
+    const slack_ns: u64 = 4 * std.time.ns_per_s;
+    const budget_ns: u64 = @as(u64, grace_ms) * std.time.ns_per_ms + slack_ns;
+    try testing.expect(elapsed_ns < budget_ns);
+
+    // Child must be reaped (exit code is observable). ping was forcibly
+    // terminated (TerminateProcess passes exit code 1 in our fix); a normal
+    // ping completion would be 0. Either way the handle is signalled, which
+    // is the actual contract — tolerate either to keep the test resilient if
+    // the process happened to race to exit.
+    try testing.expect(exit == .Exited);
+    _ = exit.Exited;
 }
