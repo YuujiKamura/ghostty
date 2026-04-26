@@ -1476,7 +1476,7 @@ test "preedit dirty flag triggers cursor row dirty" {
 
     var s = t.vtStream();
     defer s.deinit();
-    try s.nextSlice("Hello");
+    s.nextSlice("Hello");
 
     var state: RenderState = .empty;
     defer state.deinit(alloc);
@@ -1528,7 +1528,7 @@ test "preedit dirty does not affect rows when preedit is inactive" {
 
     var s = t.vtStream();
     defer s.deinit();
-    try s.nextSlice("Hello");
+    s.nextSlice("Hello");
 
     var state: RenderState = .empty;
     defer state.deinit(alloc);
@@ -1598,7 +1598,7 @@ test "preedit dirty at last column" {
     var s = t.vtStream();
     defer s.deinit();
     // Fill the entire first row to push cursor to col 9 (last col)
-    try s.nextSlice("ABCDEFGHIJ");
+    s.nextSlice("ABCDEFGHIJ");
 
     var state: RenderState = .empty;
     defer state.deinit(alloc);
@@ -1639,7 +1639,7 @@ test "preedit dirty on non-zero row" {
     var s = t.vtStream();
     defer s.deinit();
     // Move cursor to row 3
-    try s.nextSlice("line1\r\nline2\r\nline3\r\nline4");
+    s.nextSlice("line1\r\nline2\r\nline3\r\nline4");
 
     var state: RenderState = .empty;
     defer state.deinit(alloc);
@@ -1722,7 +1722,7 @@ test "cursor page row dirty forces render state row dirty" {
 
     var s = t.vtStream();
     defer s.deinit();
-    try s.nextSlice("Hello");
+    s.nextSlice("Hello");
 
     var state: RenderState = .empty;
     defer state.deinit(alloc);
@@ -1772,7 +1772,7 @@ test "cursor page row dirty on non-first row" {
 
     var s = t.vtStream();
     defer s.deinit();
-    try s.nextSlice("A\r\nB\r\nC");
+    s.nextSlice("A\r\nB\r\nC");
 
     var state: RenderState = .empty;
     defer state.deinit(alloc);
