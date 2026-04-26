@@ -471,20 +471,11 @@ pub fn waitTimeout(self: Command, timeout_ms: u32) !Exit {
 /// Wait for the command to exit and return information about how it exited.
 pub fn wait(self: Command, block: bool) !Exit {
     if (comptime builtin.os.tag == .windows) {
-        // Block until the process exits. This returns immediately if the
-        // process already exited.
-        const result = windows.kernel32.WaitForSingleObject(self.pid.?, windows.INFINITE);
-        if (result == windows.WAIT_FAILED) {
-            return windows.unexpectedError(windows.kernel32.GetLastError());
-        }
-
-        var exit_code: windows.DWORD = undefined;
-        const has_code = windows.kernel32.GetExitCodeProcess(self.pid.?, &exit_code) != 0;
-        if (!has_code) {
-            return windows.unexpectedError(windows.kernel32.GetLastError());
-        }
-
-        return .{ .Exited = exit_code };
+        // Bounded wait + TerminateProcess escalation. Fixes
+        // YuujiKamura/ghostty#221: a kernel-frozen / suspended child must
+        // not be allowed to hang ghostty's shutdown forever via an
+        // unbounded WaitForSingleObject(INFINITE).
+        return self.waitTimeout(default_wait_timeout_ms);
     }
 
     const res = if (block) posix.waitpid(self.pid.?, 0) else res: {
