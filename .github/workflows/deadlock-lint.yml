@@ -1,0 +1,42 @@
+name: Deadlock Lint
+
+# Refuses code shapes from the 2026-04-26 #218..#223 issue cluster.
+# See notes/2026-04-26_deadlock_lint_rules.md for the rule list.
+
+on:
+  push:
+    branches: [main, winui3-apprt]
+    paths:
+      - "src/Surface.zig"
+      - "src/Command.zig"
+      - "src/apprt/winui3/**"
+      - "src/apprt/win32/**"
+      - "src/apprt/embedded.zig"
+      - "src/apprt/gtk/class/application.zig"
+      - "vendor/zig-control-plane/**"
+      - "tools/lint-deadlock.sh"
+      - ".github/workflows/deadlock-lint.yml"
+  pull_request:
+    paths:
+      - "src/Surface.zig"
+      - "src/Command.zig"
+      - "src/apprt/winui3/**"
+      - "src/apprt/win32/**"
+      - "src/apprt/embedded.zig"
+      - "src/apprt/gtk/class/application.zig"
+      - "vendor/zig-control-plane/**"
+      - "tools/lint-deadlock.sh"
+      - ".github/workflows/deadlock-lint.yml"
+  workflow_dispatch: {}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Run deadlock lint
+        run: bash tools/lint-deadlock.sh

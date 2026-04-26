@@ -14,3 +14,7 @@ pre-push:
   commands:
     build-check:
       run: ./build-winui3.sh
+    deadlock-lint:
+      # Refuses unbounded waits in UI-thread reachable code.
+      # See notes/2026-04-26_deadlock_lint_rules.md.
+      run: bash tools/lint-deadlock.sh --quiet
