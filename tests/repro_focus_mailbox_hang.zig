@@ -246,6 +246,84 @@ const FocusBurstProbe = struct {
     }
 };
 
+// -----------------------------------------------------------------------
+// Test 4 (#219 sibling sites): the drop-on-full contract holds for the
+// six other UI-thread `.forever` push sites in `Surface.zig` that share
+// the same hang shape as #218 (inspector activate/deactivate, config
+// reload, font size change, occlusion, debug crash binding).
+//
+// The mechanical proof is the same as Test 3: a saturated mailbox plus
+// a sequence of `.instant` pushes must complete without blocking, and
+// the dropped slots must be observable as `r == 0`. We exercise it with
+// heterogeneous payloads (an enum tag stand-in is sufficient — the queue
+// is generic and the surface message kind is irrelevant to the contract)
+// to make it explicit that *every* sibling site relies on the same
+// guarantee, not just `.focus`.
+//
+// We also verify the producer never blocks regardless of which site
+// "fires first" by interleaving event kinds across the saturation
+// burst. This guards against a future regression where someone adds a
+// new mailbox payload that accidentally takes a slow path.
+// -----------------------------------------------------------------------
+
+const SiblingEventKind = enum(u32) {
+    inspector_on = 1,
+    inspector_off = 2,
+    change_config = 3,
+    font_grid = 4,
+    visible_show = 5,
+    visible_hide = 6,
+    crash = 7,
+};
+
+test "sibling sites: instant push never blocks UI thread (#219)" {
+    const alloc = testing.allocator;
+    const Q = BlockingQueue(u32, 4);
+
+    const q = try Q.create(alloc);
+    defer q.destroy(alloc);
+
+    // No consumer is ever started — this models the worst case where the
+    // renderer thread is fully stalled (mid-frame, holding the mutex,
+    // etc.) and the UI thread keeps firing sibling events.
+    const events = [_]SiblingEventKind{
+        .inspector_on,
+        .change_config,
+        .font_grid,
+        .visible_hide,
+        .inspector_off,
+        .visible_show,
+        .crash,
+    };
+
+    var t = try std.time.Timer.start();
+    var pushed: u32 = 0;
+    var dropped: u32 = 0;
+    for (events) |kind| {
+        const r = q.push(@intFromEnum(kind), .{ .instant = {} });
+        if (r == 0) dropped += 1 else pushed += 1;
+    }
+    const elapsed = t.read();
+
+    // Mailbox holds 4, we tried 7, so exactly 4 must succeed and 3 drop.
+    try testing.expectEqual(@as(u32, 4), pushed);
+    try testing.expectEqual(@as(u32, 3), dropped);
+
+    // The whole burst MUST complete in well under a frame budget. If
+    // `.instant` ever started waiting we'd see this balloon. 50ms is
+    // already orders of magnitude over what 7 atomic pushes need.
+    try testing.expect(elapsed < 50 * ns_per_ms);
+
+    // Queue contents reflect the FIRST 4 events (FIFO), proving the
+    // accepted pushes landed in order and the dropped ones did not
+    // displace them.
+    try testing.expectEqual(@as(u32, @intFromEnum(SiblingEventKind.inspector_on)), q.pop().?);
+    try testing.expectEqual(@as(u32, @intFromEnum(SiblingEventKind.change_config)), q.pop().?);
+    try testing.expectEqual(@as(u32, @intFromEnum(SiblingEventKind.font_grid)), q.pop().?);
+    try testing.expectEqual(@as(u32, @intFromEnum(SiblingEventKind.visible_hide)), q.pop().?);
+    try testing.expect(q.pop() == null);
+}
+
 test "focus saturation: forever hangs producer, instant drops cleanly (#218)" {
     const alloc = testing.allocator;
     const Q = BlockingQueue(u32, 4);

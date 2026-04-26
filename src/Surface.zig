@@ -917,8 +917,17 @@ pub fn activateInspector(self: *Surface) !void {
         self.renderer_state.inspector = self.inspector;
     }
 
-    // Notify our components we have an inspector active
-    _ = self.renderer_thread.mailbox.push(.{ .inspector = true }, .{ .forever = {} });
+    // Notify our components we have an inspector active.
+    //
+    // We use `.instant` (drop on full) to avoid a `.forever` push from the
+    // UI thread that could deadlock the window message pump if the renderer
+    // mailbox is saturated (sibling of #218; tracked in #219). The
+    // inspector pointer is already published into `renderer_state` above,
+    // so the renderer will see it on its next render tick even if the
+    // mailbox notification is dropped. User-driven and rare (low traffic).
+    if (self.renderer_thread.mailbox.push(.{ .inspector = true }, .{ .instant = {} }) == 0) {
+        log.warn("inspector activate event dropped (renderer mailbox full)", .{});
+    }
     self.queueIo(.{ .inspector = true }, .unlocked);
 }
 
@@ -934,8 +943,16 @@ pub fn deactivateInspector(self: *Surface) void {
         self.renderer_state.inspector = null;
     }
 
-    // Notify our components we have deactivated inspector
-    _ = self.renderer_thread.mailbox.push(.{ .inspector = false }, .{ .forever = {} });
+    // Notify our components we have deactivated inspector.
+    //
+    // See `activateInspector` for the rationale on `.instant` (drop on
+    // full, avoid UI hang per #218 / #219). The inspector pointer was
+    // already cleared from `renderer_state` above, so the renderer will
+    // stop rendering it on its next tick even if this notification is
+    // dropped.
+    if (self.renderer_thread.mailbox.push(.{ .inspector = false }, .{ .instant = {} }) == 0) {
+        log.warn("inspector deactivate event dropped (renderer mailbox full)", .{});
+    }
     self.queueIo(.{ .inspector = false }, .unlocked);
 
     // Deinit the inspector
@@ -1802,7 +1819,21 @@ pub fn updateConfig(
     termio_config_ptr.* = try termio.Termio.DerivedConfig.init(self.alloc, config);
     errdefer termio_config_ptr.deinit();
 
-    _ = self.renderer_thread.mailbox.push(renderer_message, .{ .forever = {} });
+    // Push the renderer config message with `.instant` (drop on full).
+    //
+    // A `.forever` push from the UI thread (config reload runs on the
+    // apprt thread that pumps window messages) can deadlock the message
+    // pump if the renderer mailbox is saturated. See #218 for the
+    // focusCallback case and #219 for the sibling-site umbrella. If the
+    // push is dropped, we deinit the message right here to avoid leaking
+    // the heap-allocated `change_config` payload (the errdefer above only
+    // fires on `error`, not on a clean drop). The renderer will pick up
+    // the new config on the next config reload; losing one transient
+    // config-change message is preferable to hanging the UI thread.
+    if (self.renderer_thread.mailbox.push(renderer_message, .{ .instant = {} }) == 0) {
+        log.warn("config change event dropped (renderer mailbox full)", .{});
+        renderer_message.deinit();
+    }
     self.queueIo(.{
         .change_config = .{
             .alloc = self.alloc,
@@ -2486,18 +2517,32 @@ pub fn setFontSize(self: *Surface, size: font.face.DesiredSize) !void {
 
     // Notify our render thread of the new font stack. The renderer
     // MUST accept the new font grid and deref the old.
-    _ = self.renderer_thread.mailbox.push(.{
+    //
+    // We use `.instant` (drop on full) to avoid a `.forever` push from the
+    // UI thread (font size is interactively triggered via Ctrl+= / Ctrl+-)
+    // that could deadlock the window message pump if the renderer mailbox
+    // is saturated. See #218 for the focusCallback case and #219 for the
+    // sibling-site umbrella. If the push is dropped, we must:
+    //   - `deref` the new font_grid_key we just acquired (otherwise it
+    //     leaks; the errdefer above only fires on `error`),
+    //   - NOT update `self.font_grid_key`/`self.font_metrics` (the
+    //     renderer never received the new grid, so the surface keeps
+    //     pointing at the old grid which is still ref'd and valid).
+    if (self.renderer_thread.mailbox.push(.{
         .font_grid = .{
             .grid = font_grid,
             .set = &self.app.font_grid_set,
             .old_key = self.font_grid_key,
             .new_key = font_grid_key,
         },
-    }, .{ .forever = {} });
-
-    // Once we've sent the key we can replace our key
-    self.font_grid_key = font_grid_key;
-    self.font_metrics = font_grid.metrics;
+    }, .{ .instant = {} }) == 0) {
+        log.warn("font size change event dropped (renderer mailbox full)", .{});
+        self.app.font_grid_set.deref(font_grid_key);
+    } else {
+        // Once we've sent the key we can replace our key.
+        self.font_grid_key = font_grid_key;
+        self.font_metrics = font_grid.metrics;
+    }
 
     // Schedule render which also drains our mailbox
     self.queueRender() catch unreachable;
@@ -3356,9 +3401,21 @@ pub fn occlusionCallback(self: *Surface, visible: bool) !void {
     crash.sentry.thread_state = self.crashThreadState();
     defer crash.sentry.thread_state = null;
 
-    _ = self.renderer_thread.mailbox.push(.{
+    // Push the visibility transition with `.instant` (drop on full).
+    //
+    // `occlusionCallback` runs on the UI thread (winui3 visibility, gtk
+    // visibility, embedded `ghostty_surface_set_occlusion`). A `.forever`
+    // push here would deadlock the window message pump if the renderer
+    // mailbox is saturated (sibling of #218; tracked in #219). Dropping a
+    // visibility transition means the renderer keeps its prior visible
+    // state for one extra cycle — preferable to hanging the UI. The
+    // `queueRender()` below still wakes the renderer so it will pick up
+    // the next visibility change promptly.
+    if (self.renderer_thread.mailbox.push(.{
         .visible = visible,
-    }, .{ .forever = {} });
+    }, .{ .instant = {} }) == 0) {
+        log.warn("occlusion event dropped (renderer mailbox full) visible={}", .{visible});
+    }
     try self.queueRender();
 }
 
@@ -5870,7 +5927,17 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             .main => @panic("crash binding action, crashing intentionally"),
 
             .render => {
-                _ = self.renderer_thread.mailbox.push(.{ .crash = {} }, .{ .forever = {} });
+                // Debug-only crash binding: trigger an intentional crash on
+                // the renderer thread. We use `.instant` (drop on full) so
+                // that invoking the crash binding while the renderer mailbox
+                // happens to be saturated does not itself hang the UI thread
+                // on `.forever`. If the message is dropped the renderer
+                // simply does not crash — which, for a debug binding the
+                // user invoked deliberately, is reported via log so the
+                // user knows to retry. Sibling of #218; tracked in #219.
+                if (self.renderer_thread.mailbox.push(.{ .crash = {} }, .{ .instant = {} }) == 0) {
+                    log.warn("debug crash trigger dropped (renderer mailbox full)", .{});
+                }
                 self.queueRender() catch |err| {
                     // Not a big deal if this fails.
                     log.warn("failed to notify renderer of crash message err={}", .{err});
