@@ -1937,6 +1937,24 @@ pub fn activeSurface(self: *App) ?*Surface {
 
 // ---------------------------------------------------------------
 // Control plane capture callbacks
+//
+// CP read protocol: pipe-server client thread → these callbacks →
+// Surface.* getters → renderer_state.mutex. The renderer thread holds
+// that mutex for most of every frame and termio holds it during PTY
+// parsing. A blocking `lock()` here parks the CP client thread on the
+// wait queue indefinitely under sustained PTY load (issue #207
+// hypothesis #1, audit notes/2026-04-26_cp_stall_source_audit.md
+// cause A).
+//
+// Fix: use the `*Locked` (tryLock) variants. On contention, return
+// `error.RendererLocked`; the provider layer in control_plane.zig sets
+// `last_renderer_locked` and the upper layer translates it to the wire
+// response `ERR|BUSY|renderer_locked\n`. The deckpilot poller treats
+// BUSY as "skip this poll, retry later" (correct: data was unavailable
+// for 1 frame, not "session is dead").
+//
+// See `apprt/winui3/App.zig:1034 tsfGetCursorRect` for the canonical
+// tryLock pattern (commit b7de73893, "#212 Tier 4 P0 #1").
 // ---------------------------------------------------------------
 
 fn controlPlaneCaptureState(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) !?ControlPlaneNative.StateSnapshot {
@@ -1946,13 +1964,39 @@ fn controlPlaneCaptureState(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usi
     else
         self.activeSurface();
     const s = surface orelse return null;
+    // Use tryLock variants so we never park the CP pipe-server thread.
+    // If any field reports renderer-locked, propagate
+    // `error.RendererLocked` for the whole snapshot — partial state
+    // would be inconsistent and worse than no state for a poller.
+    const pwd_val = s.pwdLocked(allocator) catch |err| switch (err) {
+        error.RendererLocked => {
+            log.warn("CP captureState: renderer mutex contended (pwd); BUSY tab_idx={?}", .{tab_idx});
+            return error.RendererLocked;
+        },
+        else => |e| return e,
+    };
+    errdefer if (pwd_val) |p| allocator.free(p);
+    const has_selection = s.hasSelectionLocked() orelse {
+        log.warn("CP captureState: renderer mutex contended (hasSelection); BUSY tab_idx={?}", .{tab_idx});
+        return error.RendererLocked;
+    };
+    const at_prompt = s.cursorIsAtPromptLocked() orelse {
+        log.warn("CP captureState: renderer mutex contended (atPrompt); BUSY tab_idx={?}", .{tab_idx});
+        return error.RendererLocked;
+    };
+    const pane_pid_opt = s.panePidLocked() catch |err| switch (err) {
+        error.RendererLocked => {
+            log.warn("CP captureState: renderer mutex contended (panePid); BUSY tab_idx={?}", .{tab_idx});
+            return error.RendererLocked;
+        },
+    };
     return .{
-        .pwd = try s.pwd(allocator),
-        .has_selection = s.hasSelection(),
-        .at_prompt = s.cursorIsAtPrompt(),
+        .pwd = pwd_val,
+        .has_selection = has_selection,
+        .at_prompt = at_prompt,
         .tab_count = self.countSurfaces(),
         .active_tab = self.active_surface_idx,
-        .pane_pid = s.panePid() orelse 0,
+        .pane_pid = pane_pid_opt orelse 0,
     };
 }
 
@@ -1963,7 +2007,13 @@ fn controlPlaneCaptureTail(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usiz
     else
         self.activeSurface();
     const s = surface orelse return null;
-    const viewport = try s.viewportString(allocator);
+    const viewport = s.viewportStringLocked(allocator) catch |err| switch (err) {
+        error.RendererLocked => {
+            log.warn("CP captureTail: renderer mutex contended; BUSY tab_idx={?}", .{tab_idx});
+            return error.RendererLocked;
+        },
+        else => |e| return e,
+    };
     return try allocator.dupe(u8, viewport);
 }
 
@@ -1974,7 +2024,13 @@ fn controlPlaneCaptureHistory(ctx: *anyopaque, allocator: Allocator, tab_idx: ?u
     else
         self.activeSurface();
     const s = surface orelse return null;
-    const history = try s.historyString(allocator);
+    const history = s.historyStringLocked(allocator) catch |err| switch (err) {
+        error.RendererLocked => {
+            log.warn("CP captureHistory: renderer mutex contended; BUSY tab_idx={?}", .{tab_idx});
+            return error.RendererLocked;
+        },
+        else => |e| return e,
+    };
     return try allocator.dupe(u8, history);
 }
 
@@ -1991,15 +2047,25 @@ fn controlPlaneCaptureTabList(ctx: *anyopaque, allocator: Allocator) !?[]u8 {
     var i: usize = 0;
     while (i < tab_count) : (i += 1) {
         if (self.getSurface(i)) |surface| {
-            const pwd_val = surface.pwd(allocator) catch null;
+            // Issue #207 hyp 1: use *Locked variants per-tab and
+            // gracefully degrade on contention (single TAB row writes
+            // "?" / 0 instead of parking the whole LIST_TABS request).
+            // Listing many tabs is read-heavy; one contended lock must
+            // not stall the rest.
+            const pwd_val = surface.pwdLocked(allocator) catch |err| switch (err) {
+                error.RendererLocked => null,
+                else => |e| return e,
+            };
             defer if (pwd_val) |p| allocator.free(p);
             const title = surface.getTitle() orelse "";
+            const at_prompt = surface.cursorIsAtPromptLocked() orelse false;
+            const has_sel = surface.hasSelectionLocked() orelse false;
             try writer.print("TAB|{d}|{s}|pwd={s}|prompt={d}|selection={d}|id={d}\n", .{
                 i,
                 title,
                 pwd_val orelse "",
-                @as(u8, if (surface.cursorIsAtPrompt()) 1 else 0),
-                @as(u8, if (surface.hasSelection()) 1 else 0),
+                @as(u8, if (at_prompt) 1 else 0),
+                @as(u8, if (has_sel) 1 else 0),
                 surface.tab_id,
             });
         }

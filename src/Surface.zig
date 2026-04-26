@@ -2085,6 +2085,21 @@ pub fn hasSelection(self: *const Surface) bool {
     return self.io.terminal.screens.active.selection != null;
 }
 
+/// Non-blocking variant of `hasSelection` for callers that must not park
+/// on `renderer_state.mutex` (CP pipe-server thread, UI thread).
+/// Returns null when the mutex is contended; callers should treat that
+/// as "snapshot unavailable, try again next poll" and write
+/// `ERR|BUSY|renderer_locked` to the pipe instead of blocking.
+///
+/// See `notes/2026-04-26_cp_stall_source_audit.md` cause (A) and
+/// `apprt/winui3/App.zig:1034 tsfGetCursorRect` for the canonical
+/// tryLock pattern (commit b7de73893, "#212 Tier 4 P0 #1").
+pub fn hasSelectionLocked(self: *const Surface) ?bool {
+    if (!self.renderer_state.mutex.tryLock()) return null;
+    defer self.renderer_state.mutex.unlock();
+    return self.io.terminal.screens.active.selection != null;
+}
+
 /// Returns the selected text. This is allocated.
 pub fn selectionString(self: *Surface, alloc: Allocator) !?[:0]const u8 {
     self.renderer_state.mutex.lock();
@@ -2109,9 +2124,34 @@ pub fn pwd(
     return try alloc.dupe(u8, terminal_pwd);
 }
 
+/// Non-blocking variant of `pwd`. Returns:
+///   - `error.RendererLocked` when `renderer_state.mutex` is contended
+///     (so callers can distinguish from "no pwd available" → null).
+///   - `null` when the mutex was acquired but the terminal has no pwd.
+///   - the duplicated pwd string on success.
+///
+/// See `hasSelectionLocked` for rationale.
+pub fn pwdLocked(
+    self: *const Surface,
+    alloc: Allocator,
+) (Allocator.Error || error{RendererLocked})!?[]const u8 {
+    if (!self.renderer_state.mutex.tryLock()) return error.RendererLocked;
+    defer self.renderer_state.mutex.unlock();
+    const terminal_pwd = self.io.terminal.getPwd() orelse return null;
+    return try alloc.dupe(u8, terminal_pwd);
+}
+
 /// Returns true when the terminal cursor is currently at a shell prompt.
 pub fn cursorIsAtPrompt(self: *Surface) bool {
     self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+    return self.io.terminal.cursorIsAtPrompt();
+}
+
+/// Non-blocking variant of `cursorIsAtPrompt`. Returns null when the
+/// mutex is contended.
+pub fn cursorIsAtPromptLocked(self: *Surface) ?bool {
+    if (!self.renderer_state.mutex.tryLock()) return null;
     defer self.renderer_state.mutex.unlock();
     return self.io.terminal.cursorIsAtPrompt();
 }
@@ -2139,6 +2179,33 @@ pub fn panePid(self: *const Surface) ?u32 {
     };
 }
 
+/// Non-blocking variant of `panePid`. Returns:
+///   - `error.RendererLocked` when the mutex is contended (so callers
+///     can distinguish from "no pid available" → null).
+///   - `null` when the mutex was acquired but no PID is available.
+///   - the PID on success.
+pub fn panePidLocked(self: *const Surface) error{RendererLocked}!?u32 {
+    if (!self.renderer_state.mutex.tryLock()) return error.RendererLocked;
+    defer self.renderer_state.mutex.unlock();
+
+    return switch (self.io.backend) {
+        .exec => |*exec| switch (exec.subprocess.process orelse return null) {
+            .fork_exec => |cmd| {
+                const raw = cmd.pid orelse return null;
+                if (comptime builtin.os.tag == .windows) {
+                    const hproc: internal_os.windows.HANDLE = raw;
+                    const pid = GetProcessId(hproc);
+                    if (pid == 0) return null;
+                    return @intCast(pid);
+                }
+                if (raw <= 0) return null;
+                return @intCast(raw);
+            },
+            .flatpak => return null,
+        },
+    };
+}
+
 /// Returns the current viewport contents as plain text.
 pub fn viewportString(self: *Surface, alloc: Allocator) ![]const u8 {
     self.renderer_state.mutex.lock();
@@ -2146,9 +2213,32 @@ pub fn viewportString(self: *Surface, alloc: Allocator) ![]const u8 {
     return try self.io.terminal.plainString(alloc);
 }
 
+/// Non-blocking variant of `viewportString`. Returns
+/// `error.RendererLocked` when the mutex is contended; callers should
+/// translate that to `ERR|BUSY|renderer_locked` on the pipe.
+pub fn viewportStringLocked(
+    self: *Surface,
+    alloc: Allocator,
+) ![]const u8 {
+    if (!self.renderer_state.mutex.tryLock()) return error.RendererLocked;
+    defer self.renderer_state.mutex.unlock();
+    return try self.io.terminal.plainString(alloc);
+}
+
 /// Returns the full scrollback + active area as plain text.
 pub fn historyString(self: *Surface, alloc: Allocator) ![]const u8 {
     self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+    return try self.io.terminal.screens.active.dumpStringAlloc(alloc, .{ .screen = .{} });
+}
+
+/// Non-blocking variant of `historyString`. Returns
+/// `error.RendererLocked` when the mutex is contended.
+pub fn historyStringLocked(
+    self: *Surface,
+    alloc: Allocator,
+) ![]const u8 {
+    if (!self.renderer_state.mutex.tryLock()) return error.RendererLocked;
     defer self.renderer_state.mutex.unlock();
     return try self.io.terminal.screens.active.dumpStringAlloc(alloc, .{ .screen = .{} });
 }

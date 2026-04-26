@@ -769,6 +769,57 @@ pub fn Surface(comptime App: type) type {
             return try self.core_surface.historyString(alloc);
         }
 
+        // ---- Non-blocking (tryLock) variants for the CP read lane.
+        //
+        // Issue #207 hyp 1: the CP pipe-server thread must not block on
+        // `core_surface.renderer_state.mutex`. These shims forward to
+        // the `*Locked` core variants and propagate the same null /
+        // error.RendererLocked contract upward to App.zig.
+        //
+        // For a non-initialized surface we do NOT return BUSY — there
+        // is genuinely no state to capture, the lock is irrelevant.
+        // Match the empty-string / null behaviour of the blocking
+        // wrappers above.
+
+        pub fn pwdLocked(
+            self: *Self,
+            alloc: std.mem.Allocator,
+        ) !?[]const u8 {
+            if (!self.core_initialized) return null;
+            return try self.core_surface.pwdLocked(alloc);
+        }
+
+        pub fn hasSelectionLocked(self: *const Self) ?bool {
+            if (!self.core_initialized) return false;
+            return self.core_surface.hasSelectionLocked();
+        }
+
+        pub fn cursorIsAtPromptLocked(self: *Self) ?bool {
+            if (!self.core_initialized) return false;
+            return self.core_surface.cursorIsAtPromptLocked();
+        }
+
+        pub fn panePidLocked(self: *const Self) error{RendererLocked}!?u32 {
+            if (!self.core_initialized) return null;
+            return self.core_surface.panePidLocked();
+        }
+
+        pub fn viewportStringLocked(
+            self: *Self,
+            alloc: std.mem.Allocator,
+        ) ![]const u8 {
+            if (!self.core_initialized) return alloc.dupe(u8, "");
+            return try self.core_surface.viewportStringLocked(alloc);
+        }
+
+        pub fn historyStringLocked(
+            self: *Self,
+            alloc: std.mem.Allocator,
+        ) ![]const u8 {
+            if (!self.core_initialized) return alloc.dupe(u8, "");
+            return try self.core_surface.historyStringLocked(alloc);
+        }
+
         pub fn getCursorPos(self: *const Self) !apprt.CursorPos {
             return self.cursor_pos;
         }
