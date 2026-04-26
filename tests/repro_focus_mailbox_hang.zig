@@ -264,6 +264,18 @@ const FocusBurstProbe = struct {
 // "fires first" by interleaving event kinds across the saturation
 // burst. This guards against a future regression where someone adds a
 // new mailbox payload that accidentally takes a slow path.
+//
+// #224 extension: macOS display-id change and GTK new_window activation
+// are the two remaining UI-thread `.forever` sites identified in
+// notes/2026-04-26_forever_push_audit.md. They live in apprt-specific
+// files (src/apprt/embedded.zig:2119, src/apprt/gtk/class/application.zig:1462)
+// rather than Surface.zig, but the fix is the same shape — switch to
+// `.instant` and drop+log on full. The blocking_queue contract being
+// relied on is identical to #218/#219, so the same enum-tag stand-in
+// pattern verifies coverage. The macOS site pushes onto the surface
+// renderer mailbox; the GTK site pushes onto the app mailbox — the
+// queue is generic over both, so adding a row each into this test
+// locks in coverage of both apprt-side fixes.
 // -----------------------------------------------------------------------
 
 const SiblingEventKind = enum(u32) {
@@ -274,9 +286,12 @@ const SiblingEventKind = enum(u32) {
     visible_show = 5,
     visible_hide = 6,
     crash = 7,
+    // #224: apprt-side UI-thread sites.
+    macos_display_id = 8, // src/apprt/embedded.zig:2119
+    gtk_new_window = 9, // src/apprt/gtk/class/application.zig:1462
 };
 
-test "sibling sites: instant push never blocks UI thread (#219)" {
+test "sibling sites: instant push never blocks UI thread (#219, #224)" {
     const alloc = testing.allocator;
     const Q = BlockingQueue(u32, 4);
 
@@ -294,6 +309,8 @@ test "sibling sites: instant push never blocks UI thread (#219)" {
         .inspector_off,
         .visible_show,
         .crash,
+        .macos_display_id, // #224 site 1
+        .gtk_new_window, // #224 site 2
     };
 
     var t = try std.time.Timer.start();
@@ -305,18 +322,20 @@ test "sibling sites: instant push never blocks UI thread (#219)" {
     }
     const elapsed = t.read();
 
-    // Mailbox holds 4, we tried 7, so exactly 4 must succeed and 3 drop.
+    // Mailbox holds 4, we tried 9, so exactly 4 must succeed and 5 drop.
     try testing.expectEqual(@as(u32, 4), pushed);
-    try testing.expectEqual(@as(u32, 3), dropped);
+    try testing.expectEqual(@as(u32, 5), dropped);
 
     // The whole burst MUST complete in well under a frame budget. If
     // `.instant` ever started waiting we'd see this balloon. 50ms is
-    // already orders of magnitude over what 7 atomic pushes need.
+    // already orders of magnitude over what 9 atomic pushes need.
     try testing.expect(elapsed < 50 * ns_per_ms);
 
     // Queue contents reflect the FIRST 4 events (FIFO), proving the
     // accepted pushes landed in order and the dropped ones did not
-    // displace them.
+    // displace them. The two #224 events come last in the burst above,
+    // so they are among the dropped — exactly the contract the apprt
+    // fix relies on (drop is safe, log.warn fires).
     try testing.expectEqual(@as(u32, @intFromEnum(SiblingEventKind.inspector_on)), q.pop().?);
     try testing.expectEqual(@as(u32, @intFromEnum(SiblingEventKind.change_config)), q.pop().?);
     try testing.expectEqual(@as(u32, @intFromEnum(SiblingEventKind.font_grid)), q.pop().?);

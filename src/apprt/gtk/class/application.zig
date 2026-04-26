@@ -1455,11 +1455,18 @@ pub const Application = extern struct {
     fn activate(self: *Self) callconv(.c) void {
         log.debug("activate", .{});
 
-        // Queue a new window
+        // Queue a new window. Use `.instant` (drop on full) instead of
+        // `.forever` to avoid hanging the GTK UI thread on
+        // `cond_not_full.wait` if the app mailbox is saturated. Although
+        // the app mailbox rarely fills in practice, a hang here at
+        // activation would be fatal at startup with no recovery path.
+        // Sister of #218/#219 (#224).
         const priv = self.private();
-        _ = priv.core_app.mailbox.push(.{
+        if (priv.core_app.mailbox.push(.{
             .new_window = .{},
-        }, .{ .forever = {} }); // LINT-ALLOW: forever-ok (gtk activate signal, cross-platform sister of #218, tracked in notes/2026-04-26_forever_push_audit.md, fix is platform-owner)
+        }, .{ .instant = {} }) == 0) {
+            log.warn("new_window event dropped (app mailbox full)", .{});
+        }
 
         // Call the parent activate method.
         gio.Application.virtual_methods.activate.call(
