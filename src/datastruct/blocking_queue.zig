@@ -95,6 +95,15 @@ pub fn BlockingQueue(
             alloc.destroy(self);
         }
 
+        /// Signal that the queue is shutting down. Any threads parked in
+        /// `push(.forever)` should observe this and bail out rather than
+        /// wait indefinitely. NOTE: this is a stub introduced alongside the
+        /// regression test for #220 — the actual escape-valve semantics are
+        /// implemented in the follow-up commit.
+        pub fn shutdown(self: *Self) void {
+            _ = self;
+        }
+
         /// Push a value to the queue. This returns the total size of the
         /// queue (unread items) after the push. A return value of zero
         /// means that the push failed.
