@@ -114,9 +114,13 @@ pub fn replaceRegion(
 fn formatBytesPerPixel(format: com.DXGI_FORMAT) usize {
     return switch (format) {
         .R8_UNORM, .R8_UINT => 1,
-        .R8G8B8A8_UNORM, .R8G8B8A8_UNORM_SRGB, .R8G8B8A8_UINT,
-        .B8G8R8A8_UNORM, .B8G8R8A8_UNORM_SRGB,
-        .R32_FLOAT, .R32_UINT,
+        .R8G8B8A8_UNORM,
+        .R8G8B8A8_UNORM_SRGB,
+        .R8G8B8A8_UINT,
+        .B8G8R8A8_UNORM,
+        .B8G8R8A8_UNORM_SRGB,
+        .R32_FLOAT,
+        .R32_UINT,
         => 4,
         .R32G32_FLOAT, .R32G32_UINT => 8,
         .R16G16B16A16_FLOAT => 8,

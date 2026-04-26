@@ -12,7 +12,7 @@ pub fn SearchOverlay(comptime Surface: type) type {
 
         surface: *Surface,
         container: ?*com.IUIElement = null, // Floating container (Canvas or Grid)
-        text_box: ?*com.ITextBox = null,    // The actual input box
+        text_box: ?*com.ITextBox = null, // The actual input box
 
         pub fn init(surface: *Surface) !Self {
             return Self{

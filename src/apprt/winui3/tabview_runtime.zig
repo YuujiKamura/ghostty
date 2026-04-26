@@ -17,7 +17,6 @@ const log = std.log.scoped(.winui3);
 const App = @import("App.zig");
 const profiles = @import("profiles.zig"); // Import profiles.zig
 
-
 /// Creates the RootGrid layout with TabView in Row 0 and TabContent Grid in Row 1.
 /// Returns the ITabView pointer (owned by caller) or null if TabView is disabled.
 ///

@@ -69,7 +69,6 @@ pub const bundle_id = "com.mitchellh.ghostty";
 
 /// slow_runtime_safety is now controlled via -Dslow-safety build option.
 /// See src/terminal/build_options.zig (terminal_options.slow_runtime_safety).
-
 pub const Artifact = enum {
     /// Standalone executable
     exe,

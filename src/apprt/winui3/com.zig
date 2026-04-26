@@ -1,4 +1,4 @@
-﻿//! WinUI 3 COM interface facade.
+//! WinUI 3 COM interface facade.
 //! Combines generated definitions with hand-written native interfaces.
 
 const gen = @import("com_generated.zig");

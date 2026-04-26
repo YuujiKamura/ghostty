@@ -7,7 +7,6 @@
 ///   - SetContent/Close: XAML root element lifecycle
 ///
 /// Ref: github.com/microsoft/terminal/blob/main/src/cascadia/WindowsTerminal/IslandWindow.cpp
-
 const std = @import("std");
 const com = @import("com.zig");
 const os = @import("os.zig");

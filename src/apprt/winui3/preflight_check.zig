@@ -9,7 +9,7 @@ pub fn main() !void {
     // 1. Check if the DLL exists in the SAME directory
     const bootstrap_dll = "Microsoft.WindowsAppRuntime.Bootstrap.dll";
     std.debug.print("[1/2] Checking {s} in current directory: ", .{bootstrap_dll});
-    
+
     std.fs.cwd().access(bootstrap_dll, .{}) catch |err| {
         std.debug.print("MISSING ({s})\n", .{@errorName(err)});
         return;

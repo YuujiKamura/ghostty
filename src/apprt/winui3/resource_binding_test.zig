@@ -53,7 +53,7 @@ fn createResourceManagerForPri(alloc: std.mem.Allocator, dll_path: []const u8, p
     utf16[utf16_len] = 0;
 
     const module = std.os.windows.kernel32.LoadLibraryW(@ptrCast(utf16.ptr)) orelse return error.WinRTFailed;
-    
+
     // Log the actual loaded path
     var path_buf: [260:0]u16 = undefined;
     const path_len = std.os.windows.kernel32.GetModuleFileNameW(module, &path_buf, path_buf.len);

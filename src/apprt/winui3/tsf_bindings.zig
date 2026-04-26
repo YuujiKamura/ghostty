@@ -49,13 +49,28 @@ pub const ITfThreadMgrEx = extern struct {
         GetActiveFlags: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
     };
     pub const Requires_ITfThreadMgr = true; // requires ITfThreadMgr
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn Deactivate(self: *@This()) !void { const base = try self.queryInterface(ITfThreadMgr); _ = try base.Deactivate(); }
-    pub fn activateEx(self: *@This(), ptid: *u32, dwFlags: u32) !void { try hrCheck(self.lpVtbl.ActivateEx(self, ptid, dwFlags)); }
-    pub fn ActivateEx(self: *@This(), ptid: *u32, dwFlags: u32) !void { try self.activateEx(ptid, dwFlags); }
-    pub fn getActiveFlags(self: *@This(), lpdwFlags: *u32) !void { try hrCheck(self.lpVtbl.GetActiveFlags(self, lpdwFlags)); }
-    pub fn GetActiveFlags(self: *@This(), lpdwFlags: *u32) !void { try self.getActiveFlags(lpdwFlags); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn Deactivate(self: *@This()) !void {
+        const base = try self.queryInterface(ITfThreadMgr);
+        _ = try base.Deactivate();
+    }
+    pub fn activateEx(self: *@This(), ptid: *u32, dwFlags: u32) !void {
+        try hrCheck(self.lpVtbl.ActivateEx(self, ptid, dwFlags));
+    }
+    pub fn ActivateEx(self: *@This(), ptid: *u32, dwFlags: u32) !void {
+        try self.activateEx(ptid, dwFlags);
+    }
+    pub fn getActiveFlags(self: *@This(), lpdwFlags: *u32) !void {
+        try hrCheck(self.lpVtbl.GetActiveFlags(self, lpdwFlags));
+    }
+    pub fn GetActiveFlags(self: *@This(), lpdwFlags: *u32) !void {
+        try self.getActiveFlags(lpdwFlags);
+    }
 };
 
 pub const ITfContextOwner = extern struct {
@@ -73,22 +88,56 @@ pub const ITfContextOwner = extern struct {
         GetAttribute: *const fn (*anyopaque, *GUID, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn getACPFromPoint(self: *@This(), ptScreen: *POINT, dwFlags: u32, pacp: *i32) !void { try hrCheck(self.lpVtbl.GetACPFromPoint(self, ptScreen, dwFlags, pacp)); }
-    pub fn GetACPFromPoint(self: *@This(), ptScreen: *POINT, dwFlags: u32, pacp: *i32) !void { try self.getACPFromPoint(ptScreen, dwFlags, pacp); }
-    pub fn getTextExt(self: *@This(), acpStart: i32, acpEnd: i32, prc: *RECT, pfClipped: *BOOL) !void { try hrCheck(self.lpVtbl.GetTextExt(self, acpStart, acpEnd, prc, pfClipped)); }
-    pub fn GetTextExt(self: *@This(), acpStart: i32, acpEnd: i32, prc: *RECT, pfClipped: *BOOL) !void { try self.getTextExt(acpStart, acpEnd, prc, pfClipped); }
-    pub fn getScreenExt(self: *@This(), prc: *RECT) !void { try hrCheck(self.lpVtbl.GetScreenExt(self, prc)); }
-    pub fn GetScreenExt(self: *@This(), prc: *RECT) !void { try self.getScreenExt(prc); }
-    pub fn getStatus(self: *@This(), pdcs: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetStatus(self, pdcs)); }
-    pub fn GetStatus(self: *@This(), pdcs: *?*anyopaque) !void { try self.getStatus(pdcs); }
-    pub fn getWnd(self: *@This(), phwnd: *HWND) !void { try hrCheck(self.lpVtbl.GetWnd(self, phwnd)); }
-    pub fn GetWnd(self: *@This(), phwnd: *HWND) !void { try self.getWnd(phwnd); }
-    pub fn getAttribute(self: *@This(), rguidAttribute: *GUID, pvarValue: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetAttribute(self, rguidAttribute, pvarValue)); }
-    pub fn GetAttribute(self: *@This(), rguidAttribute: *GUID, pvarValue: *?*anyopaque) !void { try self.getAttribute(rguidAttribute, pvarValue); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn getACPFromPoint(self: *@This(), ptScreen: *POINT, dwFlags: u32, pacp: *i32) !void {
+        try hrCheck(self.lpVtbl.GetACPFromPoint(self, ptScreen, dwFlags, pacp));
+    }
+    pub fn GetACPFromPoint(self: *@This(), ptScreen: *POINT, dwFlags: u32, pacp: *i32) !void {
+        try self.getACPFromPoint(ptScreen, dwFlags, pacp);
+    }
+    pub fn getTextExt(self: *@This(), acpStart: i32, acpEnd: i32, prc: *RECT, pfClipped: *BOOL) !void {
+        try hrCheck(self.lpVtbl.GetTextExt(self, acpStart, acpEnd, prc, pfClipped));
+    }
+    pub fn GetTextExt(self: *@This(), acpStart: i32, acpEnd: i32, prc: *RECT, pfClipped: *BOOL) !void {
+        try self.getTextExt(acpStart, acpEnd, prc, pfClipped);
+    }
+    pub fn getScreenExt(self: *@This(), prc: *RECT) !void {
+        try hrCheck(self.lpVtbl.GetScreenExt(self, prc));
+    }
+    pub fn GetScreenExt(self: *@This(), prc: *RECT) !void {
+        try self.getScreenExt(prc);
+    }
+    pub fn getStatus(self: *@This(), pdcs: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetStatus(self, pdcs));
+    }
+    pub fn GetStatus(self: *@This(), pdcs: *?*anyopaque) !void {
+        try self.getStatus(pdcs);
+    }
+    pub fn getWnd(self: *@This(), phwnd: *HWND) !void {
+        try hrCheck(self.lpVtbl.GetWnd(self, phwnd));
+    }
+    pub fn GetWnd(self: *@This(), phwnd: *HWND) !void {
+        try self.getWnd(phwnd);
+    }
+    pub fn getAttribute(self: *@This(), rguidAttribute: *GUID, pvarValue: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetAttribute(self, rguidAttribute, pvarValue));
+    }
+    pub fn GetAttribute(self: *@This(), rguidAttribute: *GUID, pvarValue: *?*anyopaque) !void {
+        try self.getAttribute(rguidAttribute, pvarValue);
+    }
 };
 
 pub const ITfContextOwnerCompositionSink = extern struct {
@@ -103,16 +152,38 @@ pub const ITfContextOwnerCompositionSink = extern struct {
         OnEndComposition: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn onStartComposition(self: *@This(), pComposition: ?*anyopaque, pfOk: *BOOL) !void { try hrCheck(self.lpVtbl.OnStartComposition(self, pComposition, pfOk)); }
-    pub fn OnStartComposition(self: *@This(), pComposition: ?*anyopaque, pfOk: *BOOL) !void { try self.onStartComposition(pComposition, pfOk); }
-    pub fn onUpdateComposition(self: *@This(), pComposition: ?*anyopaque, pRangeNew: ?*anyopaque) !void { try hrCheck(self.lpVtbl.OnUpdateComposition(self, pComposition, pRangeNew)); }
-    pub fn OnUpdateComposition(self: *@This(), pComposition: ?*anyopaque, pRangeNew: ?*anyopaque) !void { try self.onUpdateComposition(pComposition, pRangeNew); }
-    pub fn onEndComposition(self: *@This(), pComposition: ?*anyopaque) !void { try hrCheck(self.lpVtbl.OnEndComposition(self, pComposition)); }
-    pub fn OnEndComposition(self: *@This(), pComposition: ?*anyopaque) !void { try self.onEndComposition(pComposition); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn onStartComposition(self: *@This(), pComposition: ?*anyopaque, pfOk: *BOOL) !void {
+        try hrCheck(self.lpVtbl.OnStartComposition(self, pComposition, pfOk));
+    }
+    pub fn OnStartComposition(self: *@This(), pComposition: ?*anyopaque, pfOk: *BOOL) !void {
+        try self.onStartComposition(pComposition, pfOk);
+    }
+    pub fn onUpdateComposition(self: *@This(), pComposition: ?*anyopaque, pRangeNew: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.OnUpdateComposition(self, pComposition, pRangeNew));
+    }
+    pub fn OnUpdateComposition(self: *@This(), pComposition: ?*anyopaque, pRangeNew: ?*anyopaque) !void {
+        try self.onUpdateComposition(pComposition, pRangeNew);
+    }
+    pub fn onEndComposition(self: *@This(), pComposition: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.OnEndComposition(self, pComposition));
+    }
+    pub fn OnEndComposition(self: *@This(), pComposition: ?*anyopaque) !void {
+        try self.onEndComposition(pComposition);
+    }
 };
 
 pub const ITfTextEditSink = extern struct {
@@ -125,12 +196,26 @@ pub const ITfTextEditSink = extern struct {
         OnEndEdit: *const fn (*anyopaque, ?*anyopaque, u32, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn onEndEdit(self: *@This(), pic: ?*anyopaque, ecReadOnly: u32, pEditRecord: ?*anyopaque) !void { try hrCheck(self.lpVtbl.OnEndEdit(self, pic, ecReadOnly, pEditRecord)); }
-    pub fn OnEndEdit(self: *@This(), pic: ?*anyopaque, ecReadOnly: u32, pEditRecord: ?*anyopaque) !void { try self.onEndEdit(pic, ecReadOnly, pEditRecord); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn onEndEdit(self: *@This(), pic: ?*anyopaque, ecReadOnly: u32, pEditRecord: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.OnEndEdit(self, pic, ecReadOnly, pEditRecord));
+    }
+    pub fn OnEndEdit(self: *@This(), pic: ?*anyopaque, ecReadOnly: u32, pEditRecord: ?*anyopaque) !void {
+        try self.onEndEdit(pic, ecReadOnly, pEditRecord);
+    }
 };
 
 pub const ITfEditSession = extern struct {
@@ -143,12 +228,26 @@ pub const ITfEditSession = extern struct {
         DoEditSession: *const fn (*anyopaque, u32) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn doEditSession(self: *@This(), ec: u32) !void { try hrCheck(self.lpVtbl.DoEditSession(self, ec)); }
-    pub fn DoEditSession(self: *@This(), ec: u32) !void { try self.doEditSession(ec); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn doEditSession(self: *@This(), ec: u32) !void {
+        try hrCheck(self.lpVtbl.DoEditSession(self, ec));
+    }
+    pub fn DoEditSession(self: *@This(), ec: u32) !void {
+        try self.doEditSession(ec);
+    }
 };
 
 pub const ITfDocumentMgr = extern struct {
@@ -166,22 +265,56 @@ pub const ITfDocumentMgr = extern struct {
         EnumContexts: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn createContext(self: *@This(), tidOwner: u32, dwFlags: u32, punk: ?*anyopaque, ppic: *?*anyopaque, pecTextStore: *u32) !void { try hrCheck(self.lpVtbl.CreateContext(self, tidOwner, dwFlags, punk, ppic, pecTextStore)); }
-    pub fn CreateContext(self: *@This(), tidOwner: u32, dwFlags: u32, punk: ?*anyopaque, ppic: *?*anyopaque, pecTextStore: *u32) !void { try self.createContext(tidOwner, dwFlags, punk, ppic, pecTextStore); }
-    pub fn push(self: *@This(), pic: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Push(self, pic)); }
-    pub fn Push(self: *@This(), pic: ?*anyopaque) !void { try self.push(pic); }
-    pub fn pop(self: *@This(), dwFlags: u32) !void { try hrCheck(self.lpVtbl.Pop(self, dwFlags)); }
-    pub fn Pop(self: *@This(), dwFlags: u32) !void { try self.pop(dwFlags); }
-    pub fn getTop(self: *@This(), ppic: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetTop(self, ppic)); }
-    pub fn GetTop(self: *@This(), ppic: *?*anyopaque) !void { try self.getTop(ppic); }
-    pub fn getBase(self: *@This(), ppic: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetBase(self, ppic)); }
-    pub fn GetBase(self: *@This(), ppic: *?*anyopaque) !void { try self.getBase(ppic); }
-    pub fn enumContexts(self: *@This(), ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.EnumContexts(self, ppEnum)); }
-    pub fn EnumContexts(self: *@This(), ppEnum: *?*anyopaque) !void { try self.enumContexts(ppEnum); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn createContext(self: *@This(), tidOwner: u32, dwFlags: u32, punk: ?*anyopaque, ppic: *?*anyopaque, pecTextStore: *u32) !void {
+        try hrCheck(self.lpVtbl.CreateContext(self, tidOwner, dwFlags, punk, ppic, pecTextStore));
+    }
+    pub fn CreateContext(self: *@This(), tidOwner: u32, dwFlags: u32, punk: ?*anyopaque, ppic: *?*anyopaque, pecTextStore: *u32) !void {
+        try self.createContext(tidOwner, dwFlags, punk, ppic, pecTextStore);
+    }
+    pub fn push(self: *@This(), pic: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Push(self, pic));
+    }
+    pub fn Push(self: *@This(), pic: ?*anyopaque) !void {
+        try self.push(pic);
+    }
+    pub fn pop(self: *@This(), dwFlags: u32) !void {
+        try hrCheck(self.lpVtbl.Pop(self, dwFlags));
+    }
+    pub fn Pop(self: *@This(), dwFlags: u32) !void {
+        try self.pop(dwFlags);
+    }
+    pub fn getTop(self: *@This(), ppic: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetTop(self, ppic));
+    }
+    pub fn GetTop(self: *@This(), ppic: *?*anyopaque) !void {
+        try self.getTop(ppic);
+    }
+    pub fn getBase(self: *@This(), ppic: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetBase(self, ppic));
+    }
+    pub fn GetBase(self: *@This(), ppic: *?*anyopaque) !void {
+        try self.getBase(ppic);
+    }
+    pub fn enumContexts(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.EnumContexts(self, ppEnum));
+    }
+    pub fn EnumContexts(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try self.enumContexts(ppEnum);
+    }
 };
 
 pub const ITfContext = extern struct {
@@ -208,40 +341,110 @@ pub const ITfContext = extern struct {
         CreateRangeBackup: *const fn (*anyopaque, u32, ?*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn requestEditSession(self: *@This(), tid: u32, pes: ?*anyopaque, dwFlags: i32, phrSession: *HRESULT) !void { try hrCheck(self.lpVtbl.RequestEditSession(self, tid, pes, dwFlags, phrSession)); }
-    pub fn RequestEditSession(self: *@This(), tid: u32, pes: ?*anyopaque, dwFlags: i32, phrSession: *HRESULT) !void { try self.requestEditSession(tid, pes, dwFlags, phrSession); }
-    pub fn inWriteSession(self: *@This(), tid: u32, pfWriteSession: *BOOL) !void { try hrCheck(self.lpVtbl.InWriteSession(self, tid, pfWriteSession)); }
-    pub fn InWriteSession(self: *@This(), tid: u32, pfWriteSession: *BOOL) !void { try self.inWriteSession(tid, pfWriteSession); }
-    pub fn getSelection(self: *@This(), ec: u32, ulIndex: u32, ulCount: u32, pSelection: *?*anyopaque, pcFetched: *u32) !void { try hrCheck(self.lpVtbl.GetSelection(self, ec, ulIndex, ulCount, pSelection, pcFetched)); }
-    pub fn GetSelection(self: *@This(), ec: u32, ulIndex: u32, ulCount: u32, pSelection: *?*anyopaque, pcFetched: *u32) !void { try self.getSelection(ec, ulIndex, ulCount, pSelection, pcFetched); }
-    pub fn setSelection(self: *@This(), ec: u32, ulCount: u32, pSelection: *?*anyopaque) !void { try hrCheck(self.lpVtbl.SetSelection(self, ec, ulCount, pSelection)); }
-    pub fn SetSelection(self: *@This(), ec: u32, ulCount: u32, pSelection: *?*anyopaque) !void { try self.setSelection(ec, ulCount, pSelection); }
-    pub fn getStart(self: *@This(), ec: u32, ppStart: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetStart(self, ec, ppStart)); }
-    pub fn GetStart(self: *@This(), ec: u32, ppStart: *?*anyopaque) !void { try self.getStart(ec, ppStart); }
-    pub fn getEnd(self: *@This(), ec: u32, ppEnd: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetEnd(self, ec, ppEnd)); }
-    pub fn GetEnd(self: *@This(), ec: u32, ppEnd: *?*anyopaque) !void { try self.getEnd(ec, ppEnd); }
-    pub fn getActiveView(self: *@This(), ppView: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetActiveView(self, ppView)); }
-    pub fn GetActiveView(self: *@This(), ppView: *?*anyopaque) !void { try self.getActiveView(ppView); }
-    pub fn enumViews(self: *@This(), ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.EnumViews(self, ppEnum)); }
-    pub fn EnumViews(self: *@This(), ppEnum: *?*anyopaque) !void { try self.enumViews(ppEnum); }
-    pub fn getStatus(self: *@This(), pdcs: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetStatus(self, pdcs)); }
-    pub fn GetStatus(self: *@This(), pdcs: *?*anyopaque) !void { try self.getStatus(pdcs); }
-    pub fn getProperty(self: *@This(), guidProp: *GUID, ppProp: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetProperty(self, guidProp, ppProp)); }
-    pub fn GetProperty(self: *@This(), guidProp: *GUID, ppProp: *?*anyopaque) !void { try self.getProperty(guidProp, ppProp); }
-    pub fn getAppProperty(self: *@This(), guidProp: *GUID, ppProp: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetAppProperty(self, guidProp, ppProp)); }
-    pub fn GetAppProperty(self: *@This(), guidProp: *GUID, ppProp: *?*anyopaque) !void { try self.getAppProperty(guidProp, ppProp); }
-    pub fn trackProperties(self: *@This(), prgProp: *?*anyopaque, cProp: u32, prgAppProp: *?*anyopaque, cAppProp: u32, ppProperty: *?*anyopaque) !void { try hrCheck(self.lpVtbl.TrackProperties(self, prgProp, cProp, prgAppProp, cAppProp, ppProperty)); }
-    pub fn TrackProperties(self: *@This(), prgProp: *?*anyopaque, cProp: u32, prgAppProp: *?*anyopaque, cAppProp: u32, ppProperty: *?*anyopaque) !void { try self.trackProperties(prgProp, cProp, prgAppProp, cAppProp, ppProperty); }
-    pub fn enumProperties(self: *@This(), ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.EnumProperties(self, ppEnum)); }
-    pub fn EnumProperties(self: *@This(), ppEnum: *?*anyopaque) !void { try self.enumProperties(ppEnum); }
-    pub fn getDocumentMgr(self: *@This(), ppDm: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetDocumentMgr(self, ppDm)); }
-    pub fn GetDocumentMgr(self: *@This(), ppDm: *?*anyopaque) !void { try self.getDocumentMgr(ppDm); }
-    pub fn createRangeBackup(self: *@This(), ec: u32, pRange: ?*anyopaque, ppBackup: *?*anyopaque) !void { try hrCheck(self.lpVtbl.CreateRangeBackup(self, ec, pRange, ppBackup)); }
-    pub fn CreateRangeBackup(self: *@This(), ec: u32, pRange: ?*anyopaque, ppBackup: *?*anyopaque) !void { try self.createRangeBackup(ec, pRange, ppBackup); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn requestEditSession(self: *@This(), tid: u32, pes: ?*anyopaque, dwFlags: i32, phrSession: *HRESULT) !void {
+        try hrCheck(self.lpVtbl.RequestEditSession(self, tid, pes, dwFlags, phrSession));
+    }
+    pub fn RequestEditSession(self: *@This(), tid: u32, pes: ?*anyopaque, dwFlags: i32, phrSession: *HRESULT) !void {
+        try self.requestEditSession(tid, pes, dwFlags, phrSession);
+    }
+    pub fn inWriteSession(self: *@This(), tid: u32, pfWriteSession: *BOOL) !void {
+        try hrCheck(self.lpVtbl.InWriteSession(self, tid, pfWriteSession));
+    }
+    pub fn InWriteSession(self: *@This(), tid: u32, pfWriteSession: *BOOL) !void {
+        try self.inWriteSession(tid, pfWriteSession);
+    }
+    pub fn getSelection(self: *@This(), ec: u32, ulIndex: u32, ulCount: u32, pSelection: *?*anyopaque, pcFetched: *u32) !void {
+        try hrCheck(self.lpVtbl.GetSelection(self, ec, ulIndex, ulCount, pSelection, pcFetched));
+    }
+    pub fn GetSelection(self: *@This(), ec: u32, ulIndex: u32, ulCount: u32, pSelection: *?*anyopaque, pcFetched: *u32) !void {
+        try self.getSelection(ec, ulIndex, ulCount, pSelection, pcFetched);
+    }
+    pub fn setSelection(self: *@This(), ec: u32, ulCount: u32, pSelection: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.SetSelection(self, ec, ulCount, pSelection));
+    }
+    pub fn SetSelection(self: *@This(), ec: u32, ulCount: u32, pSelection: *?*anyopaque) !void {
+        try self.setSelection(ec, ulCount, pSelection);
+    }
+    pub fn getStart(self: *@This(), ec: u32, ppStart: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetStart(self, ec, ppStart));
+    }
+    pub fn GetStart(self: *@This(), ec: u32, ppStart: *?*anyopaque) !void {
+        try self.getStart(ec, ppStart);
+    }
+    pub fn getEnd(self: *@This(), ec: u32, ppEnd: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetEnd(self, ec, ppEnd));
+    }
+    pub fn GetEnd(self: *@This(), ec: u32, ppEnd: *?*anyopaque) !void {
+        try self.getEnd(ec, ppEnd);
+    }
+    pub fn getActiveView(self: *@This(), ppView: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetActiveView(self, ppView));
+    }
+    pub fn GetActiveView(self: *@This(), ppView: *?*anyopaque) !void {
+        try self.getActiveView(ppView);
+    }
+    pub fn enumViews(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.EnumViews(self, ppEnum));
+    }
+    pub fn EnumViews(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try self.enumViews(ppEnum);
+    }
+    pub fn getStatus(self: *@This(), pdcs: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetStatus(self, pdcs));
+    }
+    pub fn GetStatus(self: *@This(), pdcs: *?*anyopaque) !void {
+        try self.getStatus(pdcs);
+    }
+    pub fn getProperty(self: *@This(), guidProp: *GUID, ppProp: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetProperty(self, guidProp, ppProp));
+    }
+    pub fn GetProperty(self: *@This(), guidProp: *GUID, ppProp: *?*anyopaque) !void {
+        try self.getProperty(guidProp, ppProp);
+    }
+    pub fn getAppProperty(self: *@This(), guidProp: *GUID, ppProp: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetAppProperty(self, guidProp, ppProp));
+    }
+    pub fn GetAppProperty(self: *@This(), guidProp: *GUID, ppProp: *?*anyopaque) !void {
+        try self.getAppProperty(guidProp, ppProp);
+    }
+    pub fn trackProperties(self: *@This(), prgProp: *?*anyopaque, cProp: u32, prgAppProp: *?*anyopaque, cAppProp: u32, ppProperty: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.TrackProperties(self, prgProp, cProp, prgAppProp, cAppProp, ppProperty));
+    }
+    pub fn TrackProperties(self: *@This(), prgProp: *?*anyopaque, cProp: u32, prgAppProp: *?*anyopaque, cAppProp: u32, ppProperty: *?*anyopaque) !void {
+        try self.trackProperties(prgProp, cProp, prgAppProp, cAppProp, ppProperty);
+    }
+    pub fn enumProperties(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.EnumProperties(self, ppEnum));
+    }
+    pub fn EnumProperties(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try self.enumProperties(ppEnum);
+    }
+    pub fn getDocumentMgr(self: *@This(), ppDm: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetDocumentMgr(self, ppDm));
+    }
+    pub fn GetDocumentMgr(self: *@This(), ppDm: *?*anyopaque) !void {
+        try self.getDocumentMgr(ppDm);
+    }
+    pub fn createRangeBackup(self: *@This(), ec: u32, pRange: ?*anyopaque, ppBackup: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.CreateRangeBackup(self, ec, pRange, ppBackup));
+    }
+    pub fn CreateRangeBackup(self: *@This(), ec: u32, pRange: ?*anyopaque, ppBackup: *?*anyopaque) !void {
+        try self.createRangeBackup(ec, pRange, ppBackup);
+    }
 };
 
 pub const ITfRange = extern struct {
@@ -275,54 +478,152 @@ pub const ITfRange = extern struct {
         GetContext: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn getText(self: *@This(), ec: u32, dwFlags: u32, pchText: ?*anyopaque, cchMax: u32, pcch: *u32) !void { try hrCheck(self.lpVtbl.GetText(self, ec, dwFlags, pchText, cchMax, pcch)); }
-    pub fn GetText(self: *@This(), ec: u32, dwFlags: u32, pchText: ?*anyopaque, cchMax: u32, pcch: *u32) !void { try self.getText(ec, dwFlags, pchText, cchMax, pcch); }
-    pub fn setText(self: *@This(), ec: u32, dwFlags: u32, pchText: ?*anyopaque, cch: i32) !void { try hrCheck(self.lpVtbl.SetText(self, ec, dwFlags, pchText, cch)); }
-    pub fn SetText(self: *@This(), ec: u32, dwFlags: u32, pchText: ?*anyopaque, cch: i32) !void { try self.setText(ec, dwFlags, pchText, cch); }
-    pub fn getFormattedText(self: *@This(), ec: u32, ppDataObject: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetFormattedText(self, ec, ppDataObject)); }
-    pub fn GetFormattedText(self: *@This(), ec: u32, ppDataObject: *?*anyopaque) !void { try self.getFormattedText(ec, ppDataObject); }
-    pub fn getEmbedded(self: *@This(), ec: u32, rguidService: *GUID, riid: *GUID, ppunk: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetEmbedded(self, ec, rguidService, riid, ppunk)); }
-    pub fn GetEmbedded(self: *@This(), ec: u32, rguidService: *GUID, riid: *GUID, ppunk: *?*anyopaque) !void { try self.getEmbedded(ec, rguidService, riid, ppunk); }
-    pub fn insertEmbedded(self: *@This(), ec: u32, dwFlags: u32, pDataObject: ?*anyopaque) !void { try hrCheck(self.lpVtbl.InsertEmbedded(self, ec, dwFlags, pDataObject)); }
-    pub fn InsertEmbedded(self: *@This(), ec: u32, dwFlags: u32, pDataObject: ?*anyopaque) !void { try self.insertEmbedded(ec, dwFlags, pDataObject); }
-    pub fn shiftStart(self: *@This(), ec: u32, cchReq: i32, pcch: *i32, pHalt: *?*anyopaque) !void { try hrCheck(self.lpVtbl.ShiftStart(self, ec, cchReq, pcch, pHalt)); }
-    pub fn ShiftStart(self: *@This(), ec: u32, cchReq: i32, pcch: *i32, pHalt: *?*anyopaque) !void { try self.shiftStart(ec, cchReq, pcch, pHalt); }
-    pub fn shiftEnd(self: *@This(), ec: u32, cchReq: i32, pcch: *i32, pHalt: *?*anyopaque) !void { try hrCheck(self.lpVtbl.ShiftEnd(self, ec, cchReq, pcch, pHalt)); }
-    pub fn ShiftEnd(self: *@This(), ec: u32, cchReq: i32, pcch: *i32, pHalt: *?*anyopaque) !void { try self.shiftEnd(ec, cchReq, pcch, pHalt); }
-    pub fn shiftStartToRange(self: *@This(), ec: u32, pRange: ?*anyopaque, aPos: i32) !void { try hrCheck(self.lpVtbl.ShiftStartToRange(self, ec, pRange, aPos)); }
-    pub fn ShiftStartToRange(self: *@This(), ec: u32, pRange: ?*anyopaque, aPos: i32) !void { try self.shiftStartToRange(ec, pRange, aPos); }
-    pub fn shiftEndToRange(self: *@This(), ec: u32, pRange: ?*anyopaque, aPos: i32) !void { try hrCheck(self.lpVtbl.ShiftEndToRange(self, ec, pRange, aPos)); }
-    pub fn ShiftEndToRange(self: *@This(), ec: u32, pRange: ?*anyopaque, aPos: i32) !void { try self.shiftEndToRange(ec, pRange, aPos); }
-    pub fn shiftStartRegion(self: *@This(), ec: u32, dir: i32, pfNoRegion: *BOOL) !void { try hrCheck(self.lpVtbl.ShiftStartRegion(self, ec, dir, pfNoRegion)); }
-    pub fn ShiftStartRegion(self: *@This(), ec: u32, dir: i32, pfNoRegion: *BOOL) !void { try self.shiftStartRegion(ec, dir, pfNoRegion); }
-    pub fn shiftEndRegion(self: *@This(), ec: u32, dir: i32, pfNoRegion: *BOOL) !void { try hrCheck(self.lpVtbl.ShiftEndRegion(self, ec, dir, pfNoRegion)); }
-    pub fn ShiftEndRegion(self: *@This(), ec: u32, dir: i32, pfNoRegion: *BOOL) !void { try self.shiftEndRegion(ec, dir, pfNoRegion); }
-    pub fn isEmpty(self: *@This(), ec: u32, pfEmpty: *BOOL) !void { try hrCheck(self.lpVtbl.IsEmpty(self, ec, pfEmpty)); }
-    pub fn IsEmpty(self: *@This(), ec: u32, pfEmpty: *BOOL) !void { try self.isEmpty(ec, pfEmpty); }
-    pub fn collapse(self: *@This(), ec: u32, aPos: i32) !void { try hrCheck(self.lpVtbl.Collapse(self, ec, aPos)); }
-    pub fn Collapse(self: *@This(), ec: u32, aPos: i32) !void { try self.collapse(ec, aPos); }
-    pub fn isEqualStart(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, pfEqual: *BOOL) !void { try hrCheck(self.lpVtbl.IsEqualStart(self, ec, pWith, aPos, pfEqual)); }
-    pub fn IsEqualStart(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, pfEqual: *BOOL) !void { try self.isEqualStart(ec, pWith, aPos, pfEqual); }
-    pub fn isEqualEnd(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, pfEqual: *BOOL) !void { try hrCheck(self.lpVtbl.IsEqualEnd(self, ec, pWith, aPos, pfEqual)); }
-    pub fn IsEqualEnd(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, pfEqual: *BOOL) !void { try self.isEqualEnd(ec, pWith, aPos, pfEqual); }
-    pub fn compareStart(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, plResult: *i32) !void { try hrCheck(self.lpVtbl.CompareStart(self, ec, pWith, aPos, plResult)); }
-    pub fn CompareStart(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, plResult: *i32) !void { try self.compareStart(ec, pWith, aPos, plResult); }
-    pub fn compareEnd(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, plResult: *i32) !void { try hrCheck(self.lpVtbl.CompareEnd(self, ec, pWith, aPos, plResult)); }
-    pub fn CompareEnd(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, plResult: *i32) !void { try self.compareEnd(ec, pWith, aPos, plResult); }
-    pub fn adjustForInsert(self: *@This(), ec: u32, cchInsert: u32, pfInsertOk: *BOOL) !void { try hrCheck(self.lpVtbl.AdjustForInsert(self, ec, cchInsert, pfInsertOk)); }
-    pub fn AdjustForInsert(self: *@This(), ec: u32, cchInsert: u32, pfInsertOk: *BOOL) !void { try self.adjustForInsert(ec, cchInsert, pfInsertOk); }
-    pub fn getGravity(self: *@This(), pgStart: *i32, pgEnd: *i32) !void { try hrCheck(self.lpVtbl.GetGravity(self, pgStart, pgEnd)); }
-    pub fn GetGravity(self: *@This(), pgStart: *i32, pgEnd: *i32) !void { try self.getGravity(pgStart, pgEnd); }
-    pub fn setGravity(self: *@This(), ec: u32, gStart: i32, gEnd: i32) !void { try hrCheck(self.lpVtbl.SetGravity(self, ec, gStart, gEnd)); }
-    pub fn SetGravity(self: *@This(), ec: u32, gStart: i32, gEnd: i32) !void { try self.setGravity(ec, gStart, gEnd); }
-    pub fn clone(self: *@This(), ppClone: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, ppClone)); }
-    pub fn Clone(self: *@This(), ppClone: *?*anyopaque) !void { try self.clone(ppClone); }
-    pub fn getContext(self: *@This(), ppContext: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetContext(self, ppContext)); }
-    pub fn GetContext(self: *@This(), ppContext: *?*anyopaque) !void { try self.getContext(ppContext); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn getText(self: *@This(), ec: u32, dwFlags: u32, pchText: ?*anyopaque, cchMax: u32, pcch: *u32) !void {
+        try hrCheck(self.lpVtbl.GetText(self, ec, dwFlags, pchText, cchMax, pcch));
+    }
+    pub fn GetText(self: *@This(), ec: u32, dwFlags: u32, pchText: ?*anyopaque, cchMax: u32, pcch: *u32) !void {
+        try self.getText(ec, dwFlags, pchText, cchMax, pcch);
+    }
+    pub fn setText(self: *@This(), ec: u32, dwFlags: u32, pchText: ?*anyopaque, cch: i32) !void {
+        try hrCheck(self.lpVtbl.SetText(self, ec, dwFlags, pchText, cch));
+    }
+    pub fn SetText(self: *@This(), ec: u32, dwFlags: u32, pchText: ?*anyopaque, cch: i32) !void {
+        try self.setText(ec, dwFlags, pchText, cch);
+    }
+    pub fn getFormattedText(self: *@This(), ec: u32, ppDataObject: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetFormattedText(self, ec, ppDataObject));
+    }
+    pub fn GetFormattedText(self: *@This(), ec: u32, ppDataObject: *?*anyopaque) !void {
+        try self.getFormattedText(ec, ppDataObject);
+    }
+    pub fn getEmbedded(self: *@This(), ec: u32, rguidService: *GUID, riid: *GUID, ppunk: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetEmbedded(self, ec, rguidService, riid, ppunk));
+    }
+    pub fn GetEmbedded(self: *@This(), ec: u32, rguidService: *GUID, riid: *GUID, ppunk: *?*anyopaque) !void {
+        try self.getEmbedded(ec, rguidService, riid, ppunk);
+    }
+    pub fn insertEmbedded(self: *@This(), ec: u32, dwFlags: u32, pDataObject: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.InsertEmbedded(self, ec, dwFlags, pDataObject));
+    }
+    pub fn InsertEmbedded(self: *@This(), ec: u32, dwFlags: u32, pDataObject: ?*anyopaque) !void {
+        try self.insertEmbedded(ec, dwFlags, pDataObject);
+    }
+    pub fn shiftStart(self: *@This(), ec: u32, cchReq: i32, pcch: *i32, pHalt: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.ShiftStart(self, ec, cchReq, pcch, pHalt));
+    }
+    pub fn ShiftStart(self: *@This(), ec: u32, cchReq: i32, pcch: *i32, pHalt: *?*anyopaque) !void {
+        try self.shiftStart(ec, cchReq, pcch, pHalt);
+    }
+    pub fn shiftEnd(self: *@This(), ec: u32, cchReq: i32, pcch: *i32, pHalt: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.ShiftEnd(self, ec, cchReq, pcch, pHalt));
+    }
+    pub fn ShiftEnd(self: *@This(), ec: u32, cchReq: i32, pcch: *i32, pHalt: *?*anyopaque) !void {
+        try self.shiftEnd(ec, cchReq, pcch, pHalt);
+    }
+    pub fn shiftStartToRange(self: *@This(), ec: u32, pRange: ?*anyopaque, aPos: i32) !void {
+        try hrCheck(self.lpVtbl.ShiftStartToRange(self, ec, pRange, aPos));
+    }
+    pub fn ShiftStartToRange(self: *@This(), ec: u32, pRange: ?*anyopaque, aPos: i32) !void {
+        try self.shiftStartToRange(ec, pRange, aPos);
+    }
+    pub fn shiftEndToRange(self: *@This(), ec: u32, pRange: ?*anyopaque, aPos: i32) !void {
+        try hrCheck(self.lpVtbl.ShiftEndToRange(self, ec, pRange, aPos));
+    }
+    pub fn ShiftEndToRange(self: *@This(), ec: u32, pRange: ?*anyopaque, aPos: i32) !void {
+        try self.shiftEndToRange(ec, pRange, aPos);
+    }
+    pub fn shiftStartRegion(self: *@This(), ec: u32, dir: i32, pfNoRegion: *BOOL) !void {
+        try hrCheck(self.lpVtbl.ShiftStartRegion(self, ec, dir, pfNoRegion));
+    }
+    pub fn ShiftStartRegion(self: *@This(), ec: u32, dir: i32, pfNoRegion: *BOOL) !void {
+        try self.shiftStartRegion(ec, dir, pfNoRegion);
+    }
+    pub fn shiftEndRegion(self: *@This(), ec: u32, dir: i32, pfNoRegion: *BOOL) !void {
+        try hrCheck(self.lpVtbl.ShiftEndRegion(self, ec, dir, pfNoRegion));
+    }
+    pub fn ShiftEndRegion(self: *@This(), ec: u32, dir: i32, pfNoRegion: *BOOL) !void {
+        try self.shiftEndRegion(ec, dir, pfNoRegion);
+    }
+    pub fn isEmpty(self: *@This(), ec: u32, pfEmpty: *BOOL) !void {
+        try hrCheck(self.lpVtbl.IsEmpty(self, ec, pfEmpty));
+    }
+    pub fn IsEmpty(self: *@This(), ec: u32, pfEmpty: *BOOL) !void {
+        try self.isEmpty(ec, pfEmpty);
+    }
+    pub fn collapse(self: *@This(), ec: u32, aPos: i32) !void {
+        try hrCheck(self.lpVtbl.Collapse(self, ec, aPos));
+    }
+    pub fn Collapse(self: *@This(), ec: u32, aPos: i32) !void {
+        try self.collapse(ec, aPos);
+    }
+    pub fn isEqualStart(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, pfEqual: *BOOL) !void {
+        try hrCheck(self.lpVtbl.IsEqualStart(self, ec, pWith, aPos, pfEqual));
+    }
+    pub fn IsEqualStart(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, pfEqual: *BOOL) !void {
+        try self.isEqualStart(ec, pWith, aPos, pfEqual);
+    }
+    pub fn isEqualEnd(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, pfEqual: *BOOL) !void {
+        try hrCheck(self.lpVtbl.IsEqualEnd(self, ec, pWith, aPos, pfEqual));
+    }
+    pub fn IsEqualEnd(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, pfEqual: *BOOL) !void {
+        try self.isEqualEnd(ec, pWith, aPos, pfEqual);
+    }
+    pub fn compareStart(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, plResult: *i32) !void {
+        try hrCheck(self.lpVtbl.CompareStart(self, ec, pWith, aPos, plResult));
+    }
+    pub fn CompareStart(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, plResult: *i32) !void {
+        try self.compareStart(ec, pWith, aPos, plResult);
+    }
+    pub fn compareEnd(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, plResult: *i32) !void {
+        try hrCheck(self.lpVtbl.CompareEnd(self, ec, pWith, aPos, plResult));
+    }
+    pub fn CompareEnd(self: *@This(), ec: u32, pWith: ?*anyopaque, aPos: i32, plResult: *i32) !void {
+        try self.compareEnd(ec, pWith, aPos, plResult);
+    }
+    pub fn adjustForInsert(self: *@This(), ec: u32, cchInsert: u32, pfInsertOk: *BOOL) !void {
+        try hrCheck(self.lpVtbl.AdjustForInsert(self, ec, cchInsert, pfInsertOk));
+    }
+    pub fn AdjustForInsert(self: *@This(), ec: u32, cchInsert: u32, pfInsertOk: *BOOL) !void {
+        try self.adjustForInsert(ec, cchInsert, pfInsertOk);
+    }
+    pub fn getGravity(self: *@This(), pgStart: *i32, pgEnd: *i32) !void {
+        try hrCheck(self.lpVtbl.GetGravity(self, pgStart, pgEnd));
+    }
+    pub fn GetGravity(self: *@This(), pgStart: *i32, pgEnd: *i32) !void {
+        try self.getGravity(pgStart, pgEnd);
+    }
+    pub fn setGravity(self: *@This(), ec: u32, gStart: i32, gEnd: i32) !void {
+        try hrCheck(self.lpVtbl.SetGravity(self, ec, gStart, gEnd));
+    }
+    pub fn SetGravity(self: *@This(), ec: u32, gStart: i32, gEnd: i32) !void {
+        try self.setGravity(ec, gStart, gEnd);
+    }
+    pub fn clone(self: *@This(), ppClone: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, ppClone));
+    }
+    pub fn Clone(self: *@This(), ppClone: *?*anyopaque) !void {
+        try self.clone(ppClone);
+    }
+    pub fn getContext(self: *@This(), ppContext: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetContext(self, ppContext));
+    }
+    pub fn GetContext(self: *@This(), ppContext: *?*anyopaque) !void {
+        try self.getContext(ppContext);
+    }
 };
 
 pub const ITfSource = extern struct {
@@ -336,14 +637,32 @@ pub const ITfSource = extern struct {
         UnadviseSink: *const fn (*anyopaque, u32) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn adviseSink(self: *@This(), riid: *GUID, punk: ?*anyopaque, pdwCookie: *u32) !void { try hrCheck(self.lpVtbl.AdviseSink(self, riid, punk, pdwCookie)); }
-    pub fn AdviseSink(self: *@This(), riid: *GUID, punk: ?*anyopaque, pdwCookie: *u32) !void { try self.adviseSink(riid, punk, pdwCookie); }
-    pub fn unadviseSink(self: *@This(), dwCookie: u32) !void { try hrCheck(self.lpVtbl.UnadviseSink(self, dwCookie)); }
-    pub fn UnadviseSink(self: *@This(), dwCookie: u32) !void { try self.unadviseSink(dwCookie); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn adviseSink(self: *@This(), riid: *GUID, punk: ?*anyopaque, pdwCookie: *u32) !void {
+        try hrCheck(self.lpVtbl.AdviseSink(self, riid, punk, pdwCookie));
+    }
+    pub fn AdviseSink(self: *@This(), riid: *GUID, punk: ?*anyopaque, pdwCookie: *u32) !void {
+        try self.adviseSink(riid, punk, pdwCookie);
+    }
+    pub fn unadviseSink(self: *@This(), dwCookie: u32) !void {
+        try hrCheck(self.lpVtbl.UnadviseSink(self, dwCookie));
+    }
+    pub fn UnadviseSink(self: *@This(), dwCookie: u32) !void {
+        try self.unadviseSink(dwCookie);
+    }
 };
 
 pub const ITfCategoryMgr = extern struct {
@@ -369,38 +688,104 @@ pub const ITfCategoryMgr = extern struct {
         IsEqualTfGuidAtom: *const fn (*anyopaque, u32, *GUID, *BOOL) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn registerCategory(self: *@This(), rclsid: *GUID, rcatid: *GUID, rguid: *GUID) !void { try hrCheck(self.lpVtbl.RegisterCategory(self, rclsid, rcatid, rguid)); }
-    pub fn RegisterCategory(self: *@This(), rclsid: *GUID, rcatid: *GUID, rguid: *GUID) !void { try self.registerCategory(rclsid, rcatid, rguid); }
-    pub fn unregisterCategory(self: *@This(), rclsid: *GUID, rcatid: *GUID, rguid: *GUID) !void { try hrCheck(self.lpVtbl.UnregisterCategory(self, rclsid, rcatid, rguid)); }
-    pub fn UnregisterCategory(self: *@This(), rclsid: *GUID, rcatid: *GUID, rguid: *GUID) !void { try self.unregisterCategory(rclsid, rcatid, rguid); }
-    pub fn enumCategoriesInItem(self: *@This(), rguid: *GUID, ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.EnumCategoriesInItem(self, rguid, ppEnum)); }
-    pub fn EnumCategoriesInItem(self: *@This(), rguid: *GUID, ppEnum: *?*anyopaque) !void { try self.enumCategoriesInItem(rguid, ppEnum); }
-    pub fn enumItemsInCategory(self: *@This(), rcatid: *GUID, ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.EnumItemsInCategory(self, rcatid, ppEnum)); }
-    pub fn EnumItemsInCategory(self: *@This(), rcatid: *GUID, ppEnum: *?*anyopaque) !void { try self.enumItemsInCategory(rcatid, ppEnum); }
-    pub fn findClosestCategory(self: *@This(), rguid: *GUID, pcatid: *GUID, ppcatidList: *?*anyopaque, ulCount: u32) !void { try hrCheck(self.lpVtbl.FindClosestCategory(self, rguid, pcatid, ppcatidList, ulCount)); }
-    pub fn FindClosestCategory(self: *@This(), rguid: *GUID, pcatid: *GUID, ppcatidList: *?*anyopaque, ulCount: u32) !void { try self.findClosestCategory(rguid, pcatid, ppcatidList, ulCount); }
-    pub fn registerGUIDDescription(self: *@This(), rclsid: *GUID, rguid: *GUID, pchDesc: ?*anyopaque, cch: u32) !void { try hrCheck(self.lpVtbl.RegisterGUIDDescription(self, rclsid, rguid, pchDesc, cch)); }
-    pub fn RegisterGUIDDescription(self: *@This(), rclsid: *GUID, rguid: *GUID, pchDesc: ?*anyopaque, cch: u32) !void { try self.registerGUIDDescription(rclsid, rguid, pchDesc, cch); }
-    pub fn unregisterGUIDDescription(self: *@This(), rclsid: *GUID, rguid: *GUID) !void { try hrCheck(self.lpVtbl.UnregisterGUIDDescription(self, rclsid, rguid)); }
-    pub fn UnregisterGUIDDescription(self: *@This(), rclsid: *GUID, rguid: *GUID) !void { try self.unregisterGUIDDescription(rclsid, rguid); }
-    pub fn getGUIDDescription(self: *@This(), rguid: *GUID, pbstrDesc: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetGUIDDescription(self, rguid, pbstrDesc)); }
-    pub fn GetGUIDDescription(self: *@This(), rguid: *GUID, pbstrDesc: *?*anyopaque) !void { try self.getGUIDDescription(rguid, pbstrDesc); }
-    pub fn registerGUIDDWORD(self: *@This(), rclsid: *GUID, rguid: *GUID, dw: u32) !void { try hrCheck(self.lpVtbl.RegisterGUIDDWORD(self, rclsid, rguid, dw)); }
-    pub fn RegisterGUIDDWORD(self: *@This(), rclsid: *GUID, rguid: *GUID, dw: u32) !void { try self.registerGUIDDWORD(rclsid, rguid, dw); }
-    pub fn unregisterGUIDDWORD(self: *@This(), rclsid: *GUID, rguid: *GUID) !void { try hrCheck(self.lpVtbl.UnregisterGUIDDWORD(self, rclsid, rguid)); }
-    pub fn UnregisterGUIDDWORD(self: *@This(), rclsid: *GUID, rguid: *GUID) !void { try self.unregisterGUIDDWORD(rclsid, rguid); }
-    pub fn getGUIDDWORD(self: *@This(), rguid: *GUID, pdw: *u32) !void { try hrCheck(self.lpVtbl.GetGUIDDWORD(self, rguid, pdw)); }
-    pub fn GetGUIDDWORD(self: *@This(), rguid: *GUID, pdw: *u32) !void { try self.getGUIDDWORD(rguid, pdw); }
-    pub fn registerGUID(self: *@This(), rguid: *GUID, pguidatom: *u32) !void { try hrCheck(self.lpVtbl.RegisterGUID(self, rguid, pguidatom)); }
-    pub fn RegisterGUID(self: *@This(), rguid: *GUID, pguidatom: *u32) !void { try self.registerGUID(rguid, pguidatom); }
-    pub fn getGUID(self: *@This(), guidatom: u32, pguid: *GUID) !void { try hrCheck(self.lpVtbl.GetGUID(self, guidatom, pguid)); }
-    pub fn GetGUID(self: *@This(), guidatom: u32, pguid: *GUID) !void { try self.getGUID(guidatom, pguid); }
-    pub fn isEqualTfGuidAtom(self: *@This(), guidatom: u32, rguid: *GUID, pfEqual: *BOOL) !void { try hrCheck(self.lpVtbl.IsEqualTfGuidAtom(self, guidatom, rguid, pfEqual)); }
-    pub fn IsEqualTfGuidAtom(self: *@This(), guidatom: u32, rguid: *GUID, pfEqual: *BOOL) !void { try self.isEqualTfGuidAtom(guidatom, rguid, pfEqual); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn registerCategory(self: *@This(), rclsid: *GUID, rcatid: *GUID, rguid: *GUID) !void {
+        try hrCheck(self.lpVtbl.RegisterCategory(self, rclsid, rcatid, rguid));
+    }
+    pub fn RegisterCategory(self: *@This(), rclsid: *GUID, rcatid: *GUID, rguid: *GUID) !void {
+        try self.registerCategory(rclsid, rcatid, rguid);
+    }
+    pub fn unregisterCategory(self: *@This(), rclsid: *GUID, rcatid: *GUID, rguid: *GUID) !void {
+        try hrCheck(self.lpVtbl.UnregisterCategory(self, rclsid, rcatid, rguid));
+    }
+    pub fn UnregisterCategory(self: *@This(), rclsid: *GUID, rcatid: *GUID, rguid: *GUID) !void {
+        try self.unregisterCategory(rclsid, rcatid, rguid);
+    }
+    pub fn enumCategoriesInItem(self: *@This(), rguid: *GUID, ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.EnumCategoriesInItem(self, rguid, ppEnum));
+    }
+    pub fn EnumCategoriesInItem(self: *@This(), rguid: *GUID, ppEnum: *?*anyopaque) !void {
+        try self.enumCategoriesInItem(rguid, ppEnum);
+    }
+    pub fn enumItemsInCategory(self: *@This(), rcatid: *GUID, ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.EnumItemsInCategory(self, rcatid, ppEnum));
+    }
+    pub fn EnumItemsInCategory(self: *@This(), rcatid: *GUID, ppEnum: *?*anyopaque) !void {
+        try self.enumItemsInCategory(rcatid, ppEnum);
+    }
+    pub fn findClosestCategory(self: *@This(), rguid: *GUID, pcatid: *GUID, ppcatidList: *?*anyopaque, ulCount: u32) !void {
+        try hrCheck(self.lpVtbl.FindClosestCategory(self, rguid, pcatid, ppcatidList, ulCount));
+    }
+    pub fn FindClosestCategory(self: *@This(), rguid: *GUID, pcatid: *GUID, ppcatidList: *?*anyopaque, ulCount: u32) !void {
+        try self.findClosestCategory(rguid, pcatid, ppcatidList, ulCount);
+    }
+    pub fn registerGUIDDescription(self: *@This(), rclsid: *GUID, rguid: *GUID, pchDesc: ?*anyopaque, cch: u32) !void {
+        try hrCheck(self.lpVtbl.RegisterGUIDDescription(self, rclsid, rguid, pchDesc, cch));
+    }
+    pub fn RegisterGUIDDescription(self: *@This(), rclsid: *GUID, rguid: *GUID, pchDesc: ?*anyopaque, cch: u32) !void {
+        try self.registerGUIDDescription(rclsid, rguid, pchDesc, cch);
+    }
+    pub fn unregisterGUIDDescription(self: *@This(), rclsid: *GUID, rguid: *GUID) !void {
+        try hrCheck(self.lpVtbl.UnregisterGUIDDescription(self, rclsid, rguid));
+    }
+    pub fn UnregisterGUIDDescription(self: *@This(), rclsid: *GUID, rguid: *GUID) !void {
+        try self.unregisterGUIDDescription(rclsid, rguid);
+    }
+    pub fn getGUIDDescription(self: *@This(), rguid: *GUID, pbstrDesc: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetGUIDDescription(self, rguid, pbstrDesc));
+    }
+    pub fn GetGUIDDescription(self: *@This(), rguid: *GUID, pbstrDesc: *?*anyopaque) !void {
+        try self.getGUIDDescription(rguid, pbstrDesc);
+    }
+    pub fn registerGUIDDWORD(self: *@This(), rclsid: *GUID, rguid: *GUID, dw: u32) !void {
+        try hrCheck(self.lpVtbl.RegisterGUIDDWORD(self, rclsid, rguid, dw));
+    }
+    pub fn RegisterGUIDDWORD(self: *@This(), rclsid: *GUID, rguid: *GUID, dw: u32) !void {
+        try self.registerGUIDDWORD(rclsid, rguid, dw);
+    }
+    pub fn unregisterGUIDDWORD(self: *@This(), rclsid: *GUID, rguid: *GUID) !void {
+        try hrCheck(self.lpVtbl.UnregisterGUIDDWORD(self, rclsid, rguid));
+    }
+    pub fn UnregisterGUIDDWORD(self: *@This(), rclsid: *GUID, rguid: *GUID) !void {
+        try self.unregisterGUIDDWORD(rclsid, rguid);
+    }
+    pub fn getGUIDDWORD(self: *@This(), rguid: *GUID, pdw: *u32) !void {
+        try hrCheck(self.lpVtbl.GetGUIDDWORD(self, rguid, pdw));
+    }
+    pub fn GetGUIDDWORD(self: *@This(), rguid: *GUID, pdw: *u32) !void {
+        try self.getGUIDDWORD(rguid, pdw);
+    }
+    pub fn registerGUID(self: *@This(), rguid: *GUID, pguidatom: *u32) !void {
+        try hrCheck(self.lpVtbl.RegisterGUID(self, rguid, pguidatom));
+    }
+    pub fn RegisterGUID(self: *@This(), rguid: *GUID, pguidatom: *u32) !void {
+        try self.registerGUID(rguid, pguidatom);
+    }
+    pub fn getGUID(self: *@This(), guidatom: u32, pguid: *GUID) !void {
+        try hrCheck(self.lpVtbl.GetGUID(self, guidatom, pguid));
+    }
+    pub fn GetGUID(self: *@This(), guidatom: u32, pguid: *GUID) !void {
+        try self.getGUID(guidatom, pguid);
+    }
+    pub fn isEqualTfGuidAtom(self: *@This(), guidatom: u32, rguid: *GUID, pfEqual: *BOOL) !void {
+        try hrCheck(self.lpVtbl.IsEqualTfGuidAtom(self, guidatom, rguid, pfEqual));
+    }
+    pub fn IsEqualTfGuidAtom(self: *@This(), guidatom: u32, rguid: *GUID, pfEqual: *BOOL) !void {
+        try self.isEqualTfGuidAtom(guidatom, rguid, pfEqual);
+    }
 };
 
 pub const ITfDisplayAttributeMgr = extern struct {
@@ -415,16 +800,38 @@ pub const ITfDisplayAttributeMgr = extern struct {
         GetDisplayAttributeInfo: *const fn (*anyopaque, *GUID, *?*anyopaque, *GUID) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn onUpdateInfo(self: *@This()) !void { try hrCheck(self.lpVtbl.OnUpdateInfo(self)); }
-    pub fn OnUpdateInfo(self: *@This()) !void { try self.onUpdateInfo(); }
-    pub fn enumDisplayAttributeInfo(self: *@This(), ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.EnumDisplayAttributeInfo(self, ppEnum)); }
-    pub fn EnumDisplayAttributeInfo(self: *@This(), ppEnum: *?*anyopaque) !void { try self.enumDisplayAttributeInfo(ppEnum); }
-    pub fn getDisplayAttributeInfo(self: *@This(), guid: *GUID, ppInfo: *?*anyopaque, pclsidOwner: *GUID) !void { try hrCheck(self.lpVtbl.GetDisplayAttributeInfo(self, guid, ppInfo, pclsidOwner)); }
-    pub fn GetDisplayAttributeInfo(self: *@This(), guid: *GUID, ppInfo: *?*anyopaque, pclsidOwner: *GUID) !void { try self.getDisplayAttributeInfo(guid, ppInfo, pclsidOwner); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn onUpdateInfo(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.OnUpdateInfo(self));
+    }
+    pub fn OnUpdateInfo(self: *@This()) !void {
+        try self.onUpdateInfo();
+    }
+    pub fn enumDisplayAttributeInfo(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.EnumDisplayAttributeInfo(self, ppEnum));
+    }
+    pub fn EnumDisplayAttributeInfo(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try self.enumDisplayAttributeInfo(ppEnum);
+    }
+    pub fn getDisplayAttributeInfo(self: *@This(), guid: *GUID, ppInfo: *?*anyopaque, pclsidOwner: *GUID) !void {
+        try hrCheck(self.lpVtbl.GetDisplayAttributeInfo(self, guid, ppInfo, pclsidOwner));
+    }
+    pub fn GetDisplayAttributeInfo(self: *@This(), guid: *GUID, ppInfo: *?*anyopaque, pclsidOwner: *GUID) !void {
+        try self.getDisplayAttributeInfo(guid, ppInfo, pclsidOwner);
+    }
 };
 
 pub const ITfReadOnlyProperty = extern struct {
@@ -440,18 +847,44 @@ pub const ITfReadOnlyProperty = extern struct {
         GetContext: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn getType(self: *@This(), pguid: *GUID) !void { try hrCheck(self.lpVtbl.GetType(self, pguid)); }
-    pub fn GetType(self: *@This(), pguid: *GUID) !void { try self.getType(pguid); }
-    pub fn enumRanges(self: *@This(), ec: u32, ppEnum: *?*anyopaque, pTargetRange: ?*anyopaque) !void { try hrCheck(self.lpVtbl.EnumRanges(self, ec, ppEnum, pTargetRange)); }
-    pub fn EnumRanges(self: *@This(), ec: u32, ppEnum: *?*anyopaque, pTargetRange: ?*anyopaque) !void { try self.enumRanges(ec, ppEnum, pTargetRange); }
-    pub fn getValue(self: *@This(), ec: u32, pRange: ?*anyopaque, pvarValue: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetValue(self, ec, pRange, pvarValue)); }
-    pub fn GetValue(self: *@This(), ec: u32, pRange: ?*anyopaque, pvarValue: *?*anyopaque) !void { try self.getValue(ec, pRange, pvarValue); }
-    pub fn getContext(self: *@This(), ppContext: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetContext(self, ppContext)); }
-    pub fn GetContext(self: *@This(), ppContext: *?*anyopaque) !void { try self.getContext(ppContext); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn getType(self: *@This(), pguid: *GUID) !void {
+        try hrCheck(self.lpVtbl.GetType(self, pguid));
+    }
+    pub fn GetType(self: *@This(), pguid: *GUID) !void {
+        try self.getType(pguid);
+    }
+    pub fn enumRanges(self: *@This(), ec: u32, ppEnum: *?*anyopaque, pTargetRange: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.EnumRanges(self, ec, ppEnum, pTargetRange));
+    }
+    pub fn EnumRanges(self: *@This(), ec: u32, ppEnum: *?*anyopaque, pTargetRange: ?*anyopaque) !void {
+        try self.enumRanges(ec, ppEnum, pTargetRange);
+    }
+    pub fn getValue(self: *@This(), ec: u32, pRange: ?*anyopaque, pvarValue: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetValue(self, ec, pRange, pvarValue));
+    }
+    pub fn GetValue(self: *@This(), ec: u32, pRange: ?*anyopaque, pvarValue: *?*anyopaque) !void {
+        try self.getValue(ec, pRange, pvarValue);
+    }
+    pub fn getContext(self: *@This(), ppContext: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetContext(self, ppContext));
+    }
+    pub fn GetContext(self: *@This(), ppContext: *?*anyopaque) !void {
+        try self.getContext(ppContext);
+    }
 };
 
 pub const TF_DISPLAYATTRIBUTE = extern struct {
@@ -476,18 +909,44 @@ pub const IEnumTfDocumentMgrs = extern struct {
         Skip: *const fn (*anyopaque, u32) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn clone(self: *@This(), ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, ppEnum)); }
-    pub fn Clone(self: *@This(), ppEnum: *?*anyopaque) !void { try self.clone(ppEnum); }
-    pub fn next(self: *@This(), ulCount: u32, rgDocumentMgr: *?*anyopaque, pcFetched: *u32) !void { try hrCheck(self.lpVtbl.Next(self, ulCount, rgDocumentMgr, pcFetched)); }
-    pub fn Next(self: *@This(), ulCount: u32, rgDocumentMgr: *?*anyopaque, pcFetched: *u32) !void { try self.next(ulCount, rgDocumentMgr, pcFetched); }
-    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
-    pub fn Reset(self: *@This()) !void { try self.reset(); }
-    pub fn skip(self: *@This(), ulCount: u32) !void { try hrCheck(self.lpVtbl.Skip(self, ulCount)); }
-    pub fn Skip(self: *@This(), ulCount: u32) !void { try self.skip(ulCount); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn clone(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, ppEnum));
+    }
+    pub fn Clone(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try self.clone(ppEnum);
+    }
+    pub fn next(self: *@This(), ulCount: u32, rgDocumentMgr: *?*anyopaque, pcFetched: *u32) !void {
+        try hrCheck(self.lpVtbl.Next(self, ulCount, rgDocumentMgr, pcFetched));
+    }
+    pub fn Next(self: *@This(), ulCount: u32, rgDocumentMgr: *?*anyopaque, pcFetched: *u32) !void {
+        try self.next(ulCount, rgDocumentMgr, pcFetched);
+    }
+    pub fn reset(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Reset(self));
+    }
+    pub fn Reset(self: *@This()) !void {
+        try self.reset();
+    }
+    pub fn skip(self: *@This(), ulCount: u32) !void {
+        try hrCheck(self.lpVtbl.Skip(self, ulCount));
+    }
+    pub fn Skip(self: *@This(), ulCount: u32) !void {
+        try self.skip(ulCount);
+    }
 };
 
 pub const ITfFunctionProvider = extern struct {
@@ -502,16 +961,38 @@ pub const ITfFunctionProvider = extern struct {
         GetFunction: *const fn (*anyopaque, *GUID, *GUID, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn getType(self: *@This(), pguid: *GUID) !void { try hrCheck(self.lpVtbl.GetType(self, pguid)); }
-    pub fn GetType(self: *@This(), pguid: *GUID) !void { try self.getType(pguid); }
-    pub fn getDescription(self: *@This(), pbstrDesc: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetDescription(self, pbstrDesc)); }
-    pub fn GetDescription(self: *@This(), pbstrDesc: *?*anyopaque) !void { try self.getDescription(pbstrDesc); }
-    pub fn getFunction(self: *@This(), rguid: *GUID, riid: *GUID, ppunk: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetFunction(self, rguid, riid, ppunk)); }
-    pub fn GetFunction(self: *@This(), rguid: *GUID, riid: *GUID, ppunk: *?*anyopaque) !void { try self.getFunction(rguid, riid, ppunk); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn getType(self: *@This(), pguid: *GUID) !void {
+        try hrCheck(self.lpVtbl.GetType(self, pguid));
+    }
+    pub fn GetType(self: *@This(), pguid: *GUID) !void {
+        try self.getType(pguid);
+    }
+    pub fn getDescription(self: *@This(), pbstrDesc: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetDescription(self, pbstrDesc));
+    }
+    pub fn GetDescription(self: *@This(), pbstrDesc: *?*anyopaque) !void {
+        try self.getDescription(pbstrDesc);
+    }
+    pub fn getFunction(self: *@This(), rguid: *GUID, riid: *GUID, ppunk: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetFunction(self, rguid, riid, ppunk));
+    }
+    pub fn GetFunction(self: *@This(), rguid: *GUID, riid: *GUID, ppunk: *?*anyopaque) !void {
+        try self.getFunction(rguid, riid, ppunk);
+    }
 };
 
 pub const IEnumTfFunctionProviders = extern struct {
@@ -527,18 +1008,44 @@ pub const IEnumTfFunctionProviders = extern struct {
         Skip: *const fn (*anyopaque, u32) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn clone(self: *@This(), ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, ppEnum)); }
-    pub fn Clone(self: *@This(), ppEnum: *?*anyopaque) !void { try self.clone(ppEnum); }
-    pub fn next(self: *@This(), ulCount: u32, ppCmdobj: *?*anyopaque, pcFetch: *u32) !void { try hrCheck(self.lpVtbl.Next(self, ulCount, ppCmdobj, pcFetch)); }
-    pub fn Next(self: *@This(), ulCount: u32, ppCmdobj: *?*anyopaque, pcFetch: *u32) !void { try self.next(ulCount, ppCmdobj, pcFetch); }
-    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
-    pub fn Reset(self: *@This()) !void { try self.reset(); }
-    pub fn skip(self: *@This(), ulCount: u32) !void { try hrCheck(self.lpVtbl.Skip(self, ulCount)); }
-    pub fn Skip(self: *@This(), ulCount: u32) !void { try self.skip(ulCount); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn clone(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, ppEnum));
+    }
+    pub fn Clone(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try self.clone(ppEnum);
+    }
+    pub fn next(self: *@This(), ulCount: u32, ppCmdobj: *?*anyopaque, pcFetch: *u32) !void {
+        try hrCheck(self.lpVtbl.Next(self, ulCount, ppCmdobj, pcFetch));
+    }
+    pub fn Next(self: *@This(), ulCount: u32, ppCmdobj: *?*anyopaque, pcFetch: *u32) !void {
+        try self.next(ulCount, ppCmdobj, pcFetch);
+    }
+    pub fn reset(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Reset(self));
+    }
+    pub fn Reset(self: *@This()) !void {
+        try self.reset();
+    }
+    pub fn skip(self: *@This(), ulCount: u32) !void {
+        try hrCheck(self.lpVtbl.Skip(self, ulCount));
+    }
+    pub fn Skip(self: *@This(), ulCount: u32) !void {
+        try self.skip(ulCount);
+    }
 };
 
 pub const ITfCompartmentMgr = extern struct {
@@ -553,16 +1060,38 @@ pub const ITfCompartmentMgr = extern struct {
         EnumCompartments: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn getCompartment(self: *@This(), rguid: *GUID, ppcomp: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetCompartment(self, rguid, ppcomp)); }
-    pub fn GetCompartment(self: *@This(), rguid: *GUID, ppcomp: *?*anyopaque) !void { try self.getCompartment(rguid, ppcomp); }
-    pub fn clearCompartment(self: *@This(), tid: u32, rguid: *GUID) !void { try hrCheck(self.lpVtbl.ClearCompartment(self, tid, rguid)); }
-    pub fn ClearCompartment(self: *@This(), tid: u32, rguid: *GUID) !void { try self.clearCompartment(tid, rguid); }
-    pub fn enumCompartments(self: *@This(), ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.EnumCompartments(self, ppEnum)); }
-    pub fn EnumCompartments(self: *@This(), ppEnum: *?*anyopaque) !void { try self.enumCompartments(ppEnum); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn getCompartment(self: *@This(), rguid: *GUID, ppcomp: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetCompartment(self, rguid, ppcomp));
+    }
+    pub fn GetCompartment(self: *@This(), rguid: *GUID, ppcomp: *?*anyopaque) !void {
+        try self.getCompartment(rguid, ppcomp);
+    }
+    pub fn clearCompartment(self: *@This(), tid: u32, rguid: *GUID) !void {
+        try hrCheck(self.lpVtbl.ClearCompartment(self, tid, rguid));
+    }
+    pub fn ClearCompartment(self: *@This(), tid: u32, rguid: *GUID) !void {
+        try self.clearCompartment(tid, rguid);
+    }
+    pub fn enumCompartments(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.EnumCompartments(self, ppEnum));
+    }
+    pub fn EnumCompartments(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try self.enumCompartments(ppEnum);
+    }
 };
 
 pub const ITfThreadMgr = extern struct {
@@ -585,35 +1114,87 @@ pub const ITfThreadMgr = extern struct {
         GetGlobalCompartment: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn activate(self: *@This(), ptid: *u32) !void { try hrCheck(self.lpVtbl.Activate(self, ptid)); }
-    pub fn Activate(self: *@This(), ptid: *u32) !void { try self.activate(ptid); }
-    pub fn deactivate(self: *@This()) !void { try hrCheck(self.lpVtbl.Deactivate(self)); }
-    pub fn Deactivate(self: *@This()) !void { try self.deactivate(); }
-    pub fn createDocumentMgr(self: *@This(), ppdim: *?*anyopaque) !void { try hrCheck(self.lpVtbl.CreateDocumentMgr(self, ppdim)); }
-    pub fn CreateDocumentMgr(self: *@This(), ppdim: *?*anyopaque) !void { try self.createDocumentMgr(ppdim); }
-    pub fn enumDocumentMgrs(self: *@This(), ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.EnumDocumentMgrs(self, ppEnum)); }
-    pub fn EnumDocumentMgrs(self: *@This(), ppEnum: *?*anyopaque) !void { try self.enumDocumentMgrs(ppEnum); }
-    pub fn getFocus(self: *@This(), ppdimFocus: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetFocus(self, ppdimFocus)); }
-    pub fn GetFocus(self: *@This(), ppdimFocus: *?*anyopaque) !void { try self.getFocus(ppdimFocus); }
-    pub fn setFocus(self: *@This(), pdimFocus: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetFocus(self, pdimFocus)); }
-    pub fn SetFocus(self: *@This(), pdimFocus: ?*anyopaque) !void { try self.setFocus(pdimFocus); }
-    pub fn associateFocus(self: *@This(), hwnd: HWND, pdimNew: ?*anyopaque, ppdimPrev: *?*anyopaque) !void { try hrCheck(self.lpVtbl.AssociateFocus(self, hwnd, pdimNew, ppdimPrev)); }
-    pub fn AssociateFocus(self: *@This(), hwnd: HWND, pdimNew: ?*anyopaque, ppdimPrev: *?*anyopaque) !void { try self.associateFocus(hwnd, pdimNew, ppdimPrev); }
-    pub fn isThreadFocus(self: *@This(), pfThreadFocus: *BOOL) !void { try hrCheck(self.lpVtbl.IsThreadFocus(self, pfThreadFocus)); }
-    pub fn IsThreadFocus(self: *@This(), pfThreadFocus: *BOOL) !void { try self.isThreadFocus(pfThreadFocus); }
-    pub fn getFunctionProvider(self: *@This(), clsid: *GUID, ppFuncProv: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetFunctionProvider(self, clsid, ppFuncProv)); }
-    pub fn GetFunctionProvider(self: *@This(), clsid: *GUID, ppFuncProv: *?*anyopaque) !void { try self.getFunctionProvider(clsid, ppFuncProv); }
-    pub fn enumFunctionProviders(self: *@This(), ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.EnumFunctionProviders(self, ppEnum)); }
-    pub fn EnumFunctionProviders(self: *@This(), ppEnum: *?*anyopaque) !void { try self.enumFunctionProviders(ppEnum); }
-    pub fn getGlobalCompartment(self: *@This(), ppCompMgr: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetGlobalCompartment(self, ppCompMgr)); }
-    pub fn GetGlobalCompartment(self: *@This(), ppCompMgr: *?*anyopaque) !void { try self.getGlobalCompartment(ppCompMgr); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn activate(self: *@This(), ptid: *u32) !void {
+        try hrCheck(self.lpVtbl.Activate(self, ptid));
+    }
+    pub fn Activate(self: *@This(), ptid: *u32) !void {
+        try self.activate(ptid);
+    }
+    pub fn deactivate(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Deactivate(self));
+    }
+    pub fn Deactivate(self: *@This()) !void {
+        try self.deactivate();
+    }
+    pub fn createDocumentMgr(self: *@This(), ppdim: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.CreateDocumentMgr(self, ppdim));
+    }
+    pub fn CreateDocumentMgr(self: *@This(), ppdim: *?*anyopaque) !void {
+        try self.createDocumentMgr(ppdim);
+    }
+    pub fn enumDocumentMgrs(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.EnumDocumentMgrs(self, ppEnum));
+    }
+    pub fn EnumDocumentMgrs(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try self.enumDocumentMgrs(ppEnum);
+    }
+    pub fn getFocus(self: *@This(), ppdimFocus: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetFocus(self, ppdimFocus));
+    }
+    pub fn GetFocus(self: *@This(), ppdimFocus: *?*anyopaque) !void {
+        try self.getFocus(ppdimFocus);
+    }
+    pub fn setFocus(self: *@This(), pdimFocus: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.SetFocus(self, pdimFocus));
+    }
+    pub fn SetFocus(self: *@This(), pdimFocus: ?*anyopaque) !void {
+        try self.setFocus(pdimFocus);
+    }
+    pub fn associateFocus(self: *@This(), hwnd: HWND, pdimNew: ?*anyopaque, ppdimPrev: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.AssociateFocus(self, hwnd, pdimNew, ppdimPrev));
+    }
+    pub fn AssociateFocus(self: *@This(), hwnd: HWND, pdimNew: ?*anyopaque, ppdimPrev: *?*anyopaque) !void {
+        try self.associateFocus(hwnd, pdimNew, ppdimPrev);
+    }
+    pub fn isThreadFocus(self: *@This(), pfThreadFocus: *BOOL) !void {
+        try hrCheck(self.lpVtbl.IsThreadFocus(self, pfThreadFocus));
+    }
+    pub fn IsThreadFocus(self: *@This(), pfThreadFocus: *BOOL) !void {
+        try self.isThreadFocus(pfThreadFocus);
+    }
+    pub fn getFunctionProvider(self: *@This(), clsid: *GUID, ppFuncProv: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetFunctionProvider(self, clsid, ppFuncProv));
+    }
+    pub fn GetFunctionProvider(self: *@This(), clsid: *GUID, ppFuncProv: *?*anyopaque) !void {
+        try self.getFunctionProvider(clsid, ppFuncProv);
+    }
+    pub fn enumFunctionProviders(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.EnumFunctionProviders(self, ppEnum));
+    }
+    pub fn EnumFunctionProviders(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try self.enumFunctionProviders(ppEnum);
+    }
+    pub fn getGlobalCompartment(self: *@This(), ppCompMgr: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetGlobalCompartment(self, ppCompMgr));
+    }
+    pub fn GetGlobalCompartment(self: *@This(), ppCompMgr: *?*anyopaque) !void {
+        try self.getGlobalCompartment(ppCompMgr);
+    }
 };
-
-
 
 pub const TS_STATUS = extern struct {
     dwDynamicFlags: u32,
@@ -637,14 +1218,32 @@ pub const ITfCompositionView = extern struct {
         GetRange: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn getOwnerClsid(self: *@This(), pclsid: *GUID) !void { try hrCheck(self.lpVtbl.GetOwnerClsid(self, pclsid)); }
-    pub fn GetOwnerClsid(self: *@This(), pclsid: *GUID) !void { try self.getOwnerClsid(pclsid); }
-    pub fn getRange(self: *@This(), ppRange: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetRange(self, ppRange)); }
-    pub fn GetRange(self: *@This(), ppRange: *?*anyopaque) !void { try self.getRange(ppRange); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn getOwnerClsid(self: *@This(), pclsid: *GUID) !void {
+        try hrCheck(self.lpVtbl.GetOwnerClsid(self, pclsid));
+    }
+    pub fn GetOwnerClsid(self: *@This(), pclsid: *GUID) !void {
+        try self.getOwnerClsid(pclsid);
+    }
+    pub fn getRange(self: *@This(), ppRange: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetRange(self, ppRange));
+    }
+    pub fn GetRange(self: *@This(), ppRange: *?*anyopaque) !void {
+        try self.getRange(ppRange);
+    }
 };
 
 pub const ITfEditRecord = extern struct {
@@ -658,14 +1257,32 @@ pub const ITfEditRecord = extern struct {
         GetTextAndPropertyUpdates: *const fn (*anyopaque, i32, *?*anyopaque, u32, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn getSelectionStatus(self: *@This(), pfChanged: *BOOL) !void { try hrCheck(self.lpVtbl.GetSelectionStatus(self, pfChanged)); }
-    pub fn GetSelectionStatus(self: *@This(), pfChanged: *BOOL) !void { try self.getSelectionStatus(pfChanged); }
-    pub fn getTextAndPropertyUpdates(self: *@This(), dwFlags: i32, prgProperties: *?*anyopaque, cProperties: u32, ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetTextAndPropertyUpdates(self, dwFlags, prgProperties, cProperties, ppEnum)); }
-    pub fn GetTextAndPropertyUpdates(self: *@This(), dwFlags: i32, prgProperties: *?*anyopaque, cProperties: u32, ppEnum: *?*anyopaque) !void { try self.getTextAndPropertyUpdates(dwFlags, prgProperties, cProperties, ppEnum); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn getSelectionStatus(self: *@This(), pfChanged: *BOOL) !void {
+        try hrCheck(self.lpVtbl.GetSelectionStatus(self, pfChanged));
+    }
+    pub fn GetSelectionStatus(self: *@This(), pfChanged: *BOOL) !void {
+        try self.getSelectionStatus(pfChanged);
+    }
+    pub fn getTextAndPropertyUpdates(self: *@This(), dwFlags: i32, prgProperties: *?*anyopaque, cProperties: u32, ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetTextAndPropertyUpdates(self, dwFlags, prgProperties, cProperties, ppEnum));
+    }
+    pub fn GetTextAndPropertyUpdates(self: *@This(), dwFlags: i32, prgProperties: *?*anyopaque, cProperties: u32, ppEnum: *?*anyopaque) !void {
+        try self.getTextAndPropertyUpdates(dwFlags, prgProperties, cProperties, ppEnum);
+    }
 };
 
 pub const IEnumTfContexts = extern struct {
@@ -681,18 +1298,44 @@ pub const IEnumTfContexts = extern struct {
         Skip: *const fn (*anyopaque, u32) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn clone(self: *@This(), ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, ppEnum)); }
-    pub fn Clone(self: *@This(), ppEnum: *?*anyopaque) !void { try self.clone(ppEnum); }
-    pub fn next(self: *@This(), ulCount: u32, rgContext: *?*anyopaque, pcFetched: *u32) !void { try hrCheck(self.lpVtbl.Next(self, ulCount, rgContext, pcFetched)); }
-    pub fn Next(self: *@This(), ulCount: u32, rgContext: *?*anyopaque, pcFetched: *u32) !void { try self.next(ulCount, rgContext, pcFetched); }
-    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
-    pub fn Reset(self: *@This()) !void { try self.reset(); }
-    pub fn skip(self: *@This(), ulCount: u32) !void { try hrCheck(self.lpVtbl.Skip(self, ulCount)); }
-    pub fn Skip(self: *@This(), ulCount: u32) !void { try self.skip(ulCount); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn clone(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, ppEnum));
+    }
+    pub fn Clone(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try self.clone(ppEnum);
+    }
+    pub fn next(self: *@This(), ulCount: u32, rgContext: *?*anyopaque, pcFetched: *u32) !void {
+        try hrCheck(self.lpVtbl.Next(self, ulCount, rgContext, pcFetched));
+    }
+    pub fn Next(self: *@This(), ulCount: u32, rgContext: *?*anyopaque, pcFetched: *u32) !void {
+        try self.next(ulCount, rgContext, pcFetched);
+    }
+    pub fn reset(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Reset(self));
+    }
+    pub fn Reset(self: *@This()) !void {
+        try self.reset();
+    }
+    pub fn skip(self: *@This(), ulCount: u32) !void {
+        try hrCheck(self.lpVtbl.Skip(self, ulCount));
+    }
+    pub fn Skip(self: *@This(), ulCount: u32) !void {
+        try self.skip(ulCount);
+    }
 };
 
 pub const TF_CONTEXT_EDIT_CONTEXT_FLAGS = struct {
@@ -721,18 +1364,44 @@ pub const ITfContextView = extern struct {
         GetWnd: *const fn (*anyopaque, *HWND) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn getRangeFromPoint(self: *@This(), ec: u32, ppt: *POINT, dwFlags: u32, ppRange: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetRangeFromPoint(self, ec, ppt, dwFlags, ppRange)); }
-    pub fn GetRangeFromPoint(self: *@This(), ec: u32, ppt: *POINT, dwFlags: u32, ppRange: *?*anyopaque) !void { try self.getRangeFromPoint(ec, ppt, dwFlags, ppRange); }
-    pub fn getTextExt(self: *@This(), ec: u32, pRange: ?*anyopaque, prc: *RECT, pfClipped: *BOOL) !void { try hrCheck(self.lpVtbl.GetTextExt(self, ec, pRange, prc, pfClipped)); }
-    pub fn GetTextExt(self: *@This(), ec: u32, pRange: ?*anyopaque, prc: *RECT, pfClipped: *BOOL) !void { try self.getTextExt(ec, pRange, prc, pfClipped); }
-    pub fn getScreenExt(self: *@This(), prc: *RECT) !void { try hrCheck(self.lpVtbl.GetScreenExt(self, prc)); }
-    pub fn GetScreenExt(self: *@This(), prc: *RECT) !void { try self.getScreenExt(prc); }
-    pub fn getWnd(self: *@This(), phwnd: *HWND) !void { try hrCheck(self.lpVtbl.GetWnd(self, phwnd)); }
-    pub fn GetWnd(self: *@This(), phwnd: *HWND) !void { try self.getWnd(phwnd); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn getRangeFromPoint(self: *@This(), ec: u32, ppt: *POINT, dwFlags: u32, ppRange: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetRangeFromPoint(self, ec, ppt, dwFlags, ppRange));
+    }
+    pub fn GetRangeFromPoint(self: *@This(), ec: u32, ppt: *POINT, dwFlags: u32, ppRange: *?*anyopaque) !void {
+        try self.getRangeFromPoint(ec, ppt, dwFlags, ppRange);
+    }
+    pub fn getTextExt(self: *@This(), ec: u32, pRange: ?*anyopaque, prc: *RECT, pfClipped: *BOOL) !void {
+        try hrCheck(self.lpVtbl.GetTextExt(self, ec, pRange, prc, pfClipped));
+    }
+    pub fn GetTextExt(self: *@This(), ec: u32, pRange: ?*anyopaque, prc: *RECT, pfClipped: *BOOL) !void {
+        try self.getTextExt(ec, pRange, prc, pfClipped);
+    }
+    pub fn getScreenExt(self: *@This(), prc: *RECT) !void {
+        try hrCheck(self.lpVtbl.GetScreenExt(self, prc));
+    }
+    pub fn GetScreenExt(self: *@This(), prc: *RECT) !void {
+        try self.getScreenExt(prc);
+    }
+    pub fn getWnd(self: *@This(), phwnd: *HWND) !void {
+        try hrCheck(self.lpVtbl.GetWnd(self, phwnd));
+    }
+    pub fn GetWnd(self: *@This(), phwnd: *HWND) !void {
+        try self.getWnd(phwnd);
+    }
 };
 
 pub const IEnumTfContextViews = extern struct {
@@ -748,18 +1417,44 @@ pub const IEnumTfContextViews = extern struct {
         Skip: *const fn (*anyopaque, u32) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn clone(self: *@This(), ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, ppEnum)); }
-    pub fn Clone(self: *@This(), ppEnum: *?*anyopaque) !void { try self.clone(ppEnum); }
-    pub fn next(self: *@This(), ulCount: u32, rgViews: *?*anyopaque, pcFetched: *u32) !void { try hrCheck(self.lpVtbl.Next(self, ulCount, rgViews, pcFetched)); }
-    pub fn Next(self: *@This(), ulCount: u32, rgViews: *?*anyopaque, pcFetched: *u32) !void { try self.next(ulCount, rgViews, pcFetched); }
-    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
-    pub fn Reset(self: *@This()) !void { try self.reset(); }
-    pub fn skip(self: *@This(), ulCount: u32) !void { try hrCheck(self.lpVtbl.Skip(self, ulCount)); }
-    pub fn Skip(self: *@This(), ulCount: u32) !void { try self.skip(ulCount); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn clone(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, ppEnum));
+    }
+    pub fn Clone(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try self.clone(ppEnum);
+    }
+    pub fn next(self: *@This(), ulCount: u32, rgViews: *?*anyopaque, pcFetched: *u32) !void {
+        try hrCheck(self.lpVtbl.Next(self, ulCount, rgViews, pcFetched));
+    }
+    pub fn Next(self: *@This(), ulCount: u32, rgViews: *?*anyopaque, pcFetched: *u32) !void {
+        try self.next(ulCount, rgViews, pcFetched);
+    }
+    pub fn reset(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Reset(self));
+    }
+    pub fn Reset(self: *@This()) !void {
+        try self.reset();
+    }
+    pub fn skip(self: *@This(), ulCount: u32) !void {
+        try hrCheck(self.lpVtbl.Skip(self, ulCount));
+    }
+    pub fn Skip(self: *@This(), ulCount: u32) !void {
+        try self.skip(ulCount);
+    }
 };
 
 pub const ITfProperty = extern struct {
@@ -779,16 +1474,36 @@ pub const ITfProperty = extern struct {
         Clear: *const fn (*anyopaque, u32, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_ITfReadOnlyProperty = true; // requires ITfReadOnlyProperty
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn findRange(self: *@This(), ec: u32, pRange: ?*anyopaque, ppRange: *?*anyopaque, aPos: i32) !void { try hrCheck(self.lpVtbl.FindRange(self, ec, pRange, ppRange, aPos)); }
-    pub fn FindRange(self: *@This(), ec: u32, pRange: ?*anyopaque, ppRange: *?*anyopaque, aPos: i32) !void { try self.findRange(ec, pRange, ppRange, aPos); }
-    pub fn setValueStore(self: *@This(), ec: u32, pRange: ?*anyopaque, pPropStore: ?*anyopaque) !void { try hrCheck(self.lpVtbl.SetValueStore(self, ec, pRange, pPropStore)); }
-    pub fn SetValueStore(self: *@This(), ec: u32, pRange: ?*anyopaque, pPropStore: ?*anyopaque) !void { try self.setValueStore(ec, pRange, pPropStore); }
-    pub fn setValue(self: *@This(), ec: u32, pRange: ?*anyopaque, pvarValue: *?*anyopaque) !void { try hrCheck(self.lpVtbl.SetValue(self, ec, pRange, pvarValue)); }
-    pub fn SetValue(self: *@This(), ec: u32, pRange: ?*anyopaque, pvarValue: *?*anyopaque) !void { try self.setValue(ec, pRange, pvarValue); }
-    pub fn clear(self: *@This(), ec: u32, pRange: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Clear(self, ec, pRange)); }
-    pub fn Clear(self: *@This(), ec: u32, pRange: ?*anyopaque) !void { try self.clear(ec, pRange); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn findRange(self: *@This(), ec: u32, pRange: ?*anyopaque, ppRange: *?*anyopaque, aPos: i32) !void {
+        try hrCheck(self.lpVtbl.FindRange(self, ec, pRange, ppRange, aPos));
+    }
+    pub fn FindRange(self: *@This(), ec: u32, pRange: ?*anyopaque, ppRange: *?*anyopaque, aPos: i32) !void {
+        try self.findRange(ec, pRange, ppRange, aPos);
+    }
+    pub fn setValueStore(self: *@This(), ec: u32, pRange: ?*anyopaque, pPropStore: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.SetValueStore(self, ec, pRange, pPropStore));
+    }
+    pub fn SetValueStore(self: *@This(), ec: u32, pRange: ?*anyopaque, pPropStore: ?*anyopaque) !void {
+        try self.setValueStore(ec, pRange, pPropStore);
+    }
+    pub fn setValue(self: *@This(), ec: u32, pRange: ?*anyopaque, pvarValue: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.SetValue(self, ec, pRange, pvarValue));
+    }
+    pub fn SetValue(self: *@This(), ec: u32, pRange: ?*anyopaque, pvarValue: *?*anyopaque) !void {
+        try self.setValue(ec, pRange, pvarValue);
+    }
+    pub fn clear(self: *@This(), ec: u32, pRange: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clear(self, ec, pRange));
+    }
+    pub fn Clear(self: *@This(), ec: u32, pRange: ?*anyopaque) !void {
+        try self.clear(ec, pRange);
+    }
 };
 
 pub const IEnumTfProperties = extern struct {
@@ -804,18 +1519,44 @@ pub const IEnumTfProperties = extern struct {
         Skip: *const fn (*anyopaque, u32) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn clone(self: *@This(), ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, ppEnum)); }
-    pub fn Clone(self: *@This(), ppEnum: *?*anyopaque) !void { try self.clone(ppEnum); }
-    pub fn next(self: *@This(), ulCount: u32, ppProp: *?*anyopaque, pcFetched: *u32) !void { try hrCheck(self.lpVtbl.Next(self, ulCount, ppProp, pcFetched)); }
-    pub fn Next(self: *@This(), ulCount: u32, ppProp: *?*anyopaque, pcFetched: *u32) !void { try self.next(ulCount, ppProp, pcFetched); }
-    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
-    pub fn Reset(self: *@This()) !void { try self.reset(); }
-    pub fn skip(self: *@This(), ulCount: u32) !void { try hrCheck(self.lpVtbl.Skip(self, ulCount)); }
-    pub fn Skip(self: *@This(), ulCount: u32) !void { try self.skip(ulCount); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn clone(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, ppEnum));
+    }
+    pub fn Clone(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try self.clone(ppEnum);
+    }
+    pub fn next(self: *@This(), ulCount: u32, ppProp: *?*anyopaque, pcFetched: *u32) !void {
+        try hrCheck(self.lpVtbl.Next(self, ulCount, ppProp, pcFetched));
+    }
+    pub fn Next(self: *@This(), ulCount: u32, ppProp: *?*anyopaque, pcFetched: *u32) !void {
+        try self.next(ulCount, ppProp, pcFetched);
+    }
+    pub fn reset(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Reset(self));
+    }
+    pub fn Reset(self: *@This()) !void {
+        try self.reset();
+    }
+    pub fn skip(self: *@This(), ulCount: u32) !void {
+        try hrCheck(self.lpVtbl.Skip(self, ulCount));
+    }
+    pub fn Skip(self: *@This(), ulCount: u32) !void {
+        try self.skip(ulCount);
+    }
 };
 
 pub const ITfRangeBackup = extern struct {
@@ -828,12 +1569,26 @@ pub const ITfRangeBackup = extern struct {
         Restore: *const fn (*anyopaque, u32, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn restore(self: *@This(), ec: u32, pRange: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Restore(self, ec, pRange)); }
-    pub fn Restore(self: *@This(), ec: u32, pRange: ?*anyopaque) !void { try self.restore(ec, pRange); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn restore(self: *@This(), ec: u32, pRange: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Restore(self, ec, pRange));
+    }
+    pub fn Restore(self: *@This(), ec: u32, pRange: ?*anyopaque) !void {
+        try self.restore(ec, pRange);
+    }
 };
 
 pub const PWSTR = extern struct {
@@ -858,28 +1613,74 @@ pub const IDataObject = extern struct {
         EnumDAdvise: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn getData(self: *@This(), pformatetcIn: *?*anyopaque, pmedium: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetData(self, pformatetcIn, pmedium)); }
-    pub fn GetData(self: *@This(), pformatetcIn: *?*anyopaque, pmedium: *?*anyopaque) !void { try self.getData(pformatetcIn, pmedium); }
-    pub fn getDataHere(self: *@This(), pformatetc: *?*anyopaque, pmedium: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetDataHere(self, pformatetc, pmedium)); }
-    pub fn GetDataHere(self: *@This(), pformatetc: *?*anyopaque, pmedium: *?*anyopaque) !void { try self.getDataHere(pformatetc, pmedium); }
-    pub fn queryGetData(self: *@This(), pformatetc: *?*anyopaque) !void { try hrCheck(self.lpVtbl.QueryGetData(self, pformatetc)); }
-    pub fn QueryGetData(self: *@This(), pformatetc: *?*anyopaque) !void { try self.queryGetData(pformatetc); }
-    pub fn getCanonicalFormatEtc(self: *@This(), pformatectIn: *?*anyopaque, pformatetcOut: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetCanonicalFormatEtc(self, pformatectIn, pformatetcOut)); }
-    pub fn GetCanonicalFormatEtc(self: *@This(), pformatectIn: *?*anyopaque, pformatetcOut: *?*anyopaque) !void { try self.getCanonicalFormatEtc(pformatectIn, pformatetcOut); }
-    pub fn setData(self: *@This(), pformatetc: *?*anyopaque, pmedium: *?*anyopaque, fRelease: BOOL) !void { try hrCheck(self.lpVtbl.SetData(self, pformatetc, pmedium, fRelease)); }
-    pub fn SetData(self: *@This(), pformatetc: *?*anyopaque, pmedium: *?*anyopaque, fRelease: BOOL) !void { try self.setData(pformatetc, pmedium, fRelease); }
-    pub fn enumFormatEtc(self: *@This(), dwDirection: u32, ppenumFormatEtc: *?*anyopaque) !void { try hrCheck(self.lpVtbl.EnumFormatEtc(self, dwDirection, ppenumFormatEtc)); }
-    pub fn EnumFormatEtc(self: *@This(), dwDirection: u32, ppenumFormatEtc: *?*anyopaque) !void { try self.enumFormatEtc(dwDirection, ppenumFormatEtc); }
-    pub fn dAdvise(self: *@This(), pformatetc: *?*anyopaque, advf: u32, pAdvSink: ?*anyopaque, pdwConnection: *u32) !void { try hrCheck(self.lpVtbl.DAdvise(self, pformatetc, advf, pAdvSink, pdwConnection)); }
-    pub fn DAdvise(self: *@This(), pformatetc: *?*anyopaque, advf: u32, pAdvSink: ?*anyopaque, pdwConnection: *u32) !void { try self.dAdvise(pformatetc, advf, pAdvSink, pdwConnection); }
-    pub fn dUnadvise(self: *@This(), dwConnection: u32) !void { try hrCheck(self.lpVtbl.DUnadvise(self, dwConnection)); }
-    pub fn DUnadvise(self: *@This(), dwConnection: u32) !void { try self.dUnadvise(dwConnection); }
-    pub fn enumDAdvise(self: *@This(), ppenumAdvise: *?*anyopaque) !void { try hrCheck(self.lpVtbl.EnumDAdvise(self, ppenumAdvise)); }
-    pub fn EnumDAdvise(self: *@This(), ppenumAdvise: *?*anyopaque) !void { try self.enumDAdvise(ppenumAdvise); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn getData(self: *@This(), pformatetcIn: *?*anyopaque, pmedium: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetData(self, pformatetcIn, pmedium));
+    }
+    pub fn GetData(self: *@This(), pformatetcIn: *?*anyopaque, pmedium: *?*anyopaque) !void {
+        try self.getData(pformatetcIn, pmedium);
+    }
+    pub fn getDataHere(self: *@This(), pformatetc: *?*anyopaque, pmedium: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetDataHere(self, pformatetc, pmedium));
+    }
+    pub fn GetDataHere(self: *@This(), pformatetc: *?*anyopaque, pmedium: *?*anyopaque) !void {
+        try self.getDataHere(pformatetc, pmedium);
+    }
+    pub fn queryGetData(self: *@This(), pformatetc: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.QueryGetData(self, pformatetc));
+    }
+    pub fn QueryGetData(self: *@This(), pformatetc: *?*anyopaque) !void {
+        try self.queryGetData(pformatetc);
+    }
+    pub fn getCanonicalFormatEtc(self: *@This(), pformatectIn: *?*anyopaque, pformatetcOut: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetCanonicalFormatEtc(self, pformatectIn, pformatetcOut));
+    }
+    pub fn GetCanonicalFormatEtc(self: *@This(), pformatectIn: *?*anyopaque, pformatetcOut: *?*anyopaque) !void {
+        try self.getCanonicalFormatEtc(pformatectIn, pformatetcOut);
+    }
+    pub fn setData(self: *@This(), pformatetc: *?*anyopaque, pmedium: *?*anyopaque, fRelease: BOOL) !void {
+        try hrCheck(self.lpVtbl.SetData(self, pformatetc, pmedium, fRelease));
+    }
+    pub fn SetData(self: *@This(), pformatetc: *?*anyopaque, pmedium: *?*anyopaque, fRelease: BOOL) !void {
+        try self.setData(pformatetc, pmedium, fRelease);
+    }
+    pub fn enumFormatEtc(self: *@This(), dwDirection: u32, ppenumFormatEtc: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.EnumFormatEtc(self, dwDirection, ppenumFormatEtc));
+    }
+    pub fn EnumFormatEtc(self: *@This(), dwDirection: u32, ppenumFormatEtc: *?*anyopaque) !void {
+        try self.enumFormatEtc(dwDirection, ppenumFormatEtc);
+    }
+    pub fn dAdvise(self: *@This(), pformatetc: *?*anyopaque, advf: u32, pAdvSink: ?*anyopaque, pdwConnection: *u32) !void {
+        try hrCheck(self.lpVtbl.DAdvise(self, pformatetc, advf, pAdvSink, pdwConnection));
+    }
+    pub fn DAdvise(self: *@This(), pformatetc: *?*anyopaque, advf: u32, pAdvSink: ?*anyopaque, pdwConnection: *u32) !void {
+        try self.dAdvise(pformatetc, advf, pAdvSink, pdwConnection);
+    }
+    pub fn dUnadvise(self: *@This(), dwConnection: u32) !void {
+        try hrCheck(self.lpVtbl.DUnadvise(self, dwConnection));
+    }
+    pub fn DUnadvise(self: *@This(), dwConnection: u32) !void {
+        try self.dUnadvise(dwConnection);
+    }
+    pub fn enumDAdvise(self: *@This(), ppenumAdvise: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.EnumDAdvise(self, ppenumAdvise));
+    }
+    pub fn EnumDAdvise(self: *@This(), ppenumAdvise: *?*anyopaque) !void {
+        try self.enumDAdvise(ppenumAdvise);
+    }
 };
 
 pub const TF_HALTCOND = extern struct {
@@ -916,18 +1717,44 @@ pub const IEnumGUID = extern struct {
         Clone: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn next(self: *@This(), celt: u32, rgelt: *GUID, pceltFetched: *u32) !void { try hrCheck(self.lpVtbl.Next(self, celt, rgelt, pceltFetched)); }
-    pub fn Next(self: *@This(), celt: u32, rgelt: *GUID, pceltFetched: *u32) !void { try self.next(celt, rgelt, pceltFetched); }
-    pub fn skip(self: *@This(), celt: u32) !void { try hrCheck(self.lpVtbl.Skip(self, celt)); }
-    pub fn Skip(self: *@This(), celt: u32) !void { try self.skip(celt); }
-    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
-    pub fn Reset(self: *@This()) !void { try self.reset(); }
-    pub fn clone(self: *@This(), ppenum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, ppenum)); }
-    pub fn Clone(self: *@This(), ppenum: *?*anyopaque) !void { try self.clone(ppenum); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn next(self: *@This(), celt: u32, rgelt: *GUID, pceltFetched: *u32) !void {
+        try hrCheck(self.lpVtbl.Next(self, celt, rgelt, pceltFetched));
+    }
+    pub fn Next(self: *@This(), celt: u32, rgelt: *GUID, pceltFetched: *u32) !void {
+        try self.next(celt, rgelt, pceltFetched);
+    }
+    pub fn skip(self: *@This(), celt: u32) !void {
+        try hrCheck(self.lpVtbl.Skip(self, celt));
+    }
+    pub fn Skip(self: *@This(), celt: u32) !void {
+        try self.skip(celt);
+    }
+    pub fn reset(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Reset(self));
+    }
+    pub fn Reset(self: *@This()) !void {
+        try self.reset();
+    }
+    pub fn clone(self: *@This(), ppenum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, ppenum));
+    }
+    pub fn Clone(self: *@This(), ppenum: *?*anyopaque) !void {
+        try self.clone(ppenum);
+    }
 };
 
 pub const BSTR = extern struct {
@@ -947,18 +1774,44 @@ pub const IEnumTfDisplayAttributeInfo = extern struct {
         Skip: *const fn (*anyopaque, u32) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn clone(self: *@This(), ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, ppEnum)); }
-    pub fn Clone(self: *@This(), ppEnum: *?*anyopaque) !void { try self.clone(ppEnum); }
-    pub fn next(self: *@This(), ulCount: u32, rgInfo: *?*anyopaque, pcFetched: *u32) !void { try hrCheck(self.lpVtbl.Next(self, ulCount, rgInfo, pcFetched)); }
-    pub fn Next(self: *@This(), ulCount: u32, rgInfo: *?*anyopaque, pcFetched: *u32) !void { try self.next(ulCount, rgInfo, pcFetched); }
-    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
-    pub fn Reset(self: *@This()) !void { try self.reset(); }
-    pub fn skip(self: *@This(), ulCount: u32) !void { try hrCheck(self.lpVtbl.Skip(self, ulCount)); }
-    pub fn Skip(self: *@This(), ulCount: u32) !void { try self.skip(ulCount); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn clone(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, ppEnum));
+    }
+    pub fn Clone(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try self.clone(ppEnum);
+    }
+    pub fn next(self: *@This(), ulCount: u32, rgInfo: *?*anyopaque, pcFetched: *u32) !void {
+        try hrCheck(self.lpVtbl.Next(self, ulCount, rgInfo, pcFetched));
+    }
+    pub fn Next(self: *@This(), ulCount: u32, rgInfo: *?*anyopaque, pcFetched: *u32) !void {
+        try self.next(ulCount, rgInfo, pcFetched);
+    }
+    pub fn reset(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Reset(self));
+    }
+    pub fn Reset(self: *@This()) !void {
+        try self.reset();
+    }
+    pub fn skip(self: *@This(), ulCount: u32) !void {
+        try hrCheck(self.lpVtbl.Skip(self, ulCount));
+    }
+    pub fn Skip(self: *@This(), ulCount: u32) !void {
+        try self.skip(ulCount);
+    }
 };
 
 pub const ITfDisplayAttributeInfo = extern struct {
@@ -975,20 +1828,50 @@ pub const ITfDisplayAttributeInfo = extern struct {
         Reset: *const fn (*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn getGUID(self: *@This(), pguid: *GUID) !void { try hrCheck(self.lpVtbl.GetGUID(self, pguid)); }
-    pub fn GetGUID(self: *@This(), pguid: *GUID) !void { try self.getGUID(pguid); }
-    pub fn getDescription(self: *@This(), pbstrDesc: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetDescription(self, pbstrDesc)); }
-    pub fn GetDescription(self: *@This(), pbstrDesc: *?*anyopaque) !void { try self.getDescription(pbstrDesc); }
-    pub fn getAttributeInfo(self: *@This(), pda: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetAttributeInfo(self, pda)); }
-    pub fn GetAttributeInfo(self: *@This(), pda: *?*anyopaque) !void { try self.getAttributeInfo(pda); }
-    pub fn setAttributeInfo(self: *@This(), pda: *?*anyopaque) !void { try hrCheck(self.lpVtbl.SetAttributeInfo(self, pda)); }
-    pub fn SetAttributeInfo(self: *@This(), pda: *?*anyopaque) !void { try self.setAttributeInfo(pda); }
-    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
-    pub fn Reset(self: *@This()) !void { try self.reset(); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn getGUID(self: *@This(), pguid: *GUID) !void {
+        try hrCheck(self.lpVtbl.GetGUID(self, pguid));
+    }
+    pub fn GetGUID(self: *@This(), pguid: *GUID) !void {
+        try self.getGUID(pguid);
+    }
+    pub fn getDescription(self: *@This(), pbstrDesc: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetDescription(self, pbstrDesc));
+    }
+    pub fn GetDescription(self: *@This(), pbstrDesc: *?*anyopaque) !void {
+        try self.getDescription(pbstrDesc);
+    }
+    pub fn getAttributeInfo(self: *@This(), pda: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetAttributeInfo(self, pda));
+    }
+    pub fn GetAttributeInfo(self: *@This(), pda: *?*anyopaque) !void {
+        try self.getAttributeInfo(pda);
+    }
+    pub fn setAttributeInfo(self: *@This(), pda: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.SetAttributeInfo(self, pda));
+    }
+    pub fn SetAttributeInfo(self: *@This(), pda: *?*anyopaque) !void {
+        try self.setAttributeInfo(pda);
+    }
+    pub fn reset(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Reset(self));
+    }
+    pub fn Reset(self: *@This()) !void {
+        try self.reset();
+    }
 };
 
 pub const IEnumTfRanges = extern struct {
@@ -1004,22 +1887,48 @@ pub const IEnumTfRanges = extern struct {
         Skip: *const fn (*anyopaque, u32) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn clone(self: *@This(), ppEnum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, ppEnum)); }
-    pub fn Clone(self: *@This(), ppEnum: *?*anyopaque) !void { try self.clone(ppEnum); }
-    pub fn next(self: *@This(), ulCount: u32, ppRange: *?*anyopaque, pcFetched: *u32) !void { try hrCheck(self.lpVtbl.Next(self, ulCount, ppRange, pcFetched)); }
-    pub fn Next(self: *@This(), ulCount: u32, ppRange: *?*anyopaque, pcFetched: *u32) !void { try self.next(ulCount, ppRange, pcFetched); }
-    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
-    pub fn Reset(self: *@This()) !void { try self.reset(); }
-    pub fn skip(self: *@This(), ulCount: u32) !void { try hrCheck(self.lpVtbl.Skip(self, ulCount)); }
-    pub fn Skip(self: *@This(), ulCount: u32) !void { try self.skip(ulCount); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn clone(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, ppEnum));
+    }
+    pub fn Clone(self: *@This(), ppEnum: *?*anyopaque) !void {
+        try self.clone(ppEnum);
+    }
+    pub fn next(self: *@This(), ulCount: u32, ppRange: *?*anyopaque, pcFetched: *u32) !void {
+        try hrCheck(self.lpVtbl.Next(self, ulCount, ppRange, pcFetched));
+    }
+    pub fn Next(self: *@This(), ulCount: u32, ppRange: *?*anyopaque, pcFetched: *u32) !void {
+        try self.next(ulCount, ppRange, pcFetched);
+    }
+    pub fn reset(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Reset(self));
+    }
+    pub fn Reset(self: *@This()) !void {
+        try self.reset();
+    }
+    pub fn skip(self: *@This(), ulCount: u32) !void {
+        try hrCheck(self.lpVtbl.Skip(self, ulCount));
+    }
+    pub fn Skip(self: *@This(), ulCount: u32) !void {
+        try self.skip(ulCount);
+    }
 };
 
 pub const TF_DA_COLOR = extern struct {
-    @"type": i32,
+    type: i32,
     // Anonymous union: cr (COLORREF/u32) or nIndex (i32). Use cr_or_index for access.
     cr_or_index: u32,
 };
@@ -1053,14 +1962,32 @@ pub const ITfCompartment = extern struct {
         GetValue: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn setValue(self: *@This(), tid: u32, pvarValue: *?*anyopaque) !void { try hrCheck(self.lpVtbl.SetValue(self, tid, pvarValue)); }
-    pub fn SetValue(self: *@This(), tid: u32, pvarValue: *?*anyopaque) !void { try self.setValue(tid, pvarValue); }
-    pub fn getValue(self: *@This(), pvarValue: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetValue(self, pvarValue)); }
-    pub fn GetValue(self: *@This(), pvarValue: *?*anyopaque) !void { try self.getValue(pvarValue); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn setValue(self: *@This(), tid: u32, pvarValue: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.SetValue(self, tid, pvarValue));
+    }
+    pub fn SetValue(self: *@This(), tid: u32, pvarValue: *?*anyopaque) !void {
+        try self.setValue(tid, pvarValue);
+    }
+    pub fn getValue(self: *@This(), pvarValue: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetValue(self, pvarValue));
+    }
+    pub fn GetValue(self: *@This(), pvarValue: *?*anyopaque) !void {
+        try self.getValue(pvarValue);
+    }
 };
 
 pub const GET_TEXT_AND_PROPERTY_UPDATES_FLAGS = struct {
@@ -1091,28 +2018,74 @@ pub const ITfPropertyStore = extern struct {
         Serialize: *const fn (*anyopaque, ?*anyopaque, *u32) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn getType(self: *@This(), pguid: *GUID) !void { try hrCheck(self.lpVtbl.GetType(self, pguid)); }
-    pub fn GetType(self: *@This(), pguid: *GUID) !void { try self.getType(pguid); }
-    pub fn getDataType(self: *@This(), pdwReserved: *u32) !void { try hrCheck(self.lpVtbl.GetDataType(self, pdwReserved)); }
-    pub fn GetDataType(self: *@This(), pdwReserved: *u32) !void { try self.getDataType(pdwReserved); }
-    pub fn getData(self: *@This(), pvarValue: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetData(self, pvarValue)); }
-    pub fn GetData(self: *@This(), pvarValue: *?*anyopaque) !void { try self.getData(pvarValue); }
-    pub fn onTextUpdated(self: *@This(), dwFlags: u32, pRangeNew: ?*anyopaque, pfAccept: *BOOL) !void { try hrCheck(self.lpVtbl.OnTextUpdated(self, dwFlags, pRangeNew, pfAccept)); }
-    pub fn OnTextUpdated(self: *@This(), dwFlags: u32, pRangeNew: ?*anyopaque, pfAccept: *BOOL) !void { try self.onTextUpdated(dwFlags, pRangeNew, pfAccept); }
-    pub fn shrink(self: *@This(), pRangeNew: ?*anyopaque, pfFree: *BOOL) !void { try hrCheck(self.lpVtbl.Shrink(self, pRangeNew, pfFree)); }
-    pub fn Shrink(self: *@This(), pRangeNew: ?*anyopaque, pfFree: *BOOL) !void { try self.shrink(pRangeNew, pfFree); }
-    pub fn divide(self: *@This(), pRangeThis: ?*anyopaque, pRangeNew: ?*anyopaque, ppPropStore: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Divide(self, pRangeThis, pRangeNew, ppPropStore)); }
-    pub fn Divide(self: *@This(), pRangeThis: ?*anyopaque, pRangeNew: ?*anyopaque, ppPropStore: *?*anyopaque) !void { try self.divide(pRangeThis, pRangeNew, ppPropStore); }
-    pub fn clone(self: *@This(), pPropStore: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, pPropStore)); }
-    pub fn Clone(self: *@This(), pPropStore: *?*anyopaque) !void { try self.clone(pPropStore); }
-    pub fn getPropertyRangeCreator(self: *@This(), pclsid: *GUID) !void { try hrCheck(self.lpVtbl.GetPropertyRangeCreator(self, pclsid)); }
-    pub fn GetPropertyRangeCreator(self: *@This(), pclsid: *GUID) !void { try self.getPropertyRangeCreator(pclsid); }
-    pub fn serialize(self: *@This(), pStream: ?*anyopaque, pcb: *u32) !void { try hrCheck(self.lpVtbl.Serialize(self, pStream, pcb)); }
-    pub fn Serialize(self: *@This(), pStream: ?*anyopaque, pcb: *u32) !void { try self.serialize(pStream, pcb); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn getType(self: *@This(), pguid: *GUID) !void {
+        try hrCheck(self.lpVtbl.GetType(self, pguid));
+    }
+    pub fn GetType(self: *@This(), pguid: *GUID) !void {
+        try self.getType(pguid);
+    }
+    pub fn getDataType(self: *@This(), pdwReserved: *u32) !void {
+        try hrCheck(self.lpVtbl.GetDataType(self, pdwReserved));
+    }
+    pub fn GetDataType(self: *@This(), pdwReserved: *u32) !void {
+        try self.getDataType(pdwReserved);
+    }
+    pub fn getData(self: *@This(), pvarValue: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetData(self, pvarValue));
+    }
+    pub fn GetData(self: *@This(), pvarValue: *?*anyopaque) !void {
+        try self.getData(pvarValue);
+    }
+    pub fn onTextUpdated(self: *@This(), dwFlags: u32, pRangeNew: ?*anyopaque, pfAccept: *BOOL) !void {
+        try hrCheck(self.lpVtbl.OnTextUpdated(self, dwFlags, pRangeNew, pfAccept));
+    }
+    pub fn OnTextUpdated(self: *@This(), dwFlags: u32, pRangeNew: ?*anyopaque, pfAccept: *BOOL) !void {
+        try self.onTextUpdated(dwFlags, pRangeNew, pfAccept);
+    }
+    pub fn shrink(self: *@This(), pRangeNew: ?*anyopaque, pfFree: *BOOL) !void {
+        try hrCheck(self.lpVtbl.Shrink(self, pRangeNew, pfFree));
+    }
+    pub fn Shrink(self: *@This(), pRangeNew: ?*anyopaque, pfFree: *BOOL) !void {
+        try self.shrink(pRangeNew, pfFree);
+    }
+    pub fn divide(self: *@This(), pRangeThis: ?*anyopaque, pRangeNew: ?*anyopaque, ppPropStore: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Divide(self, pRangeThis, pRangeNew, ppPropStore));
+    }
+    pub fn Divide(self: *@This(), pRangeThis: ?*anyopaque, pRangeNew: ?*anyopaque, ppPropStore: *?*anyopaque) !void {
+        try self.divide(pRangeThis, pRangeNew, ppPropStore);
+    }
+    pub fn clone(self: *@This(), pPropStore: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, pPropStore));
+    }
+    pub fn Clone(self: *@This(), pPropStore: *?*anyopaque) !void {
+        try self.clone(pPropStore);
+    }
+    pub fn getPropertyRangeCreator(self: *@This(), pclsid: *GUID) !void {
+        try hrCheck(self.lpVtbl.GetPropertyRangeCreator(self, pclsid));
+    }
+    pub fn GetPropertyRangeCreator(self: *@This(), pclsid: *GUID) !void {
+        try self.getPropertyRangeCreator(pclsid);
+    }
+    pub fn serialize(self: *@This(), pStream: ?*anyopaque, pcb: *u32) !void {
+        try hrCheck(self.lpVtbl.Serialize(self, pStream, pcb));
+    }
+    pub fn Serialize(self: *@This(), pStream: ?*anyopaque, pcb: *u32) !void {
+        try self.serialize(pStream, pcb);
+    }
 };
 
 pub const FORMATETC = extern struct {
@@ -1145,18 +2118,44 @@ pub const IEnumFORMATETC = extern struct {
         Clone: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void { try hrCheck(self.lpVtbl.Next(self, celt, rgelt, pceltFetched)); }
-    pub fn Next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void { try self.next(celt, rgelt, pceltFetched); }
-    pub fn skip(self: *@This(), celt: u32) !void { try hrCheck(self.lpVtbl.Skip(self, celt)); }
-    pub fn Skip(self: *@This(), celt: u32) !void { try self.skip(celt); }
-    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
-    pub fn Reset(self: *@This()) !void { try self.reset(); }
-    pub fn clone(self: *@This(), ppenum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, ppenum)); }
-    pub fn Clone(self: *@This(), ppenum: *?*anyopaque) !void { try self.clone(ppenum); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void {
+        try hrCheck(self.lpVtbl.Next(self, celt, rgelt, pceltFetched));
+    }
+    pub fn Next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void {
+        try self.next(celt, rgelt, pceltFetched);
+    }
+    pub fn skip(self: *@This(), celt: u32) !void {
+        try hrCheck(self.lpVtbl.Skip(self, celt));
+    }
+    pub fn Skip(self: *@This(), celt: u32) !void {
+        try self.skip(celt);
+    }
+    pub fn reset(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Reset(self));
+    }
+    pub fn Reset(self: *@This()) !void {
+        try self.reset();
+    }
+    pub fn clone(self: *@This(), ppenum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, ppenum));
+    }
+    pub fn Clone(self: *@This(), ppenum: *?*anyopaque) !void {
+        try self.clone(ppenum);
+    }
 };
 
 pub const IAdviseSink = extern struct {
@@ -1173,20 +2172,50 @@ pub const IAdviseSink = extern struct {
         OnClose: *const fn (*anyopaque) callconv(.winapi) void,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn onDataChange(self: *@This(), pFormatetc: *?*anyopaque, pStgmed: *?*anyopaque) !void { try hrCheck(self.lpVtbl.OnDataChange(self, pFormatetc, pStgmed)); }
-    pub fn OnDataChange(self: *@This(), pFormatetc: *?*anyopaque, pStgmed: *?*anyopaque) !void { try self.onDataChange(pFormatetc, pStgmed); }
-    pub fn onViewChange(self: *@This(), dwAspect: u32, lindex: i32) !void { try hrCheck(self.lpVtbl.OnViewChange(self, dwAspect, lindex)); }
-    pub fn OnViewChange(self: *@This(), dwAspect: u32, lindex: i32) !void { try self.onViewChange(dwAspect, lindex); }
-    pub fn onRename(self: *@This(), pmk: ?*anyopaque) !void { try hrCheck(self.lpVtbl.OnRename(self, pmk)); }
-    pub fn OnRename(self: *@This(), pmk: ?*anyopaque) !void { try self.onRename(pmk); }
-    pub fn onSave(self: *@This()) !void { try hrCheck(self.lpVtbl.OnSave(self)); }
-    pub fn OnSave(self: *@This()) !void { try self.onSave(); }
-    pub fn onClose(self: *@This()) !void { try hrCheck(self.lpVtbl.OnClose(self)); }
-    pub fn OnClose(self: *@This()) !void { try self.onClose(); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn onDataChange(self: *@This(), pFormatetc: *?*anyopaque, pStgmed: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.OnDataChange(self, pFormatetc, pStgmed));
+    }
+    pub fn OnDataChange(self: *@This(), pFormatetc: *?*anyopaque, pStgmed: *?*anyopaque) !void {
+        try self.onDataChange(pFormatetc, pStgmed);
+    }
+    pub fn onViewChange(self: *@This(), dwAspect: u32, lindex: i32) !void {
+        try hrCheck(self.lpVtbl.OnViewChange(self, dwAspect, lindex));
+    }
+    pub fn OnViewChange(self: *@This(), dwAspect: u32, lindex: i32) !void {
+        try self.onViewChange(dwAspect, lindex);
+    }
+    pub fn onRename(self: *@This(), pmk: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.OnRename(self, pmk));
+    }
+    pub fn OnRename(self: *@This(), pmk: ?*anyopaque) !void {
+        try self.onRename(pmk);
+    }
+    pub fn onSave(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.OnSave(self));
+    }
+    pub fn OnSave(self: *@This()) !void {
+        try self.onSave();
+    }
+    pub fn onClose(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.OnClose(self));
+    }
+    pub fn OnClose(self: *@This()) !void {
+        try self.onClose();
+    }
 };
 
 pub const IEnumSTATDATA = extern struct {
@@ -1202,18 +2231,44 @@ pub const IEnumSTATDATA = extern struct {
         Clone: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void { try hrCheck(self.lpVtbl.Next(self, celt, rgelt, pceltFetched)); }
-    pub fn Next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void { try self.next(celt, rgelt, pceltFetched); }
-    pub fn skip(self: *@This(), celt: u32) !void { try hrCheck(self.lpVtbl.Skip(self, celt)); }
-    pub fn Skip(self: *@This(), celt: u32) !void { try self.skip(celt); }
-    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
-    pub fn Reset(self: *@This()) !void { try self.reset(); }
-    pub fn clone(self: *@This(), ppenum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, ppenum)); }
-    pub fn Clone(self: *@This(), ppenum: *?*anyopaque) !void { try self.clone(ppenum); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void {
+        try hrCheck(self.lpVtbl.Next(self, celt, rgelt, pceltFetched));
+    }
+    pub fn Next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void {
+        try self.next(celt, rgelt, pceltFetched);
+    }
+    pub fn skip(self: *@This(), celt: u32) !void {
+        try hrCheck(self.lpVtbl.Skip(self, celt));
+    }
+    pub fn Skip(self: *@This(), celt: u32) !void {
+        try self.skip(celt);
+    }
+    pub fn reset(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Reset(self));
+    }
+    pub fn Reset(self: *@This()) !void {
+        try self.reset();
+    }
+    pub fn clone(self: *@This(), ppenum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, ppenum));
+    }
+    pub fn Clone(self: *@This(), ppenum: *?*anyopaque) !void {
+        try self.clone(ppenum);
+    }
 };
 
 pub const TF_DA_COLORTYPE = struct {
@@ -1248,26 +2303,66 @@ pub const IStream = extern struct {
         Clone: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_ISequentialStream = true; // requires ISequentialStream
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn seek(self: *@This(), dlibMove: i64, dwOrigin: i32, plibNewPosition: *u64) !void { try hrCheck(self.lpVtbl.Seek(self, dlibMove, dwOrigin, plibNewPosition)); }
-    pub fn Seek(self: *@This(), dlibMove: i64, dwOrigin: i32, plibNewPosition: *u64) !void { try self.seek(dlibMove, dwOrigin, plibNewPosition); }
-    pub fn setSize(self: *@This(), libNewSize: u64) !void { try hrCheck(self.lpVtbl.SetSize(self, libNewSize)); }
-    pub fn SetSize(self: *@This(), libNewSize: u64) !void { try self.setSize(libNewSize); }
-    pub fn copyTo(self: *@This(), pstm: ?*anyopaque, cb: u64, pcbRead: *u64, pcbWritten: *u64) !void { try hrCheck(self.lpVtbl.CopyTo(self, pstm, cb, pcbRead, pcbWritten)); }
-    pub fn CopyTo(self: *@This(), pstm: ?*anyopaque, cb: u64, pcbRead: *u64, pcbWritten: *u64) !void { try self.copyTo(pstm, cb, pcbRead, pcbWritten); }
-    pub fn commit(self: *@This(), grfCommitFlags: u32) !void { try hrCheck(self.lpVtbl.Commit(self, grfCommitFlags)); }
-    pub fn Commit(self: *@This(), grfCommitFlags: u32) !void { try self.commit(grfCommitFlags); }
-    pub fn revert(self: *@This()) !void { try hrCheck(self.lpVtbl.Revert(self)); }
-    pub fn Revert(self: *@This()) !void { try self.revert(); }
-    pub fn lockRegion(self: *@This(), libOffset: u64, cb: u64, dwLockType: u32) !void { try hrCheck(self.lpVtbl.LockRegion(self, libOffset, cb, dwLockType)); }
-    pub fn LockRegion(self: *@This(), libOffset: u64, cb: u64, dwLockType: u32) !void { try self.lockRegion(libOffset, cb, dwLockType); }
-    pub fn unlockRegion(self: *@This(), libOffset: u64, cb: u64, dwLockType: u32) !void { try hrCheck(self.lpVtbl.UnlockRegion(self, libOffset, cb, dwLockType)); }
-    pub fn UnlockRegion(self: *@This(), libOffset: u64, cb: u64, dwLockType: u32) !void { try self.unlockRegion(libOffset, cb, dwLockType); }
-    pub fn stat(self: *@This(), pstatstg: *?*anyopaque, grfStatFlag: u32) !void { try hrCheck(self.lpVtbl.Stat(self, pstatstg, grfStatFlag)); }
-    pub fn Stat(self: *@This(), pstatstg: *?*anyopaque, grfStatFlag: u32) !void { try self.stat(pstatstg, grfStatFlag); }
-    pub fn clone(self: *@This(), ppstm: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, ppstm)); }
-    pub fn Clone(self: *@This(), ppstm: *?*anyopaque) !void { try self.clone(ppstm); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn seek(self: *@This(), dlibMove: i64, dwOrigin: i32, plibNewPosition: *u64) !void {
+        try hrCheck(self.lpVtbl.Seek(self, dlibMove, dwOrigin, plibNewPosition));
+    }
+    pub fn Seek(self: *@This(), dlibMove: i64, dwOrigin: i32, plibNewPosition: *u64) !void {
+        try self.seek(dlibMove, dwOrigin, plibNewPosition);
+    }
+    pub fn setSize(self: *@This(), libNewSize: u64) !void {
+        try hrCheck(self.lpVtbl.SetSize(self, libNewSize));
+    }
+    pub fn SetSize(self: *@This(), libNewSize: u64) !void {
+        try self.setSize(libNewSize);
+    }
+    pub fn copyTo(self: *@This(), pstm: ?*anyopaque, cb: u64, pcbRead: *u64, pcbWritten: *u64) !void {
+        try hrCheck(self.lpVtbl.CopyTo(self, pstm, cb, pcbRead, pcbWritten));
+    }
+    pub fn CopyTo(self: *@This(), pstm: ?*anyopaque, cb: u64, pcbRead: *u64, pcbWritten: *u64) !void {
+        try self.copyTo(pstm, cb, pcbRead, pcbWritten);
+    }
+    pub fn commit(self: *@This(), grfCommitFlags: u32) !void {
+        try hrCheck(self.lpVtbl.Commit(self, grfCommitFlags));
+    }
+    pub fn Commit(self: *@This(), grfCommitFlags: u32) !void {
+        try self.commit(grfCommitFlags);
+    }
+    pub fn revert(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Revert(self));
+    }
+    pub fn Revert(self: *@This()) !void {
+        try self.revert();
+    }
+    pub fn lockRegion(self: *@This(), libOffset: u64, cb: u64, dwLockType: u32) !void {
+        try hrCheck(self.lpVtbl.LockRegion(self, libOffset, cb, dwLockType));
+    }
+    pub fn LockRegion(self: *@This(), libOffset: u64, cb: u64, dwLockType: u32) !void {
+        try self.lockRegion(libOffset, cb, dwLockType);
+    }
+    pub fn unlockRegion(self: *@This(), libOffset: u64, cb: u64, dwLockType: u32) !void {
+        try hrCheck(self.lpVtbl.UnlockRegion(self, libOffset, cb, dwLockType));
+    }
+    pub fn UnlockRegion(self: *@This(), libOffset: u64, cb: u64, dwLockType: u32) !void {
+        try self.unlockRegion(libOffset, cb, dwLockType);
+    }
+    pub fn stat(self: *@This(), pstatstg: *?*anyopaque, grfStatFlag: u32) !void {
+        try hrCheck(self.lpVtbl.Stat(self, pstatstg, grfStatFlag));
+    }
+    pub fn Stat(self: *@This(), pstatstg: *?*anyopaque, grfStatFlag: u32) !void {
+        try self.stat(pstatstg, grfStatFlag);
+    }
+    pub fn clone(self: *@This(), ppstm: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, ppstm));
+    }
+    pub fn Clone(self: *@This(), ppstm: *?*anyopaque) !void {
+        try self.clone(ppstm);
+    }
 };
 
 pub const DVTARGETDEVICE = extern struct {
@@ -1308,39 +2403,106 @@ pub const IMoniker = extern struct {
         IsSystemMoniker: *const fn (*anyopaque, *u32) callconv(.winapi) HRESULT,
     };
     pub const Requires_IPersistStream = true; // requires IPersistStream
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn IsDirty(self: *@This()) !void { const base = try self.queryInterface(IPersistStream); _ = try base.IsDirty(); }
-    pub fn bindToObject(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, riidResult: *GUID, ppvResult: *?*anyopaque) !void { try hrCheck(self.lpVtbl.BindToObject(self, pbc, pmkToLeft, riidResult, ppvResult)); }
-    pub fn BindToObject(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, riidResult: *GUID, ppvResult: *?*anyopaque) !void { try self.bindToObject(pbc, pmkToLeft, riidResult, ppvResult); }
-    pub fn bindToStorage(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, riid: *GUID, ppvObj: *?*anyopaque) !void { try hrCheck(self.lpVtbl.BindToStorage(self, pbc, pmkToLeft, riid, ppvObj)); }
-    pub fn BindToStorage(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, riid: *GUID, ppvObj: *?*anyopaque) !void { try self.bindToStorage(pbc, pmkToLeft, riid, ppvObj); }
-    pub fn reduce(self: *@This(), pbc: ?*anyopaque, dwReduceHowFar: u32, ppmkToLeft: *?*anyopaque, ppmkReduced: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Reduce(self, pbc, dwReduceHowFar, ppmkToLeft, ppmkReduced)); }
-    pub fn Reduce(self: *@This(), pbc: ?*anyopaque, dwReduceHowFar: u32, ppmkToLeft: *?*anyopaque, ppmkReduced: *?*anyopaque) !void { try self.reduce(pbc, dwReduceHowFar, ppmkToLeft, ppmkReduced); }
-    pub fn composeWith(self: *@This(), pmkRight: ?*anyopaque, fOnlyIfNotGeneric: BOOL, ppmkComposite: *?*anyopaque) !void { try hrCheck(self.lpVtbl.ComposeWith(self, pmkRight, fOnlyIfNotGeneric, ppmkComposite)); }
-    pub fn ComposeWith(self: *@This(), pmkRight: ?*anyopaque, fOnlyIfNotGeneric: BOOL, ppmkComposite: *?*anyopaque) !void { try self.composeWith(pmkRight, fOnlyIfNotGeneric, ppmkComposite); }
-    pub fn @"enum"(self: *@This(), fForward: BOOL, ppenumMoniker: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Enum(self, fForward, ppenumMoniker)); }
-    pub fn Enum(self: *@This(), fForward: BOOL, ppenumMoniker: *?*anyopaque) !void { try self.@"enum"(fForward, ppenumMoniker); }
-    pub fn isEqual(self: *@This(), pmkOtherMoniker: ?*anyopaque) !void { try hrCheck(self.lpVtbl.IsEqual(self, pmkOtherMoniker)); }
-    pub fn IsEqual(self: *@This(), pmkOtherMoniker: ?*anyopaque) !void { try self.isEqual(pmkOtherMoniker); }
-    pub fn hash(self: *@This(), pdwHash: *u32) !void { try hrCheck(self.lpVtbl.Hash(self, pdwHash)); }
-    pub fn Hash(self: *@This(), pdwHash: *u32) !void { try self.hash(pdwHash); }
-    pub fn isRunning(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, pmkNewlyRunning: ?*anyopaque) !void { try hrCheck(self.lpVtbl.IsRunning(self, pbc, pmkToLeft, pmkNewlyRunning)); }
-    pub fn IsRunning(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, pmkNewlyRunning: ?*anyopaque) !void { try self.isRunning(pbc, pmkToLeft, pmkNewlyRunning); }
-    pub fn getTimeOfLastChange(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, pFileTime: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetTimeOfLastChange(self, pbc, pmkToLeft, pFileTime)); }
-    pub fn GetTimeOfLastChange(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, pFileTime: *?*anyopaque) !void { try self.getTimeOfLastChange(pbc, pmkToLeft, pFileTime); }
-    pub fn inverse(self: *@This(), ppmk: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Inverse(self, ppmk)); }
-    pub fn Inverse(self: *@This(), ppmk: *?*anyopaque) !void { try self.inverse(ppmk); }
-    pub fn commonPrefixWith(self: *@This(), pmkOther: ?*anyopaque, ppmkPrefix: *?*anyopaque) !void { try hrCheck(self.lpVtbl.CommonPrefixWith(self, pmkOther, ppmkPrefix)); }
-    pub fn CommonPrefixWith(self: *@This(), pmkOther: ?*anyopaque, ppmkPrefix: *?*anyopaque) !void { try self.commonPrefixWith(pmkOther, ppmkPrefix); }
-    pub fn relativePathTo(self: *@This(), pmkOther: ?*anyopaque, ppmkRelPath: *?*anyopaque) !void { try hrCheck(self.lpVtbl.RelativePathTo(self, pmkOther, ppmkRelPath)); }
-    pub fn RelativePathTo(self: *@This(), pmkOther: ?*anyopaque, ppmkRelPath: *?*anyopaque) !void { try self.relativePathTo(pmkOther, ppmkRelPath); }
-    pub fn getDisplayName(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, ppszDisplayName: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetDisplayName(self, pbc, pmkToLeft, ppszDisplayName)); }
-    pub fn GetDisplayName(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, ppszDisplayName: *?*anyopaque) !void { try self.getDisplayName(pbc, pmkToLeft, ppszDisplayName); }
-    pub fn parseDisplayName(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, pszDisplayName: ?*anyopaque, pchEaten: *u32, ppmkOut: *?*anyopaque) !void { try hrCheck(self.lpVtbl.ParseDisplayName(self, pbc, pmkToLeft, pszDisplayName, pchEaten, ppmkOut)); }
-    pub fn ParseDisplayName(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, pszDisplayName: ?*anyopaque, pchEaten: *u32, ppmkOut: *?*anyopaque) !void { try self.parseDisplayName(pbc, pmkToLeft, pszDisplayName, pchEaten, ppmkOut); }
-    pub fn isSystemMoniker(self: *@This(), pdwMksys: *u32) !void { try hrCheck(self.lpVtbl.IsSystemMoniker(self, pdwMksys)); }
-    pub fn IsSystemMoniker(self: *@This(), pdwMksys: *u32) !void { try self.isSystemMoniker(pdwMksys); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn IsDirty(self: *@This()) !void {
+        const base = try self.queryInterface(IPersistStream);
+        _ = try base.IsDirty();
+    }
+    pub fn bindToObject(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, riidResult: *GUID, ppvResult: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.BindToObject(self, pbc, pmkToLeft, riidResult, ppvResult));
+    }
+    pub fn BindToObject(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, riidResult: *GUID, ppvResult: *?*anyopaque) !void {
+        try self.bindToObject(pbc, pmkToLeft, riidResult, ppvResult);
+    }
+    pub fn bindToStorage(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, riid: *GUID, ppvObj: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.BindToStorage(self, pbc, pmkToLeft, riid, ppvObj));
+    }
+    pub fn BindToStorage(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, riid: *GUID, ppvObj: *?*anyopaque) !void {
+        try self.bindToStorage(pbc, pmkToLeft, riid, ppvObj);
+    }
+    pub fn reduce(self: *@This(), pbc: ?*anyopaque, dwReduceHowFar: u32, ppmkToLeft: *?*anyopaque, ppmkReduced: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Reduce(self, pbc, dwReduceHowFar, ppmkToLeft, ppmkReduced));
+    }
+    pub fn Reduce(self: *@This(), pbc: ?*anyopaque, dwReduceHowFar: u32, ppmkToLeft: *?*anyopaque, ppmkReduced: *?*anyopaque) !void {
+        try self.reduce(pbc, dwReduceHowFar, ppmkToLeft, ppmkReduced);
+    }
+    pub fn composeWith(self: *@This(), pmkRight: ?*anyopaque, fOnlyIfNotGeneric: BOOL, ppmkComposite: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.ComposeWith(self, pmkRight, fOnlyIfNotGeneric, ppmkComposite));
+    }
+    pub fn ComposeWith(self: *@This(), pmkRight: ?*anyopaque, fOnlyIfNotGeneric: BOOL, ppmkComposite: *?*anyopaque) !void {
+        try self.composeWith(pmkRight, fOnlyIfNotGeneric, ppmkComposite);
+    }
+    pub fn @"enum"(self: *@This(), fForward: BOOL, ppenumMoniker: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Enum(self, fForward, ppenumMoniker));
+    }
+    pub fn Enum(self: *@This(), fForward: BOOL, ppenumMoniker: *?*anyopaque) !void {
+        try self.@"enum"(fForward, ppenumMoniker);
+    }
+    pub fn isEqual(self: *@This(), pmkOtherMoniker: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.IsEqual(self, pmkOtherMoniker));
+    }
+    pub fn IsEqual(self: *@This(), pmkOtherMoniker: ?*anyopaque) !void {
+        try self.isEqual(pmkOtherMoniker);
+    }
+    pub fn hash(self: *@This(), pdwHash: *u32) !void {
+        try hrCheck(self.lpVtbl.Hash(self, pdwHash));
+    }
+    pub fn Hash(self: *@This(), pdwHash: *u32) !void {
+        try self.hash(pdwHash);
+    }
+    pub fn isRunning(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, pmkNewlyRunning: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.IsRunning(self, pbc, pmkToLeft, pmkNewlyRunning));
+    }
+    pub fn IsRunning(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, pmkNewlyRunning: ?*anyopaque) !void {
+        try self.isRunning(pbc, pmkToLeft, pmkNewlyRunning);
+    }
+    pub fn getTimeOfLastChange(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, pFileTime: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetTimeOfLastChange(self, pbc, pmkToLeft, pFileTime));
+    }
+    pub fn GetTimeOfLastChange(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, pFileTime: *?*anyopaque) !void {
+        try self.getTimeOfLastChange(pbc, pmkToLeft, pFileTime);
+    }
+    pub fn inverse(self: *@This(), ppmk: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Inverse(self, ppmk));
+    }
+    pub fn Inverse(self: *@This(), ppmk: *?*anyopaque) !void {
+        try self.inverse(ppmk);
+    }
+    pub fn commonPrefixWith(self: *@This(), pmkOther: ?*anyopaque, ppmkPrefix: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.CommonPrefixWith(self, pmkOther, ppmkPrefix));
+    }
+    pub fn CommonPrefixWith(self: *@This(), pmkOther: ?*anyopaque, ppmkPrefix: *?*anyopaque) !void {
+        try self.commonPrefixWith(pmkOther, ppmkPrefix);
+    }
+    pub fn relativePathTo(self: *@This(), pmkOther: ?*anyopaque, ppmkRelPath: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.RelativePathTo(self, pmkOther, ppmkRelPath));
+    }
+    pub fn RelativePathTo(self: *@This(), pmkOther: ?*anyopaque, ppmkRelPath: *?*anyopaque) !void {
+        try self.relativePathTo(pmkOther, ppmkRelPath);
+    }
+    pub fn getDisplayName(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, ppszDisplayName: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetDisplayName(self, pbc, pmkToLeft, ppszDisplayName));
+    }
+    pub fn GetDisplayName(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, ppszDisplayName: *?*anyopaque) !void {
+        try self.getDisplayName(pbc, pmkToLeft, ppszDisplayName);
+    }
+    pub fn parseDisplayName(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, pszDisplayName: ?*anyopaque, pchEaten: *u32, ppmkOut: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.ParseDisplayName(self, pbc, pmkToLeft, pszDisplayName, pchEaten, ppmkOut));
+    }
+    pub fn ParseDisplayName(self: *@This(), pbc: ?*anyopaque, pmkToLeft: ?*anyopaque, pszDisplayName: ?*anyopaque, pchEaten: *u32, ppmkOut: *?*anyopaque) !void {
+        try self.parseDisplayName(pbc, pmkToLeft, pszDisplayName, pchEaten, ppmkOut);
+    }
+    pub fn isSystemMoniker(self: *@This(), pdwMksys: *u32) !void {
+        try hrCheck(self.lpVtbl.IsSystemMoniker(self, pdwMksys));
+    }
+    pub fn IsSystemMoniker(self: *@This(), pdwMksys: *u32) !void {
+        try self.isSystemMoniker(pdwMksys);
+    }
 };
 
 pub const STATDATA = extern struct {
@@ -1381,14 +2543,32 @@ pub const ISequentialStream = extern struct {
         Write: *const fn (*anyopaque, *void, u32, *u32) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn read(self: *@This(), pv: *void, cb: u32, pcbRead: *u32) !void { try hrCheck(self.lpVtbl.Read(self, pv, cb, pcbRead)); }
-    pub fn Read(self: *@This(), pv: *void, cb: u32, pcbRead: *u32) !void { try self.read(pv, cb, pcbRead); }
-    pub fn write(self: *@This(), pv: *void, cb: u32, pcbWritten: *u32) !void { try hrCheck(self.lpVtbl.Write(self, pv, cb, pcbWritten)); }
-    pub fn Write(self: *@This(), pv: *void, cb: u32, pcbWritten: *u32) !void { try self.write(pv, cb, pcbWritten); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn read(self: *@This(), pv: *void, cb: u32, pcbRead: *u32) !void {
+        try hrCheck(self.lpVtbl.Read(self, pv, cb, pcbRead));
+    }
+    pub fn Read(self: *@This(), pv: *void, cb: u32, pcbRead: *u32) !void {
+        try self.read(pv, cb, pcbRead);
+    }
+    pub fn write(self: *@This(), pv: *void, cb: u32, pcbWritten: *u32) !void {
+        try hrCheck(self.lpVtbl.Write(self, pv, cb, pcbWritten));
+    }
+    pub fn Write(self: *@This(), pv: *void, cb: u32, pcbWritten: *u32) !void {
+        try self.write(pv, cb, pcbWritten);
+    }
 };
 
 pub const IBindCtx = extern struct {
@@ -1410,30 +2590,80 @@ pub const IBindCtx = extern struct {
         RevokeObjectParam: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn registerObjectBound(self: *@This(), punk: ?*anyopaque) !void { try hrCheck(self.lpVtbl.RegisterObjectBound(self, punk)); }
-    pub fn RegisterObjectBound(self: *@This(), punk: ?*anyopaque) !void { try self.registerObjectBound(punk); }
-    pub fn revokeObjectBound(self: *@This(), punk: ?*anyopaque) !void { try hrCheck(self.lpVtbl.RevokeObjectBound(self, punk)); }
-    pub fn RevokeObjectBound(self: *@This(), punk: ?*anyopaque) !void { try self.revokeObjectBound(punk); }
-    pub fn releaseBoundObjects(self: *@This()) !void { try hrCheck(self.lpVtbl.ReleaseBoundObjects(self)); }
-    pub fn ReleaseBoundObjects(self: *@This()) !void { try self.releaseBoundObjects(); }
-    pub fn setBindOptions(self: *@This(), pbindopts: *?*anyopaque) !void { try hrCheck(self.lpVtbl.SetBindOptions(self, pbindopts)); }
-    pub fn SetBindOptions(self: *@This(), pbindopts: *?*anyopaque) !void { try self.setBindOptions(pbindopts); }
-    pub fn getBindOptions(self: *@This(), pbindopts: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetBindOptions(self, pbindopts)); }
-    pub fn GetBindOptions(self: *@This(), pbindopts: *?*anyopaque) !void { try self.getBindOptions(pbindopts); }
-    pub fn getRunningObjectTable(self: *@This(), pprot: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetRunningObjectTable(self, pprot)); }
-    pub fn GetRunningObjectTable(self: *@This(), pprot: *?*anyopaque) !void { try self.getRunningObjectTable(pprot); }
-    pub fn registerObjectParam(self: *@This(), pszKey: ?*anyopaque, punk: ?*anyopaque) !void { try hrCheck(self.lpVtbl.RegisterObjectParam(self, pszKey, punk)); }
-    pub fn RegisterObjectParam(self: *@This(), pszKey: ?*anyopaque, punk: ?*anyopaque) !void { try self.registerObjectParam(pszKey, punk); }
-    pub fn getObjectParam(self: *@This(), pszKey: ?*anyopaque, ppunk: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetObjectParam(self, pszKey, ppunk)); }
-    pub fn GetObjectParam(self: *@This(), pszKey: ?*anyopaque, ppunk: *?*anyopaque) !void { try self.getObjectParam(pszKey, ppunk); }
-    pub fn enumObjectParam(self: *@This(), ppenum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.EnumObjectParam(self, ppenum)); }
-    pub fn EnumObjectParam(self: *@This(), ppenum: *?*anyopaque) !void { try self.enumObjectParam(ppenum); }
-    pub fn revokeObjectParam(self: *@This(), pszKey: ?*anyopaque) !void { try hrCheck(self.lpVtbl.RevokeObjectParam(self, pszKey)); }
-    pub fn RevokeObjectParam(self: *@This(), pszKey: ?*anyopaque) !void { try self.revokeObjectParam(pszKey); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn registerObjectBound(self: *@This(), punk: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.RegisterObjectBound(self, punk));
+    }
+    pub fn RegisterObjectBound(self: *@This(), punk: ?*anyopaque) !void {
+        try self.registerObjectBound(punk);
+    }
+    pub fn revokeObjectBound(self: *@This(), punk: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.RevokeObjectBound(self, punk));
+    }
+    pub fn RevokeObjectBound(self: *@This(), punk: ?*anyopaque) !void {
+        try self.revokeObjectBound(punk);
+    }
+    pub fn releaseBoundObjects(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.ReleaseBoundObjects(self));
+    }
+    pub fn ReleaseBoundObjects(self: *@This()) !void {
+        try self.releaseBoundObjects();
+    }
+    pub fn setBindOptions(self: *@This(), pbindopts: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.SetBindOptions(self, pbindopts));
+    }
+    pub fn SetBindOptions(self: *@This(), pbindopts: *?*anyopaque) !void {
+        try self.setBindOptions(pbindopts);
+    }
+    pub fn getBindOptions(self: *@This(), pbindopts: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetBindOptions(self, pbindopts));
+    }
+    pub fn GetBindOptions(self: *@This(), pbindopts: *?*anyopaque) !void {
+        try self.getBindOptions(pbindopts);
+    }
+    pub fn getRunningObjectTable(self: *@This(), pprot: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetRunningObjectTable(self, pprot));
+    }
+    pub fn GetRunningObjectTable(self: *@This(), pprot: *?*anyopaque) !void {
+        try self.getRunningObjectTable(pprot);
+    }
+    pub fn registerObjectParam(self: *@This(), pszKey: ?*anyopaque, punk: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.RegisterObjectParam(self, pszKey, punk));
+    }
+    pub fn RegisterObjectParam(self: *@This(), pszKey: ?*anyopaque, punk: ?*anyopaque) !void {
+        try self.registerObjectParam(pszKey, punk);
+    }
+    pub fn getObjectParam(self: *@This(), pszKey: ?*anyopaque, ppunk: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetObjectParam(self, pszKey, ppunk));
+    }
+    pub fn GetObjectParam(self: *@This(), pszKey: ?*anyopaque, ppunk: *?*anyopaque) !void {
+        try self.getObjectParam(pszKey, ppunk);
+    }
+    pub fn enumObjectParam(self: *@This(), ppenum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.EnumObjectParam(self, ppenum));
+    }
+    pub fn EnumObjectParam(self: *@This(), ppenum: *?*anyopaque) !void {
+        try self.enumObjectParam(ppenum);
+    }
+    pub fn revokeObjectParam(self: *@This(), pszKey: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.RevokeObjectParam(self, pszKey));
+    }
+    pub fn RevokeObjectParam(self: *@This(), pszKey: ?*anyopaque) !void {
+        try self.revokeObjectParam(pszKey);
+    }
 };
 
 pub const IEnumMoniker = extern struct {
@@ -1449,18 +2679,44 @@ pub const IEnumMoniker = extern struct {
         Clone: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void { try hrCheck(self.lpVtbl.Next(self, celt, rgelt, pceltFetched)); }
-    pub fn Next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void { try self.next(celt, rgelt, pceltFetched); }
-    pub fn skip(self: *@This(), celt: u32) !void { try hrCheck(self.lpVtbl.Skip(self, celt)); }
-    pub fn Skip(self: *@This(), celt: u32) !void { try self.skip(celt); }
-    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
-    pub fn Reset(self: *@This()) !void { try self.reset(); }
-    pub fn clone(self: *@This(), ppenum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, ppenum)); }
-    pub fn Clone(self: *@This(), ppenum: *?*anyopaque) !void { try self.clone(ppenum); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void {
+        try hrCheck(self.lpVtbl.Next(self, celt, rgelt, pceltFetched));
+    }
+    pub fn Next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void {
+        try self.next(celt, rgelt, pceltFetched);
+    }
+    pub fn skip(self: *@This(), celt: u32) !void {
+        try hrCheck(self.lpVtbl.Skip(self, celt));
+    }
+    pub fn Skip(self: *@This(), celt: u32) !void {
+        try self.skip(celt);
+    }
+    pub fn reset(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Reset(self));
+    }
+    pub fn Reset(self: *@This()) !void {
+        try self.reset();
+    }
+    pub fn clone(self: *@This(), ppenum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, ppenum));
+    }
+    pub fn Clone(self: *@This(), ppenum: *?*anyopaque) !void {
+        try self.clone(ppenum);
+    }
 };
 
 pub const FILETIME = extern struct {
@@ -1482,16 +2738,36 @@ pub const IPersistStream = extern struct {
         GetSizeMax: *const fn (*anyopaque, *u64) callconv(.winapi) HRESULT,
     };
     pub const Requires_IPersist = true; // requires IPersist
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn isDirty(self: *@This()) !void { try hrCheck(self.lpVtbl.IsDirty(self)); }
-    pub fn IsDirty(self: *@This()) !void { try self.isDirty(); }
-    pub fn load(self: *@This(), pStm: ?*anyopaque) !void { try hrCheck(self.lpVtbl.Load(self, pStm)); }
-    pub fn Load(self: *@This(), pStm: ?*anyopaque) !void { try self.load(pStm); }
-    pub fn save(self: *@This(), pStm: ?*anyopaque, fClearDirty: BOOL) !void { try hrCheck(self.lpVtbl.Save(self, pStm, fClearDirty)); }
-    pub fn Save(self: *@This(), pStm: ?*anyopaque, fClearDirty: BOOL) !void { try self.save(pStm, fClearDirty); }
-    pub fn getSizeMax(self: *@This(), pcbSize: *u64) !void { try hrCheck(self.lpVtbl.GetSizeMax(self, pcbSize)); }
-    pub fn GetSizeMax(self: *@This(), pcbSize: *u64) !void { try self.getSizeMax(pcbSize); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn isDirty(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.IsDirty(self));
+    }
+    pub fn IsDirty(self: *@This()) !void {
+        try self.isDirty();
+    }
+    pub fn load(self: *@This(), pStm: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Load(self, pStm));
+    }
+    pub fn Load(self: *@This(), pStm: ?*anyopaque) !void {
+        try self.load(pStm);
+    }
+    pub fn save(self: *@This(), pStm: ?*anyopaque, fClearDirty: BOOL) !void {
+        try hrCheck(self.lpVtbl.Save(self, pStm, fClearDirty));
+    }
+    pub fn Save(self: *@This(), pStm: ?*anyopaque, fClearDirty: BOOL) !void {
+        try self.save(pStm, fClearDirty);
+    }
+    pub fn getSizeMax(self: *@This(), pcbSize: *u64) !void {
+        try hrCheck(self.lpVtbl.GetSizeMax(self, pcbSize));
+    }
+    pub fn GetSizeMax(self: *@This(), pcbSize: *u64) !void {
+        try self.getSizeMax(pcbSize);
+    }
 };
 
 pub const STGM = struct {
@@ -1538,24 +2814,62 @@ pub const IRunningObjectTable = extern struct {
         EnumRunning: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn register(self: *@This(), grfFlags: i32, punkObject: ?*anyopaque, pmkObjectName: ?*anyopaque, pdwRegister: *u32) !void { try hrCheck(self.lpVtbl.Register(self, grfFlags, punkObject, pmkObjectName, pdwRegister)); }
-    pub fn Register(self: *@This(), grfFlags: i32, punkObject: ?*anyopaque, pmkObjectName: ?*anyopaque, pdwRegister: *u32) !void { try self.register(grfFlags, punkObject, pmkObjectName, pdwRegister); }
-    pub fn revoke(self: *@This(), dwRegister: u32) !void { try hrCheck(self.lpVtbl.Revoke(self, dwRegister)); }
-    pub fn Revoke(self: *@This(), dwRegister: u32) !void { try self.revoke(dwRegister); }
-    pub fn isRunning(self: *@This(), pmkObjectName: ?*anyopaque) !void { try hrCheck(self.lpVtbl.IsRunning(self, pmkObjectName)); }
-    pub fn IsRunning(self: *@This(), pmkObjectName: ?*anyopaque) !void { try self.isRunning(pmkObjectName); }
-    pub fn getObject(self: *@This(), pmkObjectName: ?*anyopaque, ppunkObject: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetObject(self, pmkObjectName, ppunkObject)); }
-    pub fn GetObject(self: *@This(), pmkObjectName: ?*anyopaque, ppunkObject: *?*anyopaque) !void { try self.getObject(pmkObjectName, ppunkObject); }
-    pub fn noteChangeTime(self: *@This(), dwRegister: u32, pfiletime: *?*anyopaque) !void { try hrCheck(self.lpVtbl.NoteChangeTime(self, dwRegister, pfiletime)); }
-    pub fn NoteChangeTime(self: *@This(), dwRegister: u32, pfiletime: *?*anyopaque) !void { try self.noteChangeTime(dwRegister, pfiletime); }
-    pub fn getTimeOfLastChange(self: *@This(), pmkObjectName: ?*anyopaque, pfiletime: *?*anyopaque) !void { try hrCheck(self.lpVtbl.GetTimeOfLastChange(self, pmkObjectName, pfiletime)); }
-    pub fn GetTimeOfLastChange(self: *@This(), pmkObjectName: ?*anyopaque, pfiletime: *?*anyopaque) !void { try self.getTimeOfLastChange(pmkObjectName, pfiletime); }
-    pub fn enumRunning(self: *@This(), ppenumMoniker: *?*anyopaque) !void { try hrCheck(self.lpVtbl.EnumRunning(self, ppenumMoniker)); }
-    pub fn EnumRunning(self: *@This(), ppenumMoniker: *?*anyopaque) !void { try self.enumRunning(ppenumMoniker); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn register(self: *@This(), grfFlags: i32, punkObject: ?*anyopaque, pmkObjectName: ?*anyopaque, pdwRegister: *u32) !void {
+        try hrCheck(self.lpVtbl.Register(self, grfFlags, punkObject, pmkObjectName, pdwRegister));
+    }
+    pub fn Register(self: *@This(), grfFlags: i32, punkObject: ?*anyopaque, pmkObjectName: ?*anyopaque, pdwRegister: *u32) !void {
+        try self.register(grfFlags, punkObject, pmkObjectName, pdwRegister);
+    }
+    pub fn revoke(self: *@This(), dwRegister: u32) !void {
+        try hrCheck(self.lpVtbl.Revoke(self, dwRegister));
+    }
+    pub fn Revoke(self: *@This(), dwRegister: u32) !void {
+        try self.revoke(dwRegister);
+    }
+    pub fn isRunning(self: *@This(), pmkObjectName: ?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.IsRunning(self, pmkObjectName));
+    }
+    pub fn IsRunning(self: *@This(), pmkObjectName: ?*anyopaque) !void {
+        try self.isRunning(pmkObjectName);
+    }
+    pub fn getObject(self: *@This(), pmkObjectName: ?*anyopaque, ppunkObject: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetObject(self, pmkObjectName, ppunkObject));
+    }
+    pub fn GetObject(self: *@This(), pmkObjectName: ?*anyopaque, ppunkObject: *?*anyopaque) !void {
+        try self.getObject(pmkObjectName, ppunkObject);
+    }
+    pub fn noteChangeTime(self: *@This(), dwRegister: u32, pfiletime: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.NoteChangeTime(self, dwRegister, pfiletime));
+    }
+    pub fn NoteChangeTime(self: *@This(), dwRegister: u32, pfiletime: *?*anyopaque) !void {
+        try self.noteChangeTime(dwRegister, pfiletime);
+    }
+    pub fn getTimeOfLastChange(self: *@This(), pmkObjectName: ?*anyopaque, pfiletime: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.GetTimeOfLastChange(self, pmkObjectName, pfiletime));
+    }
+    pub fn GetTimeOfLastChange(self: *@This(), pmkObjectName: ?*anyopaque, pfiletime: *?*anyopaque) !void {
+        try self.getTimeOfLastChange(pmkObjectName, pfiletime);
+    }
+    pub fn enumRunning(self: *@This(), ppenumMoniker: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.EnumRunning(self, ppenumMoniker));
+    }
+    pub fn EnumRunning(self: *@This(), ppenumMoniker: *?*anyopaque) !void {
+        try self.enumRunning(ppenumMoniker);
+    }
 };
 
 pub const IEnumString = extern struct {
@@ -1571,18 +2885,44 @@ pub const IEnumString = extern struct {
         Clone: *const fn (*anyopaque, *?*anyopaque) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void { try hrCheck(self.lpVtbl.Next(self, celt, rgelt, pceltFetched)); }
-    pub fn Next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void { try self.next(celt, rgelt, pceltFetched); }
-    pub fn skip(self: *@This(), celt: u32) !void { try hrCheck(self.lpVtbl.Skip(self, celt)); }
-    pub fn Skip(self: *@This(), celt: u32) !void { try self.skip(celt); }
-    pub fn reset(self: *@This()) !void { try hrCheck(self.lpVtbl.Reset(self)); }
-    pub fn Reset(self: *@This()) !void { try self.reset(); }
-    pub fn clone(self: *@This(), ppenum: *?*anyopaque) !void { try hrCheck(self.lpVtbl.Clone(self, ppenum)); }
-    pub fn Clone(self: *@This(), ppenum: *?*anyopaque) !void { try self.clone(ppenum); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void {
+        try hrCheck(self.lpVtbl.Next(self, celt, rgelt, pceltFetched));
+    }
+    pub fn Next(self: *@This(), celt: u32, rgelt: *?*anyopaque, pceltFetched: *u32) !void {
+        try self.next(celt, rgelt, pceltFetched);
+    }
+    pub fn skip(self: *@This(), celt: u32) !void {
+        try hrCheck(self.lpVtbl.Skip(self, celt));
+    }
+    pub fn Skip(self: *@This(), celt: u32) !void {
+        try self.skip(celt);
+    }
+    pub fn reset(self: *@This()) !void {
+        try hrCheck(self.lpVtbl.Reset(self));
+    }
+    pub fn Reset(self: *@This()) !void {
+        try self.reset();
+    }
+    pub fn clone(self: *@This(), ppenum: *?*anyopaque) !void {
+        try hrCheck(self.lpVtbl.Clone(self, ppenum));
+    }
+    pub fn Clone(self: *@This(), ppenum: *?*anyopaque) !void {
+        try self.clone(ppenum);
+    }
 };
 
 pub const IPersist = extern struct {
@@ -1595,12 +2935,26 @@ pub const IPersist = extern struct {
         GetClassID: *const fn (*anyopaque, *GUID) callconv(.winapi) HRESULT,
     };
     pub const Requires_IUnknown = true; // requires IUnknown
-    pub fn release(self: *@This()) void { comRelease(self); }
-    pub fn queryInterface(self: *@This(), comptime T: type) !*T { return comQueryInterface(self, T); }
-    pub fn AddRef(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.AddRef(); }
-    pub fn Release(self: *@This()) !void { const base = try self.queryInterface(IUnknown); _ = try base.Release(); }
-    pub fn getClassID(self: *@This(), pClassID: *GUID) !void { try hrCheck(self.lpVtbl.GetClassID(self, pClassID)); }
-    pub fn GetClassID(self: *@This(), pClassID: *GUID) !void { try self.getClassID(pClassID); }
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn AddRef(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.AddRef();
+    }
+    pub fn Release(self: *@This()) !void {
+        const base = try self.queryInterface(IUnknown);
+        _ = try base.Release();
+    }
+    pub fn getClassID(self: *@This(), pClassID: *GUID) !void {
+        try hrCheck(self.lpVtbl.GetClassID(self, pClassID));
+    }
+    pub fn GetClassID(self: *@This(), pClassID: *GUID) !void {
+        try self.getClassID(pClassID);
+    }
 };
 
 pub const ROT_FLAGS = struct {
@@ -1613,17 +2967,23 @@ pub const ROT_FLAGS = struct {
 // ============================================================================
 
 pub const CLSID_TF_ThreadMgr = GUID{
-    .data1 = 0x529a9e6b, .data2 = 0x6587, .data3 = 0x4f23,
+    .data1 = 0x529a9e6b,
+    .data2 = 0x6587,
+    .data3 = 0x4f23,
     .data4 = .{ 0xab, 0x9e, 0x9c, 0x7d, 0x68, 0x3e, 0x3c, 0x50 },
 };
 
 pub const CLSID_TF_CategoryMgr = GUID{
-    .data1 = 0xA4B544A1, .data2 = 0x438D, .data3 = 0x4B41,
+    .data1 = 0xA4B544A1,
+    .data2 = 0x438D,
+    .data3 = 0x4B41,
     .data4 = .{ 0x93, 0x25, 0x86, 0x95, 0x23, 0xE2, 0xD6, 0xC7 },
 };
 
 pub const CLSID_TF_DisplayAttributeMgr = GUID{
-    .data1 = 0x3CE74DE4, .data2 = 0x53D3, .data3 = 0x4D74,
+    .data1 = 0x3CE74DE4,
+    .data2 = 0x53D3,
+    .data3 = 0x4D74,
     .data4 = .{ 0x8B, 0x83, 0x43, 0x1B, 0x38, 0x28, 0xBA, 0x53 },
 };
 
@@ -1632,12 +2992,16 @@ pub const CLSID_TF_DisplayAttributeMgr = GUID{
 // ============================================================================
 
 pub const GUID_PROP_COMPOSING = GUID{
-    .data1 = 0xE12AC060, .data2 = 0xAF15, .data3 = 0x11D2,
+    .data1 = 0xE12AC060,
+    .data2 = 0xAF15,
+    .data3 = 0x11D2,
     .data4 = .{ 0xAF, 0xC5, 0x00, 0x10, 0x5A, 0x27, 0x99, 0xB5 },
 };
 
 pub const GUID_PROP_ATTRIBUTE = GUID{
-    .data1 = 0x34B45670, .data2 = 0x7526, .data3 = 0x11D2,
+    .data1 = 0x34B45670,
+    .data2 = 0x7526,
+    .data3 = 0x11D2,
     .data4 = .{ 0xA1, 0x47, 0x00, 0x10, 0x5A, 0x27, 0x99, 0xB5 },
 };
 

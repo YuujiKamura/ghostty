@@ -33,7 +33,6 @@ const PendingInput = struct {
 const default_max_pending_inputs: usize = 128;
 const default_max_inflight_data_requests: u32 = 1;
 
-
 const ResponseCache = struct {
     req: ?[]u8 = null,
     resp: ?[]u8 = null,
@@ -572,8 +571,6 @@ pub const ControlPlane = struct {
         return cmd_id <= self.last_drained_cmd_id;
     }
 
-    
-
     /// Issue #142: capture all tab state in a single SendMessageW round-trip.
     /// Called from zig-control-plane when captureSnapshot is wired into Provider.
     fn provCaptureSnapshot(ctx: *anyopaque, tab_index: usize, result: *zcp.CombinedSnapshot) bool {
@@ -751,7 +748,6 @@ fn loadSessionName(allocator: Allocator, pid: u32) ![]u8 {
 // ═══════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════
-
 
 test "commandName parses up to delimiter" {
     try std.testing.expectEqualStrings("STATE", commandName("STATE"));

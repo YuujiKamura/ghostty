@@ -38,17 +38,17 @@ const BasalApp = struct {
         std.debug.print("initXaml (BasalApp): Creating window...\n", .{});
         const window_class = try winrt.hstring("Microsoft.UI.Xaml.Window");
         defer winrt.deleteHString(window_class);
-        
+
         const window_inspectable = try winrt.activateInstance(window_class);
         self.window = try window_inspectable.queryInterface(com.IWindow);
-        
+
         if (self.window) |win| {
             const title = try winrt.hstring("Ghostty Basal Infrastructure Test");
             defer winrt.deleteHString(title);
             try win.putTitle(title);
             try win.activate();
             std.debug.print("SUCCESS: Minimal Window Activated!\n", .{});
-            
+
             _ = os.SetTimer(null, 0, 3000, timerCallback);
         }
     }

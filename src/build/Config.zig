@@ -523,7 +523,7 @@ pub fn init(b: *std.Build, appVersion: []const u8) !Config {
 
     var timestamp_buf: [32]u8 = undefined;
     const timestamp_str = try std.fmt.bufPrint(&timestamp_buf, "{d:0>4}-{d:0>2}-{d:0>2} {d:0>2}:{d:0>2}:{d:0>2} UTC", .{
-        year_day.year, @intFromEnum(month_day.month), month_day.day_index + 1,
+        year_day.year,                 @intFromEnum(month_day.month),    month_day.day_index + 1,
         day_seconds.getHoursIntoDay(), day_seconds.getMinutesIntoHour(), day_seconds.getSecondsIntoMinute(),
     });
     config.build_timestamp = b.dupe(timestamp_str);

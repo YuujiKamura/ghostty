@@ -663,7 +663,7 @@ pub fn Surface(comptime App: type) type {
                     }
                     self.scroll_bar_value_changed_token = 0;
                 }
-                
+
                 if (self.scroll_bar_range_base) |rb| {
                     rb.release();
                     self.scroll_bar_range_base = null;

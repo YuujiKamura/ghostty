@@ -38,9 +38,7 @@ pub fn handleIMEStartComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam:
                 .rcArea = .{},
             };
             const imm_result = os.ImmSetCompositionWindow(himc, &cf);
-            log.info("IME start composition: pos=({d:.2},{d:.2}) -> ImmSet=({d},{d}) result={}", .{
-                ime_pos.x, ime_pos.y, cf.ptCurrentPos.x, cf.ptCurrentPos.y, imm_result
-            });
+            log.info("IME start composition: pos=({d:.2},{d:.2}) -> ImmSet=({d},{d}) result={}", .{ ime_pos.x, ime_pos.y, cf.ptCurrentPos.x, cf.ptCurrentPos.y, imm_result });
         }
     }
     return imeDefProc(app, hwnd, msg, wparam, lparam);
@@ -110,9 +108,7 @@ pub fn handleIMEComposition(app: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.W
                 .rcArea = .{},
             };
             const imm_result = os.ImmSetCompositionWindow(himc, &cf);
-            log.info("IME composition window update: pos=({d:.2},{d:.2}) -> ImmSet=({d},{d}) result={}", .{
-                ime_pos.x, ime_pos.y, cf.ptCurrentPos.x, cf.ptCurrentPos.y, imm_result
-            });
+            log.info("IME composition window update: pos=({d:.2},{d:.2}) -> ImmSet=({d},{d}) result={}", .{ ime_pos.x, ime_pos.y, cf.ptCurrentPos.x, cf.ptCurrentPos.y, imm_result });
         }
     }
 

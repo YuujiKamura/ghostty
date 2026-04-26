@@ -1,4 +1,4 @@
-﻿const std = @import("std");
+const std = @import("std");
 const com = @import("com.zig");
 const winrt = @import("winrt.zig");
 const input_runtime = @import("input_runtime.zig");

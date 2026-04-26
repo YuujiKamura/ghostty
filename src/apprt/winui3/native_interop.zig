@@ -23,8 +23,16 @@ pub const ISwapChainPanelNative2 = extern struct {
         SetSwapChain: *const fn (*anyopaque, ?*anyopaque) callconv(.winapi) HRESULT,
         SetSwapChainHandle: *const fn (*anyopaque, os.HANDLE) callconv(.winapi) HRESULT,
     };
-    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T { return com.comQueryInterface(self, T); }
-    pub fn release(self: *@This()) void { com.comRelease(self); }
-    pub fn setSwapChain(self: *ISwapChainPanelNative2, sc: ?*anyopaque) WinRTError!void { try hrCheck(self.lpVtbl.SetSwapChain(self, sc)); }
-    pub fn setSwapChainHandle(self: *ISwapChainPanelNative2, h: os.HANDLE) WinRTError!void { try hrCheck(self.lpVtbl.SetSwapChainHandle(self, h)); }
+    pub fn queryInterface(self: *@This(), comptime T: type) WinRTError!*T {
+        return com.comQueryInterface(self, T);
+    }
+    pub fn release(self: *@This()) void {
+        com.comRelease(self);
+    }
+    pub fn setSwapChain(self: *ISwapChainPanelNative2, sc: ?*anyopaque) WinRTError!void {
+        try hrCheck(self.lpVtbl.SetSwapChain(self, sc));
+    }
+    pub fn setSwapChainHandle(self: *ISwapChainPanelNative2, h: os.HANDLE) WinRTError!void {
+        try hrCheck(self.lpVtbl.SetSwapChainHandle(self, h));
+    }
 };
