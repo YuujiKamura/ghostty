@@ -246,3 +246,32 @@ test "timed push" {
     // Timed push should fail
     try testing.expectEqual(@as(Q.Size, 0), q.push(2, .{ .ns = 1000 }));
 }
+
+// Regression test for #218: focus events from the UI thread must use
+// `.instant` (drop-on-full) and never `.forever`. The contract callers
+// rely on is that an `.instant` push to a full queue returns 0 without
+// blocking — the caller (Surface.focusCallback) then logs a warning and
+// drops the event rather than parking the UI thread on
+// `cond_not_full.wait`. This test documents that contract.
+test "instant push drops on full (focus-event drop contract, #218)" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    // Single-slot queue makes "full" trivial to reproduce.
+    const Q = BlockingQueue(u64, 1);
+    const q = try Q.create(alloc);
+    defer q.destroy(alloc);
+
+    // Saturate the queue.
+    try testing.expectEqual(@as(Q.Size, 1), q.push(1, .{ .instant = {} }));
+
+    // Subsequent .instant pushes against a full queue must return 0
+    // and must not block. Repeat to make sure the behaviour is stable.
+    try testing.expectEqual(@as(Q.Size, 0), q.push(99, .{ .instant = {} }));
+    try testing.expectEqual(@as(Q.Size, 0), q.push(100, .{ .instant = {} }));
+    try testing.expectEqual(@as(Q.Size, 0), q.push(101, .{ .instant = {} }));
+
+    // Drain and confirm the dropped values were never written into the queue.
+    try testing.expectEqual(@as(u64, 1), q.pop().?);
+    try testing.expect(q.pop() == null);
+}
