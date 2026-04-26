@@ -46,6 +46,7 @@ const NonClientIslandWindow = nonclient_island_window.NonClientIslandWindow;
 const Tsf = @import("tsf.zig");
 const tsf_logic = @import("tsf_logic.zig");
 const IpcServer = @import("ipc.zig");
+const watchdog_mod = @import("watchdog.zig");
 const internal_os = @import("../../os/main.zig");
 
 /// IME coordinate caching system for Phase 3 stability improvements
@@ -277,6 +278,16 @@ ui_stalled_reported: std.atomic.Value(bool) = std.atomic.Value(bool).init(false)
 watchdog_stop: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 watchdog_thread: ?std.Thread = null,
 
+/// Phase 4 (#232) i64 mirror of `last_ui_heartbeat_ns`. The Phase 4
+/// watchdog uses i64 because Zig atomics top out at 64-bit. Updated
+/// alongside the i128 value on every HEARTBEAT_TIMER_ID tick.
+last_ui_heartbeat_ns_i64: std.atomic.Value(i64) = std.atomic.Value(i64).init(0),
+
+/// Phase 4 (#232) in-process UI-thread crash-guard. Lives next to the
+/// soft Tier 1 watchdog above but escalates to dump + process.exit(2)
+/// per "stuck > crash". Configured via env vars; see watchdog.zig.
+phase4_watchdog: ?watchdog_mod.Watchdog = null,
+
 // Wakeup coalescing (issue #214). Under high-frequency producer wakeups
 // (e.g. PTY byte storm during Claude xhigh thinking bursts) DispatcherQueue
 // .TryEnqueue does NOT coalesce identical handler instances — each wakeup
@@ -447,7 +458,11 @@ pub fn init(
         .dq_controller = dq_controller,
         .dispatcher_queue = null,
     };
-    self.last_ui_heartbeat_ns.store(std.time.nanoTimestamp(), .release);
+    {
+        const ts = std.time.nanoTimestamp();
+        self.last_ui_heartbeat_ns.store(ts, .release);
+        self.last_ui_heartbeat_ns_i64.store(@as(i64, @truncate(ts)), .release);
+    }
 
     // Prime the config cache synchronously at init so the UI thread never has
     // to touch disk on the newTab hot path (issue #212 P0 #4). The cost here
@@ -661,12 +676,36 @@ fn initXaml(self: *App) !void {
 
     // Tier 1 UI-thread heartbeat (issue #212). Arm WM_TIMER for heartbeat
     // updates, then spawn a background poller that flags stalls.
-    self.last_ui_heartbeat_ns.store(std.time.nanoTimestamp(), .release);
+    {
+        const ts = std.time.nanoTimestamp();
+        self.last_ui_heartbeat_ns.store(ts, .release);
+        self.last_ui_heartbeat_ns_i64.store(@as(i64, @truncate(ts)), .release);
+    }
     _ = os.SetTimer(self.hwnd.?, HEARTBEAT_TIMER_ID, HEARTBEAT_INTERVAL_MS, null);
     self.watchdog_thread = std.Thread.spawn(.{}, watchdogLoop, .{self}) catch |err| blk: {
         log.warn("watchdog spawn failed: {}", .{err});
         break :blk null;
     };
+
+    // Phase 4 (#232) in-process UI-thread crash-guard. Sits alongside
+    // the soft Tier 1 watchdog above but escalates to snapshot dump +
+    // process.exit(2) once the UI thread has been wedged longer than
+    // KS_WATCHDOG_TIMEOUT_MS (default 5s). Stuck > crash. Disable
+    // explicitly via `KS_WATCHDOG=disabled` if a debugger is attached.
+    if (self.hwnd) |hwnd_for_wd| {
+        const cfg = watchdog_mod.Config.fromEnv(self.core_app.alloc);
+        self.phase4_watchdog = watchdog_mod.Watchdog.init(
+            cfg,
+            hwnd_for_wd,
+            &self.last_ui_heartbeat_ns_i64,
+        );
+        if (self.phase4_watchdog) |*wd| {
+            wd.start() catch |err| {
+                log.warn("phase4 watchdog start failed: {}", .{err});
+                self.phase4_watchdog = null;
+            };
+        }
+    }
 }
 
 /// Background poller that detects UI-thread stalls by comparing now against
@@ -1392,6 +1431,10 @@ pub fn terminate(self: *App) void {
     if (self.watchdog_thread) |t| {
         t.join();
         self.watchdog_thread = null;
+    }
+    if (self.phase4_watchdog) |*wd| {
+        wd.stopAndJoin();
+        self.phase4_watchdog = null;
     }
     if (self.hwnd) |h| {
         _ = os.KillTimer(h, HEARTBEAT_TIMER_ID);
@@ -2829,7 +2872,9 @@ fn handleTimer(self: *App, hwnd: os.HWND, wparam: os.WPARAM) os.LRESULT {
         HEARTBEAT_TIMER_ID => {
             // UI-thread heartbeat: we're alive — stamp timestamp and clear
             // the stall-reported latch so a future re-stall can re-fire.
-            self.last_ui_heartbeat_ns.store(std.time.nanoTimestamp(), .release);
+            const ts = std.time.nanoTimestamp();
+            self.last_ui_heartbeat_ns.store(ts, .release);
+            self.last_ui_heartbeat_ns_i64.store(@as(i64, @truncate(ts)), .release);
             self.ui_stalled_reported.store(false, .release);
             return 0;
         },
