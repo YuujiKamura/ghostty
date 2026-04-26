@@ -2218,10 +2218,7 @@ pub fn imePoint(self: *const Surface) apprt.IMEPos {
         break :width width;
     };
 
-    log.info("imePoint: cursor=({d},{d}) cell=({d}x{d}) padding=({d},{d}) scale=({d:.2},{d:.2}) result=({d:.2},{d:.2})", .{
-        cursor.x, cursor.y, cell_width, cell_height,
-        padding_left, padding_top, content_scale.x, content_scale.y, x, y
-    });
+    log.info("imePoint: cursor=({d},{d}) cell=({d}x{d}) padding=({d},{d}) scale=({d:.2},{d:.2}) result=({d:.2},{d:.2})", .{ cursor.x, cursor.y, cell_width, cell_height, padding_left, padding_top, content_scale.x, content_scale.y, x, y });
 
     return .{
         .x = x,
@@ -3378,10 +3375,24 @@ pub fn focusCallback(self: *Surface, focused: bool) !void {
     if (self.focused == focused) return;
     self.focused = focused;
 
-    // Notify our render thread of the new state
-    _ = self.renderer_thread.mailbox.push(.{
+    // Notify our render thread of the new state.
+    //
+    // We use `.instant` here (drop on full) to avoid blocking the UI thread
+    // when the renderer mailbox is full. A `.forever` push from the UI
+    // thread can deadlock the entire window: under sustained renderer load
+    // (e.g. CP polling), a focus event arriving while the mailbox is full
+    // would wait on `cond_not_full.wait` indefinitely, which causes
+    // `IsHungAppWindow=true` and stops the message pump. See #218 for cdb
+    // evidence (UI thread parked in `Condition.wait` ->
+    // `blocking_queue.push` -> `focusCallback`).
+    //
+    // Focus state is best-effort — losing one focus transition is far
+    // preferable to hanging the UI thread.
+    if (self.renderer_thread.mailbox.push(.{
         .focus = focused,
-    }, .{ .forever = {} });
+    }, .{ .instant = {} }) == 0) {
+        log.warn("focus event dropped (renderer mailbox full)", .{});
+    }
 
     if (!focused) unfocused: {
         // If we lost focus and we have a keypress, then we want to send a key
