@@ -2114,10 +2114,19 @@ pub const CAPI = struct {
     const Darwin = struct {
         export fn ghostty_surface_set_display_id(ptr: *Surface, display_id: u32) void {
             const surface = &ptr.core_surface;
-            _ = surface.renderer_thread.mailbox.push(
+            // Use `.instant` (drop on full) instead of `.forever` to avoid
+            // hanging the macOS host UI thread when the renderer mailbox is
+            // saturated. A `.forever` push here would park the host's UI
+            // thread on `cond_not_full.wait`, freezing the embedder's
+            // message loop. Display-ID is best-effort: missing one
+            // notification only delays the renderer picking up the new
+            // display until the next event. Sister of #218/#219 (#224).
+            if (surface.renderer_thread.mailbox.push(
                 .{ .macos_display_id = display_id },
-                .{ .forever = {} }, // LINT-ALLOW: forever-ok (macOS host UI thread; cross-platform sister of #218, tracked in notes/2026-04-26_forever_push_audit.md, fix is platform-owner)
-            );
+                .{ .instant = {} },
+            ) == 0) {
+                log.warn("macos_display_id event dropped (renderer mailbox full)", .{});
+            }
             surface.renderer_thread.wakeup.notify() catch {};
         }
 
