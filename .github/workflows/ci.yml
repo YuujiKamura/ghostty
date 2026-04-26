@@ -2,19 +2,29 @@ name: CI
 
 on:
   push:
-    branches: [winui3-apprt]
+    branches: [winui3-apprt, main]
     paths:
       - "src/**/*.zig"
       - "build.zig"
       - "build.zig.zon"
       - ".github/workflows/ci.yml"
       - "lefthook.yml"
+      - "scripts/test-winui3-runtime-contract.ps1"
+      - "scripts/winui3-*.ps1"
+      - "tests/self_diagnosis/**"
+      - "xaml/prebuilt/**"
+      - "build-winui3.sh"
   pull_request:
     paths:
       - "src/**/*.zig"
       - "build.zig"
       - "build.zig.zon"
       - ".github/workflows/ci.yml"
+      - "scripts/test-winui3-runtime-contract.ps1"
+      - "scripts/winui3-*.ps1"
+      - "tests/self_diagnosis/**"
+      - "xaml/prebuilt/**"
+      - "build-winui3.sh"
   workflow_dispatch: {}
 
 jobs:
@@ -32,9 +42,75 @@ jobs:
         run: |
           find src -name '*.zig' | head -500 | xargs zig fmt --check
 
+  # Build the WinUI3 binary once and share via artifact.
+  # Downstream test jobs (vtable-manifest, static-tests) depend on this so they
+  # can run against the actual zig-out-winui3/bin/ tree instead of failing
+  # with "no build output directory found" (issue #228).
+  build-winui3:
+    name: build winui3 (artifact for test jobs)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Cache Zig
+        uses: actions/cache@v4
+        with:
+          path: |
+            .zig-cache
+            ~\AppData\Local\zig
+          key: ${{ runner.os }}-zig-ci-${{ hashFiles('build.zig.zon') }}
+          restore-keys: |
+            ${{ runner.os }}-zig-ci-
+            ${{ runner.os }}-zig-
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Windows App SDK (NuGet)
+        shell: pwsh
+        run: |
+          nuget install Microsoft.WindowsAppSDK -Version 1.6.250108002 -OutputDirectory _nuget
+          $src = "_nuget/Microsoft.WindowsAppSDK.1.6.250108002"
+          $dest = Join-Path $env:USERPROFILE ".nuget/packages/microsoft.windowsappsdk/1.6.250108002"
+          if (-not (Test-Path $dest)) {
+            New-Item -ItemType Directory -Path $dest -Force | Out-Null
+            Copy-Item -Recurse -Force "$src/*" $dest
+          }
+          Write-Host "WindowsAppSDK installed to $dest"
+
+      - name: Zig Build (Prebuilt Mode)
+        shell: pwsh
+        run: |
+          $env:GHOSTTY_WINUI3_PREBUILT_ONLY = "1"
+          bash ./build-winui3.sh --release=fast -Dcpu=baseline
+
+      - name: List Artifacts
+        shell: pwsh
+        run: |
+          ls zig-out-winui3/bin | Select-Object Name, Length
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghostty-winui3-ci
+          path: |
+            zig-out-winui3/bin/
+            zig-out-winui3/share/
+          if-no-files-found: error
+          retention-days: 1
+
   vtable-manifest:
     name: vtable manifest verification
     runs-on: windows-latest
+    needs: build-winui3
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +125,21 @@ jobs:
           git clone --depth 1 https://github.com/YuujiKamura/win-zig-metadata.git (Join-Path $workspaceParent "win-zig-metadata")
           git clone --depth 1 https://github.com/YuujiKamura/win-zig-bindgen.git (Join-Path $workspaceParent "win-zig-bindgen")
 
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ghostty-winui3-ci
+          path: zig-out-winui3/
+
+      - name: Verify artifact layout
+        shell: pwsh
+        run: |
+          Write-Host "zig-out-winui3 tree:"
+          Get-ChildItem zig-out-winui3 -Recurse -Depth 2 | Select-Object FullName, Length | Format-Table -AutoSize
+          if (-not (Test-Path "zig-out-winui3/bin/ghostty.exe")) {
+            throw "Artifact missing: zig-out-winui3/bin/ghostty.exe"
+          }
+
       - name: WinUI3 runtime contract (strict)
         shell: pwsh
         run: ./scripts/test-winui3-runtime-contract.ps1 -Strict
@@ -56,8 +147,23 @@ jobs:
   static-tests:
     name: static analysis tests
     runs-on: windows-latest
+    needs: build-winui3
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ghostty-winui3-ci
+          path: zig-out-winui3/
+
+      - name: Verify artifact layout
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "zig-out-winui3/bin/ghostty.exe")) {
+            throw "Artifact missing: zig-out-winui3/bin/ghostty.exe"
+          }
+          Write-Host "ghostty.exe size: $((Get-Item zig-out-winui3/bin/ghostty.exe).Length) bytes"
 
       - name: Touch scroll test
         shell: pwsh
