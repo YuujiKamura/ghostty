@@ -33,7 +33,6 @@ const PendingInput = struct {
 const default_max_pending_inputs: usize = 128;
 const default_max_inflight_data_requests: u32 = 1;
 
-
 const ResponseCache = struct {
     req: ?[]u8 = null,
     resp: ?[]u8 = null,
@@ -118,6 +117,15 @@ pub const ControlPlane = struct {
     max_inflight_data_requests: u32 = default_max_inflight_data_requests,
     inflight_data_requests: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
     last_provider_timeout: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+    /// Set by provCaptureSnapshot/provCaptureHistory when the App-side
+    /// callback returns `error.RendererLocked` (i.e. the CP read-lane
+    /// tryLock found `Surface.renderer_state.mutex` contended). The
+    /// upper layer (handleRequestWith) consumes this flag and overrides
+    /// the response with `ERR|BUSY|renderer_locked\n`.
+    ///
+    /// See `notes/2026-04-26_cp_stall_source_audit.md` cause (A) and
+    /// the fix in `Surface.zig` `*Locked` variants.
+    last_renderer_locked: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 
     pub fn isEnabled(allocator: Allocator) bool {
         return checkEnvFlag(allocator, "GHOSTTY_CONTROL_PLANE") or
@@ -290,6 +298,15 @@ pub const ControlPlane = struct {
         if (self.last_provider_timeout.swap(false, .acq_rel)) {
             allocator.free(resp);
             return allocator.dupe(u8, "ERR|TIMEOUT|ui_thread_busy\n") catch return "ERR|TIMEOUT|ui_thread_busy\n";
+        }
+        // Issue #207 hyp 1: CP read lane tryLock contended on
+        // renderer_state.mutex → translate the generic SNAPSHOT_FAILED
+        // (which the vendor lib emits when captureSnapshot returns false)
+        // into a specific BUSY response so deckpilot can interpret it as
+        // "skip this poll, retry later" rather than "session is dead".
+        if (self.last_renderer_locked.swap(false, .acq_rel)) {
+            allocator.free(resp);
+            return allocator.dupe(u8, "ERR|BUSY|renderer_locked\n") catch return "ERR|BUSY|renderer_locked\n";
         }
         if (isCacheableCommand(cmd) and !std.mem.startsWith(u8, std.mem.trim(u8, resp, " \r\n\t"), "ERR|")) {
             self.updateCachedResponse(req, resp);
@@ -572,8 +589,6 @@ pub const ControlPlane = struct {
         return cmd_id <= self.last_drained_cmd_id;
     }
 
-    
-
     /// Issue #142: capture all tab state in a single SendMessageW round-trip.
     /// Called from zig-control-plane when captureSnapshot is wired into Provider.
     fn provCaptureSnapshot(ctx: *anyopaque, tab_index: usize, result: *zcp.CombinedSnapshot) bool {
@@ -583,7 +598,14 @@ pub const ControlPlane = struct {
         const capture_tail_fn = self.capture_tail_fn orelse return false;
 
         // 1. Capture basic state (pwd, etc.)
-        var snapshot = (capture_fn(callback_ctx, self.allocator, tab_index) catch return false) orelse return false;
+        var snapshot = (capture_fn(callback_ctx, self.allocator, tab_index) catch |err| {
+            // Issue #207 hyp 1: signal renderer-locked so the upper
+            // layer overrides SNAPSHOT_FAILED with ERR|BUSY|renderer_locked.
+            if (err == error.RendererLocked) {
+                self.last_renderer_locked.store(true, .release);
+            }
+            return false;
+        }) orelse return false;
         defer snapshot.deinit(self.allocator);
 
         result.tab_count = snapshot.tab_count;
@@ -608,7 +630,12 @@ pub const ControlPlane = struct {
         }
 
         // 2. Capture viewport/tail
-        const tail = (capture_tail_fn(callback_ctx, self.allocator, tab_index) catch return false) orelse return false;
+        const tail = (capture_tail_fn(callback_ctx, self.allocator, tab_index) catch |err| {
+            if (err == error.RendererLocked) {
+                self.last_renderer_locked.store(true, .release);
+            }
+            return false;
+        }) orelse return false;
         defer self.allocator.free(tail);
 
         const tail_len = @min(tail.len, result.viewport.len);
@@ -627,7 +654,12 @@ pub const ControlPlane = struct {
         const capture_history_fn = self.capture_history_fn orelse return false;
 
         // 1. Capture basic state (pwd, etc.)
-        var snapshot = (capture_fn(callback_ctx, self.allocator, tab_index) catch return false) orelse return false;
+        var snapshot = (capture_fn(callback_ctx, self.allocator, tab_index) catch |err| {
+            if (err == error.RendererLocked) {
+                self.last_renderer_locked.store(true, .release);
+            }
+            return false;
+        }) orelse return false;
         defer snapshot.deinit(self.allocator);
 
         result.tab_count = snapshot.tab_count;
@@ -652,7 +684,12 @@ pub const ControlPlane = struct {
         }
 
         // 2. Capture history
-        const history = (capture_history_fn(callback_ctx, self.allocator, tab_index) catch return false) orelse return false;
+        const history = (capture_history_fn(callback_ctx, self.allocator, tab_index) catch |err| {
+            if (err == error.RendererLocked) {
+                self.last_renderer_locked.store(true, .release);
+            }
+            return false;
+        }) orelse return false;
         defer self.allocator.free(history);
 
         const history_len = @min(history.len, result.viewport.len);
@@ -751,7 +788,6 @@ fn loadSessionName(allocator: Allocator, pid: u32) ![]u8 {
 // ═══════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════
-
 
 test "commandName parses up to delimiter" {
     try std.testing.expectEqualStrings("STATE", commandName("STATE"));

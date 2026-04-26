@@ -288,7 +288,6 @@ watchdog_thread: ?std.Thread = null,
 // full mailbox on every invocation.
 wakeup_pending: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 
-
 /// Cached configuration snapshot (Tier 4, issue #212 P0 #4).
 /// configpkg.Config.load performs synchronous disk I/O (XDG config dirs,
 /// platform-specific app-data dirs, theme dir scans) which deterministically
@@ -299,93 +298,92 @@ cached_config: ?configpkg.Config = null,
 cached_config_lock: std.Thread.Mutex = .{},
 cached_config_epoch: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
 
+/// Get a surface by index. Thread-safe (acquires surfaces_mutex).
+/// Returns the Surface pointer with the mutex released — caller must not
+/// hold the pointer across any operation that could mutate surfaces.
+pub fn getSurface(self: *App, idx: usize) ?*Surface {
+    self.surfaces_mutex.lock();
+    defer self.surfaces_mutex.unlock();
+    const snapshot = self.surfaces_snapshot;
+    if (idx >= snapshot.len) return null;
+    return snapshot[idx];
+}
 
-    /// Get a surface by index. Thread-safe (acquires surfaces_mutex).
-    /// Returns the Surface pointer with the mutex released — caller must not
-    /// hold the pointer across any operation that could mutate surfaces.
-    pub fn getSurface(self: *App, idx: usize) ?*Surface {
-        self.surfaces_mutex.lock();
-        defer self.surfaces_mutex.unlock();
-        const snapshot = self.surfaces_snapshot;
-        if (idx >= snapshot.len) return null;
-        return snapshot[idx];
-    }
+/// Get the number of active surfaces. Thread-safe (acquires surfaces_mutex).
+pub fn countSurfaces(self: *App) usize {
+    self.surfaces_mutex.lock();
+    defer self.surfaces_mutex.unlock();
+    return self.surfaces_snapshot.len;
+}
 
-    /// Get the number of active surfaces. Thread-safe (acquires surfaces_mutex).
-    pub fn countSurfaces(self: *App) usize {
-        self.surfaces_mutex.lock();
-        defer self.surfaces_mutex.unlock();
-        return self.surfaces_snapshot.len;
-    }
-
-    /// Clone the cached Config under the cache lock for use on the UI thread.
-    /// Caller owns the returned Config and must call deinit().
-    /// Falls back to a synchronous Config.load if the cache is empty (e.g.
-    /// init-time load failed). Issue #212 P0 #4.
-    pub fn cloneCachedConfig(self: *App) !configpkg.Config {
-        const alloc = self.core_app.alloc;
-        self.cached_config_lock.lock();
-        if (self.cached_config) |*cached| {
-            const cloned = cached.clone(alloc) catch |err| {
-                self.cached_config_lock.unlock();
-                log.warn("cloneCachedConfig: clone failed err={} — falling back to sync Config.load", .{err});
-                return try configpkg.Config.load(alloc);
-            };
+/// Clone the cached Config under the cache lock for use on the UI thread.
+/// Caller owns the returned Config and must call deinit().
+/// Falls back to a synchronous Config.load if the cache is empty (e.g.
+/// init-time load failed). Issue #212 P0 #4.
+pub fn cloneCachedConfig(self: *App) !configpkg.Config {
+    const alloc = self.core_app.alloc;
+    self.cached_config_lock.lock();
+    if (self.cached_config) |*cached| {
+        const cloned = cached.clone(alloc) catch |err| {
             self.cached_config_lock.unlock();
-            return cloned;
-        }
-        self.cached_config_lock.unlock();
-        log.warn("cloneCachedConfig: cache miss — falling back to sync Config.load", .{});
-        return try configpkg.Config.load(alloc);
-    }
-
-    /// Reload the cached Config on a detached background thread and swap it
-    /// atomically. Safe to call from the UI thread — returns immediately.
-    /// Issue #212 P0 #4.
-    pub fn reloadConfigAsync(self: *App) void {
-        const thread = std.Thread.spawn(.{}, reloadConfigThreadMain, .{self}) catch |err| {
-            log.warn("reloadConfigAsync: spawn failed err={} — running reload inline", .{err});
-            reloadConfigThreadMain(self);
-            return;
+            log.warn("cloneCachedConfig: clone failed err={} — falling back to sync Config.load", .{err});
+            return try configpkg.Config.load(alloc);
         };
-        thread.detach();
-    }
-
-    fn reloadConfigThreadMain(self: *App) void {
-        const alloc = self.core_app.alloc;
-        const new_config = configpkg.Config.load(alloc) catch |err| {
-            log.warn("reloadConfigThreadMain: Config.load failed err={}", .{err});
-            return;
-        };
-
-        self.cached_config_lock.lock();
-        var old_opt = self.cached_config;
-        self.cached_config = new_config;
-        _ = self.cached_config_epoch.fetchAdd(1, .acq_rel);
         self.cached_config_lock.unlock();
-
-        if (old_opt) |*old| old.deinit();
-
-        log.info("reloadConfigThreadMain: config cache refreshed (epoch={d})", .{
-            self.cached_config_epoch.load(.acquire),
-        });
+        return cloned;
     }
+    self.cached_config_lock.unlock();
+    log.warn("cloneCachedConfig: cache miss — falling back to sync Config.load", .{});
+    return try configpkg.Config.load(alloc);
+}
 
-    /// Update the thread-safe surfaces snapshot. Must be called on the UI thread
-    /// after any modification to self.surfaces.
-    /// The old snapshot is freed while holding the mutex so that CP-thread readers
-    /// that acquire the mutex before reading cannot observe a freed pointer.
-    pub fn updateSurfacesSnapshot(self: *App) !void {
-        const alloc = self.core_app.alloc;
-        const new_snapshot = try alloc.dupe(*Surface, self.surfaces.items);
+/// Reload the cached Config on a detached background thread and swap it
+/// atomically. Safe to call from the UI thread — returns immediately.
+/// Issue #212 P0 #4.
+pub fn reloadConfigAsync(self: *App) void {
+    const thread = std.Thread.spawn(.{}, reloadConfigThreadMain, .{self}) catch |err| {
+        log.warn("reloadConfigAsync: spawn failed err={} — running reload inline", .{err});
+        reloadConfigThreadMain(self);
+        return;
+    };
+    thread.detach();
+}
 
-        self.surfaces_mutex.lock();
-        const old = self.surfaces_snapshot;
-        self.surfaces_snapshot = new_snapshot;
-        // Free old snapshot inside the lock so no reader can access it after free.
-        if (old.len > 0) alloc.free(old);
-        self.surfaces_mutex.unlock();
-    }
+fn reloadConfigThreadMain(self: *App) void {
+    const alloc = self.core_app.alloc;
+    const new_config = configpkg.Config.load(alloc) catch |err| {
+        log.warn("reloadConfigThreadMain: Config.load failed err={}", .{err});
+        return;
+    };
+
+    self.cached_config_lock.lock();
+    var old_opt = self.cached_config;
+    self.cached_config = new_config;
+    _ = self.cached_config_epoch.fetchAdd(1, .acq_rel);
+    self.cached_config_lock.unlock();
+
+    if (old_opt) |*old| old.deinit();
+
+    log.info("reloadConfigThreadMain: config cache refreshed (epoch={d})", .{
+        self.cached_config_epoch.load(.acquire),
+    });
+}
+
+/// Update the thread-safe surfaces snapshot. Must be called on the UI thread
+/// after any modification to self.surfaces.
+/// The old snapshot is freed while holding the mutex so that CP-thread readers
+/// that acquire the mutex before reading cannot observe a freed pointer.
+pub fn updateSurfacesSnapshot(self: *App) !void {
+    const alloc = self.core_app.alloc;
+    const new_snapshot = try alloc.dupe(*Surface, self.surfaces.items);
+
+    self.surfaces_mutex.lock();
+    const old = self.surfaces_snapshot;
+    self.surfaces_snapshot = new_snapshot;
+    // Free old snapshot inside the lock so no reader can access it after free.
+    if (old.len > 0) alloc.free(old);
+    self.surfaces_mutex.unlock();
+}
 
 pub fn init(
     self: *App,
@@ -1060,9 +1058,7 @@ fn tsfGetCursorRect(userdata: ?*anyopaque) os.RECT {
 
     if (cache.cache_valid and !cache_expired and !cursor_moved) {
         const cell_height: i32 = if (cache.last_ime_pos_y > 0) @intFromFloat(cache.last_ime_pos_y - cache.last_ime_pos_y) else 20;
-        log.info("TSF GetTextExt: using cached coordinates cursor=({d},{d}) screen=({d},{d}) [CACHED]", .{
-            cursor_x, cursor_y, cache.last_screen_x, cache.last_screen_y
-        });
+        log.info("TSF GetTextExt: using cached coordinates cursor=({d},{d}) screen=({d},{d}) [CACHED]", .{ cursor_x, cursor_y, cache.last_screen_x, cache.last_screen_y });
         return os.RECT{
             .left = cache.last_screen_x,
             .top = cache.last_screen_y,
@@ -1080,8 +1076,8 @@ fn tsfGetCursorRect(userdata: ?*anyopaque) os.RECT {
 
     // Check if coordinates changed significantly (Phase 3 stabilization)
     const significant_change = !cache.cache_valid or
-                              @abs(pt.x - cache.last_screen_x) > IMECoordinateCache.MIN_POSITION_CHANGE or
-                              @abs(pt.y - cache.last_screen_y) > IMECoordinateCache.MIN_POSITION_CHANGE;
+        @abs(pt.x - cache.last_screen_x) > IMECoordinateCache.MIN_POSITION_CHANGE or
+        @abs(pt.y - cache.last_screen_y) > IMECoordinateCache.MIN_POSITION_CHANGE;
 
     if (significant_change) {
         // Update cache with new coordinates
@@ -1094,16 +1090,9 @@ fn tsfGetCursorRect(userdata: ?*anyopaque) os.RECT {
         cache.last_update_time = current_time;
         cache.cache_valid = true;
 
-        log.info("TSF GetTextExt: UPDATED cache cursor=({d},{d}) ime_pos=({d:.2},{d:.2}) client=({d},{d}) screen=({d},{d}) size=({d:.2}x{d:.2}) cell_h={d} hwnd=0x{x}", .{
-            cursor_x, cursor_y, ime_pos.x, ime_pos.y,
-            client_pt.x, client_pt.y, pt.x, pt.y,
-            ime_pos.width, ime_pos.height, cell_height, @intFromPtr(hwnd)
-        });
+        log.info("TSF GetTextExt: UPDATED cache cursor=({d},{d}) ime_pos=({d:.2},{d:.2}) client=({d},{d}) screen=({d},{d}) size=({d:.2}x{d:.2}) cell_h={d} hwnd=0x{x}", .{ cursor_x, cursor_y, ime_pos.x, ime_pos.y, client_pt.x, client_pt.y, pt.x, pt.y, ime_pos.width, ime_pos.height, cell_height, @intFromPtr(hwnd) });
     } else {
-        log.info("TSF GetTextExt: coordinate change too small ({d},{d}), using cached screen=({d},{d}) [STABILIZED]", .{
-            @abs(pt.x - cache.last_screen_x), @abs(pt.y - cache.last_screen_y),
-            cache.last_screen_x, cache.last_screen_y
-        });
+        log.info("TSF GetTextExt: coordinate change too small ({d},{d}), using cached screen=({d},{d}) [STABILIZED]", .{ @abs(pt.x - cache.last_screen_x), @abs(pt.y - cache.last_screen_y), cache.last_screen_x, cache.last_screen_y });
         // Use cached coordinates for stability
         pt.x = cache.last_screen_x;
         pt.y = cache.last_screen_y;
@@ -1948,6 +1937,24 @@ pub fn activeSurface(self: *App) ?*Surface {
 
 // ---------------------------------------------------------------
 // Control plane capture callbacks
+//
+// CP read protocol: pipe-server client thread → these callbacks →
+// Surface.* getters → renderer_state.mutex. The renderer thread holds
+// that mutex for most of every frame and termio holds it during PTY
+// parsing. A blocking `lock()` here parks the CP client thread on the
+// wait queue indefinitely under sustained PTY load (issue #207
+// hypothesis #1, audit notes/2026-04-26_cp_stall_source_audit.md
+// cause A).
+//
+// Fix: use the `*Locked` (tryLock) variants. On contention, return
+// `error.RendererLocked`; the provider layer in control_plane.zig sets
+// `last_renderer_locked` and the upper layer translates it to the wire
+// response `ERR|BUSY|renderer_locked\n`. The deckpilot poller treats
+// BUSY as "skip this poll, retry later" (correct: data was unavailable
+// for 1 frame, not "session is dead").
+//
+// See `apprt/winui3/App.zig:1034 tsfGetCursorRect` for the canonical
+// tryLock pattern (commit b7de73893, "#212 Tier 4 P0 #1").
 // ---------------------------------------------------------------
 
 fn controlPlaneCaptureState(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) !?ControlPlaneNative.StateSnapshot {
@@ -1957,13 +1964,39 @@ fn controlPlaneCaptureState(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usi
     else
         self.activeSurface();
     const s = surface orelse return null;
+    // Use tryLock variants so we never park the CP pipe-server thread.
+    // If any field reports renderer-locked, propagate
+    // `error.RendererLocked` for the whole snapshot — partial state
+    // would be inconsistent and worse than no state for a poller.
+    const pwd_val = s.pwdLocked(allocator) catch |err| switch (err) {
+        error.RendererLocked => {
+            log.warn("CP captureState: renderer mutex contended (pwd); BUSY tab_idx={?}", .{tab_idx});
+            return error.RendererLocked;
+        },
+        else => |e| return e,
+    };
+    errdefer if (pwd_val) |p| allocator.free(p);
+    const has_selection = s.hasSelectionLocked() orelse {
+        log.warn("CP captureState: renderer mutex contended (hasSelection); BUSY tab_idx={?}", .{tab_idx});
+        return error.RendererLocked;
+    };
+    const at_prompt = s.cursorIsAtPromptLocked() orelse {
+        log.warn("CP captureState: renderer mutex contended (atPrompt); BUSY tab_idx={?}", .{tab_idx});
+        return error.RendererLocked;
+    };
+    const pane_pid_opt = s.panePidLocked() catch |err| switch (err) {
+        error.RendererLocked => {
+            log.warn("CP captureState: renderer mutex contended (panePid); BUSY tab_idx={?}", .{tab_idx});
+            return error.RendererLocked;
+        },
+    };
     return .{
-        .pwd = try s.pwd(allocator),
-        .has_selection = s.hasSelection(),
-        .at_prompt = s.cursorIsAtPrompt(),
+        .pwd = pwd_val,
+        .has_selection = has_selection,
+        .at_prompt = at_prompt,
         .tab_count = self.countSurfaces(),
         .active_tab = self.active_surface_idx,
-        .pane_pid = s.panePid() orelse 0,
+        .pane_pid = pane_pid_opt orelse 0,
     };
 }
 
@@ -1974,7 +2007,13 @@ fn controlPlaneCaptureTail(ctx: *anyopaque, allocator: Allocator, tab_idx: ?usiz
     else
         self.activeSurface();
     const s = surface orelse return null;
-    const viewport = try s.viewportString(allocator);
+    const viewport = s.viewportStringLocked(allocator) catch |err| switch (err) {
+        error.RendererLocked => {
+            log.warn("CP captureTail: renderer mutex contended; BUSY tab_idx={?}", .{tab_idx});
+            return error.RendererLocked;
+        },
+        else => |e| return e,
+    };
     return try allocator.dupe(u8, viewport);
 }
 
@@ -1985,7 +2024,13 @@ fn controlPlaneCaptureHistory(ctx: *anyopaque, allocator: Allocator, tab_idx: ?u
     else
         self.activeSurface();
     const s = surface orelse return null;
-    const history = try s.historyString(allocator);
+    const history = s.historyStringLocked(allocator) catch |err| switch (err) {
+        error.RendererLocked => {
+            log.warn("CP captureHistory: renderer mutex contended; BUSY tab_idx={?}", .{tab_idx});
+            return error.RendererLocked;
+        },
+        else => |e| return e,
+    };
     return try allocator.dupe(u8, history);
 }
 
@@ -1998,19 +2043,29 @@ fn controlPlaneCaptureTabList(ctx: *anyopaque, allocator: Allocator) !?[]u8 {
     errdefer buf.deinit(allocator);
     const writer = buf.writer(allocator);
     try writer.print("LIST_TABS|{d}|{d}\n", .{ tab_count, self.active_surface_idx });
-    
+
     var i: usize = 0;
     while (i < tab_count) : (i += 1) {
         if (self.getSurface(i)) |surface| {
-            const pwd_val = surface.pwd(allocator) catch null;
+            // Issue #207 hyp 1: use *Locked variants per-tab and
+            // gracefully degrade on contention (single TAB row writes
+            // "?" / 0 instead of parking the whole LIST_TABS request).
+            // Listing many tabs is read-heavy; one contended lock must
+            // not stall the rest.
+            const pwd_val = surface.pwdLocked(allocator) catch |err| switch (err) {
+                error.RendererLocked => null,
+                else => |e| return e,
+            };
             defer if (pwd_val) |p| allocator.free(p);
             const title = surface.getTitle() orelse "";
+            const at_prompt = surface.cursorIsAtPromptLocked() orelse false;
+            const has_sel = surface.hasSelectionLocked() orelse false;
             try writer.print("TAB|{d}|{s}|pwd={s}|prompt={d}|selection={d}|id={d}\n", .{
                 i,
                 title,
                 pwd_val orelse "",
-                @as(u8, if (surface.cursorIsAtPrompt()) 1 else 0),
-                @as(u8, if (surface.hasSelection()) 1 else 0),
+                @as(u8, if (at_prompt) 1 else 0),
+                @as(u8, if (has_sel) 1 else 0),
                 surface.tab_id,
             });
         }
