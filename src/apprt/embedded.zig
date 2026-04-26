@@ -2116,7 +2116,7 @@ pub const CAPI = struct {
             const surface = &ptr.core_surface;
             _ = surface.renderer_thread.mailbox.push(
                 .{ .macos_display_id = display_id },
-                .{ .forever = {} },
+                .{ .forever = {} }, // LINT-ALLOW: forever-ok (macOS host UI thread; cross-platform sister of #218, tracked in notes/2026-04-26_forever_push_audit.md, fix is platform-owner)
             );
             surface.renderer_thread.wakeup.notify() catch {};
         }

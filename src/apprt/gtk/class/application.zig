@@ -1459,7 +1459,7 @@ pub const Application = extern struct {
         const priv = self.private();
         _ = priv.core_app.mailbox.push(.{
             .new_window = .{},
-        }, .{ .forever = {} });
+        }, .{ .forever = {} }); // LINT-ALLOW: forever-ok (gtk activate signal, cross-platform sister of #218, tracked in notes/2026-04-26_forever_push_audit.md, fix is platform-owner)
 
         // Call the parent activate method.
         gio.Application.virtual_methods.activate.call(

@@ -202,7 +202,7 @@ pub fn run(self: *App) !void {
         // Wait for Win32 messages indefinitely.
         // wakeup() sends PostMessageW(WM_USER) which wakes this immediately.
         // INFINITE avoids wasteful 16ms polling when idle.
-        _ = os.MsgWaitForMultipleObjectsEx(0, null, os.INFINITE, os.QS_ALLINPUT, os.MWMO_INPUTAVAILABLE);
+        _ = os.MsgWaitForMultipleObjectsEx(0, null, os.INFINITE, os.QS_ALLINPUT, os.MWMO_INPUTAVAILABLE); // LINT-ALLOW: infinite-wait (message pump itself; wakeup() posts WM_USER to break it)
     }
 }
 

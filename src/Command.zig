@@ -473,7 +473,7 @@ pub fn wait(self: Command, block: bool) !Exit {
     if (comptime builtin.os.tag == .windows) {
         // Block until the process exits. This returns immediately if the
         // process already exited.
-        const result = windows.kernel32.WaitForSingleObject(self.pid.?, windows.INFINITE);
+        const result = windows.kernel32.WaitForSingleObject(self.pid.?, windows.INFINITE); // LINT-ALLOW: infinite-wait (legacy entry; #221 added waitTimeout(ms), remaining wait() callers should migrate)
         if (result == windows.WAIT_FAILED) {
             return windows.unexpectedError(windows.kernel32.GetLastError());
         }
