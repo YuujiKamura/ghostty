@@ -237,11 +237,8 @@ pub fn focusGained(
     assert(td.backend == .exec);
     const execdata = &td.backend.exec;
 
-    if (comptime builtin.os.tag == .windows) {
-        // termios timer is not implemented on Windows yet.
-        // TODO: support on Windows
-        return;
-    }
+    // Windows has no termios, so there is nothing to poll.
+    if (comptime builtin.os.tag == .windows) return;
 
     if (!focused) {
         // Flag the timer to end on the next iteration. This is
@@ -1554,14 +1551,7 @@ fn execCommand(
         .direct => |_| (try command.clone(alloc)).direct,
 
         .shell => |v| shell: {
-            // v borrows from caller config. Dupe into our arena so its
-            // lifetime is detached from the caller — otherwise the caller
-            // may free their config before the subprocess spawns, and in
-            // ReleaseSafe the freed memory is filled with 0xAA poison,
-            // producing InvalidWtf8 at CreateProcessW. The .direct arm
-            // above already does this via command.clone(alloc).
-            const v_owned = try alloc.dupeZ(u8, v);
-
+            const v_owned = try alloc.dupeZ(u8, v); // see fork note: detach from caller config (#239)
             var args: std.ArrayList([:0]const u8) = try .initCapacity(alloc, 4);
             defer args.deinit(alloc);
 
