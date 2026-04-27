@@ -33,7 +33,15 @@ const File = std.fs.File;
 const EnvMap = std.process.EnvMap;
 const apprt = @import("apprt.zig");
 
-const log = std.log.scoped(.command);
+// UPSTREAM-SHARED-OK: minimize footprint only (#239)
+// Fork-local Win32 helpers extracted from this file to keep our delta
+// against upstream small. See src/apprt/win32/spawn.zig for the actual
+// implementations of the bounded wait + TerminateProcess escalation
+// (#221) and the WTF-8 encoding wrappers.
+const win32_spawn = if (builtin.os.tag == .windows)
+    @import("apprt/win32/spawn.zig")
+else
+    struct {};
 
 /// Function prototype for a function executed /in the child process/ after the
 /// fork, but before exec'ing the command. If the function returns a u8, the
@@ -260,24 +268,14 @@ fn startPosix(self: *Command, arena: Allocator) !void {
 }
 
 fn startWindows(self: *Command, arena: Allocator) !void {
-    // getEnvMap on Windows returns WTF-8 (surrogate halves allowed).
-    // wtf8ToWtf16Le accepts that superset. If any of these self-owned
-    // strings still fails validation, log the content so we can see
-    // exactly what's malformed rather than just a bare InvalidWtf8.
-    const application_w = std.unicode.wtf8ToWtf16LeAllocZ(arena, self.path) catch |err| {
-        log.err("startWindows: encode path failed err={} path='{s}'", .{ err, self.path });
-        return err;
-    };
-    const cwd_w = if (self.cwd) |cwd| (std.unicode.wtf8ToWtf16LeAllocZ(arena, cwd) catch |err| {
-        log.err("startWindows: encode cwd failed err={} cwd='{s}'", .{ err, cwd });
-        return err;
-    }) else null;
+    // UPSTREAM-SHARED-OK: minimize footprint only (#239)
+    // wtf8 (not utf8) + diagnostic logging on encode failure live in
+    // apprt/win32/spawn.zig.encodeWtf16Z to keep this body small.
+    const application_w = try win32_spawn.encodeWtf16Z(arena, "path", self.path);
+    const cwd_w = if (self.cwd) |cwd| try win32_spawn.encodeWtf16Z(arena, "cwd", cwd) else null;
     const command_line_w = if (self.args.len > 0) b: {
         const command_line = try windowsCreateCommandLine(arena, self.args);
-        break :b std.unicode.wtf8ToWtf16LeAllocZ(arena, command_line) catch |err| {
-            log.err("startWindows: encode command_line failed err={} cmd='{s}'", .{ err, command_line });
-            return err;
-        };
+        break :b try win32_spawn.encodeWtf16Z(arena, "command_line", command_line);
     } else null;
     const env_w = if (self.env) |env_map| try createWindowsEnvBlock(arena, env_map) else null;
 
@@ -413,59 +411,19 @@ fn setupFd(src: File.Handle, target: i32) !void {
     }
 }
 
-/// Default grace period (in milliseconds) for waitTimeout() before
-/// escalating to TerminateProcess. See YuujiKamura/ghostty#221: a
-/// kernel-frozen / suspended child must not be allowed to hang
-/// ghostty's shutdown indefinitely.
-pub const default_wait_timeout_ms: u32 = 5000;
+// UPSTREAM-SHARED-OK: minimize footprint only (#239)
+// Bounded-wait + TerminateProcess escalation for #221 lives in
+// apprt/win32/spawn.zig. The decl below is the public surface: a
+// constant for callers that need the default grace, and a thin
+// Command-method wrapper that translates the spawn-local Exit type
+// into Command.Exit.
+pub const default_wait_timeout_ms: u32 = win32_spawn.default_wait_timeout_ms;
 
-/// Windows-only: wait up to `timeout_ms` for the child handle to be
-/// signalled. If the wait times out, TerminateProcess is called and
-/// we briefly wait for the kernel to flush the handle so we can
-/// observe an exit code. This is the fix for YuujiKamura/ghostty#221:
-/// the previous unbounded WaitForSingleObject(INFINITE) would hang
-/// shutdown forever if the child was suspended / debugger-attached /
-/// otherwise unable to reach exit.
+/// Windows-only bounded wait. See `apprt/win32/spawn.zig` for the
+/// full rationale (YuujiKamura/ghostty#221).
 pub fn waitTimeout(self: Command, timeout_ms: u32) !Exit {
-    if (comptime builtin.os.tag != .windows) {
-        @compileError("waitTimeout is Windows-only; use wait() on POSIX");
-    }
-
-    const handle = self.pid.?;
-    const result = windows.kernel32.WaitForSingleObject(handle, timeout_ms);
-    if (result == windows.WAIT_FAILED) {
-        return windows.unexpectedError(windows.kernel32.GetLastError());
-    }
-
-    if (result == std.os.windows.WAIT_TIMEOUT) {
-        // Child is unresponsive within the grace period. This is the
-        // #221 case: kernel-frozen, suspended, or otherwise unable to
-        // reach exit. We must escalate by force-terminating, otherwise
-        // ghostty's shutdown hangs forever.
-        log.warn(
-            "child unresponsive after {}ms; calling TerminateProcess",
-            .{timeout_ms},
-        );
-        if (windows.kernel32.TerminateProcess(handle, 1) == 0) {
-            return windows.unexpectedError(windows.kernel32.GetLastError());
-        }
-
-        // Brief wait for the kernel to actually flush the process so
-        // GetExitCodeProcess returns a real status instead of
-        // STILL_ACTIVE. 1s is generous for a forced termination.
-        const post_kill = windows.kernel32.WaitForSingleObject(handle, 1000);
-        if (post_kill == windows.WAIT_FAILED) {
-            return windows.unexpectedError(windows.kernel32.GetLastError());
-        }
-    }
-
-    var exit_code: windows.DWORD = undefined;
-    const has_code = windows.kernel32.GetExitCodeProcess(handle, &exit_code) != 0;
-    if (!has_code) {
-        return windows.unexpectedError(windows.kernel32.GetLastError());
-    }
-
-    return .{ .Exited = exit_code };
+    const exit = try win32_spawn.waitTimeout(self.pid.?, timeout_ms);
+    return .{ .Exited = exit.Exited };
 }
 
 /// Wait for the command to exit and return information about how it exited.
@@ -537,58 +495,11 @@ fn createNullDelimitedEnvMap(arena: mem.Allocator, env_map: *const EnvMap) ![:nu
 // Copied from Zig. This is a publicly exported function but there is no
 // way to get it from the std package.
 fn createWindowsEnvBlock(allocator: mem.Allocator, env_map: *const EnvMap) ![]u16 {
-    // count bytes needed
-    const max_chars_needed = x: {
-        var max_chars_needed: usize = 4; // 4 for the final 4 null bytes
-        var it = env_map.iterator();
-        while (it.next()) |pair| {
-            // +1 for '='
-            // +1 for null byte
-            max_chars_needed += pair.key_ptr.len + pair.value_ptr.len + 2;
-        }
-        break :x max_chars_needed;
-    };
-    const result = try allocator.alloc(u16, max_chars_needed);
-    errdefer allocator.free(result);
-
-    var it = env_map.iterator();
-    var i: usize = 0;
-    var skipped: usize = 0;
-    while (it.next()) |pair| {
-        // Defensive: inherited environment may contain entries whose bytes
-        // aren't valid WTF-8 (e.g., third-party apps writing raw code-page
-        // bytes into env vars). Skip such entries rather than failing the
-        // whole spawn — losing one env var is better than a non-functional
-        // terminal.
-        const entry_start = i;
-        const key_len = std.unicode.wtf8ToWtf16Le(result[i..], pair.key_ptr.*) catch |err| {
-            log.warn("env skip: invalid key err={} key_len={d}", .{ err, pair.key_ptr.len });
-            skipped += 1;
-            continue;
-        };
-        i += key_len;
-        result[i] = '=';
-        i += 1;
-        const val_len = std.unicode.wtf8ToWtf16Le(result[i..], pair.value_ptr.*) catch |err| {
-            log.warn("env skip: invalid value err={} key='{s}' val_len={d}", .{ err, pair.key_ptr.*, pair.value_ptr.len });
-            skipped += 1;
-            i = entry_start; // rewind past the partially-written key + '='
-            continue;
-        };
-        i += val_len;
-        result[i] = 0;
-        i += 1;
-    }
-    if (skipped > 0) log.warn("createWindowsEnvBlock: skipped {d} env var(s) with invalid encoding", .{skipped});
-    result[i] = 0;
-    i += 1;
-    result[i] = 0;
-    i += 1;
-    result[i] = 0;
-    i += 1;
-    result[i] = 0;
-    i += 1;
-    return try allocator.realloc(result, i);
+    // UPSTREAM-SHARED-OK: minimize footprint only (#239)
+    // Body delegated to apprt/win32/spawn.zig.encodeEnvBlock so the
+    // fork-local skip-on-invalid-WTF8 logic doesn't sprawl into this file.
+    // Signature kept identical to upstream so callers are unaffected.
+    return win32_spawn.encodeEnvBlock(allocator, env_map);
 }
 
 /// Copied from Zig. This function could be made public in child_process.zig instead.
@@ -991,50 +902,12 @@ fn testingStart(self: *Command) !void {
     };
 }
 
-// Repro for YuujiKamura/ghostty#221:
-//   src/Command.zig wait() (Windows path) called WaitForSingleObject with
-//   INFINITE, so a kernel-frozen / suspended child would hang ghostty's
-//   shutdown forever. The fix is a bounded wait + TerminateProcess
-//   escalation, exposed via waitTimeout(). This test spawns a long-running
-//   ping (~60s) and proves waitTimeout() returns within the bounded grace
-//   instead of waiting for the child to exit naturally, and that the child
-//   is reaped after escalation.
-test "Command: wait timeout terminates unresponsive child (#221)" {
-    if (builtin.os.tag != .windows) return error.SkipZigTest;
-
-    var cmd: Command = .{
-        // ping -n 60 127.0.0.1 keeps the child alive ~60s. From our wait's
-        // point of view that handle is "stuck" for the duration of the test
-        // grace, which is the same code-path a kernel-suspended child takes:
-        // WaitForSingleObject returns WAIT_TIMEOUT and we must escalate.
-        .path = "C:\\Windows\\System32\\ping.exe",
-        .args = &.{ "C:\\Windows\\System32\\ping.exe", "-n", "60", "127.0.0.1" },
-        .os_pre_exec = null,
-        .rt_pre_exec = null,
-        .rt_post_fork = null,
-        .rt_pre_exec_info = undefined,
-        .rt_post_fork_info = undefined,
-    };
-
-    try cmd.testingStart();
-    try testing.expect(cmd.pid != null);
-
-    const grace_ms: u32 = 500;
-    var timer = try std.time.Timer.start();
-    const exit = try cmd.waitTimeout(grace_ms);
-    const elapsed_ns = timer.read();
-
-    // Must return within grace + slack (allow 4s for TerminateProcess +
-    // post-terminate cleanup wait + scheduler jitter on a busy CI box).
-    const slack_ns: u64 = 4 * std.time.ns_per_s;
-    const budget_ns: u64 = @as(u64, grace_ms) * std.time.ns_per_ms + slack_ns;
-    try testing.expect(elapsed_ns < budget_ns);
-
-    // Child must be reaped (exit code is observable). ping was forcibly
-    // terminated (TerminateProcess passes exit code 1 in our fix); a normal
-    // ping completion would be 0. Either way the handle is signalled, which
-    // is the actual contract — tolerate either to keep the test resilient if
-    // the process happened to race to exit.
-    try testing.expect(exit == .Exited);
-    _ = exit.Exited;
+// UPSTREAM-SHARED-OK: minimize footprint only (#239)
+// #221 repro test moved to apprt/win32/spawn.zig (kept alongside the
+// extracted waitTimeout implementation it exercises). Pulled in here so
+// the test still runs as part of `zig build test`'s Command.zig pass.
+test {
+    if (builtin.os.tag == .windows) {
+        _ = @import("apprt/win32/spawn.zig");
+    }
 }
