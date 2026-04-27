@@ -132,16 +132,21 @@ pub const Message = union(enum) {
 };
 
 /// A surface mailbox.
+///
+/// Phase 2.3 (#232): the underlying `App.Mailbox` is a `BoundedMailbox`
+/// with type-baked drop-on-full semantics. The bare `push` here mirrors
+/// that contract; worker callsites that want to wait for capacity opt
+/// in via `pushTimeout(msg, ms)`.
 pub const Mailbox = struct {
     surface: *Surface,
     app: App.Mailbox,
 
-    /// Send a message to the surface.
+    /// Send a message to the surface using the type-baked default
+    /// timeout (drop on full).
     pub fn push(
         self: Mailbox,
         msg: Message,
-        timeout: App.Mailbox.Queue.Timeout,
-    ) App.Mailbox.Queue.Size {
+    ) App.Mailbox.Queue.PushResult {
         // Surface message sending is actually implemented on the app
         // thread, so we have to rewrap the message with our surface
         // pointer and send it to the app thread.
@@ -150,7 +155,23 @@ pub const Mailbox = struct {
                 .surface = self.surface,
                 .message = msg,
             },
-        }, timeout);
+        });
+    }
+
+    /// Send a message with an explicit per-call timeout. Worker threads
+    /// (termio, renderer health) that can tolerate a bounded wait should
+    /// call this rather than the bare `push`.
+    pub fn pushTimeout(
+        self: Mailbox,
+        msg: Message,
+        timeout_ms: u32,
+    ) App.Mailbox.Queue.PushResult {
+        return self.app.pushTimeout(.{
+            .surface_message = .{
+                .surface = self.surface,
+                .message = msg,
+            },
+        }, timeout_ms);
     }
 };
 

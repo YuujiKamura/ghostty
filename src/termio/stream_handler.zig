@@ -128,10 +128,22 @@ pub const StreamHandler = struct {
     ) void {
         // See messageWriter which has similar logic and explains why
         // we may have to do this.
-        if (self.surface_mailbox.push(msg, .{ .instant = {} }) == 0) {
-            self.renderer_state.mutex.unlock();
-            defer self.renderer_state.mutex.lock();
-            _ = self.surface_mailbox.push(msg, .{ .forever = {} });
+        //
+        // Phase 2.3 (#232): apprt.surface.Mailbox now wraps a BoundedMailbox
+        // with type-baked drop-on-full default. The fast path is the bare
+        // `push`. On saturation we release the renderer mutex and retry
+        // with a 5s bounded pushTimeout instead of the legacy `.forever`,
+        // preventing a wedged app loop from parking the termio worker.
+        if (self.surface_mailbox.push(msg) == .ok) return;
+
+        self.renderer_state.mutex.unlock();
+        defer self.renderer_state.mutex.lock();
+        const fallback = self.surface_mailbox.pushTimeout(msg, 5_000);
+        if (fallback != .ok) {
+            log.warn(
+                "surface message dropped on fallback path result={s}",
+                .{@tagName(fallback)},
+            );
         }
     }
 

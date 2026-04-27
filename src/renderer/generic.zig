@@ -1388,11 +1388,12 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             // After the graphics API is complete (so we defer) we want to
             // update our scrollbar state.
             defer if (self.scrollbar_dirty) {
-                // Fail instantly if the surface mailbox if full, we'll just
+                // Fail instantly if the surface mailbox is full, we'll just
                 // get it on the next frame.
+                // Phase 2.3 (#232): bare push() is the new instant default.
                 if (self.surface_mailbox.push(.{
                     .scrollbar = self.scrollbar,
-                }, .instant) > 0) self.scrollbar_dirty = false;
+                }) == .ok) self.scrollbar_dirty = false;
             };
 
             // Let our graphics API do any bookkeeping, etc.
@@ -1683,9 +1684,19 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
                 // Our health value changed, so we notify the surface so that it
                 // can do something about it.
-                _ = self.surface_mailbox.push(.{
+                //
+                // Phase 2.3 (#232): apprt.surface.Mailbox now wraps a
+                // BoundedMailbox. This is the renderer worker thread, so we
+                // opt into a 5s bounded pushTimeout instead of the legacy
+                // `.forever`. A dropped renderer_health update only delays
+                // the surface's reaction by the next health-change cycle;
+                // preferable to parking the renderer on a wedged app loop.
+                if (self.surface_mailbox.pushTimeout(.{
                     .renderer_health = health,
-                }, .{ .forever = {} });
+                }, 5_000) != .ok) {
+                    // log scope inherited from the generic.zig file's scope
+                    log.warn("renderer_health update dropped (app mailbox full or closed)", .{});
+                }
             }
 
             // Always release our semaphore

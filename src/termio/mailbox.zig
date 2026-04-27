@@ -3,7 +3,9 @@ const Allocator = std.mem.Allocator;
 const xev = @import("../global.zig").xev;
 const renderer = @import("../renderer.zig");
 const termio = @import("../termio.zig");
-const BlockingQueue = @import("../datastruct/main.zig").BlockingQueue;
+const datastruct = @import("../datastruct/main.zig");
+const BlockingQueue = datastruct.BlockingQueue;
+const BoundedMailbox = datastruct.BoundedMailbox;
 
 const log = std.log.scoped(.io_writer);
 
@@ -11,7 +13,14 @@ const log = std.log.scoped(.io_writer);
 /// Typically used by a multi-threaded application. The capacity is
 /// hardcoded to a value that empirically has made sense for Ghostty usage
 /// but I'm open to changing it with good arguments.
-const Queue = BlockingQueue(termio.Message, 64);
+///
+/// Phase 2.3 (#232): migrated to `BoundedMailbox` with type-baked drop-on-full
+/// semantics. The producer is the surface (UI-reachable via input handling
+/// and the stream handler). The fast-path `send` calls bare `push`; on
+/// saturation it falls back to a 5s bounded `pushTimeout` after releasing
+/// the renderer mutex, instead of the legacy `.forever` that could park
+/// the producer permanently if the termio thread died.
+const Queue = BoundedMailbox(termio.Message, 64, 0);
 
 /// The location to where write-related messages are sent.
 pub const Mailbox = union(enum) {
@@ -67,7 +76,8 @@ pub const Mailbox = union(enum) {
             .spsc => |*mb| send: {
                 // Try to write to the queue with an instant timeout. This is the
                 // fast path because we can queue without a lock.
-                if (mb.queue.push(msg, .{ .instant = {} }) > 0) break :send;
+                // Phase 2.3 (#232): bare push() is the new instant (default 0).
+                if (mb.queue.push(msg) == .ok) break :send;
 
                 // If we enter this conditional, the queue is full. We wake up
                 // the writer thread so that it can process messages to clear up
@@ -87,9 +97,20 @@ pub const Mailbox = union(enum) {
                 // are other messages in the writer queue (resize, focus) that
                 // could acquire the lock. This is why we have to release our lock
                 // here.
+                //
+                // Phase 2.3 (#232): bridge with bounded pushTimeout(., 5000)
+                // instead of the legacy `.forever`. A wedged termio thread
+                // would otherwise park the producer (UI-reachable via input
+                // handling) permanently — the #218 hang shape.
                 if (mutex) |m| m.unlock();
                 defer if (mutex) |m| m.lock();
-                _ = mb.queue.push(msg, .{ .forever = {} });
+                const fallback = mb.queue.pushTimeout(msg, 5_000);
+                if (fallback != .ok) {
+                    log.warn(
+                        "termio mailbox push fallback dropped result={s}",
+                        .{@tagName(fallback)},
+                    );
+                }
             },
         }
     }

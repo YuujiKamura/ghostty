@@ -12,7 +12,9 @@ const Surface = @import("Surface.zig");
 const input = @import("input.zig");
 const configpkg = @import("config.zig");
 const Config = configpkg.Config;
-const BlockingQueue = @import("datastruct/main.zig").BlockingQueue;
+const datastruct = @import("datastruct/main.zig");
+const BlockingQueue = datastruct.BlockingQueue;
+const BoundedMailbox = datastruct.BoundedMailbox;
 const renderer = @import("renderer.zig");
 const font = @import("font/main.zig");
 
@@ -236,7 +238,11 @@ pub fn needsConfirmQuit(self: *const App) bool {
 
 /// Drain the mailbox.
 fn drainMailbox(self: *App, rt_app: *apprt.App) !void {
-    while (self.mailbox.pop()) |message| {
+    // Phase 2.3 (#232): `BoundedMailbox.pop()` returns a tagged union
+    // (`.value | .empty | .shutdown`). `popOrNull` is the optional-style
+    // adapter that flattens both `.empty` and `.shutdown` into `null`,
+    // preserving the existing drain loop semantics.
+    while (self.mailbox.popOrNull()) |message| {
         if (comptime std.log.logEnabled(.debug, .app)) {
             switch (message) {
                 // these tend to be way too verbose for normal debugging
@@ -576,20 +582,41 @@ pub const Message = union(enum) {
 };
 
 /// Mailbox is the way that other threads send the app thread messages.
+///
+/// Phase 2.3 (#232): migrated to `BoundedMailbox` with a type-baked
+/// `default_timeout_ms = 0` (drop on full). The app mailbox is the
+/// *terminal* destination for both UI-thread events (apprt callbacks
+/// like GTK `activate`, the embedded host's `display_id` setter, etc.)
+/// and worker-thread events (termio `child_exited`, renderer health).
+/// Any of these threads must never park indefinitely on a saturated
+/// app mailbox: the UI-thread case is the #218 hang, the worker-thread
+/// case is the #232 dead-consumer hang. Drop-on-full is the safer
+/// default; worker callsites that *want* to wait for capacity opt in
+/// via `pushTimeout(value, ms)` explicitly.
 pub const Mailbox = struct {
     /// The type used for sending messages to the app thread.
-    pub const Queue = BlockingQueue(Message, 64);
+    pub const Queue = BoundedMailbox(Message, 64, 0);
 
     rt_app: *apprt.App,
     mailbox: *Queue,
 
-    /// Send a message to the surface.
-    pub fn push(self: Mailbox, msg: Message, timeout: Queue.Timeout) Queue.Size {
-        const result = self.mailbox.push(msg, timeout);
+    /// Send a message to the surface using the type-baked default
+    /// timeout (drop on full).
+    pub fn push(self: Mailbox, msg: Message) Queue.PushResult {
+        const result = self.mailbox.push(msg);
 
         // Wake up our app loop
         self.rt_app.wakeup();
 
+        return result;
+    }
+
+    /// Send a message with an explicit per-call timeout. Worker threads
+    /// that can tolerate a bounded wait should call this rather than
+    /// the bare `push`.
+    pub fn pushTimeout(self: Mailbox, msg: Message, timeout_ms: u32) Queue.PushResult {
+        const result = self.mailbox.pushTimeout(msg, timeout_ms);
+        self.rt_app.wakeup();
         return result;
     }
 };

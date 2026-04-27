@@ -296,8 +296,10 @@ fn drainMailbox(
     const data = &cb.data;
 
     // If we're draining, we just drain the mailbox and return.
+    // Phase 2.3 (#232): `popOrNull` flattens both `.empty` and `.shutdown`
+    // into `null` to preserve the existing drain semantics.
     if (self.flags.drain) {
-        while (mailbox.pop()) |_| {}
+        while (mailbox.popOrNull()) |_| {}
         return;
     }
 
@@ -305,7 +307,7 @@ fn drainMailbox(
     // expectation is that all our message handlers will be non-blocking
     // ENOUGH to not mess up throughput on producers.
     var redraw: bool = false;
-    while (mailbox.pop()) |message| {
+    while (mailbox.popOrNull()) |message| {
         // If we have a message we always redraw
         redraw = true;
 
@@ -512,10 +514,10 @@ fn selectionScrollCallback(
     const cb = cb_ orelse return .disarm;
     const self = cb.self;
 
-    // Send the tick to the main surface
+    // Send the tick to the main surface.
+    // Phase 2.3 (#232): bare push() is the new instant default.
     _ = cb.io.surface_mailbox.push(
         .{ .selection_scroll_tick = self.scroll_active },
-        .{ .instant = {} },
     );
 
     if (self.scroll_active) self.scroll.run(

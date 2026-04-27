@@ -16,7 +16,9 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const Mutex = std.Thread.Mutex;
 const xev = @import("../../global.zig").xev;
 const internal_os = @import("../../os/main.zig");
-const BlockingQueue = @import("../../datastruct/main.zig").BlockingQueue;
+const datastruct = @import("../../datastruct/main.zig");
+const BlockingQueue = datastruct.BlockingQueue;
+const BoundedMailbox = datastruct.BoundedMailbox;
 const MessageData = @import("../../datastruct/main.zig").MessageData;
 const point = @import("../point.zig");
 const FlattenedHighlight = @import("../highlight.zig").Flattened;
@@ -178,7 +180,7 @@ fn threadMain_(self: *Thread) !void {
     while (true) {
         // If our loop is canceled then we drain our messages and quit.
         if (self.loop.stopped()) {
-            while (self.mailbox.pop()) |message| {
+            while (self.mailbox.popOrNull()) |message| {
                 log.debug("mailbox message ignored during shutdown={}", .{message});
             }
 
@@ -238,7 +240,9 @@ fn threadMain_(self: *Thread) !void {
 
 /// Drain the mailbox.
 fn drainMailbox(self: *Thread) !void {
-    while (self.mailbox.pop()) |message| {
+    // Phase 2.3 (#232): `popOrNull` flattens both `.empty` and `.shutdown`
+    // results into `null` to preserve the existing drain semantics.
+    while (self.mailbox.popOrNull()) |message| {
         log.debug("mailbox message={}", .{message});
         switch (message) {
             .change_needle => |v| {
@@ -447,7 +451,13 @@ pub const Options = struct {
 pub const EventCallback = *const fn (event: Event, userdata: ?*anyopaque) void;
 
 /// The type used for sending messages to the thread.
-pub const Mailbox = BlockingQueue(Message, 64);
+///
+/// Phase 2.3 (#232): migrated to `BoundedMailbox` with type-baked
+/// drop-on-full semantics. The producer is the surface UI thread
+/// (via `performBindingAction(.search)` and `.navigate_search`), so
+/// any bounded wait would risk reintroducing the #218 hang. Tests
+/// that need to push from a controlled producer use `pushTimeout`.
+pub const Mailbox = BoundedMailbox(Message, 64, 0);
 
 /// The messages that can be sent to the thread.
 pub const Message = union(enum) {
@@ -871,13 +881,14 @@ test {
         .{&thread},
     );
 
-    // Start our search
-    _ = thread.mailbox.push(
+    // Start our search. Test producer can wait briefly for capacity;
+    // the queue is fresh so this should hit the non-blocking path.
+    _ = thread.mailbox.pushTimeout(
         .{ .change_needle = try .init(
             alloc,
             @as([]const u8, "world"),
         ) },
-        .forever,
+        5_000,
     );
     try thread.wakeup.notify();
 

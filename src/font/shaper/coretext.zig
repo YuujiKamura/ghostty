@@ -282,10 +282,16 @@ pub const Shaper = struct {
         // Send the items. If the send succeeds then we wake up the
         // thread to process the items. If the send fails then do a manual
         // cleanup.
-        if (self.cf_release_thread.mailbox.push(.{ .release = .{
+        //
+        // Phase 2.3 (#232): cf_release_thread.Mailbox is BoundedMailbox
+        // with `null` default timeout — we're on the renderer worker
+        // thread, so we opt into a 5s bounded wait. The legacy `.forever`
+        // here would have parked the renderer if the cf-release thread
+        // had died, holding GPU resources indefinitely.
+        if (self.cf_release_thread.mailbox.pushTimeout(.{ .release = .{
             .refs = items,
             .alloc = self.alloc,
-        } }, .{ .forever = {} }) != 0) {
+        } }, 5_000) == .ok) {
             self.cf_release_thread.wakeup.notify() catch |err| {
                 log.warn(
                     "error notifying cf release thread to wake up, may stall err={}",

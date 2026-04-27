@@ -288,12 +288,21 @@ fn processExitCommon(td: *termio.Termio.ThreadData, exit_code: u32) void {
 
     // We always notify the surface immediately that the child has
     // exited and some metadata about the exit.
-    _ = td.surface_mailbox.push(.{
+    //
+    // Phase 2.3 (#232): apprt.surface.Mailbox now wraps a BoundedMailbox.
+    // This is the termio worker thread, so we use a 5s bounded pushTimeout
+    // instead of the legacy `.forever`. A dropped child_exited is observable
+    // (the surface won't immediately know the child died) but five seconds
+    // of app-mailbox stall is preferable to the termio thread parking
+    // permanently if the app loop is wedged.
+    if (td.surface_mailbox.pushTimeout(.{
         .child_exited = .{
             .exit_code = exit_code,
             .runtime_ms = runtime_ms orelse 0,
         },
-    }, .{ .forever = {} });
+    }, 5_000) != .ok) {
+        log.warn("child_exited dropped (app mailbox full or closed)", .{});
+    }
 }
 
 fn processExit(
@@ -381,11 +390,18 @@ fn termiosTimer(
         }
 
         // We have to notify the surface that we're in password input.
-        // We must block on this because the balanced true/false state
-        // of this is critical to apprt behavior.
-        _ = td.surface_mailbox.push(.{
+        //
+        // Phase 2.3 (#232): the legacy `.forever` here was load-bearing for
+        // the balanced true/false state of password mode. We bridge with a
+        // 5s bounded pushTimeout — under normal conditions the app mailbox
+        // is never full long enough to matter, but if it is, surfacing
+        // stale password state via warn log is preferable to parking the
+        // termios timer thread forever on a dead app loop.
+        if (td.surface_mailbox.pushTimeout(.{
             .password_input = password_input,
-        }, .{ .forever = {} });
+        }, 5_000) != .ok) {
+            log.warn("password_input update dropped (app mailbox full or closed)", .{});
+        }
     }
 
     // Repeat the timer

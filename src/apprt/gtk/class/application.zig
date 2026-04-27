@@ -1461,10 +1461,13 @@ pub const Application = extern struct {
         // the app mailbox rarely fills in practice, a hang here at
         // activation would be fatal at startup with no recovery path.
         // Sister of #218/#219 (#224).
+        // UPSTREAM-SHARED-OK: BoundedMailbox migration extends Phase 2 (#232)
+        // forces App.Mailbox.Queue.push signature change; GTK callsite updated
+        // to match the new return type. Drop-on-full semantics preserved.
         const priv = self.private();
         if (priv.core_app.mailbox.push(.{
             .new_window = .{},
-        }, .{ .instant = {} }) == 0) {
+        }) != .ok) {
             log.warn("new_window event dropped (app mailbox full)", .{});
         }
 
@@ -1805,7 +1808,13 @@ pub const Application = extern struct {
         _: ?*glib.Variant,
         self: *Self,
     ) callconv(.c) void {
-        _ = self.core().mailbox.push(.open_config, .forever);
+        // UPSTREAM-SHARED-OK: BoundedMailbox migration extends Phase 2 (#232).
+        // GTK action handlers run on the GTK UI thread; the legacy `.forever`
+        // here was a hang vector (sister of #218). Drop-on-full + warn is the
+        // safer default for any UI-reachable producer.
+        if (self.core().mailbox.push(.open_config) != .ok) {
+            log.warn("open_config dropped (app mailbox full)", .{});
+        }
     }
 
     fn actionPresentSurface(
@@ -1830,15 +1839,19 @@ pub const Application = extern struct {
         if (surface_id == 0) return;
         const surface = self.core().findSurfaceByID(surface_id) orelse return;
 
-        _ = self.core().mailbox.push(
+        // UPSTREAM-SHARED-OK: BoundedMailbox migration extends Phase 2 (#232).
+        // GTK action handler — drop-on-full + warn for the same reason as
+        // actionOpenConfig.
+        if (self.core().mailbox.push(
             .{
                 .surface_message = .{
                     .surface = surface,
                     .message = .present_surface,
                 },
             },
-            .forever,
-        );
+        ) != .ok) {
+            log.warn("present_surface dropped (app mailbox full)", .{});
+        }
     }
 
     //----------------------------------------------------------------

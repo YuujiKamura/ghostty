@@ -1508,15 +1508,19 @@ fn searchCallback_(
                     },
                 }
 
-                // Send the selected index to the surface mailbox.
-                // surfaceMailbox() is `apprt.surface.Mailbox` (App-thread
-                // wrapper), not the renderer.Thread.Mailbox migrated in
-                // this commit, so it still uses the legacy `.forever`
-                // contract. Phase 2.3 will migrate App.Mailbox.
-                _ = self.surfaceMailbox().push(
+                // Phase 2.3 (#232): App.Mailbox is now BoundedMailbox(.., 0).
+                // We're on the search worker thread, so we opt into a 5s
+                // bounded wait via `pushTimeout` instead of relying on
+                // the type-baked drop-on-full default. A dropped
+                // search_selected only delays the UI update of the
+                // selection counter; preferable to parking the search
+                // thread on a wedged app loop.
+                if (self.surfaceMailbox().pushTimeout(
                     .{ .search_selected = sel.idx },
-                    .forever,
-                );
+                    5_000,
+                ) != .ok) {
+                    log.warn("search_selected dropped (app mailbox full or closed)", .{});
+                }
             } else {
                 // Reset our selected match (no payload to free).
                 switch (self.renderer_thread.mailbox.pushTimeout(
@@ -1530,10 +1534,12 @@ fn searchCallback_(
                 }
 
                 // Reset the selected index (App.Mailbox; see comment above).
-                _ = self.surfaceMailbox().push(
+                if (self.surfaceMailbox().pushTimeout(
                     .{ .search_selected = null },
-                    .forever,
-                );
+                    5_000,
+                ) != .ok) {
+                    log.warn("search_selected reset dropped (app mailbox full or closed)", .{});
+                }
             }
 
             try self.renderer_thread.wakeup.notify();
@@ -1541,10 +1547,12 @@ fn searchCallback_(
 
         .total_matches => |total| {
             // App.Mailbox; see comment in selected_match above.
-            _ = self.surfaceMailbox().push(
+            if (self.surfaceMailbox().pushTimeout(
                 .{ .search_total = total },
-                .forever,
-            );
+                5_000,
+            ) != .ok) {
+                log.warn("search_total dropped (app mailbox full or closed)", .{});
+            }
         },
 
         // When we quit, tell our renderer to reset any search state.
@@ -1576,14 +1584,18 @@ fn searchCallback_(
             try self.renderer_thread.wakeup.notify();
 
             // Reset search totals in the surface
-            _ = self.surfaceMailbox().push(
+            if (self.surfaceMailbox().pushTimeout(
                 .{ .search_total = null },
-                .forever,
-            );
-            _ = self.surfaceMailbox().push(
+                5_000,
+            ) != .ok) {
+                log.warn("search_total reset dropped (app mailbox full or closed)", .{});
+            }
+            if (self.surfaceMailbox().pushTimeout(
                 .{ .search_selected = null },
-                .forever,
-            );
+                5_000,
+            ) != .ok) {
+                log.warn("search_selected reset dropped (app mailbox full or closed)", .{});
+            }
         },
 
         // Unhandled, so far.
@@ -5463,25 +5475,31 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
                 break :search;
             }
 
-            _ = s.state.mailbox.push(
-                .{ .change_needle = try .init(
-                    self.alloc,
-                    text,
-                ) },
-                .forever,
-            );
+            // Phase 2.3 (#232): search.Thread.Mailbox is BoundedMailbox(.., 0).
+            // We're on the UI thread (binding action handler), so the
+            // bare push is non-blocking and drops on full. Search input
+            // saturation only delays the next match update; it must
+            // never park the UI thread.
+            const needle = try terminal.search.Thread
+                .Message.WriteReq.init(self.alloc, text);
+            if (s.state.mailbox.push(.{ .change_needle = needle }) != .ok) {
+                log.warn("search change_needle dropped (search mailbox full or closed)", .{});
+                needle.deinit();
+            }
             s.state.wakeup.notify() catch {};
         },
 
         .navigate_search => |nav| {
             const s: *Search = if (self.search) |*s| s else return false;
-            _ = s.state.mailbox.push(
+            // Phase 2.3 (#232): see comment in `.search` above.
+            if (s.state.mailbox.push(
                 .{ .select = switch (nav) {
                     .next => .next,
                     .previous => .prev,
                 } },
-                .forever,
-            );
+            ) != .ok) {
+                log.warn("search navigate dropped (search mailbox full or closed)", .{});
+            }
             s.state.wakeup.notify() catch {};
         },
 
