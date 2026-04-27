@@ -31,3 +31,13 @@ pre-push:
       # Skip with LEFTHOOK_EXCLUDE=uia-smoke if you've already run it.
       run: pwsh -NoProfile -File tests/winui3/run-all-tests.ps1 -SkipBuild
       fail_text: "UIA smoke failed. Run 'pwsh -NoProfile -File tests/winui3/run-all-tests.ps1 -SkipBuild' to reproduce."
+    fork-isolation:
+      # Refuses upstream-shared edits without UPSTREAM-SHARED-OK justification.
+      # See AGENTS.md Operating Rule #7 + docs/apprt-contract.md for the rule;
+      # see notes/2026-04-27_fork_isolation_audit.md for the existing-violation
+      # backlog (those are grandfathered; the lint only flags NEW divergence
+      # since fork/main).
+      # Bypass with LEFTHOOK_EXCLUDE=fork-isolation only when intentionally
+      # landing an audit doc or a meta-change that legitimately spans the tree.
+      run: bash tools/lint-fork-isolation.sh --quiet
+      fail_text: "apprt contract violation. See docs/apprt-contract.md or run 'bash tools/lint-fork-isolation.sh' for details."

@@ -55,6 +55,13 @@ See issue #237 for the original incident.
 4. Do not keep stale references to retired checks such as `winui3-inspect-event-params.ps1`.
 5. Do not rediscover WinUI3 behavior from scratch if it is already captured in `docs/winui3-playbook.md` or `docs/winui3-known-good-apis.md`.
 6. Any change to mailbox / blocking queue / Win32 wait / pipe / `SendMessage` code MUST be reviewed against the [`docs/deadlock-discipline.md`](docs/deadlock-discipline.md) checklist. Pre-push lint (`tools/lint-deadlock.sh`) catches mechanical violations; the doc covers the intent.
+7. **apprt contract**: `src/apprt/<platform>/` is upstream's explicit extension point — fork-driven changes belong inside `src/apprt/winui3/` (or `src/apprt/win32/`). Allowed fork-owned paths: `src/apprt/winui3/`, `src/apprt/win32/`, `src/apprt/win32_replacement/`, `vendor/zig-control-plane/`, `xaml/`, `tests/winui3/`, `scripts/`, `docs/`, `tools/`, `notes/`, `.github/`, `.dispatch/`, `.kiro/`, `.githooks/`, `.config/`, `lefthook.yml`, `AGENTS.md`, `CLAUDE.md`, `NON-NEGOTIABLES.md`, `AI_POLICY.md`, `APPRT_INTERFACE.md`, `PLAN.md`, `CODEOWNERS`, `OWNERS.md`, `build-winui3.sh`, plus top-level `*.md` and scratch files.
+
+   Editing anything outside the fork-owned path list requires:
+   - **Maintainer self-check** in commit message body: "If upstream received this as a PR, would they merge it? If no, why is wrapper-isolation impossible?"
+   - `// UPSTREAM-SHARED-OK: <reason>` marker on the modified line(s), or `UPSTREAM-SHARED-OK: <reason>` trailer in the commit message body for diffs that span many lines.
+
+   `tools/lint-fork-isolation.sh` (pre-push) enforces this mechanically. **Upstream PR is not a relief valve** — fork-local maintenance is our job; we do not propose changes to upstream's architecture. See [`docs/apprt-contract.md`](docs/apprt-contract.md) for wrapper patterns and the maintainer self-check examples; see [`notes/2026-04-27_fork_isolation_audit.md`](notes/2026-04-27_fork_isolation_audit.md) for the existing-violation backlog.
 
 ## Verification before commit
 
