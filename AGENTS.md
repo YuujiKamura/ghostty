@@ -9,6 +9,24 @@ Then read:
 - [docs/winui3-playbook.md](docs/winui3-playbook.md)
 - [docs/winui3-known-good-apis.md](docs/winui3-known-good-apis.md)
 
+## Remote convention (this fork)
+
+This repo is `YuujiKamura/ghostty`, a personal **fork** of `ghostty-org/ghostty`.
+Mis-targeting the remote causes branches to be cut from upstream
+(hundreds of commits behind) and makes the resulting work unmergeable.
+See issue #237 for the original incident.
+
+- `origin` historically points to **upstream** (`ghostty-org/ghostty`) — **DO NOT push there.**
+- `fork` is the canonical push target (`YuujiKamura/ghostty`).
+- New clones MUST run `bash scripts/setup-fork-remote.sh` immediately after
+  `git clone` to set `remote.pushDefault=fork` and `push.default=current`.
+- Worktree-isolated agents inherit git config from the parent repo IF the parent
+  has it configured; if not, run the setup script in the worktree first.
+- When in doubt, run `git remote -v` and verify the destination URL before any push.
+- New branches MUST be cut from `fork/main` (not `origin/master`) unless you are
+  explicitly preparing an upstream contribution. Verify with
+  `git log --oneline -1 fork/main` and confirm the SHA before branching.
+
 ## Primary Commands
 
 - WinUI3 build smoke: `zig build -Dapp-runtime=winui3 -Drenderer=d3d11`
@@ -36,6 +54,19 @@ Then read:
 3. `pwsh -File ..\win-zig-core\scripts\winui3-verify-all.ps1` is the cross-repo acceptance gate.
 4. Do not keep stale references to retired checks such as `winui3-inspect-event-params.ps1`.
 5. Do not rediscover WinUI3 behavior from scratch if it is already captured in `docs/winui3-playbook.md` or `docs/winui3-known-good-apis.md`.
+
+## Verification before commit
+
+Pre-push hooks enforce most of these automatically (`lefthook.yml`), but agents
+must understand WHY each gate exists so they can debug failures. See issue #236.
+
+| Scope of change | Required local verification |
+|---|---|
+| Any `src/apprt/winui3/**` | `pwsh -NoProfile -File tests/winui3/run-all-tests.ps1` |
+| Any `src/apprt/winui3/control_plane*` or `vendor/zig-control-plane/**` | UIA smoke + `zig build test` |
+| Drag bar / window chrome (`nonclient_island_window.zig`) | UIA smoke (specifically `test-02c-drag-bar.ps1`) |
+| Mailbox / message dispatch / focus | UIA smoke + `tests/repro_*` related tests |
+| Build scripts / lefthook / CI | Push to a feature branch first, observe Actions before merging to main |
 
 ## GitHub Policy
 

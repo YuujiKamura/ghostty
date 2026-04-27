@@ -24,3 +24,10 @@ pre-push:
       # Refuses unbounded waits in UI-thread reachable code.
       # See notes/2026-04-26_deadlock_lint_rules.md.
       run: bash tools/lint-deadlock.sh --quiet
+    uia-smoke:
+      # Auto-runs the WinUI3 UIA smoke suite before push.
+      # Catches drag-bar / focus / surface regressions that compile fine
+      # but break user-facing behavior. See issue #236.
+      # Skip with LEFTHOOK_EXCLUDE=uia-smoke if you've already run it.
+      run: pwsh -NoProfile -File tests/winui3/run-all-tests.ps1 -SkipBuild
+      fail_text: "UIA smoke failed. Run 'pwsh -NoProfile -File tests/winui3/run-all-tests.ps1 -SkipBuild' to reproduce."
