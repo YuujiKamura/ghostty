@@ -5,7 +5,7 @@ $ExePath = Join-Path $PSScriptRoot "..\..\zig-out-winui3\bin\ghostty.exe"
 
 # Launch ghostty
 Write-Host "Launching ghostty..."
-$proc = Start-Process -FilePath $ExePath -PassThru
+$proc = Start-Process -FilePath $ExePath -PassThru -WindowStyle Minimized
 Write-Host "PID: $($proc.Id)"
 Start-Sleep -Seconds 10
 

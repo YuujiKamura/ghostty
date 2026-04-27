@@ -25,7 +25,7 @@ if (Test-Path $logPath) { Remove-Item $logPath -Force }
 Write-Host "  Launching ghostty ..." -ForegroundColor DarkGray
 
 $env:GHOSTTY_CONTROL_PLANE = "1"
-$proc = Start-Process -FilePath $exePath -PassThru
+$proc = Start-Process -FilePath $exePath -PassThru -WindowStyle Minimized
 $procId = $proc.Id
 Write-Host "  PID = $procId" -ForegroundColor DarkGray
 Test-Assert -Condition ($procId -gt 0) -Message "$testName - process started (PID=$procId)"

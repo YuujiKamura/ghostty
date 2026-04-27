@@ -25,7 +25,7 @@ $proc = Get-Process ghostty -ErrorAction SilentlyContinue | Select-Object -First
 $launched = $false
 if (-not $proc) {
     Write-Host "Launching ghostty..."
-    $proc = Start-Process -FilePath $ExePath -PassThru
+    $proc = Start-Process -FilePath $ExePath -PassThru -WindowStyle Minimized
     $launched = $true
     Start-Sleep -Seconds 5
 }

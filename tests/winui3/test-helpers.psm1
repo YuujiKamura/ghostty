@@ -257,7 +257,10 @@ function Start-Ghostty {
     }
 
     Write-Host "  Launching $ExePath ..." -ForegroundColor DarkGray
-    $proc = Start-Process -FilePath $ExePath -PassThru
+    # Minimized = window exists (UIA can still find HWND) but does NOT
+    # steal foreground / focus / desktop space. Keeps the user's
+    # interactive work uninterrupted while UIA tests run.
+    $proc = Start-Process -FilePath $ExePath -PassThru -WindowStyle Minimized
     return $proc
 }
 

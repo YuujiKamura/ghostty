@@ -32,7 +32,7 @@ Write-Host "  Launching $exePath ..." -ForegroundColor DarkGray
 $proc = $null
 $env:GHOSTTY_CONTROL_PLANE = $null
 $env:WINDOWS_TERMINAL_CONTROL_PLANE = $null
-$proc = Start-Process -FilePath $exePath -PassThru
+$proc = Start-Process -FilePath $exePath -PassThru -WindowStyle Minimized
 
 $procId = $proc.Id
 Write-Host "  PID = $procId" -ForegroundColor DarkGray

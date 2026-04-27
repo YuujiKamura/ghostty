@@ -126,7 +126,10 @@ $runStart = Get-Date
 $ghProcs = @()
 $ghPids = @()
 for ($s = 1; $s -le $Sessions; $s++) {
-    $proc = Start-Process -FilePath $exe -PassThru -WindowStyle Normal
+    # Minimized so the test sessions don't steal the user's foreground
+    # focus during the run. UIA / CP pipe paths still work normally
+    # against a minimized HWND.
+    $proc = Start-Process -FilePath $exe -PassThru -WindowStyle Minimized
     $ghProcs += $proc
     $ghPids += $proc.Id
     Log "launched ghostty session #$s pid=$($proc.Id)"
