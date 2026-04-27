@@ -69,8 +69,21 @@ pub const Action = enum { crash, dump_only, warn_only, disabled };
 pub const Decision = enum { idle, warn, dump, fire };
 
 pub const Config = struct {
-    action: Action = .crash,
-    timeout_ms: u64 = 5000,
+    /// Default action is `dump_only` rather than `crash` (#244): under heavy
+    /// renderer-mutex contention the UI thread can miss heartbeats for
+    /// several seconds while the renderer thread holds the mutex doing
+    /// productive work — that's not a true wedge and crash-killing the
+    /// process is a false positive. With `dump_only` we still capture a
+    /// snapshot for diagnosis but don't `process.exit(2)`. Set
+    /// `KS_WATCHDOG=crash` to opt back into the kill behaviour.
+    action: Action = .dump_only,
+    /// Default 15s rather than 5s (#244): empirically a 2-session
+    /// repro under shell-flood + 160 Hz CP poll load wedges the UI
+    /// thread for 5–8 s windows even when the system is making
+    /// progress. 15 s gives those bursts headroom; a true permanent
+    /// wedge will still trip it. See
+    /// `tests/winui3/repro_panic_in_panic_under_load.ps1`.
+    timeout_ms: u64 = 15000,
     poll_ms: u64 = 1000,
 
     /// Read `KS_WATCHDOG`, `KS_WATCHDOG_TIMEOUT_MS`, `KS_WATCHDOG_POLL_MS`

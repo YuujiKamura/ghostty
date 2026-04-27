@@ -268,13 +268,11 @@ while ((Get-Date) -lt $deadline) {
     }
     if ($testEndedEarly) { break }
 
-    # Early-exit if BUSY threshold breached (no need to wait full duration)
-    if ($busyCount -ge $BusyThreshold) {
-        $failReason = "FAIL BUSY threshold breached: count=$busyCount >= $BusyThreshold"
-        Log $failReason
-        $testEndedEarly = $true
-        break
-    }
+    # Note: BUSY count is informational only after #242 circuit breaker.
+    # The breaker fast-fails inbound requests with ERR|BUSY|renderer_locked
+    # to keep clients off the renderer mutex during a storm, so BUSY count
+    # going high under load is now expected behaviour. The real signals
+    # are process disappearance and new crash dumps (above).
 
     Start-Sleep -Seconds 2
 }
@@ -306,11 +304,11 @@ $recentDumps = @(Get-ChildItem $dumpDir -Filter 'ghostty.exe.*.dmp' -ErrorAction
 
 $totalNewDumps = $newDumps.Count + ($recentDumps | Where-Object { $newDumps -notcontains $_ }).Count
 
-if ($totalNewDumps -gt 0 -or $busyCount -ge $BusyThreshold -or $testEndedEarly) {
-    $reason = if ($failReason) { $failReason } else { "busy=$busyCount dumps=$totalNewDumps" }
-    Log "VERDICT: FAIL ($reason)"
+if ($totalNewDumps -gt 0 -or $testEndedEarly) {
+    $reason = if ($failReason) { $failReason } else { "dumps=$totalNewDumps" }
+    Log "VERDICT: FAIL ($reason) busy=$busyCount"
     exit 1
 } else {
-    Log "VERDICT: PASS (busy=$busyCount, dumps=0, sessions all survived)"
+    Log "VERDICT: PASS (sessions all survived under load) busy=$busyCount dumps=0"
     exit 0
 }

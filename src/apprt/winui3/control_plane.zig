@@ -33,6 +33,14 @@ const PendingInput = struct {
 const default_max_pending_inputs: usize = 128;
 const default_max_inflight_data_requests: u32 = 1;
 
+/// Circuit-breaker thresholds for the `renderer_locked` storm guard
+/// (#242). Threshold = number of BUSY|renderer_locked emissions within
+/// the rolling window that trips the breaker; once tripped, every
+/// inbound request is short-circuited to BUSY for `open_ns`.
+const renderer_locked_circuit_threshold: u32 = 5;
+const renderer_locked_circuit_window_ns: i64 = 1 * std.time.ns_per_s;
+const renderer_locked_circuit_open_ns: i64 = 100 * std.time.ns_per_ms;
+
 const ResponseCache = struct {
     req: ?[]u8 = null,
     resp: ?[]u8 = null,
@@ -126,6 +134,21 @@ pub const ControlPlane = struct {
     /// See `notes/2026-04-26_cp_stall_source_audit.md` cause (A) and
     /// the fix in `Surface.zig` `*Locked` variants.
     last_renderer_locked: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+
+    /// Circuit breaker for renderer_locked storms (#242). When
+    /// `renderer_locked_circuit_threshold` events occur within a
+    /// `renderer_locked_circuit_window_ns` window, hold the circuit
+    /// open for `renderer_locked_circuit_open_ns` and short-circuit
+    /// inbound requests with `ERR|BUSY|renderer_locked` *without*
+    /// dispatching to backend_fn — so clients back off and the
+    /// `Surface.renderer_state.mutex` stops being further contended.
+    /// Empirically (`tests/winui3/repro_panic_in_panic_under_load.ps1`)
+    /// the unbounded retry pattern caused 17+ BUSY events in 4s and
+    /// silent process death within ~18s under shell-flood load; the
+    /// circuit breaker turns that into bounded retry pressure.
+    renderer_locked_event_count: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
+    renderer_locked_window_start_ns: std.atomic.Value(i64) = std.atomic.Value(i64).init(0),
+    renderer_locked_circuit_open_until_ns: std.atomic.Value(i64) = std.atomic.Value(i64).init(0),
 
     pub fn isEnabled(allocator: Allocator) bool {
         return checkEnvFlag(allocator, "GHOSTTY_CONTROL_PLANE") or
@@ -270,6 +293,13 @@ pub const ControlPlane = struct {
         if (isBackpressureCommand(cmd) and self.pendingInputLen() >= self.max_pending_inputs) {
             return allocator.dupe(u8, "ERR|BUSY|input_queue_full\n") catch "ERR|BUSY|input_queue_full\n";
         }
+        // #242 circuit breaker: short-circuit during a renderer_locked
+        // storm so we don't pile more tryLock attempts on the renderer
+        // mutex. Open until is set on the cooldown path below.
+        const cb_now_ns: i64 = @intCast(std.time.nanoTimestamp());
+        if (cb_now_ns < self.renderer_locked_circuit_open_until_ns.load(.acquire)) {
+            return allocator.dupe(u8, "ERR|BUSY|renderer_locked\n") catch "ERR|BUSY|renderer_locked\n";
+        }
         if (isCacheableCommand(cmd)) {
             if (self.tryGetCachedResponse(req, allocator)) |cached| {
                 return cached;
@@ -306,6 +336,26 @@ pub const ControlPlane = struct {
         // "skip this poll, retry later" rather than "session is dead".
         if (self.last_renderer_locked.swap(false, .acq_rel)) {
             allocator.free(resp);
+            // Track for #242 circuit breaker. Roll the window each
+            // time it expires so a slow trickle of locks does not trip
+            // the breaker, but a burst within window_ns will.
+            const now_ns: i64 = @intCast(std.time.nanoTimestamp());
+            const w_start = self.renderer_locked_window_start_ns.load(.acquire);
+            if (w_start == 0 or now_ns - w_start > renderer_locked_circuit_window_ns) {
+                self.renderer_locked_window_start_ns.store(now_ns, .release);
+                self.renderer_locked_event_count.store(1, .release);
+            } else {
+                const cnt = self.renderer_locked_event_count.fetchAdd(1, .acq_rel) + 1;
+                if (cnt >= renderer_locked_circuit_threshold) {
+                    self.renderer_locked_circuit_open_until_ns.store(
+                        now_ns + renderer_locked_circuit_open_ns,
+                        .release,
+                    );
+                    log.warn("renderer_locked storm: {d} events in window — circuit open for {d}ms", .{
+                        cnt, @divTrunc(renderer_locked_circuit_open_ns, std.time.ns_per_ms),
+                    });
+                }
+            }
             return allocator.dupe(u8, "ERR|BUSY|renderer_locked\n") catch return "ERR|BUSY|renderer_locked\n";
         }
         if (isCacheableCommand(cmd) and !std.mem.startsWith(u8, std.mem.trim(u8, resp, " \r\n\t"), "ERR|")) {
