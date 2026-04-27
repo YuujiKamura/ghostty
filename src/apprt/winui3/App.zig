@@ -47,6 +47,7 @@ const Tsf = @import("tsf.zig");
 const tsf_logic = @import("tsf_logic.zig");
 const IpcServer = @import("ipc.zig");
 const watchdog_mod = @import("watchdog.zig");
+const cascade_detector_mod = @import("cascade_detector.zig");
 const internal_os = @import("../../os/main.zig");
 
 /// IME coordinate caching system for Phase 3 stability improvements
@@ -193,6 +194,9 @@ tab_mutation_in_progress: bool = false,
 
 /// CP push: timestamp (ms) of last notifyStatus call. Throttles to 1/sec.
 cp_last_notify_ts: i64 = 0,
+/// Atomic mirror of cp_last_notify_ts published for the cascade detector
+/// thread (#231). Updated alongside cp_last_notify_ts in drainMailbox.
+cp_last_notify_ms_atomic: std.atomic.Value(i64) = std.atomic.Value(i64).init(0),
 
 /// The TabView control that manages tabs.
 tab_view: ?*com.ITabView = null,
@@ -292,6 +296,14 @@ last_ui_heartbeat_ns_i64: std.atomic.Value(i64) = std.atomic.Value(i64).init(0),
 /// soft Tier 1 watchdog above but escalates to dump + process.exit(2)
 /// per "stuck > crash". Configured via env vars; see watchdog.zig.
 phase4_watchdog: ?watchdog_mod.Watchdog = null,
+
+/// Cascade deadlock detector (#231) — apprt-local chain breakers that
+/// observe wakeup backlog, drain-tick latency, CP push staleness, and
+/// "watchdog near-fire" heartbeat distance. Logs precursor signals
+/// *before* the Phase 4 watchdog has to crash the process. Entirely in
+/// `src/apprt/winui3/` per #231 fork-stewardship rule. See cascade_detector.zig.
+cascade_stats: cascade_detector_mod.Stats = .{},
+cascade_detector: ?cascade_detector_mod.Detector = null,
 
 // Wakeup coalescing (issue #214). Under high-frequency producer wakeups
 // (e.g. PTY byte storm during Claude xhigh thinking bursts) DispatcherQueue
@@ -713,6 +725,47 @@ fn initXaml(self: *App) !void {
             };
         }
     }
+
+    // Cascade detector (#231) — apprt-local chain breakers. Sits alongside
+    // the Phase 4 watchdog and observes precursor signals (wakeup backlog,
+    // long ticks, CP push staleness, watchdog near-fire) so we can log a
+    // CASCADE WARNING *before* the watchdog has to crash the process. All
+    // observability stays inside `src/apprt/winui3/` per #231 fork-stewardship
+    // rule — no upstream-shared file edits.
+    {
+        const cfg = cascade_detector_mod.Config.fromEnv(self.core_app.alloc);
+        const watchdog_timeout_ms: u64 = if (self.phase4_watchdog) |wd|
+            wd.cfg.timeout_ms
+        else
+            5000;
+        const view = cascade_detector_mod.View{
+            .stats = &self.cascade_stats,
+            .wakeup_pending = &self.wakeup_pending,
+            .cp_last_notify_ms = &self.cp_last_notify_ms_atomic,
+            .last_ui_heartbeat_ns = &self.last_ui_heartbeat_ns_i64,
+            .watchdog_timeout_ms = watchdog_timeout_ms,
+        };
+        self.cascade_detector = cascade_detector_mod.Detector.init(cfg, view);
+        if (self.cascade_detector) |*det| {
+            det.setCallback(cascadeOnFire, self);
+            det.start() catch |err| {
+                log.warn("cascade detector start failed: {}", .{err});
+                self.cascade_detector = null;
+            };
+        }
+    }
+}
+
+/// Cascade detector callback (#231). Fired from the detector poll thread
+/// when 2+ precursor signals are coincident under `KS_CASCADE_DETECTOR=trigger`.
+/// Must NOT block — we just log and let the Phase 4 watchdog take over if
+/// the UI thread actually wedges.
+fn cascadeOnFire(ctx: ?*anyopaque) void {
+    const self: *App = @ptrCast(@alignCast(ctx.?));
+    log.err(
+        "cascade detector fired callback: phase4_watchdog={s} — watch for follow-on watchdog snapshot",
+        .{if (self.phase4_watchdog == null) "absent" else "armed"},
+    );
 }
 
 /// Background poller that detects UI-thread stalls by comparing now against
@@ -1446,6 +1499,10 @@ pub fn terminate(self: *App) void {
     if (self.phase4_watchdog) |*wd| {
         wd.stopAndJoin();
         self.phase4_watchdog = null;
+    }
+    if (self.cascade_detector) |*det| {
+        det.stopAndJoin();
+        self.cascade_detector = null;
     }
     if (self.hwnd) |h| {
         _ = os.KillTimer(h, HEARTBEAT_TIMER_ID);
@@ -2464,6 +2521,14 @@ pub fn drainMailbox(self: *App) void {
     const elapsed_ns: u64 = @intCast(@max(0, std.time.nanoTimestamp() - t_start));
     log.info("drainMailbox: tick done", .{});
 
+    // Cascade detector (#231): record this tick into apprt-local stats so
+    // the detector thread can compute long-tick rate / max-tick / last-tick-age.
+    self.cascade_stats.recordTick(
+        elapsed_ns,
+        tick_slice_warn_ns,
+        100 * std.time.ns_per_ms,
+    );
+
     // UI-thread non-blocking invariant (Tier 4 / issue #212 P1 #1):
     // core_app.tick drains the full core→apprt mailbox in one shot. Under a
     // PTY/CP storm that can be hundreds of performAction calls monopolizing
@@ -2492,6 +2557,8 @@ pub fn drainMailbox(self: *App) void {
         const elapsed = now - self.cp_last_notify_ts;
         if (elapsed >= 1000 or self.cp_last_notify_ts == 0) {
             self.cp_last_notify_ts = now;
+            // Cascade detector mirror (#231) — readable from poll thread.
+            self.cp_last_notify_ms_atomic.store(now, .release);
             cp.notifyStatus("running");
         }
     }
