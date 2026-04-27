@@ -1,0 +1,2 @@
+auto-approvals: monitoring ghostty-42852 (interval=2s, agent=auto, Ctrl+C to stop)
+auto-approvals: detected agent=gemini

@@ -1,0 +1,61 @@
+2026/04/27 02:15:13 watcher[ghostty-39964]: pipe.Tail error (37564/3): dial \\.\pipe\ghostty-winui3-ghostty-39964-39964: open \\.\pipe\ghostty-winui3-ghostty-39964-39964: The system cannot find the file specified.
+2026/04/27 02:36:52 watcher[ghostty-10300]: pipe.Tail error (37564/3): dial \\.\pipe\ghostty-winui3-ghostty-10300-10300: open \\.\pipe\ghostty-winui3-ghostty-10300-10300: The system cannot find the file specified.
+2026/04/27 02:51:15 watcher[ghostty-20200]: pipe.Tail error (37564/3): dial \\.\pipe\ghostty-winui3-ghostty-20200-20200: open \\.\pipe\ghostty-winui3-ghostty-20200-20200: The system cannot find the file specified.
+2026/04/27 02:58:05 watcher[ghostty-15624]: pipe.Tail error (37564/3): dial \\.\pipe\ghostty-winui3-ghostty-15624-15624: open \\.\pipe\ghostty-winui3-ghostty-15624-15624: The system cannot find the file specified.
+2026/04/27 02:59:17 watcher[ghostty-39964]: pipe.Tail error (42852/3): dial \\.\pipe\ghostty-winui3-ghostty-39964-39964: open \\.\pipe\ghostty-winui3-ghostty-39964-39964: The system cannot find the file specified.
+2026/04/27 03:08:01 watcher[ghostty-39796]: pipe.Tail error (37564/3): dial \\.\pipe\ghostty-winui3-ghostty-39796-39796: open \\.\pipe\ghostty-winui3-ghostty-39796-39796: The system cannot find the file specified.
+2026/04/27 03:20:56 watcher[ghostty-10300]: pipe.Tail error (42852/3): dial \\.\pipe\ghostty-winui3-ghostty-10300-10300: open \\.\pipe\ghostty-winui3-ghostty-10300-10300: The system cannot find the file specified.
+2026/04/27 03:35:19 watcher[ghostty-20200]: pipe.Tail error (42852/3): dial \\.\pipe\ghostty-winui3-ghostty-20200-20200: open \\.\pipe\ghostty-winui3-ghostty-20200-20200: The system cannot find the file specified.
+2026/04/27 03:42:09 watcher[ghostty-15624]: pipe.Tail error (42852/3): dial \\.\pipe\ghostty-winui3-ghostty-15624-15624: open \\.\pipe\ghostty-winui3-ghostty-15624-15624: The system cannot find the file specified.
+2026/04/27 03:43:17 watcher[ghostty-26032]: pipe.Tail error (37564/3): dial \\.\pipe\ghostty-winui3-ghostty-26032-26032: open \\.\pipe\ghostty-winui3-ghostty-26032-26032: The system cannot find the file specified.
+2026/04/27 03:52:05 watcher[ghostty-39796]: pipe.Tail error (42852/3): dial \\.\pipe\ghostty-winui3-ghostty-39796-39796: open \\.\pipe\ghostty-winui3-ghostty-39796-39796: The system cannot find the file specified.
+2026/04/27 04:27:21 watcher[ghostty-26032]: pipe.Tail error (42852/3): dial \\.\pipe\ghostty-winui3-ghostty-26032-26032: open \\.\pipe\ghostty-winui3-ghostty-26032-26032: The system cannot find the file specified.
+2026/04/27 12:51:02 daemon: added session "ghostty-37564" -> \\.\pipe\ghostty-winui3-ghostty-37564-37564
+2026/04/27 12:51:02 watcher[ghostty-37564]: goroutine started, pipe=\\.\pipe\ghostty-winui3-ghostty-37564-37564, hwnd=1906944
+2026/04/27 12:51:04 daemon: added session "ghostty-42852" -> \\.\pipe\ghostty-winui3-ghostty-42852-42852
+2026/04/27 12:51:04 watcher[ghostty-42852]: goroutine started, pipe=\\.\pipe\ghostty-winui3-ghostty-42852-42852, hwnd=727832
+2026/04/27 12:51:35 daemon: callback conditions met - target=ghostty-37564 caller=ghostty-42852
+2026/04/27 12:51:35 daemon: auto-registered callback hook ghostty-37564 -> ghostty-42852
+2026/04/27 12:51:37 daemon: idle callback sent to session ghostty-42852: [NOTIFY] ghostty-37564 is idle
+2026/04/27 12:51:45 watcher[ghostty-37564]: pipe.Tail error (1/3): read: No process is on the other end of the pipe.
+2026/04/27 12:51:46 watcher[ghostty-37564]: recovered from pipe.Tail error
+2026/04/27 12:52:05 watcher[ghostty-37564]: pipe.Tail error (1/3): read: No process is on the other end of the pipe.
+2026/04/27 12:52:05 watcher[ghostty-37564]: recovered from pipe.Tail error
+2026/04/27 12:52:10 daemon: callback conditions met - target=ghostty-42852 caller=ghostty-37564
+2026/04/27 12:52:10 daemon: auto-registered callback hook ghostty-42852 -> ghostty-37564
+2026/04/27 12:52:23 daemon: idle callback sent to session ghostty-37564: [NOTIFY] ghostty-42852 is idle
+2026/04/27 12:52:38 watcher[ghostty-42852]: pipe.Tail error (1/3): server: BUSY|renderer_locked
+2026/04/27 12:52:38 watcher[ghostty-42852]: recovered from pipe.Tail error
+2026/04/27 12:54:34 watcher[ghostty-37564]: pipe.Tail error (1/3): server: BUSY|renderer_locked
+2026/04/27 12:54:35 watcher[ghostty-37564]: recovered from pipe.Tail error
+2026/04/27 12:57:02 daemon: callback conditions met - target=ghostty-42852 caller=ghostty-37564
+2026/04/27 12:57:02 daemon: auto-registered callback hook ghostty-42852 -> ghostty-37564
+2026/04/27 12:57:10 watcher[ghostty-42852]: pipe.Tail error (1/3): server: BUSY|renderer_locked
+2026/04/27 12:57:10 watcher[ghostty-42852]: recovered from pipe.Tail error
+2026/04/27 12:57:16 watcher[ghostty-42852]: pipe.Tail error (1/3): server: BUSY|renderer_locked
+2026/04/27 12:57:16 watcher[ghostty-42852]: recovered from pipe.Tail error
+2026/04/27 12:57:28 daemon: idle callback sent to session ghostty-37564: [NOTIFY] ghostty-42852 is idle
+2026/04/27 12:57:33 daemon: callback conditions met - target=ghostty-42852 caller=ghostty-37564
+2026/04/27 12:57:33 daemon: auto-registered callback hook ghostty-42852 -> ghostty-37564
+2026/04/27 12:57:47 daemon: idle callback sent to session ghostty-37564: [NOTIFY] ghostty-42852 is idle
+2026/04/27 12:57:56 watcher[ghostty-42852]: pipe.Tail error (1/3): server: BUSY|renderer_locked
+2026/04/27 12:57:56 watcher[ghostty-42852]: recovered from pipe.Tail error
+2026/04/27 12:58:06 daemon: skipping callback - resolved caller aliases to target ghostty-42852 (heuristic self-loop)
+2026/04/27 12:58:07 watcher[ghostty-42852]: pipe.Tail error (1/3): server: BUSY|renderer_locked
+2026/04/27 12:58:08 watcher[ghostty-42852]: recovered from pipe.Tail error
+2026/04/27 12:58:22 watcher[ghostty-42852]: pipe.Tail error (1/3): server: BUSY|renderer_locked
+2026/04/27 12:58:22 watcher[ghostty-42852]: recovered from pipe.Tail error
+2026/04/27 12:58:58 watcher[ghostty-42852]: pipe.Tail error (1/3): server: BUSY|renderer_locked
+2026/04/27 12:58:59 watcher[ghostty-42852]: recovered from pipe.Tail error
+2026/04/27 12:59:13 watcher[ghostty-37564]: pipe.Tail error (1/3): dial \\.\pipe\ghostty-winui3-ghostty-37564-37564: open \\.\pipe\ghostty-winui3-ghostty-37564-37564: The system cannot find the file specified.
+2026/04/27 12:59:13 watcher[ghostty-42852]: pipe.Tail error (1/3): dial \\.\pipe\ghostty-winui3-ghostty-42852-42852: open \\.\pipe\ghostty-winui3-ghostty-42852-42852: The system cannot find the file specified.
+2026/04/27 12:59:13 watcher[ghostty-37564]: pipe.Tail error (2/3): dial \\.\pipe\ghostty-winui3-ghostty-37564-37564: open \\.\pipe\ghostty-winui3-ghostty-37564-37564: The system cannot find the file specified.
+2026/04/27 12:59:13 watcher[ghostty-42852]: pipe.Tail error (2/3): dial \\.\pipe\ghostty-winui3-ghostty-42852-42852: open \\.\pipe\ghostty-winui3-ghostty-42852-42852: The system cannot find the file specified.
+2026/04/27 12:59:14 watcher[ghostty-37564]: pipe.Tail error (3/3): dial \\.\pipe\ghostty-winui3-ghostty-37564-37564: open \\.\pipe\ghostty-winui3-ghostty-37564-37564: The system cannot find the file specified.
+2026/04/27 12:59:14 watcher[ghostty-37564]: marked dead after 3 consecutive failures. last error: dial \\.\pipe\ghostty-winui3-ghostty-37564-37564: open \\.\pipe\ghostty-winui3-ghostty-37564-37564: The system cannot find the file specified.
+2026/04/27 12:59:14 watcher: session "ghostty-37564" dead at 12:59:14, error: dial \\.\pipe\ghostty-winui3-ghostty-37564-37564: open \\.\pipe\ghostty-winui3-ghostty-37564-37564: The system cannot find the file specified., stopping goroutine
+2026/04/27 12:59:14 profile[ghostty-37564]: uptime=8m12s send=3 show=9 poll_ok=981 poll_fail=6 lastPollOK=12:59:12, dead=12:59:14 err="dial \\\\.\\pipe\\ghostty-winui3-ghostty-37564-37564: open \\\\.\\pipe\\ghostty-winui3-ghostty-37564-37564: The system cannot find the file specified."
+2026/04/27 12:59:14 watcher[ghostty-42852]: pipe.Tail error (3/3): dial \\.\pipe\ghostty-winui3-ghostty-42852-42852: open \\.\pipe\ghostty-winui3-ghostty-42852-42852: The system cannot find the file specified.
+2026/04/27 12:59:14 watcher[ghostty-42852]: marked dead after 3 consecutive failures. last error: dial \\.\pipe\ghostty-winui3-ghostty-42852-42852: open \\.\pipe\ghostty-winui3-ghostty-42852-42852: The system cannot find the file specified.
+2026/04/27 12:59:14 watcher: session "ghostty-42852" dead at 12:59:14, error: dial \\.\pipe\ghostty-winui3-ghostty-42852-42852: open \\.\pipe\ghostty-winui3-ghostty-42852-42852: The system cannot find the file specified., stopping goroutine
+2026/04/27 12:59:14 profile[ghostty-42852]: uptime=8m10s send=1 show=239 poll_ok=968 poll_fail=10 lastPollOK=12:59:12, dead=12:59:14 err="dial \\\\.\\pipe\\ghostty-winui3-ghostty-42852-42852: open \\\\.\\pipe\\ghostty-winui3-ghostty-42852-42852: The system cannot find the file specified."

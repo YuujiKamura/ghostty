@@ -1,0 +1,9 @@
+[13:34:49.890] repro-start exe=C:\Users\yuuji\ghostty-win\zig-out-winui3\bin\ghostty.exe duration=3min pollers=4 hz=5
+[13:34:49.906] pre-existing dumps: 10
+[13:34:49.958] launched ghostty pid=8584
+[13:34:56.688] spawned 4 pollers
+[13:34:56.845] spawned text-flooder
+[13:34:56.861] daemon-log baseline offset=1456802750
+[13:37:53.278] test-end busyCount=0
+[13:37:53.299] stopping ghostty pid=8584
+[13:37:53.316] VERDICT: PASS (busy=0, dumps=0)

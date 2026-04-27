@@ -1,0 +1,19 @@
+2026/04/27 13:34:42 handleConn: raw line="PING" parts=[PING]
+2026/04/27 13:34:42 handleConn: raw line="SHOW|ghostty-35640|buffer|wt:7e6d9e2c-7cf1-419f-926a-fdf8317a2433" parts=[SHOW ghostty-35640 buffer wt:7e6d9e2c-7cf1-419f-926a-fdf8317a2433]
+2026/04/27 13:34:42 handleShow: parts=[SHOW ghostty-35640 buffer wt:7e6d9e2c-7cf1-419f-926a-fdf8317a2433] len=4
+2026/04/27 13:34:42 handleShow: caller="wt:7e6d9e2c-7cf1-419f-926a-fdf8317a2433" name="ghostty-35640"
+2026/04/27 13:34:42 daemon: session "ghostty-35640" still dead, keeping entry
+2026/04/27 13:34:42 daemon: session "ghostty-81560" still dead, keeping entry
+2026/04/27 13:34:42 handleConn: raw line="SHOW|ghostty-15624|buffer|wt:7e6d9e2c-7cf1-419f-926a-fdf8317a2433" parts=[SHOW ghostty-15624 buffer wt:7e6d9e2c-7cf1-419f-926a-fdf8317a2433]
+2026/04/27 13:34:42 handleShow: parts=[SHOW ghostty-15624 buffer wt:7e6d9e2c-7cf1-419f-926a-fdf8317a2433] len=4
+2026/04/27 13:34:42 handleShow: caller="wt:7e6d9e2c-7cf1-419f-926a-fdf8317a2433" name="ghostty-15624"
+2026/04/27 13:34:42 daemon: session "ghostty-81560" still dead, keeping entry
+2026/04/27 13:34:42 daemon: session "ghostty-35640" still dead, keeping entry
+2026/04/27 13:34:42 handleConn: raw line="PING" parts=[PING]
+2026/04/27 13:34:42 handleConn: raw line="LIST" parts=[LIST]
+2026/04/27 13:34:42 daemon: session "ghostty-35640" still dead, keeping entry
+2026/04/27 13:34:42 daemon: session "ghostty-81560" still dead, keeping entry
+2026/04/27 13:34:43 handleConn: raw line="PING" parts=[PING]
+2026/04/27 13:34:43 handleConn: raw line="LIST" parts=[LIST]
+2026/04/27 13:34:43 daemon: session "ghostty-35640" still dead, keeping entry
+2026/04/27 13:34:43 daemon: session "ghostty-81560" still dead, keeping entry
