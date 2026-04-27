@@ -94,14 +94,22 @@ function Log {
     Write-Host $line
 }
 
-# Cleanup-orphan helper - kill any stray ghostty.exe spawned by previous failed runs
-function Stop-OrphanGhostty {
-    param([int[]]$KeepPids = @())
-    $orphans = Get-Process -Name 'ghostty' -ErrorAction SilentlyContinue |
-        Where-Object { $KeepPids -notcontains $_.Id }
-    foreach ($p in $orphans) {
-        Log "cleanup: stopping orphan ghostty pid=$($p.Id)"
-        Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+# Cleanup-orphan helper - kill stray ghostty.exe spawned by THIS run only.
+#
+# IMPORTANT (2026-04-27 self-kill incident): An earlier version called this
+# with `-KeepPids @()` which classified *every* ghostty in the system as
+# orphan, including the host session that was running the test under
+# Gemini/Codex. That caused an 11-minute Gemini session to die at the end
+# of the run (no crash, just Stop-Process from this very script). Always
+# restrict cleanup to processes started by *this* test run.
+function Stop-RunGhostty {
+    param([int[]]$RunPids)
+    foreach ($p in $RunPids) {
+        $live = Get-Process -Id $p -ErrorAction SilentlyContinue
+        if ($live) {
+            Log "cleanup: stopping run ghostty pid=$p"
+            Stop-Process -Id $p -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 
@@ -289,8 +297,9 @@ foreach ($p in $ghProcs) {
     }
 }
 Start-Sleep -Seconds 1
-# Catch orphaned ghostty processes that might have spawned tabs
-Stop-OrphanGhostty -KeepPids @()
+# Cleanup only the pids this run launched (do NOT kill arbitrary ghostty
+# processes — see Stop-RunGhostty docstring re: 2026-04-27 self-kill).
+Stop-RunGhostty -RunPids $ghPids
 
 # Verdict
 $newDumps = @()
