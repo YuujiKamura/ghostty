@@ -345,6 +345,39 @@ pub const DirectWriteFace = struct {
 };
 
 // ============================================================================
+// DeferredFace switch-arm delegates
+//
+// UPSTREAM-SHARED-OK: minimize footprint only, preserves upstream tagged-union
+// architecture (#239). Each helper makes the freetype switch arm in
+// DeferredFace.zig a single-line delegation, reducing per-callsite footprint
+// against upstream merges.
+// ============================================================================
+
+pub fn deferredDeinit(face: *?DirectWriteFace) void {
+    if (face.*) |*f| f.deinit();
+}
+
+pub fn deferredFamilyName(face: ?DirectWriteFace, buf: []u8) ![]const u8 {
+    if (face) |f| return f.familyName(buf);
+    return "";
+}
+
+pub fn deferredName(face: ?DirectWriteFace, buf: []u8) ![]const u8 {
+    if (face) |f| return f.name(buf);
+    return "";
+}
+
+pub fn deferredLoad(face: *?DirectWriteFace, lib: font.Library, opts: font.face.Options) !Face {
+    if (face.*) |*f| return f.load(lib, opts);
+    unreachable;
+}
+
+pub fn deferredHasCodepoint(face: ?DirectWriteFace, cp: u32) bool {
+    if (face) |f| return f.hasCodepoint(cp);
+    return false;
+}
+
+// ============================================================================
 // DiscoverIterator
 // ============================================================================
 
