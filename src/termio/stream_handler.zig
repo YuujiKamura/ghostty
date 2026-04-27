@@ -82,7 +82,38 @@ pub const StreamHandler = struct {
     /// this to determine if we need to default the window title.
     seen_title: bool = false,
 
+    // UPSTREAM-SHARED-OK: minimize footprint only (#239) — LF safe-point
+    // yield. `processOutput` (Termio.zig:656-708) takes the renderer mutex
+    // once for the whole PTY read buffer. Under a shell text flood the VT
+    // parser runs the full buffer in `nextSlice` without natural release
+    // points, so the renderer thread is starved. We yield the mutex briefly
+    // after a complete `linefeed` action when the lock has been held longer
+    // than a threshold; LF is the canonical safe boundary because the
+    // parser is at ground state and `Terminal.index` (Terminal.zig:1417)
+    // leaves the grid in a fully renderable state.
+    /// Monotonic anchor for measuring lock-hold windows. Set on first LF
+    /// after threshold init; never reset.
+    lf_yield_anchor: ?std.time.Instant = null,
+    /// Nanoseconds since `lf_yield_anchor` at which the current
+    /// lock-hold window started. 0 means "rearm on next LF".
+    lf_yield_window_start_ns: u64 = 0,
+    /// Cached threshold in nanoseconds. `init_pending` means "read env
+    /// var on next LF". `0` means disabled. Otherwise the LF yield fires
+    /// when the held window exceeds this value.
+    lf_yield_threshold_ns: u64 = lf_yield_init_pending,
+    /// Number of times we released-and-reacquired the renderer mutex at
+    /// an LF safe point. Test-only counter; production reads this purely
+    /// to reason about behaviour.
+    lf_yield_count: u64 = 0,
+
     pub const Stream = terminal.Stream(StreamHandler);
+
+    /// Sentinel for `lf_yield_threshold_ns` meaning "env var not yet
+    /// resolved". Cannot collide with a real ns threshold because we
+    /// clamp to 1 hour max.
+    const lf_yield_init_pending: u64 = std.math.maxInt(u64);
+    /// Default window before yielding: 5 ms.
+    const lf_yield_default_ms: u64 = 5;
 
     /// True if we have tmux control mode built in.
     pub const tmux_enabled = terminal.options.tmux_control_mode;
@@ -628,6 +659,70 @@ pub const StreamHandler = struct {
         // Small optimization: call index instead of linefeed because they're
         // identical and this avoids one layer of function call overhead.
         try self.terminal.index();
+
+        // UPSTREAM-SHARED-OK: minimize footprint only (#239) — LF safe-point
+        // yield. After a successful index() the cursor is positioned, any
+        // scroll-up is committed, and the parser is at ground state; the
+        // grid is fully renderable. If the renderer mutex has been held
+        // longer than the configured window, release it for one instant so
+        // the renderer thread (or any other contender) can acquire it
+        // before we resume processing the rest of the PTY read buffer.
+        self.maybeYieldAtSafePoint();
+    }
+
+    /// Resolve the env-controlled yield threshold. Called lazily on the
+    /// first LF after construction.
+    ///
+    /// `KS_TERMIO_YIELD_MS=0` disables the yield entirely. Any other
+    /// value is parsed as a u32 millisecond count and clamped to
+    /// [1ms, 3_600_000ms]. Default (env unset) is 5 ms.
+    fn resolveYieldThreshold(self: *StreamHandler) void {
+        self.lf_yield_threshold_ns = resolveYieldThresholdImpl(self.alloc);
+    }
+
+    /// LF-safe-point yield. The renderer state mutex MUST be held on
+    /// entry; on return it is held again. Between release and re-acquire
+    /// any other contender (renderer thread, control plane, surface
+    /// callback) is free to grab the mutex briefly.
+    inline fn maybeYieldAtSafePoint(self: *StreamHandler) void {
+        const now_ns = blk: {
+            const inst = std.time.Instant.now() catch break :blk null;
+            if (self.lf_yield_anchor == null) {
+                // Establish the anchor on first observation.
+                self.lf_yield_anchor = inst;
+                break :blk @as(u64, 0);
+            }
+            break :blk inst.since(self.lf_yield_anchor.?);
+        };
+        if (!self.shouldYieldAtSafePoint(now_ns)) return;
+
+        // Threshold exceeded. Release-and-reacquire. The renderer thread
+        // can grab the mutex during this window; that is the entire point.
+        self.renderer_state.mutex.unlock();
+        defer self.renderer_state.mutex.lock();
+        self.lf_yield_count +%= 1;
+        // Re-arm: the next LF after we re-acquire establishes the new
+        // window start, so any sub-threshold spans don't accumulate
+        // across the yield boundary.
+        self.lf_yield_window_start_ns = 0;
+        // Yielding the CPU here hints the OS scheduler to run the
+        // renderer thread before we re-acquire. Harmless if nothing is
+        // ready to run.
+        std.Thread.yield() catch {};
+    }
+
+    /// Pure decision logic: given a monotonic `now_ns` (relative to
+    /// `lf_yield_anchor`, or null if the platform has no monotonic clock),
+    /// return whether the caller should yield, and update the window
+    /// start as a side effect. Factored out so tests can drive it
+    /// without constructing a full StreamHandler.
+    fn shouldYieldAtSafePoint(self: *StreamHandler, now_ns_opt: ?u64) bool {
+        return shouldYieldImpl(
+            self.alloc,
+            &self.lf_yield_threshold_ns,
+            &self.lf_yield_window_start_ns,
+            now_ns_opt,
+        );
     }
 
     pub inline fn reverseIndex(self: *StreamHandler) !void {
@@ -1596,3 +1691,150 @@ pub const StreamHandler = struct {
         self.surfaceMessageWriter(.{ .progress_report = report });
     }
 };
+
+// UPSTREAM-SHARED-OK: minimize footprint only (#239) — free helpers for
+// the LF-yield logic. Pulled out of the StreamHandler methods so the
+// tests below can exercise the threshold-window state machine without
+// constructing the heavyweight terminal/mailbox/renderer surroundings.
+
+/// Read `KS_TERMIO_YIELD_MS` (default 5 ms) and return the threshold in
+/// nanoseconds. `0` is the explicit disable sentinel; any other value
+/// is clamped to `[1ms, 3_600_000ms]`.
+fn resolveYieldThresholdImpl(alloc: Allocator) u64 {
+    const default_ms: u64 = StreamHandler.lf_yield_default_ms;
+    const ms: u64 = blk: {
+        const raw = std.process.getEnvVarOwned(
+            alloc,
+            "KS_TERMIO_YIELD_MS",
+        ) catch |err| switch (err) {
+            error.EnvironmentVariableNotFound => break :blk default_ms,
+            else => {
+                log.warn("KS_TERMIO_YIELD_MS read failed err={} default={}ms", .{
+                    err,
+                    default_ms,
+                });
+                break :blk default_ms;
+            },
+        };
+        defer alloc.free(raw);
+        const trimmed = std.mem.trim(u8, raw, " \t\r\n");
+        const parsed = std.fmt.parseInt(u64, trimmed, 10) catch |err| {
+            log.warn("KS_TERMIO_YIELD_MS parse failed value=\"{s}\" err={} default={}ms", .{
+                trimmed,
+                err,
+                default_ms,
+            });
+            break :blk default_ms;
+        };
+        break :blk parsed;
+    };
+
+    if (ms == 0) {
+        log.debug("LF safe-point yield disabled via KS_TERMIO_YIELD_MS=0", .{});
+        return 0;
+    }
+    const clamped: u64 = @min(@max(ms, 1), 3_600_000);
+    return clamped * std.time.ns_per_ms;
+}
+
+/// Pure state-machine for the LF safe-point yield decision. Returns
+/// true if the caller should release-and-reacquire the renderer mutex.
+/// On entry `threshold_ns_p.*` may be `lf_yield_init_pending`, in which
+/// case it is resolved from the env on first call.
+fn shouldYieldImpl(
+    alloc: Allocator,
+    threshold_ns_p: *u64,
+    window_start_ns_p: *u64,
+    now_ns_opt: ?u64,
+) bool {
+    if (threshold_ns_p.* == StreamHandler.lf_yield_init_pending) {
+        @branchHint(.unlikely);
+        threshold_ns_p.* = resolveYieldThresholdImpl(alloc);
+        window_start_ns_p.* = 0;
+        return false;
+    }
+
+    if (threshold_ns_p.* == 0) {
+        @branchHint(.likely);
+        return false;
+    }
+
+    const now_ns = now_ns_opt orelse return false;
+    if (window_start_ns_p.* == 0) {
+        window_start_ns_p.* = now_ns +| 1;
+        return false;
+    }
+
+    const held_ns = (now_ns +| 1) -| window_start_ns_p.*;
+    return held_ns >= threshold_ns_p.*;
+}
+
+const testing = std.testing;
+
+test "shouldYieldImpl: disabled via KS_TERMIO_YIELD_MS=0 produces zero releases" {
+    // Simulate env=0 by skipping the env-resolution path: pre-set the
+    // threshold to 0 directly. Then drive 10 KB worth of LFs (100
+    // chars/line + LF = 101 bytes; 10 KB ≈ 100 lines). Even with the
+    // window time advancing past any plausible threshold, the disabled
+    // sentinel must short-circuit.
+    var threshold: u64 = 0;
+    var window: u64 = 0;
+    var releases: u64 = 0;
+    var now: u64 = 0;
+    var i: usize = 0;
+    while (i < 100) : (i += 1) {
+        // Simulate 1ms of wall time per line (way over the 5ms default).
+        now += 10 * std.time.ns_per_ms;
+        if (shouldYieldImpl(testing.allocator, &threshold, &window, now)) {
+            releases += 1;
+        }
+    }
+    try testing.expectEqual(@as(u64, 0), releases);
+    try testing.expectEqual(@as(u64, 0), threshold);
+}
+
+test "shouldYieldImpl: 5ms threshold fires at least N times under sustained load" {
+    // 10 KB of `'A' * 100 + '\n'` = ~100 LFs. Each "line" advances
+    // simulated wall time by 1 ms; the 5 ms threshold should yield at
+    // least 100/5 - 2 = 18 times (allow generous slack for re-arm
+    // settling).
+    var threshold: u64 = 5 * std.time.ns_per_ms;
+    var window: u64 = 0;
+    var releases: u64 = 0;
+    var now: u64 = 0;
+    var i: usize = 0;
+    while (i < 100) : (i += 1) {
+        now += 1 * std.time.ns_per_ms;
+        if (shouldYieldImpl(testing.allocator, &threshold, &window, now)) {
+            releases += 1;
+            // The yield path itself zeros `window` to rearm.
+            window = 0;
+        }
+    }
+    // Lower bound: with a 5 ms window and 1 ms / line, we expect a
+    // release roughly every 5-6 lines (the rearm consumes one tick).
+    // For 100 lines this is ~16 yields. Be conservative on the floor.
+    try testing.expect(releases >= 10);
+}
+
+test "shouldYieldImpl: monotonic clock unavailable is a no-op" {
+    var threshold: u64 = 5 * std.time.ns_per_ms;
+    var window: u64 = 0;
+    try testing.expect(!shouldYieldImpl(testing.allocator, &threshold, &window, null));
+    try testing.expect(!shouldYieldImpl(testing.allocator, &threshold, &window, null));
+    try testing.expectEqual(@as(u64, 0), window);
+}
+
+test "shouldYieldImpl: rearm-on-init swallows first call" {
+    // A fresh StreamHandler has `threshold_ns = init_pending`. The
+    // first call must resolve the env and return false (no release on
+    // first LF). We can't directly control the env from here without
+    // platform-specific calls, so just verify the init-pending path
+    // resolves to *some* finite threshold (default 5ms) or 0
+    // (KS_TERMIO_YIELD_MS=0 if the test harness sets it).
+    var threshold: u64 = StreamHandler.lf_yield_init_pending;
+    var window: u64 = 0;
+    const released = shouldYieldImpl(testing.allocator, &threshold, &window, 1);
+    try testing.expect(!released);
+    try testing.expect(threshold != StreamHandler.lf_yield_init_pending);
+}
