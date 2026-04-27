@@ -54,6 +54,7 @@ See issue #237 for the original incident.
 3. `pwsh -File ..\win-zig-core\scripts\winui3-verify-all.ps1` is the cross-repo acceptance gate.
 4. Do not keep stale references to retired checks such as `winui3-inspect-event-params.ps1`.
 5. Do not rediscover WinUI3 behavior from scratch if it is already captured in `docs/winui3-playbook.md` or `docs/winui3-known-good-apis.md`.
+6. Any change to mailbox / blocking queue / Win32 wait / pipe / `SendMessage` code MUST be reviewed against the [`docs/deadlock-discipline.md`](docs/deadlock-discipline.md) checklist. Pre-push lint (`tools/lint-deadlock.sh`) catches mechanical violations; the doc covers the intent.
 
 ## Verification before commit
 

@@ -286,6 +286,7 @@ log "================================================================"
 if [ "${VIOLATIONS}" -gt 0 ]; then
     echo "lint-deadlock: ${VIOLATIONS} violation(s), ${WARNINGS} warning(s)"
     echo "lint-deadlock: see notes/2026-04-26_deadlock_lint_rules.md for the rule rationale and fix patterns"
+    echo "lint-deadlock: see docs/deadlock-discipline.md for the design rules + escape-valve patterns"
     exit 1
 fi
 
