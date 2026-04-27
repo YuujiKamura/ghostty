@@ -1,0 +1,16 @@
+[13:49:52.500] repro-start exe=%USERPROFILE%\ghostty-win\zig-out-winui3\bin\ghostty.exe duration=3min sessions=2 pollers=4 hz=20 baselineOnly=False
+[13:49:52.515] pre-existing dumps: 10
+[13:49:52.586] launched ghostty session #1 pid=90960
+[13:49:55.614] launched ghostty session #2 pid=42412
+[13:50:02.964] spawned 8 pollers (4 per session × 2 sessions = 8 total, 20 Hz each = 160 Hz aggregate)
+[13:50:05.101] session=ghostty-90960: kicked echo flooder
+[13:50:05.856] session=ghostty-42412: kicked echo flooder
+[13:50:06.310] spawned 2 shell flooders (dir /S every 2s per session)
+[13:50:06.573] spawned 50Hz cross-session burst poller
+[13:50:06.594] daemon-log baseline offset=1461931333
+[13:50:08.714] renderer_locked total=1 [ghostty-90960=0 ghostty-42412=1]
+[13:50:10.764] renderer_locked total=2 [ghostty-90960=1 ghostty-42412=1]
+[13:50:12.791] FAIL pid=42412 disappeared after 00:00:20.2495548
+[13:50:12.804] test-end busyCount=2 endedEarly=True
+[13:50:13.040] stopping ghostty pid=90960
+[13:50:14.111] VERDICT: FAIL (FAIL pid=42412 disappeared after 00:00:20.2495548)

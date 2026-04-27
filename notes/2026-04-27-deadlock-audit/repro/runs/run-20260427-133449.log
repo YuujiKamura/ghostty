@@ -1,4 +1,4 @@
-[13:34:49.890] repro-start exe=C:\Users\yuuji\ghostty-win\zig-out-winui3\bin\ghostty.exe duration=3min pollers=4 hz=5
+[13:34:49.890] repro-start exe=%USERPROFILE%\ghostty-win\zig-out-winui3\bin\ghostty.exe duration=3min pollers=4 hz=5
 [13:34:49.906] pre-existing dumps: 10
 [13:34:49.958] launched ghostty pid=8584
 [13:34:56.688] spawned 4 pollers

@@ -1,0 +1,15 @@
+[13:51:30.954] repro-start exe=%USERPROFILE%\ghostty-win\zig-out-winui3\bin\ghostty.exe duration=3min sessions=2 pollers=4 hz=20 baselineOnly=False
+[13:51:30.978] pre-existing dumps: 10
+[13:51:31.035] launched ghostty session #1 pid=75496
+[13:51:34.064] launched ghostty session #2 pid=45920
+[13:51:41.363] spawned 8 pollers (4 per session × 2 sessions = 8 total, 20 Hz each = 160 Hz aggregate)
+[13:51:42.297] session=ghostty-75496: kicked echo flooder
+[13:51:43.021] session=ghostty-45920: kicked echo flooder
+[13:51:43.432] spawned 2 shell flooders (dir /S every 2s per session)
+[13:51:43.634] spawned 50Hz cross-session burst poller
+[13:51:43.653] daemon-log baseline offset=1463089689
+[13:51:47.790] FAIL BUSY threshold breached: count=17 >= 5
+[13:51:47.803] test-end busyCount=17 endedEarly=True
+[13:51:48.079] stopping ghostty pid=75496
+[13:51:48.099] stopping ghostty pid=45920
+[13:51:49.153] VERDICT: FAIL (FAIL BUSY threshold breached: count=17 >= 5)

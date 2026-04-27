@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 LOG=$(dirname "$0")/monitor-events.log
-SRC=/c/Users/yuuji/AppData/Local/Temp/deckpilot-daemon.log
+SRC=<HOME>/AppData/Local/Temp/deckpilot-daemon.log
 START_FILE=$(dirname "$0")/daemon-baseline-offset.txt
 offset=$(cat "$START_FILE" 2>/dev/null || stat -c '%s' "$SRC")
 echo "[$(date +%H:%M:%S.%3N)] monitor-start offset=$offset" > "$LOG"

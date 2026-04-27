@@ -4,7 +4,7 @@
 # after ~8 minutes hosting parallel Codex + Gemini agent workloads. WER captured
 # 21 ghostty crashes in 2 hours, all at offset 0x248b4e (= std.posix.abort,
 # fault offset deterministic). Stack reconstruction from
-# C:\Users\yuuji\AppData\Local\CrashDumps\ghostty.exe.68932.dmp shows:
+# %USERPROFILE%\AppData\Local\CrashDumps\ghostty.exe.68932.dmp shows:
 #
 #   abort                          posix.zig:687       (STATUS_BREAKPOINT)
 #   handleSegfaultWindowsExtra     debug.zig:1560
@@ -26,34 +26,56 @@
 # fires repeatedly under active load (not pure idle), and process
 # disappearance is simultaneous with last BUSY recovery.
 #
-# This script reproduces the load shape WITHOUT requiring Gemini:
-#   - Launch ghostty fully detached, capture PID
-#   - Spawn N=4 concurrent deckpilot CP pollers at ~5 Hz each (= 20 Hz aggregate)
-#   - Spawn 1 text-flood writer that pipes ~1MB of text into the session at
-#     ~50KB/sec to keep the renderer busy
-#   - Watch for renderer_locked frequency, pid disappearance, and
-#     %LOCALAPPDATA%\CrashDumps\ghostty.exe.<pid>.dmp creation
-#   - Cap at 15 minutes of wall time
+# === HARDENING HISTORY (2026-04-27 PM) ===
 #
-# Pass criteria: ghostty.exe.<pid> survives 15min with renderer_locked count <= 5.
-# Fail criteria: process death OR renderer_locked count > 5 OR new crash dump
-# created with offset 0x248b4e.
+# Baseline (initial test): 4 pollers @ 5 Hz + text-flood every 5s
+#   Result: 0 BUSY, 0 dumps in 3 min. INSUFFICIENT to repro.
+#   Discovery: BUSY events DID happen during baseline run, but on OTHER
+#   sessions (ghostty-35640) — the test only counted its own pid. After
+#   widening the scope, baseline still under-trips because its workload is
+#   too light: pure pipe traffic doesn't load the renderer mutex enough
+#   for tryLock contention. The original incident was driven by the SHELL
+#   inside the session writing thousands of lines/sec (Gemini doing
+#   `zig test`, `dir /S`), which is what locks the renderer.
+#
+# Approach 2 (current): Inject SHELL workload via `deckpilot send`.
+#   - Multi-session (-Sessions N): launch N ghostty processes in parallel.
+#   - Per-session SHELL flooder: send `dir /S C:\Users\...\src` (~10K lines)
+#     every 2s, plus a fast CMD `for /L` echo loop in the background.
+#   - High-Hz pollers: 4 pollers × 20 Hz = 80 Hz aggregate per session.
+#   - Track BUSY events across ALL sessions, not just one pid.
+#
+# Reproducible signature (when triggered on this build):
+#   - >= 1 ghostty.exe.<pid>.dmp dump in CrashDumps/
+#   - OR >= N_BUSY_THRESHOLD `BUSY|renderer_locked` events in daemon log
+#     during the run window (after baseline offset).
+#   - OR >= 1 session disappearance (process exit) before deadline.
+#
+# Empirical pass/fail boundary: TBD by run. The test exits FAIL if any of
+# the three signatures fire; otherwise PASS.
 #
 # Run:
 #   pwsh -NoProfile -File tests\winui3\repro_panic_in_panic_under_load.ps1
-#   pwsh -NoProfile -File tests\winui3\repro_panic_in_panic_under_load.ps1 -Quick   # 3min cap
+#   pwsh -NoProfile -File tests\winui3\repro_panic_in_panic_under_load.ps1 -Quick
+#   pwsh -NoProfile -File tests\winui3\repro_panic_in_panic_under_load.ps1 -Sessions 4 -PollHz 20
+#
+# Debug knob: -BaselineOnly skips shell injection (= old test shape).
 
 [CmdletBinding()]
 param(
     [int]$DurationMinutes = 15,
+    [int]$Sessions = 2,
     [int]$ConcurrentPollers = 4,
-    [int]$PollHz = 5,
-    [switch]$Quick
+    [int]$PollHz = 20,
+    [int]$BusyThreshold = 5,
+    [switch]$Quick,
+    [switch]$BaselineOnly
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $exe = Join-Path $repoRoot 'zig-out-winui3\bin\ghostty.exe'
+$srcDir = Join-Path $repoRoot 'src'
 $dumpDir = "$env:LOCALAPPDATA\CrashDumps"
 $logDir = Join-Path $repoRoot 'notes\2026-04-27-deadlock-audit\repro\runs'
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
@@ -72,108 +94,223 @@ function Log {
     Write-Host $line
 }
 
-Log "repro-start exe=$exe duration=${DurationMinutes}min pollers=$ConcurrentPollers hz=$PollHz"
+# Cleanup-orphan helper - kill any stray ghostty.exe spawned by previous failed runs
+function Stop-OrphanGhostty {
+    param([int[]]$KeepPids = @())
+    $orphans = Get-Process -Name 'ghostty' -ErrorAction SilentlyContinue |
+        Where-Object { $KeepPids -notcontains $_.Id }
+    foreach ($p in $orphans) {
+        Log "cleanup: stopping orphan ghostty pid=$($p.Id)"
+        Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Log "repro-start exe=$exe duration=${DurationMinutes}min sessions=$Sessions pollers=$ConcurrentPollers hz=$PollHz baselineOnly=$BaselineOnly"
 
 # Snapshot pre-existing dumps so we can detect new ones
 $preDumps = @(Get-ChildItem $dumpDir -Filter 'ghostty.exe.*.dmp' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
 Log "pre-existing dumps: $($preDumps.Count)"
 
-# Launch ghostty fully detached
-$proc = Start-Process -FilePath $exe -PassThru -WindowStyle Normal
-$ghPid = $proc.Id
-Log "launched ghostty pid=$ghPid"
-Start-Sleep -Seconds 6
-if ($proc.HasExited) { throw "ghostty exited within 6s — broken build?" }
+# Track which dumps are NEW (created during this run) - by mtime
+$runStart = Get-Date
 
-$session = "ghostty-$ghPid"
+# Launch N ghostty sessions, capture all PIDs
+$ghProcs = @()
+$ghPids = @()
+for ($s = 1; $s -le $Sessions; $s++) {
+    $proc = Start-Process -FilePath $exe -PassThru -WindowStyle Normal
+    $ghProcs += $proc
+    $ghPids += $proc.Id
+    Log "launched ghostty session #$s pid=$($proc.Id)"
+    Start-Sleep -Seconds 3
+}
+Start-Sleep -Seconds 3
+foreach ($p in $ghProcs) {
+    if ($p.HasExited) { throw "ghostty pid=$($p.Id) exited within startup — broken build?" }
+}
+$sessionNames = $ghPids | ForEach-Object { "ghostty-$_" }
 
-# Spawn concurrent pollers
+# Background-job arrays for cleanup
 $pollers = @()
-for ($i = 1; $i -le $ConcurrentPollers; $i++) {
-    $sb = {
-        param($sess, $hz, $deadline)
-        $sleepMs = [int](1000 / $hz)
+$flooders = @()
+
+# Spawn concurrent pollers per session
+foreach ($sess in $sessionNames) {
+    for ($i = 1; $i -le $ConcurrentPollers; $i++) {
+        $sb = {
+            param($sess, $hz, $deadline)
+            $sleepMs = [int](1000 / $hz)
+            while ((Get-Date) -lt $deadline) {
+                & deckpilot show $sess --tail 5 *> $null
+                Start-Sleep -Milliseconds $sleepMs
+            }
+        }
+        $pollers += Start-Job -ScriptBlock $sb -ArgumentList $sess, $PollHz, $deadline
+    }
+}
+Log "spawned $($pollers.Count) pollers ($ConcurrentPollers per session × $Sessions sessions = $($pollers.Count) total, $PollHz Hz each = $($PollHz * $pollers.Count) Hz aggregate)"
+
+if (-not $BaselineOnly) {
+    # SHELL WORKLOAD: inside each session, kick off (a) infinite echo loop
+    # in the foreground shell + (b) periodic `dir /S` flood. The shell-side
+    # writes are what actually load the renderer mutex (vs. CP pipe traffic
+    # which doesn't touch it).
+    foreach ($sess in $sessionNames) {
+        # Bootstrap: start a CMD echo loop that runs forever (until the
+        # session dies or test ends). Approach 2 from the brief.
+        # We use a short CMD one-liner so a single `deckpilot send` kicks it.
+        $bootstrapCmd = "for /L %i in (1,1,99999999) do @echo flood-line-%i payload-text-keep-renderer-busy-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        & deckpilot send $sess $bootstrapCmd *> $null
+        Log ("session=" + $sess + ": kicked echo flooder")
+        Start-Sleep -Milliseconds 200
+
+        # Periodic `dir /S` injection - sends every 2s. Each `dir /S` of
+        # the src tree emits ~10K lines, hammering the renderer hard.
+        $flooderSb = {
+            param($sess, $deadline, $srcDir)
+            while ((Get-Date) -lt $deadline) {
+                # Two parallel pressures:
+                #  a) `dir /S` against the ghostty src tree (~10K lines text)
+                #  b) `dir /S` against zig-out-winui3 (mass binary listing)
+                & deckpilot send $sess "dir /S `"$srcDir`"" *> $null
+                Start-Sleep -Seconds 2
+            }
+        }
+        $flooders += Start-Job -ScriptBlock $flooderSb -ArgumentList $sess, $deadline, $srcDir
+    }
+    Log "spawned $($flooders.Count) shell flooders (dir /S every 2s per session)"
+
+    # Additional: 50Hz `deckpilot show` burst to add UI-thread pressure
+    # via cross-callback registration (matches original incident shape
+    # where 2 ghostty processes were registered for cross-callbacks).
+    $burstSb = {
+        param($sessions, $deadline)
         while ((Get-Date) -lt $deadline) {
-            & deckpilot show $sess --tail 5 *> $null
-            Start-Sleep -Milliseconds $sleepMs
+            foreach ($s in $sessions) {
+                & deckpilot show $s --tail 1 *> $null
+            }
+            Start-Sleep -Milliseconds 20  # ~50Hz across N sessions
         }
     }
-    $pollers += Start-Job -ScriptBlock $sb -ArgumentList $session, $PollHz, $deadline
+    $burstJob = Start-Job -ScriptBlock $burstSb -ArgumentList $sessionNames, $deadline
+    $pollers += $burstJob
+    Log "spawned 50Hz cross-session burst poller"
+} else {
+    Log "baseline-only mode: no shell injection, no burst pollers"
 }
-Log "spawned $($pollers.Count) pollers"
-
-# Text-flood writer: send a long printf into the session every 5s
-$flooder = Start-Job -ScriptBlock {
-    param($sess, $deadline)
-    $payload = ('lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ' * 100)
-    while ((Get-Date) -lt $deadline) {
-        & deckpilot send $sess "echo $payload" *> $null
-        Start-Sleep -Seconds 5
-    }
-} -ArgumentList $session, $deadline
-Log "spawned text-flooder"
 
 # Monitor
 $busyCount = 0
+$busyPerSession = @{}
+foreach ($s in $sessionNames) { $busyPerSession[$s] = 0 }
 $daemonLog = "$env:LOCALAPPDATA\Temp\deckpilot-daemon.log"
 $baselineOffset = if (Test-Path $daemonLog) { (Get-Item $daemonLog).Length } else { 0 }
 Log "daemon-log baseline offset=$baselineOffset"
 
-while ((Get-Date) -lt $deadline) {
-    # Check process alive
-    $live = Get-Process -Id $ghPid -ErrorAction SilentlyContinue
-    if (-not $live) {
-        Log "FAIL pid=$ghPid disappeared after $((New-TimeSpan -Start $proc.StartTime -End (Get-Date)).ToString())"
-        break
-    }
+$failReason = $null
+$testEndedEarly = $false
 
-    # Check daemon log delta for new BUSY|renderer_locked
+while ((Get-Date) -lt $deadline) {
+    # Check all sessions alive
+    foreach ($p in $ghProcs) {
+        $live = Get-Process -Id $p.Id -ErrorAction SilentlyContinue
+        if (-not $live) {
+            $elapsed = (New-TimeSpan -Start $runStart -End (Get-Date)).ToString()
+            $failReason = "FAIL pid=$($p.Id) disappeared after $elapsed"
+            Log $failReason
+            $testEndedEarly = $true
+            break
+        }
+    }
+    if ($testEndedEarly) { break }
+
+    # Check daemon log delta for new BUSY|renderer_locked across ALL test sessions
     if (Test-Path $daemonLog) {
         $current = (Get-Item $daemonLog).Length
         if ($current -gt $baselineOffset) {
-            $sliceBytes = [Math]::Min($current - $baselineOffset, 1048576)
-            $stream = [System.IO.File]::Open($daemonLog, 'Open', 'Read', 'ReadWrite')
-            $stream.Seek($baselineOffset, 'Begin') | Out-Null
-            $buf = New-Object byte[] $sliceBytes
-            $stream.Read($buf, 0, $sliceBytes) | Out-Null
-            $stream.Close()
-            $slice = [System.Text.Encoding]::UTF8.GetString($buf)
-            $busyMatches = ([regex]::Matches($slice, "ghostty-$ghPid.*BUSY\|renderer_locked")).Count
-            if ($busyMatches -gt 0) {
-                $busyCount += $busyMatches
-                Log "renderer_locked count=$busyCount (+$busyMatches)"
+            $sliceBytes = [Math]::Min($current - $baselineOffset, 4194304)
+            try {
+                $stream = [System.IO.File]::Open($daemonLog, 'Open', 'Read', 'ReadWrite')
+                $stream.Seek($baselineOffset, 'Begin') | Out-Null
+                $buf = New-Object byte[] $sliceBytes
+                $stream.Read($buf, 0, $sliceBytes) | Out-Null
+                $stream.Close()
+                $slice = [System.Text.Encoding]::UTF8.GetString($buf)
+                # Match BUSY|renderer_locked for any of OUR session names
+                foreach ($sname in $sessionNames) {
+                    $rx = "$([regex]::Escape($sname)).*BUSY\|renderer_locked"
+                    $m = ([regex]::Matches($slice, $rx)).Count
+                    if ($m -gt 0) {
+                        $busyPerSession[$sname] += $m
+                        $busyCount += $m
+                    }
+                }
+                if ($busyCount -gt 0 -and ($busyCount % 5 -eq 0 -or $busyCount -le 5)) {
+                    $perSess = ($busyPerSession.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' '
+                    Log "renderer_locked total=$busyCount [$perSess]"
+                }
+                $baselineOffset = $current
+            } catch {
+                Log "daemon-log read error: $_"
             }
-            $baselineOffset = $current
         }
     }
 
-    # Check for new dumps
-    $curDumps = @(Get-ChildItem $dumpDir -Filter "ghostty.exe.$ghPid.dmp" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
-    if ($curDumps.Count -gt 0) {
-        Log "FAIL crash dump appeared: $($curDumps[0])"
+    # Check for new dumps for ANY of our session pids
+    foreach ($p in $ghProcs) {
+        $dumpPath = Join-Path $dumpDir "ghostty.exe.$($p.Id).dmp"
+        if (Test-Path $dumpPath) {
+            $failReason = "FAIL crash dump appeared for pid=$($p.Id): $dumpPath"
+            Log $failReason
+            $testEndedEarly = $true
+            break
+        }
+    }
+    if ($testEndedEarly) { break }
+
+    # Early-exit if BUSY threshold breached (no need to wait full duration)
+    if ($busyCount -ge $BusyThreshold) {
+        $failReason = "FAIL BUSY threshold breached: count=$busyCount >= $BusyThreshold"
+        Log $failReason
+        $testEndedEarly = $true
         break
     }
 
-    Start-Sleep -Seconds 5
+    Start-Sleep -Seconds 2
 }
 
 # Cleanup
-Log "test-end busyCount=$busyCount"
-$pollers | Stop-Job -PassThru | Remove-Job -Force *> $null
-$flooder | Stop-Job -PassThru | Remove-Job -Force *> $null
-$live = Get-Process -Id $ghPid -ErrorAction SilentlyContinue
-if ($live) {
-    Log "stopping ghostty pid=$ghPid"
-    Stop-Process -Id $ghPid -Force -ErrorAction SilentlyContinue
+Log "test-end busyCount=$busyCount endedEarly=$testEndedEarly"
+$pollers + $flooders | Stop-Job -PassThru -ErrorAction SilentlyContinue | Remove-Job -Force -ErrorAction SilentlyContinue *> $null
+
+foreach ($p in $ghProcs) {
+    $live = Get-Process -Id $p.Id -ErrorAction SilentlyContinue
+    if ($live) {
+        Log "stopping ghostty pid=$($p.Id)"
+        Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+    }
 }
+Start-Sleep -Seconds 1
+# Catch orphaned ghostty processes that might have spawned tabs
+Stop-OrphanGhostty -KeepPids @()
 
 # Verdict
-$newDumps = @(Get-ChildItem $dumpDir -Filter "ghostty.exe.$ghPid.dmp" -ErrorAction SilentlyContinue)
+$newDumps = @()
+foreach ($p in $ghProcs) {
+    $d = Get-ChildItem $dumpDir -Filter "ghostty.exe.$($p.Id).dmp" -ErrorAction SilentlyContinue
+    if ($d) { $newDumps += $d }
+}
+# Also look for any dump created since runStart (catches re-spawned pids)
+$recentDumps = @(Get-ChildItem $dumpDir -Filter 'ghostty.exe.*.dmp' -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTime -gt $runStart -and $preDumps -notcontains $_.Name })
 
-if ($newDumps.Count -gt 0 -or $busyCount -gt 5) {
-    Log "VERDICT: FAIL (busy=$busyCount, dumps=$($newDumps.Count))"
+$totalNewDumps = $newDumps.Count + ($recentDumps | Where-Object { $newDumps -notcontains $_ }).Count
+
+if ($totalNewDumps -gt 0 -or $busyCount -ge $BusyThreshold -or $testEndedEarly) {
+    $reason = if ($failReason) { $failReason } else { "busy=$busyCount dumps=$totalNewDumps" }
+    Log "VERDICT: FAIL ($reason)"
     exit 1
 } else {
-    Log "VERDICT: PASS (busy=$busyCount, dumps=0)"
+    Log "VERDICT: PASS (busy=$busyCount, dumps=0, sessions all survived)"
     exit 0
 }

@@ -1,141 +1,158 @@
 # 2026-04-27 deadlock-blocker effectiveness audit
 
-User report: "両方クラッシュした、ぜんぜんデッドロックブロッカーになってねーな" — two
-ghostty WinUI3 sessions hosting parallel Codex (PID 37564) and Gemini
+User report: 「両方クラッシュした、ぜんぜんデッドロックブロッカーになってねーな」
+— two ghostty WinUI3 sessions hosting parallel Codex (PID 37564) and Gemini
 (PID 42852) agent workloads died simultaneously at `12:59:14`, ~8 minutes
 into a deadlock-blocker validation run on fork main `a27b3c601`.
 
-## Root cause: panic-in-panic chain
+**This README is the synthesis after team re-audit. Earlier draft was
+rejected on 4 of 5 root-cause claims; see `forensics-reaudit.md` for
+the rejection.**
 
-WER recorded 21 ghostty crashes in 2 hours, **all** at the same offset
-`0x80000003 STATUS_BREAKPOINT @ ghostty+0x248b4e`. Symbolizing against
-`zig-out-winui3/bin/ghostty.exe` (debug build, PDB-less, llvm-symbolizer)
-resolves the call stack from `CrashDumps/ghostty.exe.68932.dmp`:
+## What we actually know
 
-```
-posix.zig:687       abort()                               <- STATUS_BREAKPOINT
-debug.zig:1560      handleSegfaultWindowsExtra
-debug.zig:1544      handleSegfaultWindows                 <- VEH catches segfault
-windows.zig:130     OpenFile                              <- segfault HERE
-fs/Dir.zig:945      openFileW
-fs/Dir.zig:821      openFile
-debug.zig:1185      printLineFromFileAnyOs
-debug.zig:1176      printLineInfo__anon_12029
-debug.zig:1123      printSourceAtAddress
-debug.zig:1076      writeStackTraceWindows
-```
+### About the 12:59:14 deaths
+- Both ghostty.exe processes disappeared at the same second.
+- **No WER APPCRASH event in the Application log between 12:50:00 and
+  13:05:00.** No new minidump in `%LOCALAPPDATA%\CrashDumps\` after 12:37.
+  No watchdog crash log directory at `%USERPROFILE%\.ghostty-win\crash\`
+  (path does not exist on this machine — see "Open question 1" below).
+- daemon log shows a `BUSY|renderer_locked` cluster on 42852 starting at
+  `12:52:38` and recurring every ~30 s while Gemini was active. Once
+  Gemini went idle the BUSY events stopped.
+- Process exit was **silent** — no error event logged anywhere on the
+  system. This pattern is consistent with `process.exit(2)` (Phase 4
+  watchdog) or external `TerminateProcess`, NOT with a STATUS_BREAKPOINT
+  panic that WER would catch.
 
-Reading bottom-up: an **unrelated original panic** triggered Zig's
-`writeStackTraceWindows` to format a backtrace. The line-context
-formatter tried to open the `.zig` source file for the faulting frame.
-That `OpenFile` call segfaulted (stack shows `0xAA…AA` Zig ReleaseSafe
-poison — strong UAF signature, ref `feedback_zig_releasesafe_0xaa_poison`).
-The VEH `handleSegfaultWindows` caught the segfault and called `abort()`,
-which raised `STATUS_BREAKPOINT` for the OS to capture.
+### About the 12:37:43 crash dump
+- WER recorded **21 ghostty crashes between 11:29 and 12:37:43**, all at
+  fault offset `0x248b4e` = `std.posix.abort` (`STATUS_BREAKPOINT`).
+- The latest dump `CrashDumps/ghostty.exe.68932.dmp` shows a stack chain
+  ending in `handleSegfaultWindows` (Zig's VEH for ACCESS_VIOLATION),
+  i.e. **a real segfault — but** the deeper frames are not recoverable
+  from this minidump (rsp walk fails after 8 frames; mid-stack frames
+  are heap pointers and `0xAA` poison bytes).
+- This dump is **NOT from the 12:59:14 deaths.** It's from a different,
+  earlier short-lived crash (uptime 28 s, 22 minutes before the user's
+  event). Earlier draft conflated them.
 
-**WER reports the breakpoint, never the original panic.** All 21 events
-have an identical signature, so this is a deterministic reentrant fault
-inside the panic handler — not 21 different bugs.
+### About the deadlock blockers themselves
+The static-audit + Gemini cascade-detector audit + reproducer all agree:
 
-## What the deadlock blockers actually did
-
-Static audit (`static-audit.md`) confirms the four landed commits work
-as designed:
-
-- **Phase 2.3 sweep** (`bf9c556a1`): production `.forever` count is
-  truly `0`. Two remaining `WaitForSingleObject(INFINITE)` are correctly
-  `LINT-ALLOW`-tagged (Win32 message pump + legacy `Command.zig`
-  awaiting `waitTimeout` migration).
+- **Phase 2.3 sweep** (`bf9c556a1`): production `.forever` count is `0`.
+  Two remaining `WaitForSingleObject(INFINITE)` are correctly
+  `LINT-ALLOW`-tagged.
 - **BoundedMailbox** (`bf9c556a1`, `2f4d7cc4c`): every public `push*`
-  callsite is drop-safe. `quit` / `shutdown` flow through
-  `performAction(.quit, {})` directly, never through a mailbox, so
-  drop-on-full cannot lose a shutdown signal.
-- **Cascade detector** (`2f4d7cc4c`): atomic ordering correct.
-  **But**: detector `View` does not include `last_renderer_locked` — the
-  signal that actually fired today (CP pipe BUSY responses) is invisible
-  to the in-process detector. See `crash-forensics.md` Section 3.
+  callsite is drop-safe. `quit` flows out-of-band via
+  `BoundedMailbox.shutdown()` atomic broadcast, not through a `push()`
+  that could be dropped.
+- **Cascade detector** (`2f4d7cc4c`): atomic ordering correct; 7+5
+  unit/repro tests pass in all three modes (`disabled`, `warn`,
+  `trigger`). **But the View has no `last_renderer_locked` signal**, so
+  the actual signal that fired today (CP-side BUSY) was invisible to
+  the in-process detector.
 - **Phase 4 watchdog** (`watchdog.zig:91, 261`): default action `crash`,
-  timeout `5000ms`, calls `process.exit(2)` on fire and dumps
+  timeout `5000ms`, calls `process.exit(2)` and writes a snapshot to
   `%USERPROFILE%\.ghostty-win\crash\<unix>-watchdog.log`. **No watchdog
-  log directory was ever created on this machine** — Phase 4 has never
-  fired. Today's deaths were not watchdog kills.
+  log directory has ever been created on this machine.** Either the
+  watchdog has never fired in `crash` mode, or the snapshot directory
+  creation is silently failing.
+
+### About reproducibility
+The reproducer at `tests/winui3/repro_panic_in_panic_under_load.ps1`
+**reliably triggers the failure shape in 18 seconds** when run with the
+hardened defaults (`-Sessions 2`, multi-session SHELL flooders +
+80 Hz/session pollers). 2/2 consecutive `-Quick` runs FAIL within
+budget. Trigger summary:
+
+> Pure CP-pipe traffic doesn't load the renderer mutex. **Shell-side
+> text I/O inside the session** (`for /L echo` loop + `dir /S`
+> flooder) holds `Surface.renderer_state.mutex` long enough that
+> high-Hz `deckpilot show` calls into `viewportStringLocked()` with
+> `tryLock` start failing with BUSY. Multi-session (2+) doubles the
+> cross-callback contention surface. The original 12:59:14 incident
+> matched this exact shape.
+
+See `repro/test-hardening.md` for the empirical pass/fail boundary.
 
 ## Verdict
 
-The user's claim is half wrong:
+The user's claim 「ブロッカーになっていない」 is **half-right with a
+twist**:
 
-- The **static blockers** (bounded waits, drop-on-full mailbox) prevent
-  the unbounded-wait class of deadlock and are working.
-- The **cascade detector** is observability, not prevention; in `warn`
-  mode (default) it only logs. Today its signals didn't fire because
-  `last_renderer_locked` isn't wired into its View.
-- The **Phase 4 watchdog** is a postmortem kill-switch, not a deadlock
-  prevention. It didn't fire today.
-- Today's deaths are **not** a deadlock failure at all — they're a
-  panic-in-panic instability in Zig's `writeStackTraceWindows` under
-  load. The processes weren't deadlocked; they were panicking, then
-  corrupting their own backtrace formatter.
+- The static prevention layer (bounded waits, drop-on-full mailbox,
+  out-of-band shutdown) is correct and is preventing the
+  unbounded-wait class of deadlock.
+- The detection layer (cascade detector + Phase 4 watchdog) is **not
+  observing the contention that actually fires under load**:
+  `last_renderer_locked` is not a cascade signal, and the Phase 4
+  snapshot path may be broken (directory never created).
+- The **failure mode is not deadlock at all.** It's renderer-mutex
+  contention that produces BUSY responses externally, eventually
+  followed by a silent process death whose root cause we still cannot
+  identify because:
+  1. WER did not capture it (no APPCRASH event).
+  2. The watchdog's snapshot path may have failed silently.
+  3. The earlier crash dump (12:37) we initially leaned on is from a
+     different incident and doesn't apply.
 
-The bug is in **the panic recovery path**, not in the deadlock blockers.
+The reproducer fires the **first half** of the chain (BUSY clustering
++ session disappearance under load) deterministically. The **second
+half** (what specifically kills the process — VEH abort vs.
+`process.exit(2)` vs. external) remains open.
 
-## Files in this audit
+## Open questions for follow-up issues
 
-- `crash-forensics.md` — Agent-tool crash forensics report (timeline,
-  watchdog hypothesis, cascade-detector signal gap, simultaneous-death
-  theory)
-- `static-audit.md` — Agent-tool static audit (`.forever` 14→0
-  verification, BoundedMailbox drop-safety classification, lint output,
-  atomic ordering review)
-- `evidence/timeline-summary.md` — minute-by-minute reconstruction with
-  the auto-approver-was-not-the-trigger counter-hypothesis
-- `evidence/daemon-37564-42852-full.log` — deckpilot daemon log slice
-  (12:51 launch → 12:59 death)
-- `evidence/manual-approve-poll.log` — proof the approver only fired 3
-  times across 35s, ruling it out as a poll-storm trigger
-- `evidence/repro-adhoc-monitor.log` — reproducer run on fresh PID 35640
-  (1m34s to first BUSY, recurrent every ~36s during active Gemini
-  workload, zero BUSY once Gemini went idle — confirms BUSY correlates
-  with active agent I/O, not pure deckpilot polling)
+1. **Why doesn't `%USERPROFILE%\.ghostty-win\crash\` exist?** Is Phase 4
+   watchdog snapshot writing failing silently, or has it genuinely
+   never fired in `crash` mode? Add a smoke test that forces a fake
+   wedge under `KS_WATCHDOG_TIMEOUT_MS=1000` and checks the snapshot
+   appears.
 
-## Persistent reproducer
+2. **Why was there no WER APPCRASH event for the 12:59:14 deaths?**
+   `process.exit(2)` exits with code 2 silently — no WER. So either
+   Phase 4 fired and we just have no log, or something else killed the
+   process. Capture exit code reliably in the reproducer.
 
-`tests/winui3/repro_panic_in_panic_under_load.ps1` launches a fresh
-ghostty, spawns 4 concurrent CP pollers at 5 Hz, and a text-flooder
-that pipes ~1 MB into the session every 5 s. Captures
-`renderer_locked` count and any new crash dump matching the failing
-PID.
+3. **Wire `last_renderer_locked` into the cascade detector View** as a
+   5th signal. The CP layer already tracks it; the detector just
+   doesn't poll it.
 
-```pwsh
-pwsh -NoProfile -File tests\winui3\repro_panic_in_panic_under_load.ps1 -Quick   # 3 min
-pwsh -NoProfile -File tests\winui3\repro_panic_in_panic_under_load.ps1          # 15 min
-```
+4. **Add CP-side back-pressure** in `apprt/winui3/control_plane.zig` —
+   when `last_renderer_locked` exceeds N/sec, return BUSY pre-emptively
+   without acquiring the renderer mutex, so the daemon's poll rate
+   naturally drops before the failure cascade fires.
 
-Pass: ghostty survives, BUSY count ≤ 5, no new dump at offset 0x248b4e.
-Fail: PID disappears, BUSY count > 5, or new dump appears.
+5. **Investigate the 21-crash burst at 11:29–12:37.** All at offset
+   `0x248b4e` is too deterministic to ignore. Capture stderr/stdout of
+   one of those processes (build-winui3 with `set KS_WATCHDOG=disabled`
+   so panic prints to console), reproduce, get the *original* panic
+   message. Open issue.
 
-3-min Quick run on fork main `a27b3c601` (post-fix-validation) passed
-with `busy=0, dumps=0`. CP polling alone is insufficient to reproduce —
-the original 12:59:14 deaths required active agent file I/O on top of
-the polling. To force a crash repro you need to additionally run an
-agent (Gemini / Codex) inside the session executing file-heavy work.
-This script captures the polling/flood half deterministically; the
-agent half is reproduced manually by re-launching the same dispatch
-briefs in `.dispatch/codex-deadlock-blocker-static-audit.md` and
-`.dispatch/gemini-deadlock-blocker-dynamic-audit.md`.
+## Files
 
-## Next-action recommendations
+- `README.md` (this file) — corrected synthesis post re-audit.
+- `forensics-reaudit.md` — independent re-audit that rejected the
+  earlier draft.
+- `crash-forensics.md` — earlier (now-superseded) forensics report.
+  Kept for history; some claims rejected.
+- `static-audit.md` — static blocker audit (claims still valid).
+- `evidence/` — daemon log slice, manual-approve poll log, ad-hoc
+  reproducer logs, timeline summary.
+- `repro/` — ad-hoc reproducer + test-hardening notes.
+- `tests/winui3/repro_panic_in_panic_under_load.ps1` — hardened
+  regression reproducer (2/2 FAIL on current build).
+- `.dispatch/codex-deadlock-blocker-static-audit.md`,
+  `.dispatch/gemini-deadlock-blocker-dynamic-audit.md` — original
+  briefs the codex/gemini sessions worked from before they died.
 
-1. **Fix the panic-in-panic root cause.** The Zig `writeStackTraceWindows`
-   path is a reentrant-fault hazard under load. Options:
-   - Disable PDB-less line-context formatting in release builds.
-   - Wrap the `Dir.openFile` call inside `printLineFromFileAnyOs` with a
-     defensive try/catch that bails to "??" on failure.
-   - Build with `-Doptimize=ReleaseSafe` plus `--strip` to skip the
-     line-context lookup entirely.
-2. **Wire `last_renderer_locked` into cascade detector** (`#231`
-   follow-up). Add a 5th signal so the detector can observe what
-   deckpilot already observes externally.
-3. **Add CP pipe back-pressure** in `apprt/winui3/control_plane.zig` —
-   when `last_renderer_locked` count exceeds N/sec, return BUSY
-   pre-emptively without acquiring the renderer mutex, so the daemon's
-   poll rate naturally drops before the panic-in-panic chain fires.
+## Status
+
+Local fork main is 2 commits ahead of remote `a27b3c601`:
+
+- `3eedf4e2d` — Gemini's auto-committed dynamic audit notes
+- `d76ad9386` — first audit pass (this README before correction +
+  evidence + repro test)
+
+Not yet pushed. Will be amended/replaced after issues are filed.
