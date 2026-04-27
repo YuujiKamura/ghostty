@@ -13,7 +13,8 @@ param(
     [string]$ExePath,
     [switch]$SkipBuild,
     [switch]$OnlyFailed,
-    [switch]$IncludeStress
+    [switch]$IncludeStress,
+    [switch]$IncludeRegressionRepro
 )
 
 $ErrorActionPreference = 'Stop'
@@ -425,6 +426,36 @@ if (-not $IncludeStress) {
 # ============================================================
 Write-Host "`n=== Stopping Ghostty ===" -ForegroundColor Cyan
 Stop-Ghostty -Process $proc
+
+# ============================================================
+# Phase 5: Regression repro (opt-in via -IncludeRegressionRepro)
+# Closes #245. Asserts the multi-session shell-flood load shape that
+# silently killed sessions on 2026-04-27 (#244) does NOT regress.
+# Test is at tests/winui3/repro_panic_in_panic_under_load.ps1; -Quick
+# runs in 3 minutes. The script self-launches its own ghostty pids,
+# so we run it AFTER the main test ghostty has been stopped.
+# ============================================================
+Write-Host "`n=== Phase 5: Regression repro ===" -ForegroundColor Cyan
+
+if (-not $IncludeRegressionRepro) {
+    Write-Host "  SKIP: regression repro (use -IncludeRegressionRepro to run, ~3 min)" -ForegroundColor DarkGray
+} else {
+    $reproPath = Join-Path $PSScriptRoot "repro_panic_in_panic_under_load.ps1"
+    if (-not (Test-Path $reproPath)) {
+        Write-Host "  SKIP: regression repro (script not found at $reproPath)" -ForegroundColor Yellow
+    } else {
+        Invoke-Test -Name "phase5-regression-repro" -Block {
+            $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue) ?? (Get-Command powershell)
+            $proc5 = Start-Process -FilePath $pwsh.Source -ArgumentList @(
+                '-NoProfile', '-File', $reproPath, '-Quick'
+            ) -PassThru -Wait -WindowStyle Hidden -RedirectStandardOutput "$env:TEMP\repro-out.log" -RedirectStandardError "$env:TEMP\repro-err.log"
+            if ($proc5.ExitCode -ne 0) {
+                $tail = Get-Content "$env:TEMP\repro-out.log" -Tail 5 -ErrorAction SilentlyContinue
+                throw "regression repro FAILED (exit=$($proc5.ExitCode)): $($tail -join '; ')"
+            }
+        }
+    }
+}
 
 # --- Summary ---
 Write-Host "`n============================================" -ForegroundColor White
