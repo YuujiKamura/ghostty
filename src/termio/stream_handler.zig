@@ -151,7 +151,8 @@ pub const StreamHandler = struct {
         // See termio.Mailbox.send for more details on how this works.
 
         // Try instant first. If it works then we can return.
-        if (self.renderer_mailbox.push(msg, .{ .instant = {} }) > 0) {
+        // Phase 2 (#232): bare push() is the new instant (default_timeout_ms=0).
+        if (self.renderer_mailbox.push(msg) == .ok) {
             return;
         }
 
@@ -169,7 +170,21 @@ pub const StreamHandler = struct {
                 .{err},
             );
         };
-        _ = self.renderer_mailbox.push(msg, .{ .forever = {} });
+        // Phase 2 (#232): bridge with bounded pushTimeout(., 5000). The
+        // original `.forever` here was load-bearing for "never lose vt
+        // characters", but a worker thread parking forever on a dead
+        // renderer is exactly the failure mode #232 outlaws. The 5s
+        // bridge surfaces real backpressure as a warn log (Phase 4
+        // metrics will count these); a separate byte-stream channel
+        // with read()-side backpressure is the long-term right answer
+        // (out of scope for #232).
+        const fallback_push = self.renderer_mailbox.pushTimeout(msg, 5_000);
+        if (fallback_push != .ok) {
+            log.warn(
+                "renderer mailbox push fallback dropped vt message result={s}",
+                .{@tagName(fallback_push)},
+            );
+        }
     }
 
     pub fn vt(

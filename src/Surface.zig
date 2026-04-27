@@ -925,7 +925,10 @@ pub fn activateInspector(self: *Surface) !void {
     // inspector pointer is already published into `renderer_state` above,
     // so the renderer will see it on its next render tick even if the
     // mailbox notification is dropped. User-driven and rare (low traffic).
-    if (self.renderer_thread.mailbox.push(.{ .inspector = true }, .{ .instant = {} }) == 0) {
+    // Phase 2 (#232): BoundedMailbox.push() is non-blocking (default
+    // timeout = 0). Returns PushResult; treat anything other than .ok as
+    // a drop with a warn log.
+    if (self.renderer_thread.mailbox.push(.{ .inspector = true }) != .ok) {
         log.warn("inspector activate event dropped (renderer mailbox full)", .{});
     }
     self.queueIo(.{ .inspector = true }, .unlocked);
@@ -950,7 +953,7 @@ pub fn deactivateInspector(self: *Surface) void {
     // already cleared from `renderer_state` above, so the renderer will
     // stop rendering it on its next tick even if this notification is
     // dropped.
-    if (self.renderer_thread.mailbox.push(.{ .inspector = false }, .{ .instant = {} }) == 0) {
+    if (self.renderer_thread.mailbox.push(.{ .inspector = false }) != .ok) {
         log.warn("inspector deactivate event dropped (renderer mailbox full)", .{});
     }
     self.queueIo(.{ .inspector = false }, .unlocked);
@@ -1462,13 +1465,24 @@ fn searchCallback_(
             const matches = try alloc.dupe(terminal.highlight.Flattened, matches_unowned);
             for (matches) |*m| m.* = try m.clone(alloc);
 
-            _ = self.renderer_thread.mailbox.push(
+            // Phase 2 (#232): search-thread producer → renderer mailbox.
+            // Bridge with `pushTimeout(., 5000)` until Phase 3 lands the
+            // App-scoped shutdown bus. Drops free the arena to avoid leaks
+            // on saturation. The 5s ceiling protects the search thread
+            // from parking if the renderer is wedged.
+            switch (self.renderer_thread.mailbox.pushTimeout(
                 .{ .search_viewport_matches = .{
                     .arena = arena,
                     .matches = matches,
                 } },
-                .forever,
-            );
+                5_000,
+            )) {
+                .ok => {},
+                .full, .shutdown => {
+                    log.warn("search_viewport_matches dropped (renderer mailbox full or closed)", .{});
+                    arena.deinit();
+                },
+            }
             try self.renderer_thread.wakeup.notify();
         },
 
@@ -1480,27 +1494,42 @@ fn searchCallback_(
                 const alloc = arena.allocator();
                 const match = try sel.highlight.clone(alloc);
 
-                _ = self.renderer_thread.mailbox.push(
+                switch (self.renderer_thread.mailbox.pushTimeout(
                     .{ .search_selected_match = .{
                         .arena = arena,
                         .match = match,
                     } },
-                    .forever,
-                );
+                    5_000,
+                )) {
+                    .ok => {},
+                    .full, .shutdown => {
+                        log.warn("search_selected_match dropped (renderer mailbox full or closed)", .{});
+                        arena.deinit();
+                    },
+                }
 
-                // Send the selected index to the surface mailbox
+                // Send the selected index to the surface mailbox.
+                // surfaceMailbox() is `apprt.surface.Mailbox` (App-thread
+                // wrapper), not the renderer.Thread.Mailbox migrated in
+                // this commit, so it still uses the legacy `.forever`
+                // contract. Phase 2.3 will migrate App.Mailbox.
                 _ = self.surfaceMailbox().push(
                     .{ .search_selected = sel.idx },
                     .forever,
                 );
             } else {
-                // Reset our selected match
-                _ = self.renderer_thread.mailbox.push(
+                // Reset our selected match (no payload to free).
+                switch (self.renderer_thread.mailbox.pushTimeout(
                     .{ .search_selected_match = null },
-                    .forever,
-                );
+                    5_000,
+                )) {
+                    .ok => {},
+                    .full, .shutdown => {
+                        log.warn("search_selected_match=null dropped (renderer mailbox full or closed)", .{});
+                    },
+                }
 
-                // Reset the selected index
+                // Reset the selected index (App.Mailbox; see comment above).
                 _ = self.surfaceMailbox().push(
                     .{ .search_selected = null },
                     .forever,
@@ -1511,6 +1540,7 @@ fn searchCallback_(
         },
 
         .total_matches => |total| {
+            // App.Mailbox; see comment in selected_match above.
             _ = self.surfaceMailbox().push(
                 .{ .search_total = total },
                 .forever,
@@ -1519,17 +1549,30 @@ fn searchCallback_(
 
         // When we quit, tell our renderer to reset any search state.
         .quit => {
-            _ = self.renderer_thread.mailbox.push(
+            switch (self.renderer_thread.mailbox.pushTimeout(
                 .{ .search_selected_match = null },
-                .forever,
-            );
-            _ = self.renderer_thread.mailbox.push(
+                5_000,
+            )) {
+                .ok => {},
+                .full, .shutdown => {
+                    log.warn("search quit (selected_match reset) dropped", .{});
+                },
+            }
+            // Build the reset payload first so we can free its arena on drop.
+            var quit_arena: ArenaAllocator = .init(self.alloc);
+            switch (self.renderer_thread.mailbox.pushTimeout(
                 .{ .search_viewport_matches = .{
-                    .arena = .init(self.alloc),
+                    .arena = quit_arena,
                     .matches = &.{},
                 } },
-                .forever,
-            );
+                5_000,
+            )) {
+                .ok => {},
+                .full, .shutdown => {
+                    log.warn("search quit (viewport_matches reset) dropped", .{});
+                    quit_arena.deinit();
+                },
+            }
             try self.renderer_thread.wakeup.notify();
 
             // Reset search totals in the surface
@@ -1830,7 +1873,7 @@ pub fn updateConfig(
     // fires on `error`, not on a clean drop). The renderer will pick up
     // the new config on the next config reload; losing one transient
     // config-change message is preferable to hanging the UI thread.
-    if (self.renderer_thread.mailbox.push(renderer_message, .{ .instant = {} }) == 0) {
+    if (self.renderer_thread.mailbox.push(renderer_message) != .ok) {
         log.warn("config change event dropped (renderer mailbox full)", .{});
         renderer_message.deinit();
     }
@@ -2625,7 +2668,7 @@ pub fn setFontSize(self: *Surface, size: font.face.DesiredSize) !void {
             .old_key = self.font_grid_key,
             .new_key = font_grid_key,
         },
-    }, .{ .instant = {} }) == 0) {
+    }) != .ok) {
         log.warn("font size change event dropped (renderer mailbox full)", .{});
         self.app.font_grid_set.deref(font_grid_key);
     } else {
@@ -3503,7 +3546,7 @@ pub fn occlusionCallback(self: *Surface, visible: bool) !void {
     // the next visibility change promptly.
     if (self.renderer_thread.mailbox.push(.{
         .visible = visible,
-    }, .{ .instant = {} }) == 0) {
+    }) != .ok) {
         log.warn("occlusion event dropped (renderer mailbox full) visible={}", .{visible});
     }
     try self.queueRender();
@@ -3537,7 +3580,7 @@ pub fn focusCallback(self: *Surface, focused: bool) !void {
     // preferable to hanging the UI thread.
     if (self.renderer_thread.mailbox.push(.{
         .focus = focused,
-    }, .{ .instant = {} }) == 0) {
+    }) != .ok) {
         log.warn("focus event dropped (renderer mailbox full)", .{});
     }
 
@@ -6025,7 +6068,7 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
                 // simply does not crash — which, for a debug binding the
                 // user invoked deliberately, is reported via log so the
                 // user knows to retry. Sibling of #218; tracked in #219.
-                if (self.renderer_thread.mailbox.push(.{ .crash = {} }, .{ .instant = {} }) == 0) {
+                if (self.renderer_thread.mailbox.push(.{ .crash = {} }) != .ok) {
                     log.warn("debug crash trigger dropped (renderer mailbox full)", .{});
                 }
                 self.queueRender() catch |err| {

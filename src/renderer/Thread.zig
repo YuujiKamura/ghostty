@@ -10,7 +10,9 @@ const internal_os = @import("../os/main.zig");
 const rendererpkg = @import("../renderer.zig");
 const apprt = @import("../apprt.zig");
 const configpkg = @import("../config.zig");
-const BlockingQueue = @import("../datastruct/main.zig").BlockingQueue;
+const datastruct = @import("../datastruct/main.zig");
+const BlockingQueue = datastruct.BlockingQueue;
+const BoundedMailbox = datastruct.BoundedMailbox;
 const App = @import("../App.zig");
 
 const Allocator = std.mem.Allocator;
@@ -29,10 +31,18 @@ const must_draw_from_app_thread =
     else
         false;
 
-/// The type used for sending messages to the IO thread. For now this is
-/// hardcoded with a capacity. We can make this a comptime parameter in
+/// The type used for sending messages to the renderer thread. For now this
+/// is hardcoded with a capacity. We can make this a comptime parameter in
 /// the future if we want it configurable.
-pub const Mailbox = BlockingQueue(rendererpkg.Message, 64);
+///
+/// Migrated to `BoundedMailbox` (Phase 2.2 of #232). The type-baked
+/// `default_timeout_ms = 0` means bare `push()` is non-blocking
+/// (drop on full) — the contract UI-thread producers (Surface callbacks,
+/// embedded host events) require to avoid the #218 hang. Worker-thread
+/// producers (termio, font shaper) opt into bounded waits by calling
+/// `pushTimeout(value, ms)` explicitly. Indefinite waits are spelled
+/// `pushUntilShutdown(value, &token)` and require a shutdown token.
+pub const Mailbox = BoundedMailbox(rendererpkg.Message, 64, 0);
 
 /// Allocator used for some state
 alloc: std.mem.Allocator,
@@ -345,7 +355,13 @@ fn drainMailbox(self: *Thread) !void {
         void;
     defer if (builtin.os.tag.isDarwin()) pool.deinit();
 
-    while (self.mailbox.pop()) |message| {
+    // Use `popOrNull` (Phase 2 of #232): the new `BoundedMailbox.pop()`
+    // returns a `PopResult` union; `popOrNull` is the optional-style adapter
+    // that flattens `.empty` and `.shutdown` into `null` so the existing
+    // drain loop semantics are preserved verbatim. Shutdown handling for
+    // the renderer thread itself is driven by the `xev` `stop` async, not
+    // by mailbox closure.
+    while (self.mailbox.popOrNull()) |message| {
         // Gate high-frequency mailbox log to avoid I/O bottleneck during animation/output.
         // reset_cursor_blink fires on every PTY character batch (500ms throttle) and
         // floods the log during fast output (e.g. ghost demo at 15fps).

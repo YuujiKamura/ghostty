@@ -497,8 +497,21 @@ pub fn resize(
         }
     }
 
-    // Mail the renderer so that it can update the GPU and re-render
-    _ = self.renderer_mailbox.push(.{ .resize = size }, .{ .forever = {} });
+    // Mail the renderer so that it can update the GPU and re-render.
+    // Phase 2 (#232): termio worker → renderer; bridge with bounded
+    // pushTimeout(., 5000) until Phase 3's App-scoped shutdown bus lands.
+    // A dropped resize is observable as a stale GPU size for one frame
+    // until the next event-driven update; catastrophic resize loss would
+    // require five seconds of renderer stall, which the watchdog already
+    // catches. The previous `.forever` could park the termio thread
+    // permanently if the renderer died, holding pty resources.
+    const resize_push = self.renderer_mailbox.pushTimeout(.{ .resize = size }, 5_000);
+    if (resize_push != .ok) {
+        log.warn(
+            "renderer resize message dropped (renderer mailbox full or closed) result={s}",
+            .{@tagName(resize_push)},
+        );
+    }
     self.renderer_wakeup.notify() catch {};
 }
 
@@ -665,9 +678,11 @@ fn processOutputLocked(self: *Termio, buf: []const u8) void {
         }
 
         self.last_cursor_reset = now;
+        // Phase 2 (#232): drop on full is fine here — the cursor will
+        // re-render itself on the next frame regardless.
         _ = self.renderer_mailbox.push(.{
             .reset_cursor_blink = {},
-        }, .{ .instant = {} });
+        });
     } else |err| {
         log.warn("failed to get current time err={}", .{err});
     }

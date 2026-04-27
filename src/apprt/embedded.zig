@@ -2123,8 +2123,7 @@ pub const CAPI = struct {
             // display until the next event. Sister of #218/#219 (#224).
             if (surface.renderer_thread.mailbox.push(
                 .{ .macos_display_id = display_id },
-                .{ .instant = {} },
-            ) == 0) {
+            ) != .ok) {
                 log.warn("macos_display_id event dropped (renderer mailbox full)", .{});
             }
             surface.renderer_thread.wakeup.notify() catch {};

@@ -11,24 +11,39 @@
 //! showed the UI thread parked in
 //!   Condition.wait -> blocking_queue.push -> focusCallback.
 //!
+//! Phase 2 (#232) replaces the buggy contract structurally
+//! ------------------------------------------------------
+//! The original test (commits 66c125b22, ddf59742e) validated the fix on
+//! `BlockingQueue` by asserting that `.instant` pushes return 0 and never
+//! block (test 4) while `.forever` pushes hang the producer until a pop
+//! frees a slot (test 1). Phase 2 lands `BoundedMailbox<T, N, ms>`, which
+//! removes `.forever` from the type entirely; this file is updated to
+//! exercise both the legacy `BlockingQueue` contract (for the regression
+//! window where Surface.zig still imports it) AND the new
+//! `BoundedMailbox` contract that the migrated `renderer.Thread.Mailbox`
+//! relies on.
+//!
 //! What these tests prove (mechanically, no hardware needed)
 //! ---------------------------------------------------------
-//! 1. `BlockingQueue.push(.forever)` against a full queue blocks the
-//!    caller indefinitely until a consumer pops. This is the buggy
-//!    contract the pre-fix `focusCallback` relied on. Test #1 spawns a
-//!    side thread to attempt the push, sleeps 100ms on the main thread,
-//!    and asserts (via an Atomic flag) that the side thread is *still*
-//!    blocked. We then unblock by popping so the test cleans up.
-//! 2. `BlockingQueue.push(.{ .ns = ... })` against a full queue returns
-//!    0 after the timeout instead of blocking forever. This is the
-//!    timeout contract callers can rely on.
-//! 3. The `focusCallback` saturation pattern: a consumer that is
-//!    temporarily stalled lets the producer fill the mailbox, and the
-//!    Nth focus event then needs a non-blocking push (`.instant` or
-//!    short `.ns`) or it deadlocks. We model this with a 4-slot mailbox,
-//!    a paused consumer, and 5 focus pushes. The 5th push under
-//!    `.forever` would hang; we test the safe variants instead and
-//!    bound the whole exercise with a wall-clock timeout assertion.
+//! Legacy `BlockingQueue` contract (still asserted because Termio mailbox,
+//! App mailbox, and the search worker queue have not migrated yet):
+//!   1. `BlockingQueue.push(.forever)` against a full queue blocks the
+//!      caller indefinitely until a consumer pops. Test #1.
+//!   2. `BlockingQueue.push(.{ .ns = ... })` returns 0 after the timeout
+//!      instead of blocking. Test #2.
+//!   3. `.instant` saturation contract for the seven UI-thread sibling
+//!      sites described in #218/#219/#224. Tests #3 and #4.
+//!
+//! New `BoundedMailbox` contract (renderer.Thread.Mailbox after Phase 2):
+//!   5. `push()` on a `default_timeout_ms=0` mailbox is non-blocking and
+//!      returns `.full` (not `.ok`) on saturation. Test #5.
+//!   6. `pushTimeout(.., 5_000)` from the search worker thread (the
+//!      bridge migration of the seven `.forever` search callsites in
+//!      Surface.zig:1465-1542) returns `.full` after the bound rather
+//!      than parking forever. Test #6.
+//!   7. The compile-time guarantee: there is no `.forever` enum tag on
+//!      `PushResult`, so a future regression that re-introduces a
+//!      forever-shaped escape hatch fails at comptime. Test #7.
 //!
 //! Hard rule: every test in this file MUST bound its own waiting with
 //! an explicit deadline / timed wait. Never rely on the test runner to
@@ -36,22 +51,36 @@
 //!
 //! Constraints from the dispatch brief
 //! -----------------------------------
-//! - Do not modify `src/Surface.zig` (owned by another agent).
-//! - Do not modify `src/datastruct/blocking_queue.zig` (under audit).
-//! - This file is self-contained: it imports `blocking_queue.zig` directly
-//!   so it can run via `zig test tests/repro_focus_mailbox_hang.zig`
+//! - This file is self-contained: it imports `blocking_queue.zig` and
+//!   `bounded_mailbox.zig` as named modules so it can run via `zig test`
 //!   without touching the project test wiring.
+//! - Build commands are documented in
+//!   `notes/2026-04-26_repro_test_218.md` and `notes/architecture/
+//!   2026-04-27_phase2_bounded_mailbox_design.md`.
 
 const std = @import("std");
 const testing = std.testing;
-// Imported as a named module so this file can sit outside `src/` and
-// still build via `zig test` with `--dep blocking_queue
-// -Mroot=... -Mblocking_queue=src/datastruct/blocking_queue.zig`.
-// See `notes/2026-04-26_repro_test_218.md` for the exact command.
+// Imported as named modules so this file can sit outside `src/` and
+// still build via `zig test` with `--dep blocking_queue --dep
+// bounded_mailbox -Mroot=... -Mblocking_queue=src/datastruct/
+// blocking_queue.zig -Mbounded_mailbox=src/datastruct/
+// bounded_mailbox.zig`.
 const blocking_queue = @import("blocking_queue");
 const BlockingQueue = blocking_queue.BlockingQueue;
+const bounded_mailbox = @import("bounded_mailbox");
+const BoundedMailbox = bounded_mailbox.BoundedMailbox;
+const never_signal = &bounded_mailbox.never_signal;
 
 const ns_per_ms = std.time.ns_per_ms;
+
+// =========================================================================
+// LEGACY BLOCKING_QUEUE CONTRACT (Tests 1-4)
+//
+// These assert the original .forever / .instant contract that the
+// non-renderer mailboxes (App.Mailbox, termio mailbox, search worker
+// mailbox) still rely on until Phase 2.3 migrates them. Until those
+// migrations land, this contract is load-bearing.
+// =========================================================================
 
 // -----------------------------------------------------------------------
 // Test 1: `.forever` push blocks indefinitely when the queue is full.
@@ -80,7 +109,7 @@ const ForeverProbe = struct {
     }
 };
 
-test "push forever blocks indefinitely when full" {
+test "BlockingQueue: push forever blocks indefinitely when full (legacy contract)" {
     const alloc = testing.allocator;
     const Q = BlockingQueue(u64, 2);
 
@@ -101,9 +130,6 @@ test "push forever blocks indefinitely when full" {
     var thread = try std.Thread.spawn(.{}, ForeverProbe.run, .{&probe});
 
     // Give the producer time to actually enter `cond_not_full.wait`.
-    // 100ms is many orders of magnitude longer than a CV park costs to
-    // set up; if `.forever` ever returned without a pop, we'd see done
-    // become true here.
     std.Thread.sleep(100 * ns_per_ms);
 
     // Core assertion: the producer is still blocked.
@@ -113,8 +139,7 @@ test "push forever blocks indefinitely when full" {
     const popped = q.pop();
     try testing.expect(popped != null);
 
-    // Now the producer should complete promptly. Bound the wait so a
-    // pathological hang here doesn't take the test runner with it.
+    // Now the producer should complete promptly.
     const join_deadline_ns: u64 = 2 * std.time.ns_per_s;
     var waited: u64 = 0;
     const step_ns: u64 = 5 * ns_per_ms;
@@ -125,19 +150,11 @@ test "push forever blocks indefinitely when full" {
     try testing.expect(probe.done.load(.acquire));
 
     thread.join();
-
-    // The producer's push must have eventually succeeded (>0).
     try testing.expect(probe.push_return.load(.acquire) > 0);
 }
 
 // -----------------------------------------------------------------------
 // Test 2: timeout-bounded push returns 0 instead of hanging.
-//
-// Same setup as Test 1 but the producer uses `.{ .ns = 50ms }`. The
-// producer must return on its own within ~50ms with a return value of
-// 0 (queue still full). This is the contract a fixed `focusCallback`
-// can rely on if it ever wants bounded back-pressure instead of pure
-// drop.
 // -----------------------------------------------------------------------
 
 const TimedProbe = struct {
@@ -155,7 +172,7 @@ const TimedProbe = struct {
     }
 };
 
-test "push with ns timeout returns 0 on full queue without hanging" {
+test "BlockingQueue: push with ns timeout returns 0 on full queue without hanging" {
     const alloc = testing.allocator;
     const Q = BlockingQueue(u64, 2);
 
@@ -168,15 +185,13 @@ test "push with ns timeout returns 0 on full queue without hanging" {
     var probe: TimedProbe = .{
         .queue = q,
         .done = std.atomic.Value(bool).init(false),
-        .push_return = std.atomic.Value(u32).init(7), // poison; must overwrite
+        .push_return = std.atomic.Value(u32).init(7),
         .elapsed_ns = std.atomic.Value(u64).init(0),
     };
 
     var thread = try std.Thread.spawn(.{}, TimedProbe.run, .{&probe});
     defer thread.join();
 
-    // Wait up to 500ms (10x the timeout) for the producer to finish.
-    // If we ever cross this deadline the timeout contract is broken.
     const deadline_ns: u64 = 500 * ns_per_ms;
     var waited: u64 = 0;
     const step_ns: u64 = 5 * ns_per_ms;
@@ -186,41 +201,19 @@ test "push with ns timeout returns 0 on full queue without hanging" {
     }
     try testing.expect(probe.done.load(.acquire));
 
-    // Push returned 0 (queue still full, did not write).
     try testing.expectEqual(@as(u32, 0), probe.push_return.load(.acquire));
 
-    // And it returned in roughly the timeout window — well below our
-    // 500ms cap. Allow some slack for scheduler jitter.
     const elapsed = probe.elapsed_ns.load(.acquire);
     try testing.expect(elapsed >= 40 * ns_per_ms);
     try testing.expect(elapsed < 400 * ns_per_ms);
 
-    // Queue contents are untouched.
     try testing.expectEqual(@as(u64, 1), q.pop().?);
     try testing.expectEqual(@as(u64, 2), q.pop().?);
     try testing.expect(q.pop() == null);
 }
 
 // -----------------------------------------------------------------------
-// Test 3: focus-saturation repro.
-//
-// Mocks the Surface.focusCallback path: a 4-slot mailbox stands in for
-// `renderer_thread.mailbox`, a "consumer" thread is paused for the
-// duration of the burst, and the producer (the UI thread analogue)
-// fires 5 focus events back-to-back. With `.forever`, the 5th push
-// would hang the producer; we therefore exercise both the bug shape
-// and the fix shape in the same test:
-//
-//   * "buggy_kind" (`.forever`) is run on a side thread and observed
-//     via an atomic flag. After 200ms the producer MUST still be
-//     blocked. We then unblock it by popping and shut down cleanly.
-//   * "fixed_kind" (`.instant`) is run inline on the main thread. All
-//     5 pushes complete, the 5th returns 0 (dropped, mirroring the
-//     "log warn + drop" path the fix branch takes), and no thread
-//     parks at all.
-//
-// The whole test is bounded by an explicit deadline. It will never
-// hang the runner.
+// Test 3: focus-saturation repro on legacy BlockingQueue.
 // -----------------------------------------------------------------------
 
 const FocusKind = enum { buggy_forever, fixed_instant };
@@ -246,38 +239,6 @@ const FocusBurstProbe = struct {
     }
 };
 
-// -----------------------------------------------------------------------
-// Test 4 (#219 sibling sites): the drop-on-full contract holds for the
-// six other UI-thread `.forever` push sites in `Surface.zig` that share
-// the same hang shape as #218 (inspector activate/deactivate, config
-// reload, font size change, occlusion, debug crash binding).
-//
-// The mechanical proof is the same as Test 3: a saturated mailbox plus
-// a sequence of `.instant` pushes must complete without blocking, and
-// the dropped slots must be observable as `r == 0`. We exercise it with
-// heterogeneous payloads (an enum tag stand-in is sufficient — the queue
-// is generic and the surface message kind is irrelevant to the contract)
-// to make it explicit that *every* sibling site relies on the same
-// guarantee, not just `.focus`.
-//
-// We also verify the producer never blocks regardless of which site
-// "fires first" by interleaving event kinds across the saturation
-// burst. This guards against a future regression where someone adds a
-// new mailbox payload that accidentally takes a slow path.
-//
-// #224 extension: macOS display-id change and GTK new_window activation
-// are the two remaining UI-thread `.forever` sites identified in
-// notes/2026-04-26_forever_push_audit.md. They live in apprt-specific
-// files (src/apprt/embedded.zig:2119, src/apprt/gtk/class/application.zig:1462)
-// rather than Surface.zig, but the fix is the same shape — switch to
-// `.instant` and drop+log on full. The blocking_queue contract being
-// relied on is identical to #218/#219, so the same enum-tag stand-in
-// pattern verifies coverage. The macOS site pushes onto the surface
-// renderer mailbox; the GTK site pushes onto the app mailbox — the
-// queue is generic over both, so adding a row each into this test
-// locks in coverage of both apprt-side fixes.
-// -----------------------------------------------------------------------
-
 const SiblingEventKind = enum(u32) {
     inspector_on = 1,
     inspector_off = 2,
@@ -286,21 +247,17 @@ const SiblingEventKind = enum(u32) {
     visible_show = 5,
     visible_hide = 6,
     crash = 7,
-    // #224: apprt-side UI-thread sites.
-    macos_display_id = 8, // src/apprt/embedded.zig:2119
-    gtk_new_window = 9, // src/apprt/gtk/class/application.zig:1462
+    macos_display_id = 8,
+    gtk_new_window = 9,
 };
 
-test "sibling sites: instant push never blocks UI thread (#219, #224)" {
+test "BlockingQueue: sibling sites instant push never blocks UI thread (#219, #224)" {
     const alloc = testing.allocator;
     const Q = BlockingQueue(u32, 4);
 
     const q = try Q.create(alloc);
     defer q.destroy(alloc);
 
-    // No consumer is ever started — this models the worst case where the
-    // renderer thread is fully stalled (mid-frame, holding the mutex,
-    // etc.) and the UI thread keeps firing sibling events.
     const events = [_]SiblingEventKind{
         .inspector_on,
         .change_config,
@@ -309,8 +266,8 @@ test "sibling sites: instant push never blocks UI thread (#219, #224)" {
         .inspector_off,
         .visible_show,
         .crash,
-        .macos_display_id, // #224 site 1
-        .gtk_new_window, // #224 site 2
+        .macos_display_id,
+        .gtk_new_window,
     };
 
     var t = try std.time.Timer.start();
@@ -322,20 +279,10 @@ test "sibling sites: instant push never blocks UI thread (#219, #224)" {
     }
     const elapsed = t.read();
 
-    // Mailbox holds 4, we tried 9, so exactly 4 must succeed and 5 drop.
     try testing.expectEqual(@as(u32, 4), pushed);
     try testing.expectEqual(@as(u32, 5), dropped);
-
-    // The whole burst MUST complete in well under a frame budget. If
-    // `.instant` ever started waiting we'd see this balloon. 50ms is
-    // already orders of magnitude over what 9 atomic pushes need.
     try testing.expect(elapsed < 50 * ns_per_ms);
 
-    // Queue contents reflect the FIRST 4 events (FIFO), proving the
-    // accepted pushes landed in order and the dropped ones did not
-    // displace them. The two #224 events come last in the burst above,
-    // so they are among the dropped — exactly the contract the apprt
-    // fix relies on (drop is safe, log.warn fires).
     try testing.expectEqual(@as(u32, @intFromEnum(SiblingEventKind.inspector_on)), q.pop().?);
     try testing.expectEqual(@as(u32, @intFromEnum(SiblingEventKind.change_config)), q.pop().?);
     try testing.expectEqual(@as(u32, @intFromEnum(SiblingEventKind.font_grid)), q.pop().?);
@@ -343,11 +290,10 @@ test "sibling sites: instant push never blocks UI thread (#219, #224)" {
     try testing.expect(q.pop() == null);
 }
 
-test "focus saturation: forever hangs producer, instant drops cleanly (#218)" {
+test "BlockingQueue: focus saturation forever hangs producer, instant drops cleanly (#218)" {
     const alloc = testing.allocator;
     const Q = BlockingQueue(u32, 4);
 
-    // ---- Phase A: buggy `.forever` shape — must hang on the 5th push.
     {
         const q = try Q.create(alloc);
         defer q.destroy(alloc);
@@ -360,23 +306,15 @@ test "focus saturation: forever hangs producer, instant drops cleanly (#218)" {
             .drops = std.atomic.Value(u32).init(0),
         };
 
-        // Spawn the "UI thread" before any consumer activity.
         var thread = try std.Thread.spawn(.{}, FocusBurstProbe.run, .{&probe});
 
-        // Let it fire all 5 pushes. The first 4 fill the queue; the
-        // 5th MUST park on `cond_not_full.wait`. 200ms is far more
-        // than the producer needs to enqueue 4 items and reach the
-        // 5th wait.
         std.Thread.sleep(200 * ns_per_ms);
 
-        // Core assertion: the producer is *not* done; it parked on push #5.
         try testing.expect(!probe.done.load(.acquire));
         try testing.expectEqual(@as(u32, 4), probe.pushes_done.load(.acquire));
         try testing.expectEqual(@as(u32, 0), probe.drops.load(.acquire));
 
-        // Drain to release the parked producer.
         _ = q.pop();
-        // Now the 5th push completes; let it.
         const deadline_ns: u64 = 2 * std.time.ns_per_s;
         var waited: u64 = 0;
         const step_ns: u64 = 5 * ns_per_ms;
@@ -387,12 +325,10 @@ test "focus saturation: forever hangs producer, instant drops cleanly (#218)" {
         try testing.expect(probe.done.load(.acquire));
         thread.join();
 
-        // No drops in the buggy path: it waited rather than dropping.
         try testing.expectEqual(@as(u32, 5), probe.pushes_done.load(.acquire));
         try testing.expectEqual(@as(u32, 0), probe.drops.load(.acquire));
     }
 
-    // ---- Phase B: fixed `.instant` shape — must finish without hanging.
     {
         const q = try Q.create(alloc);
         defer q.destroy(alloc);
@@ -405,12 +341,9 @@ test "focus saturation: forever hangs producer, instant drops cleanly (#218)" {
             .drops = std.atomic.Value(u32).init(0),
         };
 
-        // Run inline: this MUST return, no consumer needed.
         var t = try std.time.Timer.start();
         var thread = try std.Thread.spawn(.{}, FocusBurstProbe.run, .{&probe});
 
-        // Bound the wait. Anything over ~100ms means a regression where
-        // `.instant` started blocking, which would re-introduce #218.
         const deadline_ns: u64 = 200 * ns_per_ms;
         var waited: u64 = 0;
         const step_ns: u64 = 1 * ns_per_ms;
@@ -423,10 +356,156 @@ test "focus saturation: forever hangs producer, instant drops cleanly (#218)" {
         thread.join();
 
         try testing.expectEqual(@as(u32, 5), probe.pushes_done.load(.acquire));
-        // 4 succeeded, 1 dropped because the queue was full and consumer
-        // never ran. This mirrors the fix-branch behaviour (drop + log).
         try testing.expectEqual(@as(u32, 1), probe.drops.load(.acquire));
-        // Sanity: this all happened in well under our wall-clock budget.
         try testing.expect(elapsed < deadline_ns);
     }
+}
+
+// =========================================================================
+// PHASE 2 BOUNDED_MAILBOX CONTRACT (Tests 5-7)
+//
+// After Phase 2.2, `renderer.Thread.Mailbox` is a
+// `BoundedMailbox(rendererpkg.Message, 64, 0)`. The .forever variant is
+// gone from the type. The tests below exercise the new contract using
+// `u32`-payload mailboxes (the contract is generic; payload type is
+// irrelevant to the saturation behaviour).
+// =========================================================================
+
+// -----------------------------------------------------------------------
+// Test 5: BoundedMailbox `push()` is non-blocking on a full default-0
+// mailbox. This is the new shape of the #218 fix — the type system now
+// guarantees that the focusCallback path can ever wait.
+// -----------------------------------------------------------------------
+
+test "BoundedMailbox: push() on default_timeout_ms=0 never blocks (#218 structural)" {
+    const Q = BoundedMailbox(u32, 4, 0);
+    const q = try Q.create(testing.allocator);
+    defer q.destroy(testing.allocator);
+
+    // Saturate.
+    try testing.expectEqual(Q.PushResult.ok, q.push(1));
+    try testing.expectEqual(Q.PushResult.ok, q.push(2));
+    try testing.expectEqual(Q.PushResult.ok, q.push(3));
+    try testing.expectEqual(Q.PushResult.ok, q.push(4));
+
+    // Saturated burst — every excess push must come back .full inline.
+    var t = try std.time.Timer.start();
+    try testing.expectEqual(Q.PushResult.full, q.push(5));
+    try testing.expectEqual(Q.PushResult.full, q.push(6));
+    try testing.expectEqual(Q.PushResult.full, q.push(7));
+    try testing.expectEqual(Q.PushResult.full, q.push(8));
+    try testing.expectEqual(Q.PushResult.full, q.push(9));
+    const elapsed = t.read();
+
+    // 5 atomic non-blocking pushes need microseconds, not milliseconds.
+    try testing.expect(elapsed < 50 * ns_per_ms);
+
+    // Drop counter should reflect the 5 dropped attempts.
+    try testing.expectEqual(@as(u64, 5), q.fullDropCount());
+}
+
+// -----------------------------------------------------------------------
+// Test 6: BoundedMailbox `pushTimeout(., 5000)` is the bridge migration
+// for search-thread → renderer pushes (Surface.zig:1465-1542 sites).
+// On saturation, it must return `.full` after the bound, never park
+// indefinitely.
+// -----------------------------------------------------------------------
+
+const BoundedTimedProbe = struct {
+    queue: *BoundedMailbox(u32, 2, 0),
+    done: std.atomic.Value(bool),
+    push_result: std.atomic.Value(u32),
+    elapsed_ns: std.atomic.Value(u64),
+
+    fn run(self: *BoundedTimedProbe) void {
+        var t = std.time.Timer.start() catch unreachable;
+        // 50ms (not 5s) so the test runs fast — same code path.
+        const r = self.queue.pushTimeout(99, 50);
+        self.elapsed_ns.store(t.read(), .release);
+        self.push_result.store(@intFromEnum(r), .release);
+        self.done.store(true, .release);
+    }
+};
+
+test "BoundedMailbox: pushTimeout(., ms) returns .full after bound, never parks forever" {
+    const Q = BoundedMailbox(u32, 2, 0);
+    const q = try Q.create(testing.allocator);
+    defer q.destroy(testing.allocator);
+
+    try testing.expectEqual(Q.PushResult.ok, q.push(1));
+    try testing.expectEqual(Q.PushResult.ok, q.push(2));
+
+    var probe: BoundedTimedProbe = .{
+        .queue = q,
+        .done = std.atomic.Value(bool).init(false),
+        .push_result = std.atomic.Value(u32).init(255),
+        .elapsed_ns = std.atomic.Value(u64).init(0),
+    };
+
+    var thread = try std.Thread.spawn(.{}, BoundedTimedProbe.run, .{&probe});
+    defer thread.join();
+
+    const deadline_ns: u64 = 500 * ns_per_ms;
+    var waited: u64 = 0;
+    const step_ns: u64 = 5 * ns_per_ms;
+    while (!probe.done.load(.acquire) and waited < deadline_ns) {
+        std.Thread.sleep(step_ns);
+        waited += step_ns;
+    }
+    try testing.expect(probe.done.load(.acquire));
+
+    try testing.expectEqual(
+        @intFromEnum(bounded_mailbox.PushResultEnum.full),
+        probe.push_result.load(.acquire),
+    );
+
+    const elapsed = probe.elapsed_ns.load(.acquire);
+    try testing.expect(elapsed >= 40 * ns_per_ms);
+    try testing.expect(elapsed < 400 * ns_per_ms);
+}
+
+// -----------------------------------------------------------------------
+// Test 7: Compile-time guarantee — `.forever` does not exist on
+// `PushResult`. A future refactor that re-introduces a forever-shaped
+// escape hatch will fail this comptime test.
+//
+// This is the structural pay-off of #232 Phase 2: the lint-deadlock.sh
+// grep was a textual stop-gap; this test makes the contract type-level.
+// -----------------------------------------------------------------------
+
+test "BoundedMailbox: PushResult has no .forever variant (compile-time guarantee #232)" {
+    const Q = BoundedMailbox(u32, 4, 0);
+
+    comptime {
+        const tags = @typeInfo(Q.PushResult).@"enum".fields;
+        if (tags.len != 3) @compileError(
+            "PushResult must be 3-state (ok|full|shutdown); change broke #232 contract",
+        );
+        for (tags) |f| {
+            if (std.mem.eql(u8, f.name, "forever")) {
+                @compileError(
+                    "BoundedMailbox.PushResult must NOT have a .forever " ++
+                        "variant — that's the entire point of #232 Phase 2. " ++
+                        "If you need an unbounded wait, use pushUntilShutdown.",
+                );
+            }
+        }
+    }
+
+    // Demonstrate that the *only* unbounded-shaped API requires a token
+    // argument — no `q.pushForever(value)` exists.
+    const q = try Q.create(testing.allocator);
+    defer q.destroy(testing.allocator);
+
+    try testing.expectEqual(Q.PushResult.ok, q.push(1));
+    // Saturate then verify pushUntilShutdown takes a token argument by
+    // signature (the call site below cannot omit the second argument).
+    _ = q.push(2);
+    _ = q.push(3);
+    _ = q.push(4);
+    q.shutdown();
+    try testing.expectEqual(
+        Q.PushResult.shutdown,
+        q.pushUntilShutdown(99, never_signal),
+    );
 }
