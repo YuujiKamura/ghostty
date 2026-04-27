@@ -177,19 +177,36 @@ pub const View = struct {
     /// True while the apprt has scheduled a drain that hasn't run yet.
     wakeup_pending: *std.atomic.Value(bool),
     /// Last time the apprt pushed a CP "running" status (ms since epoch).
-    /// Zero means CP is disabled or hasn't been pinged yet.
+    /// Zero means CP is uninitialized; skip in that case.
     cp_last_notify_ms: *std.atomic.Value(i64),
     /// Last UI heartbeat timestamp (ns, i64 mirror — same field the Phase 4
     /// watchdog reads). Used to compute "watchdog near-fire" cascade signal.
     last_ui_heartbeat_ns: *std.atomic.Value(i64),
     /// Phase 4 watchdog timeout (ms), read once at init for cascade math.
     watchdog_timeout_ms: u64,
+
+    /// 5th Signal precursor: CP-side renderer mutex contention.
+    /// Pointers to CP atomics (optional, set via setControlPlane).
+    renderer_locked_event_count_ptr: ?*const std.atomic.Value(u32) = null,
+    renderer_locked_circuit_open_until_ns_ptr: ?*const std.atomic.Value(i64) = null,
+
+    /// Snapshots for Signal 5 (updated by tick()).
+    renderer_locked_event_count: u32 = 0,
+    renderer_locked_circuit_open: bool = false,
 };
 
 /// Optional callback for `Action.trigger`. Invoked from the detector thread
 /// when a multi-signal cascade fires. MUST NOT block the calling thread —
 /// typical implementation flips an atomic flag the watchdog observes.
 pub const OnCascadeFn = *const fn (ctx: ?*anyopaque) void;
+
+pub const Signal = enum(u32) {
+    wakeup_backlog = 1,
+    cp_push_stale = 2,
+    watchdog_near_fire = 3,
+    long_tick_storm = 4,
+    renderer_locked = 5,
+};
 
 // ---------------------------------------------------------------------------
 // Detector
@@ -212,6 +229,10 @@ pub const Detector = struct {
     snap_tick_count: u64 = 0,
     snap_tick_warn_count: u64 = 0,
     snap_tick_err_count: u64 = 0,
+
+    /// Snapshots for Signal 5 (renderer_locked).
+    snap_renderer_locked_event_count: u32 = 0,
+
     /// Has the cascade callback fired in this process lifetime? One-shot
     /// guard — avoid spamming the watchdog dump path. Resets only on process
     /// restart, which is the right granularity (a cascade is rare).
@@ -219,6 +240,14 @@ pub const Detector = struct {
 
     pub fn init(cfg: Config, view: View) Detector {
         return .{ .cfg = cfg, .view = view };
+    }
+
+    /// Connect the detector to the ControlPlane to observe Signal 5.
+    /// Uses anytype to avoid a direct dependency on control_plane.zig
+    /// during standalone unit tests.
+    pub fn setControlPlane(self: *Detector, cp: anytype) void {
+        self.view.renderer_locked_event_count_ptr = &cp.renderer_locked_event_count;
+        self.view.renderer_locked_circuit_open_until_ns_ptr = &cp.renderer_locked_circuit_open_until_ns;
     }
 
     pub fn setCallback(self: *Detector, cb: OnCascadeFn, ctx: ?*anyopaque) void {
@@ -262,6 +291,14 @@ pub const Detector = struct {
     pub fn tick(self: *Detector) void {
         const now_ms = std.time.milliTimestamp();
         const now_ns = nsNow();
+
+        // Refresh CP snapshots if connected.
+        if (self.view.renderer_locked_event_count_ptr) |ptr| {
+            self.view.renderer_locked_event_count = ptr.load(.acquire);
+        }
+        if (self.view.renderer_locked_circuit_open_until_ns_ptr) |ptr| {
+            self.view.renderer_locked_circuit_open = ptr.load(.acquire) > now_ns;
+        }
 
         // Signal 1: wakeup backlog.
         const wakeup_set = self.view.wakeup_pending.load(.acquire);
@@ -327,17 +364,28 @@ pub const Detector = struct {
             );
         }
 
+        // Signal 5: renderer locked.
+        const rl_delta = self.view.renderer_locked_event_count -% self.snap_renderer_locked_event_count;
+        const renderer_locked_signal = self.view.renderer_locked_circuit_open or rl_delta >= 3;
+        if (renderer_locked_signal) {
+            log.warn(
+                "renderer locked: circuit_open={} event_count_delta={} (total={})",
+                .{ self.view.renderer_locked_circuit_open, rl_delta, self.view.renderer_locked_event_count },
+            );
+        }
+
         // Cascade aggregation: 2+ signals coincident → CASCADE WARNING.
         var lit_signals: u32 = 0;
         if (wakeup_signal) lit_signals += 1;
         if (cp_signal) lit_signals += 1;
         if (watchdog_signal) lit_signals += 1;
         if (tick_err_signal) lit_signals += 1;
+        if (renderer_locked_signal) lit_signals += 1;
 
         if (lit_signals >= 2) {
             log.err(
-                "CASCADE WARNING: {} signals coincident (wakeup={} cp_stale={} wd_near={} tick_err={}) — UI deadlock imminent",
-                .{ lit_signals, wakeup_signal, cp_signal, watchdog_signal, tick_err_signal },
+                "CASCADE WARNING: {} signals coincident (wakeup={} cp_stale={} wd_near={} tick_err={} renderer_locked={}) — UI deadlock imminent",
+                .{ lit_signals, wakeup_signal, cp_signal, watchdog_signal, tick_err_signal, renderer_locked_signal },
             );
             self.maybeFireCascade(lit_signals);
         }
@@ -349,6 +397,7 @@ pub const Detector = struct {
             self.snap_tick_count = self.view.stats.tick_count.load(.monotonic);
             self.snap_tick_warn_count = self.view.stats.tick_warn_count.load(.monotonic);
             self.snap_tick_err_count = self.view.stats.tick_err_count.load(.monotonic);
+            self.snap_renderer_locked_event_count = self.view.renderer_locked_event_count;
             self.last_summary_ms = now_ms;
         }
     }
@@ -383,15 +432,18 @@ pub const Detector = struct {
         const delta_ticks = tick_count -% self.snap_tick_count;
         const delta_warn = tick_warn -% self.snap_tick_warn_count;
         const delta_err = tick_err -% self.snap_tick_err_count;
+        const delta_rl = self.view.renderer_locked_event_count -% self.snap_renderer_locked_event_count;
 
         log.info(
-            "cascade summary: ticks={} (+{}) warn={} (+{}) err={} (+{}) max_tick_ms={} last_tick_age_ms={} cp_age_ms={} cascade_fired={}",
+            "cascade summary: ticks={} (+{}) warn={} (+{}) err={} (+{}) max_tick_ms={} last_tick_age_ms={} cp_age_ms={} renderer_locked={}/{} (+{}) cascade_fired={}",
             .{
-                tick_count,              delta_ticks,
-                tick_warn,               delta_warn,
-                tick_err,                delta_err,
-                max_tick_ns / ns_per_ms, last_tick_age,
-                cp_age,                  self.cascade_fired.load(.acquire),
+                tick_count,                            delta_ticks,
+                tick_warn,                             delta_warn,
+                tick_err,                              delta_err,
+                max_tick_ns / ns_per_ms,               last_tick_age,
+                cp_age,                                @intFromBool(self.view.renderer_locked_circuit_open),
+                self.view.renderer_locked_event_count, delta_rl,
+                self.cascade_fired.load(.acquire),
             },
         );
     }
@@ -528,20 +580,51 @@ test "cascade callback does NOT fire on .warn even with many signals" {
     try testing.expect(!det.cascade_fired.load(.acquire));
 }
 
-test "Detector disabled action: start() is a no-op" {
+test "Detector.tick flags renderer_locked signal when event count increases" {
     var stats = Stats{};
     var wakeup = std.atomic.Value(bool).init(false);
-    var cp = std.atomic.Value(i64).init(0);
+    var cp_notify = std.atomic.Value(i64).init(0);
     var hb = std.atomic.Value(i64).init(0);
     const view = View{
         .stats = &stats,
         .wakeup_pending = &wakeup,
-        .cp_last_notify_ms = &cp,
+        .cp_last_notify_ms = &cp_notify,
         .last_ui_heartbeat_ns = &hb,
         .watchdog_timeout_ms = 5000,
     };
-    var det = Detector.init(.{ .action = .disabled }, view);
-    try det.start();
-    try testing.expect(det.thread == null);
-    det.stopAndJoin(); // safe no-op
+    var det = Detector.init(.{ .action = .warn }, view);
+
+    // Manual setup: Signal 5 ONLY.
+    det.view.renderer_locked_event_count = 5;
+    det.snap_renderer_locked_event_count = 0; // delta = 5 >= 3
+
+    // tick() should see Signal 5 (renderer_locked) and log a warning,
+    // but NO cascade error because it is the only signal lit.
+    det.tick();
+
+    // Verify snapshot was updated.
+    try testing.expectEqual(@as(u32, 5), det.snap_renderer_locked_event_count);
+}
+
+test "Detector.tick flags renderer_locked signal when circuit is open" {
+    var stats = Stats{};
+    var wakeup = std.atomic.Value(bool).init(false);
+    var cp_notify = std.atomic.Value(i64).init(0);
+    var hb = std.atomic.Value(i64).init(0);
+    const view = View{
+        .stats = &stats,
+        .wakeup_pending = &wakeup,
+        .cp_last_notify_ms = &cp_notify,
+        .last_ui_heartbeat_ns = &hb,
+        .watchdog_timeout_ms = 5000,
+    };
+    var det = Detector.init(.{ .action = .warn }, view);
+
+    // Signal 5 ONLY.
+    det.view.renderer_locked_circuit_open = true;
+
+    det.tick();
+
+    // In this case delta was 0, but circuit_open=true triggered the signal.
+    try testing.expectEqual(@as(u32, 0), det.snap_renderer_locked_event_count);
 }

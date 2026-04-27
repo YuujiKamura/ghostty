@@ -38,6 +38,7 @@ const Stats = struct {
 const Detector = struct {
     action: Action,
     consecutive_wakeup_pending: u32 = 0,
+    snap_renderer_locked_event_count: u32 = 0,
     fired: std.atomic.Value(bool) = .init(false),
     on_cascade: ?*const fn (ctx: ?*anyopaque) void = null,
     on_cascade_ctx: ?*anyopaque = null,
@@ -51,6 +52,13 @@ const Detector = struct {
             self.consecutive_wakeup_pending = 0;
         }
         return self.consecutive_wakeup_pending >= wakeup_warn_threshold;
+    }
+
+    fn observeRendererLocked(self: *Detector, count: u32, circuit_open: bool) bool {
+        const delta = count -% self.snap_renderer_locked_event_count;
+        const signal = circuit_open or delta >= 3;
+        self.snap_renderer_locked_event_count = count;
+        return signal;
     }
 
     fn maybeFireCascade(self: *Detector, lit_signals: u32) void {
@@ -72,6 +80,48 @@ test "wakeup-pending consecutive counter latches at threshold then resets" {
     try testing.expect(det.observeWakeup(true)); // stays signalled
     try testing.expect(!det.observeWakeup(false)); // resets
     try testing.expect(!det.observeWakeup(true)); // back to 1, no signal
+}
+
+test "renderer-locked signal flags on delta or circuit-open" {
+    var det = Detector{ .action = .warn };
+
+    // Case 1: Delta >= 3
+    try testing.expect(det.observeRendererLocked(3, false));
+    try testing.expect(!det.observeRendererLocked(4, false)); // delta 1
+    try testing.expect(det.observeRendererLocked(7, false)); // delta 3
+
+    // Case 2: Circuit open
+    try testing.expect(det.observeRendererLocked(7, true));
+}
+
+test "cascade triggered by wakeup-backlog + renderer-locked" {
+    const Counter = struct {
+        n: u32 = 0,
+        fn cb(ctx: ?*anyopaque) void {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            self.n += 1;
+        }
+    };
+    var c = Counter{};
+    var det = Detector{ .action = .trigger, .on_cascade = Counter.cb, .on_cascade_ctx = &c };
+
+    // Setup 1 signal: wakeup backlog
+    _ = det.observeWakeup(true);
+    _ = det.observeWakeup(true);
+    const s1 = det.observeWakeup(true);
+    try testing.expect(s1);
+
+    // Setup 2nd signal: renderer locked delta
+    const s2 = det.observeRendererLocked(3, false);
+    try testing.expect(s2);
+
+    // Fire cascade
+    var lit: u32 = 0;
+    if (s1) lit += 1;
+    if (s2) lit += 1;
+    det.maybeFireCascade(lit);
+
+    try testing.expectEqual(@as(u32, 1), c.n);
 }
 
 test "cascade callback is one-shot under .trigger" {

@@ -747,6 +747,9 @@ fn initXaml(self: *App) !void {
         };
         self.cascade_detector = cascade_detector_mod.Detector.init(cfg, view);
         if (self.cascade_detector) |*det| {
+            if (self.control_plane) |cp| {
+                det.setControlPlane(cp);
+            }
             det.setCallback(cascadeOnFire, self);
             det.start() catch |err| {
                 log.warn("cascade detector start failed: {}", .{err});
