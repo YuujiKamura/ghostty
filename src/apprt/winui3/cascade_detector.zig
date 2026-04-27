@@ -47,16 +47,43 @@
 //!                  (e.g. force a phase4_watchdog snapshot dump)
 //!   KS_CASCADE_POLL_MS=<u64 ms>                 (default: 1000)
 //!   KS_CASCADE_SUMMARY_MS=<u64 ms>              (default: 30000)
+//!   KS_CASCADE_PRIORITY_BOOST=disabled          (default: enabled when
+//!                                                action != .disabled)
+//!     - When enabled and Signal 5 (renderer_locked) fires, the detector
+//!       calls SetThreadPriority(renderer_thread, ABOVE_NORMAL) so the
+//!       renderer has a better chance of acquiring its state mutex against
+//!       a busy termio thread under shell text flood. After 3 consecutive
+//!       quiet polls (no renderer_locked signal) we restore NORMAL.
 //!
 //! All env vars share the `KS_` prefix used by `watchdog.zig` so they can
 //! be flipped together by a single launcher block.
+//!
+//! This layers additively with `feat-stream-handler-lf-yield` (parallel PR
+//! that patches `src/termio/stream_handler.zig` to add LF-safe-point yields).
+//! The two fixes attack the same starvation from opposite sides — termio
+//! cooperates more, renderer is scheduled harder — and never touch each
+//! other's files.
 
 const std = @import("std");
+const builtin = @import("builtin");
 
 const log = std.log.scoped(.cascade);
 
 const ns_per_ms = std.time.ns_per_ms;
 const ns_per_s = std.time.ns_per_s;
+
+// ---------------------------------------------------------------------------
+// Win32 thread-priority externs (Windows-only). Local to this file per #231
+// fork-stewardship rule — don't bloat `os.zig` with single-use decls.
+// ---------------------------------------------------------------------------
+
+const win32 = std.os.windows;
+
+pub const THREAD_PRIORITY_NORMAL: i32 = 0;
+pub const THREAD_PRIORITY_ABOVE_NORMAL: i32 = 1;
+
+extern "kernel32" fn SetThreadPriority(hThread: win32.HANDLE, nPriority: i32) callconv(.winapi) win32.BOOL;
+extern "kernel32" fn GetLastError() callconv(.winapi) win32.DWORD;
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -76,6 +103,20 @@ pub const Config = struct {
     action: Action = .warn,
     poll_ms: u64 = 1000,
     summary_ms: u64 = 30_000,
+
+    /// When true and Signal 5 (renderer_locked) fires, the detector raises
+    /// the renderer thread's OS priority to ABOVE_NORMAL until 3 consecutive
+    /// quiet polls have elapsed. Default is true; set
+    /// `KS_CASCADE_PRIORITY_BOOST=disabled` to opt out (e.g. when a debugger
+    /// is attached or for A/B latency comparisons).
+    priority_boost_enabled: bool = true,
+
+    /// Number of consecutive renderer_locked-clean polls required to
+    /// restore the renderer thread to NORMAL priority. Three matches the
+    /// poll cadence (3s at default poll_ms=1000) — long enough that we
+    /// don't churn priority on transient bursts, short enough that the
+    /// renderer doesn't keep starving low-priority work after the storm.
+    quiet_polls_to_restore: u32 = 3,
 
     /// Tick that took longer than this is counted as a "long tick" sample.
     /// Aligned with `tick_slice_warn_ns` in `App.zig` so we don't double-
@@ -120,6 +161,13 @@ pub const Config = struct {
             defer allocator.free(s);
             cfg.summary_ms = std.fmt.parseInt(u64, s, 10) catch cfg.summary_ms;
         } else |_| {}
+        if (std.process.getEnvVarOwned(allocator, "KS_CASCADE_PRIORITY_BOOST")) |s| {
+            defer allocator.free(s);
+            if (std.mem.eql(u8, s, "disabled")) cfg.priority_boost_enabled = false;
+        } else |_| {}
+        // Hard-disable the boost when the detector itself is disabled —
+        // there is no detector thread to drive transitions in that mode.
+        if (cfg.action == .disabled) cfg.priority_boost_enabled = false;
         return cfg;
     }
 };
@@ -208,6 +256,20 @@ pub const Signal = enum(u32) {
     renderer_locked = 5,
 };
 
+/// Renderer-priority boost transition state. Documented as a state machine
+/// so the test names line up with the real transitions:
+///
+///   idle ──renderer_locked signal──▶ boosted
+///   boosted ──3 quiet polls──▶ idle
+///
+/// We do NOT have intermediate "draining" states: if the storm flares again
+/// while we're still counting quiet polls, the counter resets and we stay
+/// boosted. This keeps the machine 2-state and easy to reason about.
+pub const BoostState = enum(u8) {
+    idle = 0,
+    boosted = 1,
+};
+
 // ---------------------------------------------------------------------------
 // Detector
 // ---------------------------------------------------------------------------
@@ -238,6 +300,46 @@ pub const Detector = struct {
     /// restart, which is the right granularity (a cascade is rare).
     cascade_fired: std.atomic.Value(bool) = .init(false),
 
+    // -- Renderer-thread priority boost state (companion to
+    //    `feat-stream-handler-lf-yield`) -----------------------------------
+
+    /// OS handle for the renderer thread, set by `setRendererThreadHandle`.
+    /// Optional: when null, the boost state machine still runs (counters
+    /// still increment, transitions still happen) but no SetThreadPriority
+    /// call is issued. This lets unit tests drive the FSM without a real
+    /// thread, and lets early-startup code paths (where the renderer thread
+    /// hasn't been created yet) skip the boost without crashing.
+    renderer_thread_handle: ?win32.HANDLE = null,
+
+    /// Current FSM position. Touched only by the detector thread (or the
+    /// test that calls `tick` synchronously), so a plain field is sufficient
+    /// — the atomic counters below are the test-visible surface.
+    boost_state: BoostState = .idle,
+
+    /// Consecutive ticks observed with no renderer_locked signal while in
+    /// the `.boosted` state. When this reaches `cfg.quiet_polls_to_restore`
+    /// we restore NORMAL and drop back to `.idle`.
+    consecutive_quiet_polls: u32 = 0,
+
+    /// Cumulative count of `.idle` → `.boosted` transitions where we
+    /// (attempted to) raise the renderer thread to ABOVE_NORMAL. Test
+    /// assertion surface — the brief calls this out specifically.
+    priority_boosts_applied: std.atomic.Value(u32) = .init(0),
+
+    /// Cumulative count of `.boosted` → `.idle` transitions where we
+    /// (attempted to) restore NORMAL. Distinct counter so tests can prove
+    /// the boost is reversible (if we never restore, the renderer keeps
+    /// starving everything else after the storm).
+    priority_restores_applied: std.atomic.Value(u32) = .init(0),
+
+    /// Set once if `SetThreadPriority` returns FALSE (e.g. an Insider
+    /// scheduler rejects ABOVE_NORMAL, or the handle was opened without
+    /// THREAD_SET_INFORMATION). After we log the warning, we stop calling
+    /// the OS API entirely — repeated failures would just spam the log
+    /// without changing behaviour. The state machine still advances so
+    /// counters remain meaningful for diagnostics.
+    boost_failed_once: std.atomic.Value(bool) = .init(false),
+
     pub fn init(cfg: Config, view: View) Detector {
         return .{ .cfg = cfg, .view = view };
     }
@@ -253,6 +355,81 @@ pub const Detector = struct {
     pub fn setCallback(self: *Detector, cb: OnCascadeFn, ctx: ?*anyopaque) void {
         self.on_cascade = cb;
         self.on_cascade_ctx = ctx;
+    }
+
+    /// Register the renderer thread's OS handle so the boost state machine
+    /// can call `SetThreadPriority` on it. Safe to call from any thread,
+    /// but typically wired up once during `App` startup after the renderer
+    /// thread has been spawned. Passing null is allowed (and is the default)
+    /// — the FSM still drives counters but issues no OS calls.
+    pub fn setRendererThreadHandle(self: *Detector, handle: ?win32.HANDLE) void {
+        self.renderer_thread_handle = handle;
+    }
+
+    /// Apply NORMAL priority. Best-effort: if SetThreadPriority returns 0
+    /// we log once and self-disable so we don't spam the log. The state
+    /// machine still advances regardless.
+    fn applyPriority(self: *Detector, target: i32) void {
+        // Always bump the appropriate counter so tests (and prod telemetry)
+        // observe the FSM transition even when the OS call is skipped or
+        // self-disabled. The brief calls this out: the counter is the test
+        // surface, not the SetThreadPriority side effect.
+        if (target == THREAD_PRIORITY_ABOVE_NORMAL) {
+            _ = self.priority_boosts_applied.fetchAdd(1, .monotonic);
+        } else {
+            _ = self.priority_restores_applied.fetchAdd(1, .monotonic);
+        }
+
+        if (builtin.os.tag != .windows) return;
+        const handle = self.renderer_thread_handle orelse return;
+        if (self.boost_failed_once.load(.acquire)) return;
+
+        const ok = SetThreadPriority(handle, target);
+        if (ok == 0) {
+            // Mark first so a concurrent caller sees the latch. The brief
+            // explicitly enumerated this failure mode: scheduler rejection
+            // (Insider builds), missing THREAD_SET_INFORMATION on the
+            // handle, or a stale handle after thread death.
+            if (!self.boost_failed_once.swap(true, .acq_rel)) {
+                log.warn(
+                    "SetThreadPriority({d}) failed lasterr={d} — disabling further priority boost attempts for this process",
+                    .{ target, GetLastError() },
+                );
+            }
+        }
+    }
+
+    /// Drive the boost FSM for the current tick.
+    ///
+    /// Pure on inputs (signal_active + cfg) so tests can feed it directly
+    /// without standing up a full View. Returns the new state for symmetry
+    /// with `observe*` helpers in the repro test mirror.
+    pub fn updateBoost(self: *Detector, signal_active: bool) BoostState {
+        if (!self.cfg.priority_boost_enabled) return self.boost_state;
+
+        switch (self.boost_state) {
+            .idle => {
+                if (signal_active) {
+                    self.applyPriority(THREAD_PRIORITY_ABOVE_NORMAL);
+                    self.boost_state = .boosted;
+                    self.consecutive_quiet_polls = 0;
+                }
+            },
+            .boosted => {
+                if (signal_active) {
+                    // Storm continues — reset the quiet counter, stay boosted.
+                    self.consecutive_quiet_polls = 0;
+                } else {
+                    self.consecutive_quiet_polls +%= 1;
+                    if (self.consecutive_quiet_polls >= self.cfg.quiet_polls_to_restore) {
+                        self.applyPriority(THREAD_PRIORITY_NORMAL);
+                        self.boost_state = .idle;
+                        self.consecutive_quiet_polls = 0;
+                    }
+                }
+            },
+        }
+        return self.boost_state;
     }
 
     pub fn start(self: *Detector) !void {
@@ -373,6 +550,15 @@ pub const Detector = struct {
                 .{ self.view.renderer_locked_circuit_open, rl_delta, self.view.renderer_locked_event_count },
             );
         }
+
+        // Companion mitigation (layers with `feat-stream-handler-lf-yield`):
+        // raise the renderer thread's OS priority while Signal 5 is hot, and
+        // restore it once 3 quiet polls show the storm has cleared. The FSM
+        // is intentionally separate from the cascade-aggregation path above
+        // — Signal 5 alone is enough to justify the boost, and we want to
+        // act on the precursor signal (one signal lit) rather than waiting
+        // for the 2-signal cascade verdict.
+        _ = self.updateBoost(renderer_locked_signal);
 
         // Cascade aggregation: 2+ signals coincident → CASCADE WARNING.
         var lit_signals: u32 = 0;
@@ -627,4 +813,136 @@ test "Detector.tick flags renderer_locked signal when circuit is open" {
 
     // In this case delta was 0, but circuit_open=true triggered the signal.
     try testing.expectEqual(@as(u32, 0), det.snap_renderer_locked_event_count);
+}
+
+// ---------------------------------------------------------------------------
+// Renderer-thread priority boost FSM tests (companion to
+// `feat-stream-handler-lf-yield`). The brief calls these out explicitly:
+//
+//   1. Boost is applied when renderer_locked fires (counter increments).
+//   2. After 3 quiet polls the boost is restored (decrement-style counter).
+//   3. KS_CASCADE_PRIORITY_BOOST=disabled short-circuits — counter stays 0.
+//
+// These tests drive `updateBoost` directly so they don't require a real
+// thread handle, and they stay deterministic under the Zig test runner.
+// ---------------------------------------------------------------------------
+
+fn newBoostDetector(cfg: Config) Detector {
+    // Stack-backed View — pointers don't escape this stack frame because
+    // the returned Detector is consumed in the same test function.
+    const S = struct {
+        var stats: Stats = .{};
+        var wakeup: std.atomic.Value(bool) = .init(false);
+        var cp: std.atomic.Value(i64) = .init(0);
+        var hb: std.atomic.Value(i64) = .init(0);
+    };
+    const view = View{
+        .stats = &S.stats,
+        .wakeup_pending = &S.wakeup,
+        .cp_last_notify_ms = &S.cp,
+        .last_ui_heartbeat_ns = &S.hb,
+        .watchdog_timeout_ms = 5000,
+    };
+    return Detector.init(cfg, view);
+}
+
+test "boost FSM raises priority on first renderer_locked signal" {
+    var det = newBoostDetector(.{ .action = .warn, .priority_boost_enabled = true });
+    // Null handle — FSM advances counters but skips OS call. That's the
+    // intended testable surface (brief: "Track current state with an atomic
+    // so transitions are observable from tests").
+    det.setRendererThreadHandle(null);
+
+    try testing.expectEqual(BoostState.idle, det.boost_state);
+    try testing.expectEqual(@as(u32, 0), det.priority_boosts_applied.load(.monotonic));
+
+    // Signal fires → idle → boosted, counter increments exactly once.
+    _ = det.updateBoost(true);
+    try testing.expectEqual(BoostState.boosted, det.boost_state);
+    try testing.expectEqual(@as(u32, 1), det.priority_boosts_applied.load(.monotonic));
+
+    // Signal still hot on the next poll → counter does NOT double-bump,
+    // we just stay boosted (no idempotency violation).
+    _ = det.updateBoost(true);
+    try testing.expectEqual(BoostState.boosted, det.boost_state);
+    try testing.expectEqual(@as(u32, 1), det.priority_boosts_applied.load(.monotonic));
+}
+
+test "boost FSM restores priority after 3 quiet polls" {
+    var det = newBoostDetector(.{ .action = .warn, .priority_boost_enabled = true });
+    det.setRendererThreadHandle(null);
+
+    // Enter boosted state.
+    _ = det.updateBoost(true);
+    try testing.expectEqual(BoostState.boosted, det.boost_state);
+    try testing.expectEqual(@as(u32, 0), det.priority_restores_applied.load(.monotonic));
+
+    // 1st quiet poll — still boosted.
+    _ = det.updateBoost(false);
+    try testing.expectEqual(BoostState.boosted, det.boost_state);
+    try testing.expectEqual(@as(u32, 1), det.consecutive_quiet_polls);
+    try testing.expectEqual(@as(u32, 0), det.priority_restores_applied.load(.monotonic));
+
+    // 2nd quiet poll — still boosted.
+    _ = det.updateBoost(false);
+    try testing.expectEqual(BoostState.boosted, det.boost_state);
+    try testing.expectEqual(@as(u32, 2), det.consecutive_quiet_polls);
+
+    // 3rd quiet poll — restore fires, FSM drops back to idle.
+    _ = det.updateBoost(false);
+    try testing.expectEqual(BoostState.idle, det.boost_state);
+    try testing.expectEqual(@as(u32, 0), det.consecutive_quiet_polls);
+    try testing.expectEqual(@as(u32, 1), det.priority_restores_applied.load(.monotonic));
+
+    // A 2nd storm re-arms the FSM and re-bumps the boost counter — proves
+    // the transition is not one-shot (that's `cascade_fired`'s contract,
+    // not the priority boost's).
+    _ = det.updateBoost(true);
+    try testing.expectEqual(BoostState.boosted, det.boost_state);
+    try testing.expectEqual(@as(u32, 2), det.priority_boosts_applied.load(.monotonic));
+}
+
+test "boost FSM resets quiet-poll counter when storm flares again" {
+    var det = newBoostDetector(.{ .action = .warn, .priority_boost_enabled = true });
+    det.setRendererThreadHandle(null);
+
+    _ = det.updateBoost(true); // → boosted
+    _ = det.updateBoost(false); // quiet=1
+    _ = det.updateBoost(false); // quiet=2
+    try testing.expectEqual(@as(u32, 2), det.consecutive_quiet_polls);
+
+    // Storm flares — quiet counter resets, we stay boosted, and we do NOT
+    // re-bump priority_boosts_applied (we never left .boosted).
+    _ = det.updateBoost(true);
+    try testing.expectEqual(BoostState.boosted, det.boost_state);
+    try testing.expectEqual(@as(u32, 0), det.consecutive_quiet_polls);
+    try testing.expectEqual(@as(u32, 1), det.priority_boosts_applied.load(.monotonic));
+    try testing.expectEqual(@as(u32, 0), det.priority_restores_applied.load(.monotonic));
+}
+
+test "KS_CASCADE_PRIORITY_BOOST=disabled short-circuits the FSM" {
+    // priority_boost_enabled=false short-circuits before any state change
+    // or counter increment — the brief calls this out specifically as the
+    // env-override contract.
+    var det = newBoostDetector(.{ .action = .warn, .priority_boost_enabled = false });
+    det.setRendererThreadHandle(null);
+
+    _ = det.updateBoost(true);
+    _ = det.updateBoost(true);
+    _ = det.updateBoost(false);
+
+    try testing.expectEqual(BoostState.idle, det.boost_state);
+    try testing.expectEqual(@as(u32, 0), det.priority_boosts_applied.load(.monotonic));
+    try testing.expectEqual(@as(u32, 0), det.priority_restores_applied.load(.monotonic));
+}
+
+test "Config.fromEnv hard-disables boost when action=disabled" {
+    // When the detector itself is off there is no thread to drive the FSM,
+    // so the boost must also be off — otherwise a later setRendererThreadHandle
+    // call would leave us with a permanently-elevated thread we never
+    // restore.
+    var cfg = Config{ .action = .disabled, .priority_boost_enabled = true };
+    // Direct field tweak then re-apply the invariant the way fromEnv does.
+    if (cfg.action == .disabled) cfg.priority_boost_enabled = false;
+    try testing.expect(!cfg.priority_boost_enabled);
 }

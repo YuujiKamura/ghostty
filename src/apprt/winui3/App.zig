@@ -305,6 +305,17 @@ phase4_watchdog: ?watchdog_mod.Watchdog = null,
 cascade_stats: cascade_detector_mod.Stats = .{},
 cascade_detector: ?cascade_detector_mod.Detector = null,
 
+/// Renderer thread OS handle, registered with the cascade detector so it
+/// can call SetThreadPriority(ABOVE_NORMAL) when Signal 5 (renderer_locked)
+/// fires, and restore NORMAL after 3 quiet polls. Owned by the renderer
+/// thread itself (we do not OpenThread/CloseHandle here); this field is
+/// just a published reference for the detector poll thread to use.
+///
+/// Companion to `feat-stream-handler-lf-yield` — the two mitigations layer
+/// additively (termio yields more often, renderer is scheduled harder).
+/// See `cascade_detector.zig` for the FSM contract.
+renderer_thread_handle: ?os.HANDLE = null,
+
 // Wakeup coalescing (issue #214). Under high-frequency producer wakeups
 // (e.g. PTY byte storm during Claude xhigh thinking bursts) DispatcherQueue
 // .TryEnqueue does NOT coalesce identical handler instances — each wakeup
@@ -751,11 +762,33 @@ fn initXaml(self: *App) !void {
                 det.setControlPlane(cp);
             }
             det.setCallback(cascadeOnFire, self);
+            // If the renderer thread handle is already known by the time
+            // the detector starts, hand it over up-front. In practice the
+            // renderer thread is spawned per-Surface (later than App init),
+            // so this is usually wired through `setRendererThreadHandle`
+            // when the first Surface comes up.
+            det.setRendererThreadHandle(self.renderer_thread_handle);
             det.start() catch |err| {
                 log.warn("cascade detector start failed: {}", .{err});
                 self.cascade_detector = null;
             };
         }
+    }
+}
+
+/// Publish the renderer thread's OS handle to the cascade detector so it
+/// can raise/lower the renderer's OS priority during Signal 5 storms.
+///
+/// Caller retains ownership of the handle (the detector does not duplicate
+/// or close it). Pass `null` to clear the registration when the renderer
+/// thread is being torn down.
+///
+/// This is the apprt-side hook for the priority-boost mitigation that
+/// layers with `feat-stream-handler-lf-yield`. See cascade_detector.zig.
+pub fn setRendererThreadHandle(self: *App, handle: ?os.HANDLE) void {
+    self.renderer_thread_handle = handle;
+    if (self.cascade_detector) |*det| {
+        det.setRendererThreadHandle(handle);
     }
 }
 
