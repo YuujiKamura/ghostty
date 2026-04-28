@@ -129,8 +129,19 @@ pub const SW_HIDE: c_int = 0;
 pub const SW_SHOWNORMAL: c_int = 1;
 pub const SW_SHOWMINIMIZED: c_int = 2;
 pub const SW_SHOWMAXIMIZED: c_int = 3;
-pub const SW_SHOW: c_int = 5;
+/// SW_SHOWNOACTIVATE — visible at normal size, but does NOT take the
+/// foreground / focus. Taskbar entry appears; the previously-active
+/// window keeps keyboard focus. Used by `KS_NO_ACTIVATE=visible` (and
+/// alias `=show`) for the "background batch launch" case where the
+/// caller wants the window discoverable but doesn't want to steal
+/// focus from the user's interactive work (deckpilot e2e tests,
+/// scripted spawn-many).
 pub const SW_SHOWNOACTIVATE: c_int = 4;
+pub const SW_SHOW: c_int = 5;
+/// SW_SHOWNA — visible, no activation, no z-order change. Distinct
+/// from SHOWNOACTIVATE in that the latter restores the window if it
+/// was minimised; SHOWNA leaves it as-is. Both have "do not focus"
+/// semantics; we use SHOWNOACTIVATE because we always start hidden.
 pub const SW_SHOWNA: c_int = 8;
 pub const PM_REMOVE: UINT = 0x0001;
 pub const PM_NOREMOVE: UINT = 0x0000;

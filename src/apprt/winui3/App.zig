@@ -67,6 +67,96 @@ const IMECoordinateCache = struct {
 
 const log = std.log.scoped(.winui3);
 
+/// Launch-time window-activation policy controlled by the
+/// `KS_NO_ACTIVATE` environment variable. See the long-form comment in
+/// `initXaml` step 5 for the rationale; the parser lives at module
+/// scope so unit tests can drive it directly without booting the
+/// WinUI3 runtime.
+pub const NoActivateMode = enum { default, hide, visible };
+
+/// Parse one `KS_NO_ACTIVATE` env-var value into a `NoActivateMode`.
+/// Pure function — no I/O, no allocator, no globals — so the unit
+/// test below can exhaustively cover the alias matrix:
+///
+///   `1` / `true` / `hide`            → `.hide`
+///   `visible` / `show` / `background`→ `.visible`
+///   anything else (incl. `0`, ``)    → `.default`
+///
+/// All matches are case-insensitive except the literal `1` (the
+/// existing UIA suite contract specifies decimal `1`, not `01` or
+/// other variants). Unknown values fall back to `.default` rather
+/// than failing closed: an operator typo should not make an
+/// interactive launch silently invisible.
+pub fn parseNoActivateMode(raw: []const u8) NoActivateMode {
+    if (std.mem.eql(u8, raw, "1") or
+        std.ascii.eqlIgnoreCase(raw, "true") or
+        std.ascii.eqlIgnoreCase(raw, "hide"))
+    {
+        return .hide;
+    }
+    if (std.ascii.eqlIgnoreCase(raw, "visible") or
+        std.ascii.eqlIgnoreCase(raw, "show") or
+        std.ascii.eqlIgnoreCase(raw, "background"))
+    {
+        return .visible;
+    }
+    return .default;
+}
+
+/// Read `KS_NO_ACTIVATE` from the process environment and dispatch
+/// through `parseNoActivateMode`. Wraps the I/O so the call site in
+/// `initXaml` stays one line; missing env var maps to `.default`.
+fn readNoActivateMode(alloc: Allocator) NoActivateMode {
+    const raw = std.process.getEnvVarOwned(alloc, "KS_NO_ACTIVATE") catch return .default;
+    defer alloc.free(raw);
+    return parseNoActivateMode(raw);
+}
+
+test "parseNoActivateMode: hide aliases" {
+    const expectEqual = std.testing.expectEqual;
+    try expectEqual(NoActivateMode.hide, parseNoActivateMode("1"));
+    try expectEqual(NoActivateMode.hide, parseNoActivateMode("true"));
+    try expectEqual(NoActivateMode.hide, parseNoActivateMode("True"));
+    try expectEqual(NoActivateMode.hide, parseNoActivateMode("TRUE"));
+    try expectEqual(NoActivateMode.hide, parseNoActivateMode("hide"));
+    try expectEqual(NoActivateMode.hide, parseNoActivateMode("Hide"));
+    try expectEqual(NoActivateMode.hide, parseNoActivateMode("HIDE"));
+}
+
+test "parseNoActivateMode: visible aliases" {
+    const expectEqual = std.testing.expectEqual;
+    try expectEqual(NoActivateMode.visible, parseNoActivateMode("visible"));
+    try expectEqual(NoActivateMode.visible, parseNoActivateMode("Visible"));
+    try expectEqual(NoActivateMode.visible, parseNoActivateMode("VISIBLE"));
+    try expectEqual(NoActivateMode.visible, parseNoActivateMode("show"));
+    try expectEqual(NoActivateMode.visible, parseNoActivateMode("Show"));
+    try expectEqual(NoActivateMode.visible, parseNoActivateMode("background"));
+    try expectEqual(NoActivateMode.visible, parseNoActivateMode("Background"));
+    try expectEqual(NoActivateMode.visible, parseNoActivateMode("BACKGROUND"));
+}
+
+test "parseNoActivateMode: unknown values fall back to default" {
+    const expectEqual = std.testing.expectEqual;
+    try expectEqual(NoActivateMode.default, parseNoActivateMode(""));
+    try expectEqual(NoActivateMode.default, parseNoActivateMode("0"));
+    try expectEqual(NoActivateMode.default, parseNoActivateMode("false"));
+    try expectEqual(NoActivateMode.default, parseNoActivateMode("no"));
+    try expectEqual(NoActivateMode.default, parseNoActivateMode("typo"));
+    try expectEqual(NoActivateMode.default, parseNoActivateMode("01"));
+    try expectEqual(NoActivateMode.default, parseNoActivateMode("2"));
+    try expectEqual(NoActivateMode.default, parseNoActivateMode("hidden")); // not "hide"
+}
+
+test "parseNoActivateMode: hide and visible never overlap" {
+    // Defensive: a typo halfway between the two ("show1") must not
+    // accidentally match the `hide` arm via the literal `1` check.
+    // The literal `1` is whole-string only.
+    const expectEqual = std.testing.expectEqual;
+    try expectEqual(NoActivateMode.default, parseNoActivateMode("show1"));
+    try expectEqual(NoActivateMode.default, parseNoActivateMode("1show"));
+    try expectEqual(NoActivateMode.default, parseNoActivateMode("hide1"));
+}
+
 fn postMessageWarn(hwnd: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM, msg_name: []const u8) bool {
     const result = os.PostMessageW(hwnd, msg, wparam, lparam);
     if (result == 0) {
@@ -595,35 +685,49 @@ fn initXaml(self: *App) !void {
 
     // Step 5: Show the window.
     //
-    // KS_NO_ACTIVATE=1 keeps the window from stealing the user's
-    // foreground focus on launch — used by the UIA suite and the
-    // regression repro (see tests/winui3/test-helpers.psm1) so test
-    // ghostty windows don't pop on top of the user's interactive
-    // work. Default behaviour (env unset) is unchanged: SW_SHOWNORMAL
-    // + SetForegroundWindow.
-    const no_activate = blk: {
-        const alloc = self.core_app.alloc;
-        const raw = std.process.getEnvVarOwned(alloc, "KS_NO_ACTIVATE") catch break :blk false;
-        defer alloc.free(raw);
-        break :blk std.mem.eql(u8, raw, "1") or std.ascii.eqlIgnoreCase(raw, "true");
-    };
-    if (no_activate) {
-        // KS_NO_ACTIVATE=1 — keep window completely off-screen.
-        // SW_SHOWNOACTIVATE still visibly pops the window (just doesn't
-        // take focus), which is intrusive for tests/repro running
-        // alongside the user's interactive work. SW_HIDE keeps the
-        // HWND alive for UIA / CP / SendMessage but does NOT
-        // display it. Tests that need visual presence (test-03
-        // TransformPattern.Move) can call ShowWindow(SW_SHOWNA)
-        // themselves at test entry.
-        _ = os.ShowWindow(self.hwnd.?, os.SW_HIDE);
-        _ = os.UpdateWindow(self.hwnd.?);
-        log.debug("initXaml step 5: ShowWindow(HIDE) — KS_NO_ACTIVATE=1", .{});
-    } else {
-        _ = os.ShowWindow(self.hwnd.?, os.SW_SHOWNORMAL);
-        _ = os.UpdateWindow(self.hwnd.?);
-        _ = os.SetForegroundWindow(self.hwnd.?);
-        log.debug("initXaml step 5: ShowWindow + SetForegroundWindow OK", .{});
+    // `KS_NO_ACTIVATE` env var controls launch-time activation. The
+    // default (env unset) is unchanged: `SW_SHOWNORMAL` plus
+    // `SetForegroundWindow` so an interactive launch ends up focused.
+    // Two opt-in modes exist for non-interactive callers:
+    //
+    //   `KS_NO_ACTIVATE=hide` (also `1` / `true`)
+    //       → `SW_HIDE`. Window is invisible. The HWND stays alive
+    //         so UIA / CP / SendMessage automation can still drive it.
+    //         Used by the UIA suite and the cascade-deadlock repro
+    //         (`tests/winui3/test-helpers.psm1`) where popping a
+    //         window on top of the developer's interactive work
+    //         would be intrusive.
+    //
+    //   `KS_NO_ACTIVATE=visible` (also `show` / `background`)
+    //       → `SW_SHOWNOACTIVATE`. Window is visible at normal size,
+    //         taskbar entry appears, but foreground / focus stays
+    //         with whatever process had it before launch. Used by
+    //         background batch launchers (deckpilot e2e tests,
+    //         scripted spawn-many) where the operator wants to see
+    //         the window land but does not want their typing
+    //         redirected mid-stream.
+    const no_activate_mode: NoActivateMode = readNoActivateMode(self.core_app.alloc);
+    switch (no_activate_mode) {
+        .hide => {
+            _ = os.ShowWindow(self.hwnd.?, os.SW_HIDE);
+            _ = os.UpdateWindow(self.hwnd.?);
+            log.debug("initXaml step 5: ShowWindow(HIDE) — KS_NO_ACTIVATE=hide", .{});
+        },
+        .visible => {
+            // SW_SHOWNOACTIVATE: visible at normal size, no
+            // SetForegroundWindow follow-up — focus stays with the
+            // previously-foreground window. Taskbar entry appears
+            // so a human can click into the window if they want.
+            _ = os.ShowWindow(self.hwnd.?, os.SW_SHOWNOACTIVATE);
+            _ = os.UpdateWindow(self.hwnd.?);
+            log.debug("initXaml step 5: ShowWindow(SHOWNOACTIVATE) — KS_NO_ACTIVATE=visible", .{});
+        },
+        .default => {
+            _ = os.ShowWindow(self.hwnd.?, os.SW_SHOWNORMAL);
+            _ = os.UpdateWindow(self.hwnd.?);
+            _ = os.SetForegroundWindow(self.hwnd.?);
+            log.debug("initXaml step 5: ShowWindow + SetForegroundWindow OK", .{});
+        },
     }
     self.setStartupStage(.window_activated);
 

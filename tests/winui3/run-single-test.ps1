@@ -12,7 +12,10 @@ if (-not $ExePath) {
 }
 
 # Standalone tests (Phase 3) manage their own process — don't launch ghostty for them.
-$standaloneTests = @("test-05-ghost-demo")
+$standaloneTests = @(
+    "test-05-ghost-demo",
+    "test-09-no-activate-modes"
+)
 if ($TestName -in $standaloneTests) {
     Write-Host "Standalone test: $TestName (manages its own ghostty process)"
     $testFile = Join-Path $PSScriptRoot "$TestName.ps1"
