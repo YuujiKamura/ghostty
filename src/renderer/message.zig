@@ -64,6 +64,15 @@ pub const Message = union(enum) {
     /// Activate or deactivate the inspector.
     inspector: bool,
 
+    /// Toggle the debug overlay.
+    toggle_debug_overlay,
+
+    /// Set the TSF preedit text for the debug overlay.
+    tsf_preedit: struct {
+        alloc: Allocator,
+        text: ?[:0]const u8,
+    },
+
     /// The macOS display ID has changed for the window.
     macos_display_id: u32,
 
@@ -103,6 +112,10 @@ pub const Message = union(enum) {
                 v.impl.deinit();
                 v.alloc.destroy(v.impl);
                 v.alloc.destroy(v.thread);
+            },
+
+            .tsf_preedit => |v| {
+                if (v.text) |text| v.alloc.free(text);
             },
 
             else => {},

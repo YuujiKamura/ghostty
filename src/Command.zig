@@ -335,7 +335,14 @@ fn startWindows(self: *Command, arena: Allocator) !void {
             .hStdError = stderr,
             .hStdOutput = stdout,
             .hStdInput = stdin,
-            .dwFlags = windows.STARTF_USESTDHANDLES,
+            // STARTF_USESHOWWINDOW (0x00000001) makes wShowWindow take
+            // effect — without it, wShowWindow is ignored. SW_HIDE = 0
+            // suppresses any console window the child or its conhost
+            // might display. With ConPTY this is harmless because i/o
+            // is via the pseudoterminal handles in the attribute list,
+            // not the console UI.
+            // UPSTREAM-SHARED-OK: minimize footprint only (#239)
+            .dwFlags = windows.STARTF_USESTDHANDLES | 0x00000001,
             .lpReserved = null,
             .lpDesktop = null,
             .lpTitle = null,
@@ -346,7 +353,7 @@ fn startWindows(self: *Command, arena: Allocator) !void {
             .dwXCountChars = 0,
             .dwYCountChars = 0,
             .dwFillAttribute = 0,
-            .wShowWindow = 0,
+            .wShowWindow = 0, // SW_HIDE; honored when STARTF_USESHOWWINDOW set
             .cbReserved2 = 0,
             .lpReserved2 = null,
         },

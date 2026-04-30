@@ -227,6 +227,15 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         /// Our overlay state, if any.
         overlay: ?Overlay = null,
 
+        /// Whether to show the debug overlay.
+        show_debug_overlay: bool = false,
+
+        /// The current FPS.
+        current_fps: f64 = 0,
+
+        /// The current TSF preedit text.
+        tsf_preedit: ?[]const u8 = null,
+
         const HighlightTag = enum(u8) {
             search_match,
             search_match_selected,
@@ -1401,6 +1410,22 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             self.api.drawFrameStart();
             defer self.api.drawFrameEnd();
 
+            // Calculate current FPS.
+            {
+                const now = std.time.Instant.now() catch null;
+                if (now) |n| {
+                    if (self.last_frame_time) |last| {
+                        const elapsed_ns = n.since(last);
+                        if (elapsed_ns > 0) {
+                            const fps = @as(f64, 1_000_000_000.0) / @as(f64, @floatFromInt(elapsed_ns));
+                            // Exponential moving average for stability
+                            self.current_fps = self.current_fps * 0.9 + fps * 0.1;
+                        }
+                    }
+                    self.last_frame_time = n;
+                }
+            }
+
             // Retrieve the most up-to-date surface size from the Graphics API
             const surface_size = try self.api.surfaceSize();
 
@@ -1877,6 +1902,19 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             }
         }
 
+        pub fn toggleDebugOverlay(self: *Self) !void {
+            self.show_debug_overlay = !self.show_debug_overlay;
+        }
+
+        pub fn setTsfPreedit(self: *Self, preedit: ?[:0]const u8) !void {
+            if (self.tsf_preedit) |old| self.alloc.free(old);
+            if (preedit) |new| {
+                self.tsf_preedit = try self.alloc.dupe(u8, new);
+            } else {
+                self.tsf_preedit = null;
+            }
+        }
+
         /// Resize the screen.
         pub fn setScreenSize(
             self: *Self,
@@ -2203,7 +2241,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
             // If we have no features enabled, don't build an overlay.
             // If we had a previous overlay, deallocate it.
-            if (features.len == 0) {
+            if (features.len == 0 and !self.show_debug_overlay) {
                 if (self.overlay) |*old| {
                     old.deinit(alloc);
                     self.overlay = null;
@@ -2246,13 +2284,17 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 self.overlay = new;
                 break :overlay &self.overlay.?;
             };
+
+            overlay.show_debug_overlay = self.show_debug_overlay;
+            overlay.fps = self.current_fps;
+            overlay.tsf_preedit = self.tsf_preedit;
+
             overlay.applyFeatures(
-                alloc,
+                self.alloc,
                 &self.terminal_state,
                 features,
             );
         }
-
         const PreeditRange = struct {
             y: terminal.size.CellCountInt,
             x: [2]terminal.size.CellCountInt,

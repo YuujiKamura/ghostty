@@ -1127,6 +1127,14 @@ pub fn Surface(comptime App: type) type {
                 log.debug("handleKeyEvent: unmapped vk=0x{X:0>4} pressed={} -> pending=none", .{ vk, pressed });
                 return;
             };
+
+            // F12 toggles the debug overlay
+            if (ghostty_key == .f12 and pressed) {
+                if (self.core_surface.renderer_thread.mailbox.push(.toggle_debug_overlay) == .ok) {
+                    log.info("debug overlay toggled", .{});
+                }
+            }
+
             log.debug("handleKeyEvent: vk=0x{X:0>4} pressed={} key={s}", .{ vk, pressed, @tagName(ghostty_key) });
             const mods = key.getModifiers();
             const unshifted = key.vkToUnshiftedCodepoint(vk);
@@ -1908,6 +1916,24 @@ pub fn Surface(comptime App: type) type {
         /// Bridges to core Surface.preeditCallback.
         pub fn setTsfPreedit(self: *Self, preedit_utf8: ?[]const u8) void {
             if (!self.core_initialized) return;
+
+            // Forward to debug overlay
+            const alloc = self.app.core_app.alloc;
+            if (preedit_utf8) |text| {
+                const copy = alloc.dupeZ(u8, text) catch null;
+                if (copy) |c| {
+                    if (self.core_surface.renderer_thread.mailbox.push(.{
+                        .tsf_preedit = .{ .alloc = alloc, .text = c },
+                    }) != .ok) {
+                        alloc.free(c);
+                    }
+                }
+            } else {
+                _ = self.core_surface.renderer_thread.mailbox.push(.{
+                    .tsf_preedit = .{ .alloc = alloc, .text = null },
+                });
+            }
+
             self.core_surface.preeditCallback(preedit_utf8) catch |err| {
                 log.err("TSF preedit error: {}", .{err});
             };
