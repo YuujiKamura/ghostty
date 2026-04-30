@@ -594,10 +594,37 @@ fn initXaml(self: *App) !void {
     }
 
     // Step 5: Show the window.
-    _ = os.ShowWindow(self.hwnd.?, os.SW_SHOWNORMAL);
-    _ = os.UpdateWindow(self.hwnd.?);
-    _ = os.SetForegroundWindow(self.hwnd.?);
-    log.debug("initXaml step 5: ShowWindow + SetForegroundWindow OK", .{});
+    //
+    // KS_NO_ACTIVATE=1 keeps the window from stealing the user's
+    // foreground focus on launch — used by the UIA suite and the
+    // regression repro (see tests/winui3/test-helpers.psm1) so test
+    // ghostty windows don't pop on top of the user's interactive
+    // work. Default behaviour (env unset) is unchanged: SW_SHOWNORMAL
+    // + SetForegroundWindow.
+    const no_activate = blk: {
+        const alloc = self.core_app.alloc;
+        const raw = std.process.getEnvVarOwned(alloc, "KS_NO_ACTIVATE") catch break :blk false;
+        defer alloc.free(raw);
+        break :blk std.mem.eql(u8, raw, "1") or std.ascii.eqlIgnoreCase(raw, "true");
+    };
+    if (no_activate) {
+        // KS_NO_ACTIVATE=1 — keep window completely off-screen.
+        // SW_SHOWNOACTIVATE still visibly pops the window (just doesn't
+        // take focus), which is intrusive for tests/repro running
+        // alongside the user's interactive work. SW_HIDE keeps the
+        // HWND alive for UIA / CP / SendMessage but does NOT
+        // display it. Tests that need visual presence (test-03
+        // TransformPattern.Move) can call ShowWindow(SW_SHOWNA)
+        // themselves at test entry.
+        _ = os.ShowWindow(self.hwnd.?, os.SW_HIDE);
+        _ = os.UpdateWindow(self.hwnd.?);
+        log.debug("initXaml step 5: ShowWindow(HIDE) — KS_NO_ACTIVATE=1", .{});
+    } else {
+        _ = os.ShowWindow(self.hwnd.?, os.SW_SHOWNORMAL);
+        _ = os.UpdateWindow(self.hwnd.?);
+        _ = os.SetForegroundWindow(self.hwnd.?);
+        log.debug("initXaml step 5: ShowWindow + SetForegroundWindow OK", .{});
+    }
     self.setStartupStage(.window_activated);
 
     // Step 6: Create XAML content (TabView + SwapChainPanel).

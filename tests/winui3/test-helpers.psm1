@@ -165,19 +165,24 @@ public class Win32 {
     }
 
     /// Find a top-level window by PID.
-    /// Prefers a window with class name "GhosttyWindow"; falls back to first visible window.
+    /// Prefers a window with class name "GhosttyWindow" (regardless of
+    /// visibility — ghostty under KS_NO_ACTIVATE=1 starts with SW_HIDE
+    /// to keep test windows out of the user's foreground).
+    /// Falls back to the first VISIBLE window with a different class
+    /// (visibility filter on fallback prevents picking up phantom
+    /// helper / tooltip windows).
     public static IntPtr FindWindowByPid(uint pid) {
         IntPtr fallback = IntPtr.Zero;
         IntPtr preferred = IntPtr.Zero;
         EnumWindows((h, _) => {
             uint wpid;
             GetWindowThreadProcessId(h, out wpid);
-            if (wpid == pid && IsWindowVisible(h)) {
+            if (wpid == pid) {
                 if (GetClassName(h) == "GhosttyWindow") {
                     preferred = h;
                     return false; // stop enumeration
                 }
-                if (fallback == IntPtr.Zero) {
+                if (fallback == IntPtr.Zero && IsWindowVisible(h)) {
                     fallback = h;
                 }
             }
@@ -257,53 +262,18 @@ function Start-Ghostty {
     }
 
     Write-Host "  Launching $ExePath ..." -ForegroundColor DarkGray
-    # Launch Normal so child windows (drag bar, IME overlay) are
-    # created on the standard show path (Minimized blocks lazy child
-    # creation in WinUI3 and breaks test-02b/02c). Then immediately
-    # push the window off-screen and de-activate so it doesn't steal
-    # the user's foreground focus or eat desktop real estate.
-    $proc = Start-Process -FilePath $ExePath -PassThru
-    Hide-GhosttyWindow -Process $proc -TimeoutMs 5000
-    return $proc
-}
-
-function Hide-GhosttyWindow {
-    <#
-    .SYNOPSIS
-        Show ghostty's main window without activating it, so UIA tests
-        can still find/manipulate the HWND but the window doesn't
-        steal foreground focus from the user's interactive work. Polls
-        until the window is found or the timeout expires.
-        Window position is left at OS default — moving it off-screen
-        breaks position-based UIA tests (test-03-window-ops).
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [System.Diagnostics.Process]$Process,
-        [int]$TimeoutMs = 5000
-    )
-    Add-Type -ErrorAction SilentlyContinue -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public static class GhWin {
-    [DllImport("user32.dll")]
-    public static extern bool ShowWindow(IntPtr hWnd, int cmd);
-}
-"@
-    $deadline = (Get-Date).AddMilliseconds($TimeoutMs)
-    while ((Get-Date) -lt $deadline) {
-        $p = Get-Process -Id $Process.Id -ErrorAction SilentlyContinue
-        if ($p -and $p.MainWindowHandle -ne 0) {
-            # SW_SHOWNA = 8 (show without activating). Window stays at
-            # OS-default position (so position tests still work) but
-            # does not steal foreground focus.
-            [void][GhWin]::ShowWindow($p.MainWindowHandle, 8)
-            return
-        }
-        Start-Sleep -Milliseconds 100
+    # Tell ghostty itself to use SW_SHOWNOACTIVATE + skip
+    # SetForegroundWindow during initXaml step 5 (App.zig) — that's
+    # the actual call that pops the window to foreground. PowerShell
+    # -WindowStyle / Start-Process hints alone are not enough because
+    # ghostty re-asserts foreground on its own startup path.
+    $env:KS_NO_ACTIVATE = "1"
+    try {
+        $proc = Start-Process -FilePath $ExePath -PassThru
+    } finally {
+        Remove-Item Env:KS_NO_ACTIVATE -ErrorAction SilentlyContinue
     }
-    Write-Host "  Hide-GhosttyWindow: HWND not ready within ${TimeoutMs}ms (continuing)" -ForegroundColor Yellow
+    return $proc
 }
 
 function Stop-Ghostty {

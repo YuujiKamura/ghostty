@@ -28,12 +28,14 @@ pub const Color = enum {
     hyperlink, // light blue
     semantic_prompt, // orange/gold
     semantic_input, // cyan
+    debug_text, // green
 
     pub fn rgb(self: Color) z2d.pixel.RGB {
         return switch (self) {
             .hyperlink => .{ .r = 180, .g = 180, .b = 255 },
             .semantic_prompt => .{ .r = 255, .g = 200, .b = 64 },
             .semantic_input => .{ .r = 64, .g = 200, .b = 255 },
+            .debug_text => .{ .r = 0, .g = 255, .b = 0 },
         };
     }
 
@@ -64,6 +66,15 @@ surface: z2d.Surface,
 
 /// Cell size information so we can map grid coordinates to pixels.
 cell_size: CellSize,
+
+/// Whether to show the debug overlay (FPS, TSF preedit).
+show_debug_overlay: bool = false,
+
+/// Current FPS to display in the debug overlay.
+fps: f64 = 0,
+
+/// Current TSF preedit text to display in the debug overlay.
+tsf_preedit: ?[]const u8 = null,
 
 /// The set of available features and their configuration.
 pub const Feature = union(enum) {
@@ -144,6 +155,35 @@ pub fn applyFeatures(
             state,
         ),
     };
+
+    if (self.show_debug_overlay) {
+        self.drawDebugOverlay(alloc) catch |err| {
+            log.warn("error drawing debug overlay: {}", .{err});
+        };
+    }
+}
+
+/// Draw the FPS and TSF preedit overlay in the top right corner.
+fn drawDebugOverlay(self: *Overlay, alloc: Allocator) !void {
+    var ctx: z2d.Context = .init(alloc, &self.surface);
+    defer ctx.deinit();
+
+    ctx.setSourceToPixel(Color.debug_text.pixel());
+
+    var buf: [128]u8 = undefined;
+    const fps_text = std.fmt.bufPrint(&buf, "FPS: {d:.2}", .{self.fps}) catch "FPS: ERROR";
+
+    const width = self.surface.getWidth();
+    // Simple top-right alignment (fixed offset for now)
+    const x: f64 = @as(f64, @floatFromInt(width)) - 150.0;
+    const y: f64 = 20.0;
+
+    try ctx.showText(fps_text, x, y);
+
+    if (self.tsf_preedit) |preedit| {
+        const tsf_text = std.fmt.bufPrint(&buf, "TSF: {s}", .{preedit}) catch "TSF: ERROR";
+        try ctx.showText(tsf_text, x, y + 20.0);
+    }
 }
 
 /// Add rectangles around contiguous hyperlinks in the render state.

@@ -125,15 +125,21 @@ $runStart = Get-Date
 # Launch N ghostty sessions, capture all PIDs
 $ghProcs = @()
 $ghPids = @()
-for ($s = 1; $s -le $Sessions; $s++) {
-    # Minimized so the test sessions don't steal the user's foreground
-    # focus during the run. UIA / CP pipe paths still work normally
-    # against a minimized HWND.
-    $proc = Start-Process -FilePath $exe -PassThru -WindowStyle Minimized
-    $ghProcs += $proc
-    $ghPids += $proc.Id
-    Log "launched ghostty session #$s pid=$($proc.Id)"
-    Start-Sleep -Seconds 3
+$env:KS_NO_ACTIVATE = "1"
+try {
+    for ($s = 1; $s -le $Sessions; $s++) {
+        # KS_NO_ACTIVATE=1 (above) tells ghostty to use SW_SHOWNOACTIVATE
+        # in initXaml step 5 instead of SW_SHOWNORMAL+SetForegroundWindow,
+        # so the test sessions do not steal the user's foreground focus
+        # during the run.
+        $proc = Start-Process -FilePath $exe -PassThru
+        $ghProcs += $proc
+        $ghPids += $proc.Id
+        Log "launched ghostty session #$s pid=$($proc.Id)"
+        Start-Sleep -Seconds 3
+    }
+} finally {
+    Remove-Item Env:KS_NO_ACTIVATE -ErrorAction SilentlyContinue
 }
 Start-Sleep -Seconds 3
 foreach ($p in $ghProcs) {
