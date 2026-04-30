@@ -15,6 +15,8 @@ const Overlay = @This();
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const z2d = @import("z2d");
+// UPSTREAM-SHARED-OK: renderer debug overlay text needs an explicit embedded font because z2d Context has no default font.
+const fontpkg = @import("../font/main.zig");
 const terminal = @import("../terminal/main.zig");
 const size = @import("size.zig");
 const Size = size.Size;
@@ -30,12 +32,12 @@ pub const Color = enum {
     semantic_input, // cyan
     debug_text, // green
 
-    pub fn rgb(self: Color) z2d.pixel.RGB {
+    pub fn rgba(self: Color) z2d.pixel.RGBA {
         return switch (self) {
-            .hyperlink => .{ .r = 180, .g = 180, .b = 255 },
-            .semantic_prompt => .{ .r = 255, .g = 200, .b = 64 },
-            .semantic_input => .{ .r = 64, .g = 200, .b = 255 },
-            .debug_text => .{ .r = 0, .g = 255, .b = 0 },
+            .hyperlink => .{ .r = 180, .g = 180, .b = 255, .a = 255 },
+            .semantic_prompt => .{ .r = 255, .g = 200, .b = 64, .a = 255 },
+            .semantic_input => .{ .r = 64, .g = 200, .b = 255, .a = 255 },
+            .debug_text => .{ .r = 0, .g = 255, .b = 0, .a = 255 },
         };
     }
 
@@ -49,15 +51,15 @@ pub const Color = enum {
         return self.alphaPixel(200);
     }
 
-    /// The raw RGB as a pixel.
+    /// The raw RGBA as a pixel.
     pub fn pixel(self: Color) z2d.Pixel {
-        return self.rgb().asPixel();
+        return .{ .rgba = self.rgba() };
     }
 
     fn alphaPixel(self: Color, alpha: u8) z2d.Pixel {
-        var rgba: z2d.pixel.RGBA = .fromPixel(self.pixel());
-        rgba.a = alpha;
-        return rgba.multiply().asPixel();
+        var res = self.rgba();
+        res.a = alpha;
+        return res.multiply().asPixel();
     }
 };
 
@@ -66,6 +68,9 @@ surface: z2d.Surface,
 
 /// Cell size information so we can map grid coordinates to pixels.
 cell_size: CellSize,
+
+/// UPSTREAM-SHARED-OK: reusing a validated embedded font avoids reparsing font tables for every debug overlay frame.
+debug_font: z2d.Font,
 
 /// Whether to show the debug overlay (FPS, TSF preedit).
 show_debug_overlay: bool = false,
@@ -110,6 +115,7 @@ pub fn init(alloc: Allocator, sz: Size) InitError!Overlay {
     return .{
         .surface = sfc,
         .cell_size = sz.cell,
+        .debug_font = z2d.Font.loadBuffer(fontpkg.embedded.regular) catch unreachable,
     };
 }
 
@@ -169,20 +175,28 @@ fn drawDebugOverlay(self: *Overlay, alloc: Allocator) !void {
     defer ctx.deinit();
 
     ctx.setSourceToPixel(Color.debug_text.pixel());
+    // UPSTREAM-SHARED-OK: z2d text rendering is a no-op without an explicit font, so bind the cached embedded face for overlay text.
+    ctx.font = .{ .buffer = self.debug_font };
+
+    const font_size = 16.0;
+    const line_height = font_size + 4.0;
+    const margin = 8.0;
+    const right_padding = 240.0;
+    ctx.setFontSize(font_size);
 
     var buf: [128]u8 = undefined;
     const fps_text = std.fmt.bufPrint(&buf, "FPS: {d:.2}", .{self.fps}) catch "FPS: ERROR";
 
-    const width = self.surface.getWidth();
-    // Simple top-right alignment (fixed offset for now)
-    const x: f64 = @as(f64, @floatFromInt(width)) - 150.0;
-    const y: f64 = 20.0;
+    const width = @as(f64, @floatFromInt(self.surface.getWidth()));
+    // Simple top-right alignment (fixed offset for now).
+    const x = @max(margin, width - right_padding);
+    const y = margin + font_size;
 
     try ctx.showText(fps_text, x, y);
 
     if (self.tsf_preedit) |preedit| {
         const tsf_text = std.fmt.bufPrint(&buf, "TSF: {s}", .{preedit}) catch "TSF: ERROR";
-        try ctx.showText(tsf_text, x, y + 20.0);
+        try ctx.showText(tsf_text, x, y + line_height);
     }
 }
 
@@ -452,4 +466,229 @@ fn highlightPixelRect(
     ctx.setLineWidth(1);
     ctx.setSourceToPixel(border_color);
     try ctx.stroke();
+}
+
+fn testSize(cols: u32, rows: u32) Size {
+    const cell: CellSize = .{ .width = 10, .height = 20 };
+    return .{
+        .screen = .{
+            .width = cols * cell.width,
+            .height = rows * cell.height,
+        },
+        .cell = cell,
+        .padding = .{},
+    };
+}
+
+fn initTestOverlay(alloc: Allocator, cols: u32, rows: u32) !Overlay {
+    return Overlay.init(alloc, testSize(cols, rows));
+}
+
+fn pixelAt(overlay: *const Overlay, x: usize, y: usize) z2d.pixel.RGBA {
+    const width: usize = @intCast(overlay.surface.getWidth());
+    return overlay.surface.image_surface_rgba.buf[y * width + x];
+}
+
+fn countVisiblePixels(overlay: *const Overlay) usize {
+    var count: usize = 0;
+    for (overlay.surface.image_surface_rgba.buf) |px| {
+        if (px.a != 0) count += 1;
+    }
+    return count;
+}
+
+fn countVisiblePixelsInRect(
+    overlay: *const Overlay,
+    x0: usize,
+    y0: usize,
+    x1: usize,
+    y1: usize,
+) usize {
+    const width: usize = @intCast(overlay.surface.getWidth());
+    const height: usize = @intCast(overlay.surface.getHeight());
+
+    var count: usize = 0;
+    var y = y0;
+    while (y < @min(y1, height)) : (y += 1) {
+        var x = x0;
+        while (x < @min(x1, width)) : (x += 1) {
+            if (overlay.surface.image_surface_rgba.buf[y * width + x].a != 0) {
+                count += 1;
+            }
+        }
+    }
+
+    return count;
+}
+
+test "Overlay Color helpers preserve expected alpha semantics" {
+    const testing = std.testing;
+
+    try testing.expectEqual(
+        Color.debug_text.rgba(),
+        z2d.pixel.RGBA.fromPixel(Color.debug_text.pixel()),
+    );
+
+    var expected_fill = Color.hyperlink.rgba();
+    expected_fill.a = 96;
+    try testing.expectEqual(
+        expected_fill.multiply(),
+        z2d.pixel.RGBA.fromPixel(Color.hyperlink.rectFill()),
+    );
+
+    var expected_border = Color.hyperlink.rgba();
+    expected_border.a = 200;
+    try testing.expectEqual(
+        expected_border.multiply(),
+        z2d.pixel.RGBA.fromPixel(Color.hyperlink.rectBorder()),
+    );
+}
+
+test "Overlay init pendingImage and reset" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var overlay = try initTestOverlay(alloc, 2, 2);
+    defer overlay.deinit(alloc);
+
+    const pending = overlay.pendingImage();
+    try testing.expectEqual(@as(u32, 20), pending.width);
+    try testing.expectEqual(@as(u32, 40), pending.height);
+    try testing.expectEqual(Image.Pending.PixelFormat.rgba, pending.pixel_format);
+    try testing.expectEqual(
+        @intFromPtr(overlay.surface.image_surface_rgba.buf.ptr),
+        @intFromPtr(pending.data),
+    );
+
+    overlay.surface.paintPixel(Color.debug_text.pixel());
+    try testing.expect(pixelAt(&overlay, 0, 0).a != 0);
+
+    overlay.reset();
+    try testing.expectEqual(
+        z2d.pixel.RGBA{ .r = 0, .g = 0, .b = 0, .a = 0 },
+        pixelAt(&overlay, 0, 0),
+    );
+    try testing.expectEqual(
+        z2d.pixel.RGBA{ .r = 0, .g = 0, .b = 0, .a = 0 },
+        pixelAt(&overlay, 19, 39),
+    );
+}
+
+test "Overlay drawDebugOverlay renders text without legacy test rectangle" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var overlay = try initTestOverlay(alloc, 32, 4);
+    defer overlay.deinit(alloc);
+
+    overlay.fps = 60.0;
+    overlay.tsf_preedit = "abc";
+
+    try overlay.drawDebugOverlay(alloc);
+
+    try testing.expect(countVisiblePixels(&overlay) > 0);
+    try testing.expect(countVisiblePixelsInRect(&overlay, 80, 0, 320, 48) > 0);
+    try testing.expectEqual(@as(u8, 0), pixelAt(&overlay, 60, 60).a);
+}
+
+test "Overlay highlightGridRect draws fill and border" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var overlay = try initTestOverlay(alloc, 4, 2);
+    defer overlay.deinit(alloc);
+
+    const border = Color.hyperlink.rectBorder();
+    const fill = Color.hyperlink.rectFill();
+    try overlay.highlightGridRect(alloc, 1, 0, 2, 1, border, fill);
+
+    try testing.expectEqual(
+        z2d.pixel.RGBA.fromPixel(border),
+        pixelAt(&overlay, 10, 10),
+    );
+    try testing.expectEqual(
+        z2d.pixel.RGBA.fromPixel(fill),
+        pixelAt(&overlay, 15, 10),
+    );
+    try testing.expectEqual(@as(u8, 0), pixelAt(&overlay, 35, 10).a);
+}
+
+test "Overlay highlightPixelRect draws fill and border" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var overlay = try initTestOverlay(alloc, 4, 3);
+    defer overlay.deinit(alloc);
+
+    const border = Color.semantic_prompt.rectBorder();
+    const fill = Color.semantic_prompt.rectFill();
+    try overlay.highlightPixelRect(alloc, 0, 1, 5, 1, border, fill);
+
+    try testing.expectEqual(
+        z2d.pixel.RGBA.fromPixel(border),
+        pixelAt(&overlay, 0, 30),
+    );
+    try testing.expectEqual(
+        z2d.pixel.RGBA.fromPixel(fill),
+        pixelAt(&overlay, 2, 30),
+    );
+    try testing.expectEqual(@as(u8, 0), pixelAt(&overlay, 7, 30).a);
+}
+
+test "Overlay applyFeatures highlights hyperlinks" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var t: terminal.Terminal = try .init(alloc, .{ .cols = 4, .rows = 1 });
+    defer t.deinit(alloc);
+
+    try t.screens.active.startHyperlink("http://example.com", null);
+    try t.printString("AB");
+    t.screens.active.endHyperlink();
+    try t.printString("CD");
+
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    var overlay = try initTestOverlay(alloc, 4, 1);
+    defer overlay.deinit(alloc);
+    overlay.applyFeatures(alloc, &state, &.{.highlight_hyperlinks});
+
+    try testing.expectEqual(
+        z2d.pixel.RGBA.fromPixel(Color.hyperlink.rectFill()),
+        pixelAt(&overlay, 5, 10),
+    );
+    try testing.expectEqual(@as(u8, 0), pixelAt(&overlay, 25, 10).a);
+}
+
+test "Overlay applyFeatures highlights semantic prompts and input" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var t: terminal.Terminal = try .init(alloc, .{ .cols = 8, .rows = 2 });
+    defer t.deinit(alloc);
+
+    try t.semanticPrompt(.init(.prompt_start));
+    try t.printString("> ");
+    try t.semanticPrompt(.init(.end_prompt_start_input));
+    try t.printString("cd");
+
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    var overlay = try initTestOverlay(alloc, 8, 2);
+    defer overlay.deinit(alloc);
+    overlay.applyFeatures(alloc, &state, &.{.semantic_prompts});
+
+    try testing.expectEqual(
+        z2d.pixel.RGBA.fromPixel(Color.semantic_prompt.rectFill()),
+        pixelAt(&overlay, 2, 10),
+    );
+    try testing.expectEqual(
+        z2d.pixel.RGBA.fromPixel(Color.semantic_input.rectFill()),
+        pixelAt(&overlay, 25, 10),
+    );
+    try testing.expectEqual(@as(u8, 0), pixelAt(&overlay, 55, 10).a);
 }

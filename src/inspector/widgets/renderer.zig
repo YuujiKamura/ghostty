@@ -97,18 +97,18 @@ pub const Info = struct {
 
         cimgui.c.ImGui_TextDisabled("Colors:");
 
-        const prompt_rgb = renderer.Overlay.Color.semantic_prompt.rgb();
-        const input_rgb = renderer.Overlay.Color.semantic_input.rgb();
+        const prompt_rgba = renderer.Overlay.Color.semantic_prompt.rgba();
+        const input_rgba = renderer.Overlay.Color.semantic_input.rgba();
         const prompt_col: cimgui.c.ImVec4 = .{
-            .x = @as(f32, @floatFromInt(prompt_rgb.r)) / 255.0,
-            .y = @as(f32, @floatFromInt(prompt_rgb.g)) / 255.0,
-            .z = @as(f32, @floatFromInt(prompt_rgb.b)) / 255.0,
+            .x = @as(f32, @floatFromInt(prompt_rgba.r)) / 255.0,
+            .y = @as(f32, @floatFromInt(prompt_rgba.g)) / 255.0,
+            .z = @as(f32, @floatFromInt(prompt_rgba.b)) / 255.0,
             .w = 1.0,
         };
         const input_col: cimgui.c.ImVec4 = .{
-            .x = @as(f32, @floatFromInt(input_rgb.r)) / 255.0,
-            .y = @as(f32, @floatFromInt(input_rgb.g)) / 255.0,
-            .z = @as(f32, @floatFromInt(input_rgb.b)) / 255.0,
+            .x = @as(f32, @floatFromInt(input_rgba.r)) / 255.0,
+            .y = @as(f32, @floatFromInt(input_rgba.g)) / 255.0,
+            .z = @as(f32, @floatFromInt(input_rgba.b)) / 255.0,
             .w = 1.0,
         };
 
