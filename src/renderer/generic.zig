@@ -1904,6 +1904,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
         pub fn toggleDebugOverlay(self: *Self) !void {
             self.show_debug_overlay = !self.show_debug_overlay;
+            self.markDirty();
         }
 
         pub fn setTsfPreedit(self: *Self, preedit: ?[:0]const u8) !void {

@@ -499,6 +499,7 @@ fn drainMailbox(self: *Thread) !void {
 
             .toggle_debug_overlay => {
                 try self.renderer.toggleDebugOverlay();
+                self.drawFrame(false);
             },
 
             .tsf_preedit => |v| {
