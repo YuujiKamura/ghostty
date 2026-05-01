@@ -156,6 +156,7 @@ pub export fn ghostty_string_free(str: String) void {
     str.deinit();
 }
 
+// UPSTREAM-SHARED-OK: comptime-gated MSVC-only DllMain CRT bootstrap workaround (Zig 0.15.x gap, ziglang/zig #30936); fork-only because libghostty.dll is built only on Windows MSVC.
 // On Windows, Zig's _DllMainCRTStartup does not initialize the MSVC C
 // runtime when targeting MSVC ABI. Without initialization, any C library
 // function that depends on CRT internal state (setlocale, malloc from C

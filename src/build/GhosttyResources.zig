@@ -125,6 +125,7 @@ pub fn init(b: *std.Build, cfg: *const Config, deps: *const SharedDeps) !Ghostty
         try steps.append(b.allocator, &install_step.step);
     }
 
+    // UPSTREAM-SHARED-OK: Windows-only resource install for fontconfig defaults bundled with the WinUI3 distribution; sibling to the existing OS-conditional install patterns in this file.
     // Bundled Fontconfig defaults for Windows runtime.
     if (cfg.target.result.os.tag == .windows) {
         const install_step = b.addInstallDirectory(.{

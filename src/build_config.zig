@@ -45,6 +45,7 @@ pub const artifact = Artifact.detect();
 
 /// Our build configuration. We re-export a lot of these back at the
 /// top-level so its a bit cleaner to use throughout the code.
+// UPSTREAM-SHARED-OK: fork inlines local enums + stringToEnum bridge instead of importing build/Config.zig (avoids circular import: build_options is a Zig module, Config.zig is the build-script side).
 pub const exe_entrypoint: ExeEntrypoint = std.meta.stringToEnum(ExeEntrypoint, @tagName(options.exe_entrypoint)).?;
 pub const flatpak = options.flatpak;
 pub const snap = options.snap;
@@ -67,6 +68,7 @@ pub const i18n: bool = options.i18n;
 /// avoid it in Zig coe as much as possible.
 pub const bundle_id = "com.mitchellh.ghostty";
 
+// UPSTREAM-SHARED-OK: fork relocated slow_runtime_safety into the -Dslow-safety build option (terminal/build_options.zig); upstream still has it as a comptime branch on builtin.mode here.
 /// slow_runtime_safety is now controlled via -Dslow-safety build option.
 /// See src/terminal/build_options.zig (terminal_options.slow_runtime_safety).
 pub const Artifact = enum {

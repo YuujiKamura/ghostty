@@ -98,6 +98,7 @@ pub fn main() !MainReturn {
     defer app.destroy();
 
     // Create our runtime app
+    // UPSTREAM-SHARED-OK: explicit error log + posix.exit(1) on apprt init/run failure (upstream does `try`); entrypoint-level diagnosis aid for headless winui3/win32 launches where stack traces vanish to nowhere.
     var app_runtime: apprt.App = undefined;
     app_runtime.init(app, .{}) catch |err| {
         std.log.err("runtime init failed error={}", .{err});
@@ -124,6 +125,7 @@ fn logFn(
     comptime format: []const u8,
     args: anytype,
 ) void {
+    // UPSTREAM-SHARED-OK: builtin.is_test guard ensures negative-path tests don't drown real failures in warning flood (added in da4f7a760 after Overlay 3-fail was hidden for a day).
     // In tests, swallow all log output. Negative-path tests deliberately
     // exercise error branches that fire log.warn/log.err, and the resulting
     // noise hides actual test failures (cf. 2026-05-01 Overlay 3-fail

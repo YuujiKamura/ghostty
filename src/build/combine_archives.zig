@@ -1,3 +1,4 @@
+//! UPSTREAM-SHARED-OK: paired with the inlined combineArchives in GhosttyLibVt.zig (fork is intentionally behind upstream's CombineArchivesStep.zig refactor; signature stays simple `<output> <inputs...>` instead of upstream's `<zig_exe> <output> <inputs...>`).
 //! Build tool that combines multiple static archives into a single fat
 //! archive using an MRI script piped to `zig ar -M`.
 //!

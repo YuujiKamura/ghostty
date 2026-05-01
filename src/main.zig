@@ -15,6 +15,7 @@ const entrypoint = switch (build_config.exe_entrypoint) {
 /// The main entrypoint for the program.
 pub const main = entrypoint.main;
 
+// UPSTREAM-SHARED-OK: comment-only documentation of Windows wWinMain symbol generation (no behavior change); entrypoint dispatch must live at root.
 /// Zig 0.15.2 + link_libc + subsystem=.Windows: the MSVC linker needs a
 /// WinMain-family symbol. start.zig detects wWinMain in root and generates
 /// wWinMainCRTStartup. We delegate to main() which delegates to the entrypoint.

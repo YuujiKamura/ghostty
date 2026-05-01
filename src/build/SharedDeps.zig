@@ -593,6 +593,7 @@ pub fn add(
         // get access to glib for dbus.
         if (self.config.flatpak) step.linkSystemLibrary2("gtk4", dynamic_link_opts);
 
+        // UPSTREAM-SHARED-OK: switch coverage forced by Runtime enum extension; .win32/.winui3 wire deps in build.zig (not here).
         switch (self.config.app_runtime) {
             .none => {},
             .gtk => try self.addGtkNg(step),
@@ -838,6 +839,7 @@ pub fn addSimd(
             "-DSIMDUTF_NO_LIBCXX",
         );
 
+        // UPSTREAM-SHARED-OK: fork narrows ubsan opt-out to MSVC ABI only (upstream applies to all Windows OS tags); MinGW handles ubsan via dllcrt2.
         // Disable ubsan for MSVC to avoid undefined references to
         // __ubsan_handle_* symbols that require a runtime we don't link
         // and bundle. Hopefully we can fix this one day since ubsan is nice!
