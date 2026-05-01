@@ -184,7 +184,7 @@ pub fn bind(self: *const Self, ctx: *com.ID3D11DeviceContext) void {
 }
 
 /// Build input element descriptors from a Zig struct type at comptime.
-fn buildInputElementDescs(comptime T: type) [std.meta.fields(T).len]com.D3D11_INPUT_ELEMENT_DESC {
+pub fn buildInputElementDescs(comptime T: type) [std.meta.fields(T).len]com.D3D11_INPUT_ELEMENT_DESC {
     const fields = std.meta.fields(T);
     var descs: [fields.len]com.D3D11_INPUT_ELEMENT_DESC = undefined;
 
@@ -211,7 +211,7 @@ fn buildInputElementDescs(comptime T: type) [std.meta.fields(T).len]com.D3D11_IN
     return descs;
 }
 
-fn fieldToFormat(comptime FT: type) com.DXGI_FORMAT {
+pub fn fieldToFormat(comptime FT: type) com.DXGI_FORMAT {
     return switch (FT) {
         [2]u32 => .R32G32_UINT,
         [2]u16 => .R16G16_UINT,
@@ -228,3 +228,58 @@ fn fieldToFormat(comptime FT: type) com.DXGI_FORMAT {
 }
 
 const error_set = error{ShaderCompileFailed};
+
+test "fieldToFormat: full table coverage" {
+    const testing = std.testing;
+    try testing.expectEqual(com.DXGI_FORMAT.R32G32_UINT, fieldToFormat([2]u32));
+    try testing.expectEqual(com.DXGI_FORMAT.R16G16_UINT, fieldToFormat([2]u16));
+    try testing.expectEqual(com.DXGI_FORMAT.R16G16_SINT, fieldToFormat([2]i16));
+    try testing.expectEqual(com.DXGI_FORMAT.R8G8B8A8_UINT, fieldToFormat([4]u8));
+    try testing.expectEqual(com.DXGI_FORMAT.R32_UINT, fieldToFormat(u32));
+    try testing.expectEqual(com.DXGI_FORMAT.R16_UINT, fieldToFormat(u16));
+    try testing.expectEqual(com.DXGI_FORMAT.R8_UINT, fieldToFormat(u8));
+    try testing.expectEqual(com.DXGI_FORMAT.R32G32B32A32_FLOAT, fieldToFormat([4]f32));
+    try testing.expectEqual(com.DXGI_FORMAT.R32G32_FLOAT, fieldToFormat([2]f32));
+    try testing.expectEqual(com.DXGI_FORMAT.R32_FLOAT, fieldToFormat(f32));
+}
+
+test "fieldToFormat: fallback for unsupported type pinned to R32_UINT" {
+    const testing = std.testing;
+    // Pin current fallback behavior — types not in the explicit table return R32_UINT.
+    try testing.expectEqual(com.DXGI_FORMAT.R32_UINT, fieldToFormat(i32));
+    try testing.expectEqual(com.DXGI_FORMAT.R32_UINT, fieldToFormat(f64));
+    try testing.expectEqual(com.DXGI_FORMAT.R32_UINT, fieldToFormat([3]f32));
+}
+
+test "buildInputElementDescs: sample struct yields per-field descs" {
+    const testing = std.testing;
+    const Sample = extern struct { pos: [2]f32, uv: [2]f32, color: [4]f32 };
+
+    const descs = comptime buildInputElementDescs(Sample);
+    try testing.expectEqual(@as(usize, 3), descs.len);
+
+    // Format matches fieldToFormat for each field type.
+    try testing.expectEqual(fieldToFormat([2]f32), descs[0].Format);
+    try testing.expectEqual(fieldToFormat([2]f32), descs[1].Format);
+    try testing.expectEqual(fieldToFormat([4]f32), descs[2].Format);
+
+    // AlignedByteOffset matches @offsetOf for each field.
+    try testing.expectEqual(@as(com.UINT, @offsetOf(Sample, "pos")), descs[0].AlignedByteOffset);
+    try testing.expectEqual(@as(com.UINT, @offsetOf(Sample, "uv")), descs[1].AlignedByteOffset);
+    try testing.expectEqual(@as(com.UINT, @offsetOf(Sample, "color")), descs[2].AlignedByteOffset);
+
+    // InputSlotClass is PER_INSTANCE_DATA for all entries.
+    try testing.expectEqual(com.D3D11_INPUT_CLASSIFICATION.PER_INSTANCE_DATA, descs[0].InputSlotClass);
+    try testing.expectEqual(com.D3D11_INPUT_CLASSIFICATION.PER_INSTANCE_DATA, descs[1].InputSlotClass);
+    try testing.expectEqual(com.D3D11_INPUT_CLASSIFICATION.PER_INSTANCE_DATA, descs[2].InputSlotClass);
+
+    // SemanticName matches what the impl emits.
+    try testing.expectEqualStrings("TEXCOORD", std.mem.span(descs[0].SemanticName));
+    try testing.expectEqualStrings("TEXCOORD", std.mem.span(descs[1].SemanticName));
+    try testing.expectEqualStrings("TEXCOORD", std.mem.span(descs[2].SemanticName));
+
+    // SemanticIndex is 0, 1, 2.
+    try testing.expectEqual(@as(com.UINT, 0), descs[0].SemanticIndex);
+    try testing.expectEqual(@as(com.UINT, 1), descs[1].SemanticIndex);
+    try testing.expectEqual(@as(com.UINT, 2), descs[2].SemanticIndex);
+}
