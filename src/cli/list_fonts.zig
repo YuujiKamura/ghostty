@@ -100,7 +100,8 @@ fn runArgs(alloc_gpa: Allocator, argsIter: anytype) !u8 {
     var families: std.ArrayList([]const u8) = .empty;
     var map: std.StringHashMap(std.ArrayListUnmanaged([]const u8)) = .init(alloc);
 
-    // Look up all available fonts
+    // Look up all available fonts.
+    // UPSTREAM-SHARED-OK: bound to fork's font.Discover.init() (no-arg) API; fork's font module independently diverges from upstream font.Library/Discover coupling.
     var disco = font.Discover.init();
     defer disco.deinit();
     var disco_it = try disco.discover(alloc, .{

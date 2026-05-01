@@ -36,6 +36,7 @@ pub fn run(alloc: Allocator) !u8 {
     try stdout.print("  - channel: {t}\n", .{build_config.release_channel});
 
     try stdout.print("Build Config\n", .{});
+    // UPSTREAM-SHARED-OK: build_timestamp is generic build info exposed via build_options; useful for verification across all apprts, not WinUI3-specific.
     try stdout.print("  - build timestamp: {s}\n", .{@import("build_options").build_timestamp});
     try stdout.print("  - Zig version   : {s}\n", .{builtin.zig_version_string});
     try stdout.print("  - build mode    : {}\n", .{builtin.mode});
