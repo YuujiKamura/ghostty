@@ -5,6 +5,16 @@
 - **Win32**: `zig build -Dapp-runtime=win32 --prefix zig-out-win32`
 - `zig build` を直接叩くな。必ずラッパーか `--prefix` を使え
 
+## テスト gate（毎 commit・スコープ限定）
+- 触った module だけテスト、フルスイート全件は脳死
+  - 例: `Overlay.zig` 触ったら `ZIG_GLOBAL_CACHE_DIR= zig build test -Dapp-runtime=win32 -Dtest-filter="renderer.Overlay"`
+  - `git diff --name-only` で範囲確認 → 関連 module を `-Dtest-filter` で指定
+- スコープ内 1 fail = commit 禁止
+- 関数単位ピンポイントで commit するな (隣の関数を壊している可能性が残る)。module 単位で回せ
+- フルスイート (`zig build test -Dapp-runtime=win32` 無 filter) は **release 前 / broad refactor 後 / 一日の終わり** に回す
+- WinUI3 build (`./build-winui3.sh`) は GUI/apprt 触ったときの gate、render/terminal だけなら不要
+- 通らないコミットを残すな
+
 ## Git
 - push先: `git push fork main`（`fork` = YuujiKamura/ghostty）
 - `origin` は ghostty-org/ghostty（upstream、push禁止）
