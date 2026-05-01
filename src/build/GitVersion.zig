@@ -21,7 +21,7 @@ pub fn detect(b: *std.Build) !Version {
     var code: u8 = 0;
     const branch: []const u8 = b: {
         const tmp: []u8 = b.runAllowFail(
-            &[_][]const u8{ "git", "rev-parse", "--abbrev-ref", "HEAD" },
+            &[_][]const u8{ "git", "-C", b.build_root.path orelse ".", "rev-parse", "--abbrev-ref", "HEAD" },
             &code,
             .Ignore,
         ) catch |err| switch (err) {
@@ -42,7 +42,7 @@ pub fn detect(b: *std.Build) !Version {
 
     const short_hash = short_hash: {
         const output = b.runAllowFail(
-            &[_][]const u8{ "git", "-c", "log.showSignature=false", "log", "--pretty=format:%h", "-n", "1" },
+            &[_][]const u8{ "git", "-C", b.build_root.path orelse ".", "-c", "log.showSignature=false", "log", "--pretty=format:%h", "-n", "1" },
             &code,
             .Ignore,
         ) catch |err| switch (err) {
@@ -54,7 +54,7 @@ pub fn detect(b: *std.Build) !Version {
     };
 
     const tag = b.runAllowFail(
-        &[_][]const u8{ "git", "describe", "--exact-match", "--tags" },
+        &[_][]const u8{ "git", "-C", b.build_root.path orelse ".", "describe", "--exact-match", "--tags" },
         &code,
         .Ignore,
     ) catch |err| switch (err) {
@@ -65,6 +65,8 @@ pub fn detect(b: *std.Build) !Version {
 
     _ = b.runAllowFail(&[_][]const u8{
         "git",
+        "-C",
+        b.build_root.path orelse ".",
         "diff",
         "--quiet",
         "--exit-code",
