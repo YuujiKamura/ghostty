@@ -336,7 +336,7 @@ test "Buffer.initFill: empty data returns device-free zero buffer with options f
 test "Buffer.initFill: non-empty data with null device returns error.D3D11Failed" {
     const T = extern struct { x: u32 };
     const opts: Options = .{ .device = null };
-    const data = [_]T{.{ .x = 1 }, .{ .x = 2 }};
+    const data = [_]T{ .{ .x = 1 }, .{ .x = 2 } };
     try std.testing.expectError(error.D3D11Failed, Buffer(T).initFill(opts, &data));
 }
 
