@@ -96,9 +96,13 @@ pub fn runInner(
 
     if (opts.add) |host| {
         const result = cache.add(alloc, host) catch |err| switch (err) {
-            error.HostnameIsInvalid => {
+            DiskCache.Error.HostnameIsInvalid => {
                 try stderr.print("Error: Invalid hostname format '{s}'\n", .{host});
                 try stderr.print("Expected format: hostname or user@hostname\n", .{});
+                return 1;
+            },
+            DiskCache.Error.CacheIsLocked => {
+                try stderr.print("Error: Cache is busy, try again\n", .{});
                 return 1;
             },
             else => {
@@ -119,9 +123,13 @@ pub fn runInner(
 
     if (opts.remove) |host| {
         cache.remove(alloc, host) catch |err| switch (err) {
-            error.HostnameIsInvalid => {
+            DiskCache.Error.HostnameIsInvalid => {
                 try stderr.print("Error: Invalid hostname format '{s}'\n", .{host});
                 try stderr.print("Expected format: hostname or user@hostname\n", .{});
+                return 1;
+            },
+            DiskCache.Error.CacheIsLocked => {
+                try stderr.print("Error: Cache is busy, try again\n", .{});
                 return 1;
             },
             else => {
