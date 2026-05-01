@@ -18,8 +18,10 @@ const xev = @import("../../global.zig").xev;
 const internal_os = @import("../../os/main.zig");
 const datastruct = @import("../../datastruct/main.zig");
 const BlockingQueue = datastruct.BlockingQueue;
-// #251: BoundedMailbox lives in apprt/winui3/ to keep upstream-shared
-// `src/datastruct/` clean.
+// UPSTREAM-SHARED-OK (#232/#251): BoundedMailbox lives in apprt/winui3/ to
+// keep upstream-shared `src/datastruct/` clean. The Mailbox type-hole at
+// boundary level is unavoidable because producer/consumer cross apprt and
+// terminal/ layers; bounded drop-on-full semantics resolve the #218 hang.
 const BoundedMailbox = @import("../../apprt/winui3/safe_mailbox.zig").BoundedMailbox;
 const MessageData = @import("../../datastruct/main.zig").MessageData;
 const point = @import("../point.zig");
