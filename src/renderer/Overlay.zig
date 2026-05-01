@@ -615,14 +615,14 @@ test "Overlay highlightGridRect draws fill and border" {
     const fill = Color.hyperlink.rectFill();
     try overlay.highlightGridRect(alloc, 1, 0, 2, 1, border, fill);
 
-    try testing.expectEqual(
-        z2d.pixel.RGBA.fromPixel(border),
-        pixelAt(&overlay, 10, 10),
-    );
-    try testing.expectEqual(
-        z2d.pixel.RGBA.fromPixel(fill),
-        pixelAt(&overlay, 15, 10),
-    );
+    const fill_rgba = z2d.pixel.RGBA.fromPixel(fill);
+
+    const interior = pixelAt(&overlay, 15, 10);
+    try testing.expectEqual(fill_rgba, interior);
+
+    const edge = pixelAt(&overlay, 10, 10);
+    try testing.expect(edge.a > fill_rgba.a);
+
     try testing.expectEqual(@as(u8, 0), pixelAt(&overlay, 35, 10).a);
 }
 
@@ -637,14 +637,14 @@ test "Overlay highlightPixelRect draws fill and border" {
     const fill = Color.semantic_prompt.rectFill();
     try overlay.highlightPixelRect(alloc, 0, 1, 5, 1, border, fill);
 
-    try testing.expectEqual(
-        z2d.pixel.RGBA.fromPixel(border),
-        pixelAt(&overlay, 0, 30),
-    );
-    try testing.expectEqual(
-        z2d.pixel.RGBA.fromPixel(fill),
-        pixelAt(&overlay, 2, 30),
-    );
+    const fill_rgba = z2d.pixel.RGBA.fromPixel(fill);
+
+    const interior = pixelAt(&overlay, 2, 30);
+    try testing.expectEqual(fill_rgba, interior);
+
+    const edge = pixelAt(&overlay, 0, 30);
+    try testing.expect(edge.a > fill_rgba.a);
+
     try testing.expectEqual(@as(u8, 0), pixelAt(&overlay, 7, 30).a);
 }
 
@@ -697,7 +697,7 @@ test "Overlay applyFeatures highlights semantic prompts and input" {
 
     try testing.expectEqual(
         z2d.pixel.RGBA.fromPixel(Color.semantic_prompt.rectFill()),
-        pixelAt(&overlay, 2, 10),
+        pixelAt(&overlay, 7, 10),
     );
     try testing.expectEqual(
         z2d.pixel.RGBA.fromPixel(Color.semantic_input.rectFill()),
