@@ -3,17 +3,22 @@
 //! Used when the freetype backend is selected on Windows, providing
 //! font enumeration and discovery through the DirectWrite API while
 //! still using FreeType for rendering.
+//!
+//! Relocated from `src/font/directwrite.zig` per A6 / wrap-first-in-apprt
+//! (#264). The upstream-shared `src/font/discovery.zig` reaches in via
+//! relative `@import` so this remains the single owning location for the
+//! DirectWrite discovery implementation.
 const DirectWrite = @This();
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const font = @import("main.zig");
+const font = @import("../../../font/main.zig");
 const options = font.options;
 const DeferredFace = font.DeferredFace;
 const Face = font.Face;
 const Variation = font.face.Variation;
 const Collection = font.Collection;
-const Descriptor = @import("discovery.zig").Descriptor;
+const Descriptor = @import("../../../font/discovery.zig").Descriptor;
 
 const log = std.log.scoped(.discovery);
 

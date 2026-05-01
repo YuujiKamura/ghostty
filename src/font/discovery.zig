@@ -14,7 +14,13 @@ const log = std.log.scoped(.discovery);
 
 /// DirectWrite module, only available on Windows.
 /// The imported file IS the DirectWrite struct (uses @This() pattern).
-pub const directwrite = if (builtin.os.tag == .windows) @import("directwrite.zig") else struct {};
+///
+/// UPSTREAM-SHARED-OK: DirectWrite implementation lives under
+/// `src/apprt/winui3/font/` per #264 / wrap-first-in-apprt. We only keep
+/// the comptime branch + signature simplification (init() with no Library
+/// arg) here; both are irreducible in this dispatch file because the
+/// Discover type is wired through upstream's `Backend` enum.
+pub const directwrite = if (builtin.os.tag == .windows) @import("../apprt/winui3/font/directwrite.zig") else struct {};
 pub const DirectWrite = if (builtin.os.tag == .windows) directwrite else void;
 
 /// Discover implementation for the compile options.
