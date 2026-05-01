@@ -111,7 +111,7 @@ pub fn replaceRegion(
     context.updateSubresource(@ptrCast(tex), 0, &box, @ptrCast(data.ptr), row_pitch, 0);
 }
 
-fn formatBytesPerPixel(format: com.DXGI_FORMAT) usize {
+pub fn formatBytesPerPixel(format: com.DXGI_FORMAT) usize {
     return switch (format) {
         .R8_UNORM, .R8_UINT => 1,
         .R8G8B8A8_UNORM,
@@ -127,4 +127,37 @@ fn formatBytesPerPixel(format: com.DXGI_FORMAT) usize {
         .R32G32B32A32_FLOAT => 16,
         else => 4,
     };
+}
+
+test "formatBytesPerPixel: table-driven coverage of DXGI formats" {
+    const T = std.testing;
+
+    // 1-byte formats.
+    try T.expectEqual(@as(usize, 1), formatBytesPerPixel(.R8_UNORM));
+    try T.expectEqual(@as(usize, 1), formatBytesPerPixel(.R8_UINT));
+
+    // 4-byte formats (RGBA8 / BGRA8 / sRGB variants / R32 single-channel).
+    try T.expectEqual(@as(usize, 4), formatBytesPerPixel(.R8G8B8A8_UNORM));
+    try T.expectEqual(@as(usize, 4), formatBytesPerPixel(.R8G8B8A8_UNORM_SRGB));
+    try T.expectEqual(@as(usize, 4), formatBytesPerPixel(.R8G8B8A8_UINT));
+    try T.expectEqual(@as(usize, 4), formatBytesPerPixel(.B8G8R8A8_UNORM));
+    try T.expectEqual(@as(usize, 4), formatBytesPerPixel(.B8G8R8A8_UNORM_SRGB));
+    try T.expectEqual(@as(usize, 4), formatBytesPerPixel(.R32_FLOAT));
+    try T.expectEqual(@as(usize, 4), formatBytesPerPixel(.R32_UINT));
+
+    // 8-byte formats.
+    try T.expectEqual(@as(usize, 8), formatBytesPerPixel(.R32G32_FLOAT));
+    try T.expectEqual(@as(usize, 8), formatBytesPerPixel(.R32G32_UINT));
+    try T.expectEqual(@as(usize, 8), formatBytesPerPixel(.R16G16B16A16_FLOAT));
+
+    // 16-byte format.
+    try T.expectEqual(@as(usize, 16), formatBytesPerPixel(.R32G32B32A32_FLOAT));
+
+    // Fallback: any format not in the explicit arms returns 4.
+    // Pin this so a future change is forced to consider whether a default
+    // of 4 still makes sense.
+    try T.expectEqual(@as(usize, 4), formatBytesPerPixel(.UNKNOWN));
+    try T.expectEqual(@as(usize, 4), formatBytesPerPixel(.R16G16_SINT));
+    try T.expectEqual(@as(usize, 4), formatBytesPerPixel(.R16G16_UINT));
+    try T.expectEqual(@as(usize, 4), formatBytesPerPixel(.R16_UINT));
 }

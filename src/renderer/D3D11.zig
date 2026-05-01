@@ -469,22 +469,28 @@ pub const ImageTextureFormat = enum {
     }
 };
 
+/// Pure enum→DXGI_FORMAT mapping with optional sRGB upgrade.
+/// Extracted from `imageTextureOptions` so the format-selection logic is
+/// testable without a live D3D11 device.
+pub fn pickImageFormat(format: ImageTextureFormat, srgb: bool) com.DXGI_FORMAT {
+    const f = format.toFormat();
+    // If sRGB requested, upgrade to the _SRGB variant where applicable.
+    return if (srgb) switch (f) {
+        .R8G8B8A8_UNORM => .R8G8B8A8_UNORM_SRGB,
+        .B8G8R8A8_UNORM => .B8G8R8A8_UNORM_SRGB,
+        else => f,
+    } else f;
+}
+
 pub inline fn imageTextureOptions(
     self: D3D11,
     format: ImageTextureFormat,
     srgb: bool,
 ) Texture.Options {
-    const f = format.toFormat();
-    // If sRGB requested, upgrade to the _SRGB variant where applicable.
-    const final_format: com.DXGI_FORMAT = if (srgb) switch (f) {
-        .R8G8B8A8_UNORM => .R8G8B8A8_UNORM_SRGB,
-        .B8G8R8A8_UNORM => .B8G8R8A8_UNORM_SRGB,
-        else => f,
-    } else f;
     return .{
         .device = self.device,
         .context = self.context,
-        .format = final_format,
+        .format = pickImageFormat(format, srgb),
     };
 }
 
@@ -593,4 +599,70 @@ test "D3D11.surfaceSize: blending field is independent of size getter" {
     try std.testing.expectEqual(@as(u32, 600), sz.height);
     // Sanity check: surfaceSize must not mutate blending or other fields.
     try std.testing.expectEqual(configpkg.Config.AlphaBlending.@"linear-corrected", d3d11.blending);
+}
+
+// -----------------------------------------------------------------------------
+// Tests — pickImageFormat / imageTextureOptions are pure enum→DXGI_FORMAT
+// mappings. They do not require a live device.
+
+test "pickImageFormat: rgba upgrades to SRGB when srgb=true" {
+    try std.testing.expectEqual(
+        com.DXGI_FORMAT.R8G8B8A8_UNORM_SRGB,
+        pickImageFormat(.rgba, true),
+    );
+}
+
+test "pickImageFormat: rgba stays linear when srgb=false" {
+    try std.testing.expectEqual(
+        com.DXGI_FORMAT.R8G8B8A8_UNORM,
+        pickImageFormat(.rgba, false),
+    );
+}
+
+test "pickImageFormat: bgra upgrades to SRGB when srgb=true" {
+    try std.testing.expectEqual(
+        com.DXGI_FORMAT.B8G8R8A8_UNORM_SRGB,
+        pickImageFormat(.bgra, true),
+    );
+}
+
+test "pickImageFormat: bgra stays linear when srgb=false" {
+    try std.testing.expectEqual(
+        com.DXGI_FORMAT.B8G8R8A8_UNORM,
+        pickImageFormat(.bgra, false),
+    );
+}
+
+test "pickImageFormat: gray (R8_UNORM) is left alone regardless of srgb" {
+    try std.testing.expectEqual(
+        com.DXGI_FORMAT.R8_UNORM,
+        pickImageFormat(.gray, true),
+    );
+    try std.testing.expectEqual(
+        com.DXGI_FORMAT.R8_UNORM,
+        pickImageFormat(.gray, false),
+    );
+}
+
+test "imageTextureOptions: passes through device/context and uses pickImageFormat" {
+    // device=null is fine here — imageTextureOptions does not dereference it,
+    // it just propagates the field into the returned Texture.Options.
+    const d3d11: D3D11 = .{
+        .alloc = std.testing.allocator,
+        .blending = .native,
+    };
+
+    const opts_srgb = d3d11.imageTextureOptions(.rgba, true);
+    try std.testing.expectEqual(@as(?*com.ID3D11Device, null), opts_srgb.device);
+    try std.testing.expectEqual(@as(?*com.ID3D11DeviceContext, null), opts_srgb.context);
+    try std.testing.expectEqual(com.DXGI_FORMAT.R8G8B8A8_UNORM_SRGB, opts_srgb.format);
+
+    const opts_linear = d3d11.imageTextureOptions(.rgba, false);
+    try std.testing.expectEqual(com.DXGI_FORMAT.R8G8B8A8_UNORM, opts_linear.format);
+
+    const opts_gray = d3d11.imageTextureOptions(.gray, true);
+    try std.testing.expectEqual(com.DXGI_FORMAT.R8_UNORM, opts_gray.format);
+
+    const opts_bgra = d3d11.imageTextureOptions(.bgra, true);
+    try std.testing.expectEqual(com.DXGI_FORMAT.B8G8R8A8_UNORM_SRGB, opts_bgra.format);
 }
