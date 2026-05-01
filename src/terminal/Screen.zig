@@ -252,6 +252,8 @@ pub const Options = struct {
     /// The maximum size of scrollback in bytes. Zero means no scrollback.
     /// Any other value will be clamped to support a minimum of the active
     /// area. Default 10MB to prevent unbounded memory growth.
+    /// UPSTREAM-SHARED-OK (#138): defensive non-zero default; upstream's 0
+    /// default surfaced as memory growth when config layer didn't set it.
     max_scrollback: usize = 10_000_000,
 
     /// The total storage limit for Kitty images in bytes for this
@@ -10445,7 +10447,9 @@ test "Screen: promptClickMove click right of input cursor on last char" {
 }
 
 // ============================================================
-// Issue #138: Scrollback limit regression tests
+// UPSTREAM-SHARED-OK: Issue #138 scrollback regression tests live next to the
+// code they exercise. They have no apprt coupling and are upstream-PR
+// candidates.
 // ============================================================
 
 test "Screen: Options default max_scrollback is not zero" {
