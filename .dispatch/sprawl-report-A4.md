@@ -60,6 +60,39 @@ Pushed to `fork/main`.
 
 Parallel team sessions touching the same git working tree caused several intermediate `git commit` calls to land with collateral content from other sessions' staged files. The eventual `git commit -- <pathspec>` form worked reliably to scope a commit to A4 files only (`14feb98d6`). Earlier commits `aba70c04f` and `3a0475751` carried correct A4 annotation diffs but also pulled in unrelated parallel-session content via the staging area — those collateral files are valid commits from other chunks, just labeled with my message. Net result: every A4 annotation made it to `fork/main`.
 
+## Test gate
+
+All A4 commits fall under category (a) per `test-gate-default-on` skill — pure REVERT or annotation-only, no logic/move/wrap. Required: `zig fmt --check` + `zig ast-check` + compile pass.
+
+| Commit | Category | zig fmt --check | zig ast-check | zig build |
+|--------|----------|-----------------|----------------|-----------|
+| `26cbebf23` revert XCFramework + GitVersion | (a) revert | PASS (whole-file revert to upstream) | PASS | BLOCKED (infra) |
+| `aba70c04f` annotate build/Config + Exe + Lib + LibVt | (a) annotation | PASS | PASS | BLOCKED (infra) |
+| `14feb98d6` annotate SharedDeps + Resources + combine_archives + build_config + main + main_ghostty + main_c | (a) annotation | PASS | PASS | BLOCKED (infra) |
+| `cbbd4c38b` docs (sprawl-report-A4.md) | doc-only | n/a | n/a | n/a |
+
+`zig fmt --check` on all 13 A4 files: EXIT=0.
+`zig ast-check` on all 13 A4 files: clean (no FAIL).
+
+`zig build -Dapp-runtime=win32` BLOCKED at dependency resolution:
+
+```
+thread 51872 panic: unable to find module 'zigimg'
+  C:\Users\yuuji\ghostty-win\p\vaxis-0.5.1-.../build.zig:30:52: in build
+    vaxis_mod.addImport("zigimg", zigimg_dep.module("zigimg"));
+  src/build/SharedDeps.zig:446:25: in add
+    if (b.lazyDependency("vaxis", .{})) |dep|
+```
+
+Root cause: untracked `p/` directory (created 2026-05-01 17:01 by a parallel session, before my A4 work began) contains a vaxis package cache that can't resolve its `zigimg` sibling. This is environment pollution from a peer's misconfigured `--cache-dir` or similar, NOT introduced by any A4 commit. By inspection, A4's diff cannot affect dependency resolution: 2 reverts (one macOS-only XCFramework, one GitVersion git-CLI cosmetic) + 16 annotation lines across 11 files, none touching `lazyDependency`, `b.dependency`, `zon` files, or import paths.
+
+Attempted fixes:
+- `ZIG_GLOBAL_CACHE_DIR= zig build --fetch` — no error, but doesn't resolve the missing module
+- `find .zig-cache/tmp -mindepth 1 -delete` — same panic on retry
+- Could not `rm -rf .zig-cache` (pre-edit-guard blocks recursive forced remove)
+
+**BLOCKED-test**: `zig build` infra panic from peer-session `p/` cache pollution. Compile-pass verification deferred to hub. fmt + ast-check both green for all 13 A4 files.
+
 ## Contract block
 
 ```
@@ -69,5 +102,6 @@ COMMITS: 26cbebf23 aba70c04f 14feb98d6
 ISSUES_FILED: (none)
 PUSHED: yes
 SKILLS_FIRED: yes
+TEST_GATE: fmt+ast-check PASS on all 13 files; full `zig build` BLOCKED by peer-session p/vaxis cache pollution (not A4-introduced); compile-pass deferred to hub
 NOTES: parallel-team staging area contention required `git commit -- <pathspec>` for clean A4-scoped batch
 ```
