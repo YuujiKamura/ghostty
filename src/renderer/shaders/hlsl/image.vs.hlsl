@@ -52,7 +52,12 @@ VSOutput vs_main(VSInput input) {
     float2 image_pos = (cell_size * input.grid_pos) + input.cell_offset;
     image_pos += input.dest_size * corner;
 
-    output.position = mul(projection_matrix, float4(image_pos.xy, 1.0, 1.0));
+    // z = 0.0 (D3D11 NDC depth is [0, 1]; ortho2d's z-scale is -1, so input
+    // z = 1.0 maps to NDC z = -1 which is outside the valid range and the
+    // entire quad gets clipped — invisible overlay. cell_text passes 0.0
+    // for the same reason. This was the root cause of the long-standing
+    // "image .overlay never appears" bug on the D3D11 backend.
+    output.position = mul(projection_matrix, float4(image_pos.xy, 0.0, 1.0));
 
     return output;
 }

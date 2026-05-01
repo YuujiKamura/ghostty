@@ -67,6 +67,25 @@ pub fn replaceOwnedString(
     slot.* = if (new) |n| try alloc.dupe(u8, n) else null;
 }
 
+/// Advance frame-timing scalars: the previous `current_time` is shifted
+/// into `last_time`, then the new `time_sec` and `fps` are recorded.
+///
+/// Extracted as a free helper so the "shift-then-record" ordering
+/// invariant of `Renderer.setFrameConstants` (`last_time` must observe
+/// the *previous* frame's `current_time`, not the new one) can be
+/// unit-tested without instantiating the templated `Renderer`.
+pub fn advanceFrameTiming(
+    last_time: *f32,
+    current_time: *f32,
+    current_fps: *f32,
+    time_sec: f32,
+    fps: f32,
+) void {
+    last_time.* = current_time.*;
+    current_time.* = time_sec;
+    current_fps.* = fps;
+}
+
 test "toggleFlagAndMarkDirty flips false -> true and marks .full" {
     var flag: bool = false;
     var dirty: terminal.RenderState.Dirty = .false;
@@ -149,6 +168,51 @@ test "replaceOwnedString stores duplicated bytes (caller buffer can be freed)" {
     }
     defer if (slot) |s| alloc.free(s);
     try std.testing.expectEqualStrings("ephemeral", slot.?);
+}
+
+test "advanceFrameTiming records new values from zero state" {
+    var last_time: f32 = 0;
+    var current_time: f32 = 0;
+    var current_fps: f32 = 0;
+    advanceFrameTiming(&last_time, &current_time, &current_fps, 1.5, 60.0);
+    try std.testing.expectEqual(@as(f32, 0.0), last_time);
+    try std.testing.expectEqual(@as(f32, 1.5), current_time);
+    try std.testing.expectEqual(@as(f32, 60.0), current_fps);
+}
+
+test "advanceFrameTiming shifts previous current_time into last_time" {
+    var last_time: f32 = 99.0;
+    var current_time: f32 = 1.5;
+    var current_fps: f32 = 60.0;
+    advanceFrameTiming(&last_time, &current_time, &current_fps, 2.5, 59.0);
+    // last_time picks up the *previous* current_time, not the prior last_time.
+    try std.testing.expectEqual(@as(f32, 1.5), last_time);
+    try std.testing.expectEqual(@as(f32, 2.5), current_time);
+    try std.testing.expectEqual(@as(f32, 59.0), current_fps);
+}
+
+test "advanceFrameTiming over multiple frames preserves delta = current - last" {
+    var last_time: f32 = 0;
+    var current_time: f32 = 0;
+    var current_fps: f32 = 0;
+
+    advanceFrameTiming(&last_time, &current_time, &current_fps, 1.0, 60.0);
+    advanceFrameTiming(&last_time, &current_time, &current_fps, 1.25, 60.0);
+    try std.testing.expectEqual(@as(f32, 0.25), current_time - last_time);
+
+    advanceFrameTiming(&last_time, &current_time, &current_fps, 1.5, 30.0);
+    try std.testing.expectEqual(@as(f32, 0.25), current_time - last_time);
+    try std.testing.expectEqual(@as(f32, 30.0), current_fps);
+}
+
+test "advanceFrameTiming accepts identical time (zero delta) without aliasing" {
+    var last_time: f32 = 5.0;
+    var current_time: f32 = 7.0;
+    var current_fps: f32 = 60.0;
+    advanceFrameTiming(&last_time, &current_time, &current_fps, 7.0, 60.0);
+    try std.testing.expectEqual(@as(f32, 7.0), last_time);
+    try std.testing.expectEqual(@as(f32, 7.0), current_time);
+    try std.testing.expectEqual(@as(f32, 0.0), current_time - last_time);
 }
 
 /// Create a renderer type with the provided graphics API wrapper.
@@ -1149,10 +1213,16 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         ///
         /// Must be called on the render thread.
         pub fn setFrameConstants(self: *Self, time_sec: f32, fps: f32) void {
-            // Renderer does not compute; it only records.
-            self.last_time = self.current_time;
-            self.current_time = time_sec;
-            self.current_fps = fps;
+            // Renderer does not compute; it only records. Delegated to a
+            // free helper so the shift-then-record ordering invariant is
+            // unit-tested independently of the Renderer template.
+            advanceFrameTiming(
+                &self.last_time,
+                &self.current_time,
+                &self.current_fps,
+                time_sec,
+                fps,
+            );
         }
 
         /// Set the new font grid.
