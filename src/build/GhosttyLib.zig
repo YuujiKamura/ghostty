@@ -41,6 +41,7 @@ pub fn initStatic(
     lib.bundle_compiler_rt = true;
     lib.bundle_ubsan_rt = true;
 
+    // UPSTREAM-SHARED-OK: Windows ubsan_rt opt-out + non-Darwin early return for libghostty (we don't ship libghostty fat archive on Windows; ghostty.exe is the artifact).
     if (deps.config.target.result.os.tag == .windows) {
         // Zig's ubsan emits /exclude-symbols linker directives that
         // are incompatible with the MSVC linker (LNK4229).

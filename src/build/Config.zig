@@ -34,6 +34,7 @@ sentry: bool = true,
 simd: bool = true,
 i18n: bool = true,
 wasm_shared: bool = true,
+// UPSTREAM-SHARED-OK: -Dslow-safety threads through terminal/* + renderer/* on all platforms; can't be apprt-scoped.
 slow_safety: bool = true,
 
 /// Ghostty exe properties
@@ -44,6 +45,7 @@ version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 0 },
 /// overridden. Kept as a field so GhosttyZig.zig's upstream-origin code that
 /// reads `cfg.lib_version` compiles.
 lib_version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 0 },
+// UPSTREAM-SHARED-OK: build_timestamp surfaced via build_options to runtime About dialog; consumed today by winui3 but plumbed through the shared options table, can't be apprt-scoped.
 build_timestamp: []const u8 = "",
 
 /// Binary properties
@@ -169,6 +171,7 @@ pub fn init(b: *std.Build, appVersion: []const u8) !Config {
         "The app runtime to use. Not all values supported on all platforms.",
     ) orelse ApprtRuntime.default(target.result);
 
+    // UPSTREAM-SHARED-OK: comptime branch on app_runtime defaults winui3 -> d3d11 (no opengl on Windows); 1-line, zero runtime cost.
     config.renderer = b.option(
         RendererBackend,
         "renderer",

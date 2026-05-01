@@ -314,6 +314,7 @@ fn initLib(
 
 /// Combine multiple static archives into a single fat archive.
 /// Uses libtool on Darwin and ar MRI scripts on other platforms.
+// UPSTREAM-SHARED-OK: inlined here (upstream extracted to CombineArchivesStep.zig in 08a2d9b22); fork is intentionally behind to avoid pulling the shared file when this is the sole call site.
 fn combineArchives(
     b: *std.Build,
     target: std.Build.ResolvedTarget,

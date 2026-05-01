@@ -47,6 +47,7 @@ pub fn init(b: *std.Build, cfg: *const Config, deps: *const SharedDeps) !Ghostty
     }
 
     // OS-specific
+    // UPSTREAM-SHARED-OK: .windows branch wires win32_manifest + .rc bundle at the build-step level, can't be moved to apprt/winui3.
     switch (cfg.target.result.os.tag) {
         .windows => {
             // TODO: restore .Windows subsystem once WinMain entry is properly

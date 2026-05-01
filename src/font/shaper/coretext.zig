@@ -282,16 +282,10 @@ pub const Shaper = struct {
         // Send the items. If the send succeeds then we wake up the
         // thread to process the items. If the send fails then do a manual
         // cleanup.
-        //
-        // Phase 2.3 (#232): cf_release_thread.Mailbox is BoundedMailbox
-        // with `null` default timeout — we're on the renderer worker
-        // thread, so we opt into a 5s bounded wait. The legacy `.forever`
-        // here would have parked the renderer if the cf-release thread
-        // had died, holding GPU resources indefinitely.
-        if (self.cf_release_thread.mailbox.pushTimeout(.{ .release = .{
+        if (self.cf_release_thread.mailbox.push(.{ .release = .{
             .refs = items,
             .alloc = self.alloc,
-        } }, 5_000) == .ok) {
+        } }, .{ .forever = {} }) != 0) {
             self.cf_release_thread.wakeup.notify() catch |err| {
                 log.warn(
                     "error notifying cf release thread to wake up, may stall err={}",
@@ -2591,7 +2585,7 @@ fn testShaperWithFont(alloc: Allocator, font_req: TestFont) !TestShaper {
         });
     } else {
         // On CoreText we want to load Apple Emoji, we should have it.
-        var disco = font.Discover.init();
+        var disco = font.Discover.init(lib);
         defer disco.deinit();
         var disco_it = try disco.discover(alloc, .{
             .family = "Apple Color Emoji",
@@ -2646,7 +2640,7 @@ fn testShaperWithDiscoveredFont(alloc: Allocator, font_req: [:0]const u8) !TestS
 
     // Discover and add our font to the collection.
     {
-        var disco = font.Discover.init();
+        var disco = font.Discover.init(lib);
         defer disco.deinit();
         var disco_it = try disco.discover(alloc, .{
             .family = font_req,
