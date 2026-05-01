@@ -1,5 +1,9 @@
 const std = @import("std");
 
+// UPSTREAM-SHARED-OK: drops upstream's `freetype_windows` Backend variant
+// (FreeType-based Windows directory scanner). Windows ships with the
+// `.freetype` backend + DirectWrite discovery (see src/font/discovery.zig
+// + src/apprt/winui3/font/directwrite.zig). #264 / wrap-first-in-apprt.
 pub const Backend = enum {
     const WasmTarget = @import("../os/wasm/target.zig").Target;
 

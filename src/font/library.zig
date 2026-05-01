@@ -6,6 +6,8 @@ const options = @import("main.zig").options;
 const freetype = @import("freetype");
 const font = @import("main.zig");
 
+// UPSTREAM-SHARED-OK: prong-removal (freetype_windows) mirrors the
+// Backend-enum simplification in src/font/backend.zig (#264).
 /// Library implementation for the compile options.
 pub const Library = switch (options.backend) {
     // Freetype requires a state library

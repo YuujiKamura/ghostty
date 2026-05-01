@@ -8,6 +8,9 @@ const freetype = @import("face/freetype.zig");
 const coretext = @import("face/coretext.zig");
 pub const web_canvas = @import("face/web_canvas.zig");
 
+// UPSTREAM-SHARED-OK: prong-removal (freetype_windows) + .none/.win32
+// passthrough below mirror the Backend-enum simplification driven by
+// src/font/backend.zig (#264 / wrap-first-in-apprt).
 /// Face implementation for the compile options.
 pub const Face = switch (options.backend) {
     .freetype,

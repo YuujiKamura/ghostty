@@ -442,6 +442,9 @@ fn discover(self: *SharedGridSet) !?*Discover {
     // If we initialized, use it
     if (self.font_discover) |*v| return v;
 
+    // UPSTREAM-SHARED-OK: drop Library arg from .init() — paired with
+    // signature change in src/font/discovery.zig (#264). Fontconfig and
+    // CoreText init-with-Library was unused upstream too.
     self.font_discover = .init();
     return &self.font_discover.?;
 }

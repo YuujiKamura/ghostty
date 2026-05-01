@@ -16,6 +16,8 @@ pub const Feature = feature.Feature;
 pub const FeatureList = feature.FeatureList;
 pub const default_features = feature.default_features;
 
+// UPSTREAM-SHARED-OK: prong-removal (freetype_windows) mirrors the
+// Backend-enum simplification in src/font/backend.zig (#264).
 /// Shaper implementation for our compile options.
 pub const Shaper = switch (options.backend) {
     .freetype,
