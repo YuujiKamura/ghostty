@@ -63,6 +63,8 @@ See issue #237 for the original incident.
 
    `tools/lint-fork-isolation.sh` (pre-push) enforces this mechanically. **Upstream PR is not a relief valve** — fork-local maintenance is our job; we do not propose changes to upstream's architecture. See [`docs/apprt-contract.md`](docs/apprt-contract.md) for wrapper patterns and the maintainer self-check examples; see [`notes/2026-04-27_fork_isolation_audit.md`](notes/2026-04-27_fork_isolation_audit.md) for the existing-violation backlog.
 
+8. **Dispatch-time conventions**: every `.dispatch/*.md` brief inherits the rules in [`.dispatch/RULES.md`](.dispatch/RULES.md) — explicit `git add <path>`, `LEFTHOOK=0` for commit/push (the harness blocks `--no-verify`), single objective per brief, no scope expansion, GUI changes need visual verification (test PASS ≠ ship), file scope discipline so sister sessions don't collide. Brief authors should reference `.dispatch/RULES.md` rather than restate.
+
 ## Verification before commit
 
 Pre-push hooks enforce most of these automatically (`lefthook.yml`), but agents
