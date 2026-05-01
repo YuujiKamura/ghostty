@@ -4,7 +4,6 @@ pub const OpenGL = @This();
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
-const build_config = @import("../build_config.zig");
 const gl = @import("opengl");
 const shadertoy = @import("shadertoy.zig");
 const apprt = @import("../apprt.zig");
@@ -28,9 +27,9 @@ pub const custom_shader_target: shadertoy.Target = .glsl;
 // The fragCoord for OpenGL shaders is +Y = up.
 pub const custom_shader_y_is_down = false;
 
-/// On Windows, use double buffering to allow CPU-GPU overlap.
-/// On other platforms, OpenGL frame completion is sync so no need.
-pub const swap_chain_count = if (builtin.os.tag == .windows) 2 else 1;
+/// Because OpenGL's frame completion is always
+/// sync, we have no need for multi-buffering.
+pub const swap_chain_count = 1;
 
 const log = std.log.scoped(.opengl);
 
@@ -46,80 +45,6 @@ blending: configpkg.Config.AlphaBlending,
 /// The most recently presented target, in case we need to present it again.
 last_target: ?Target = null,
 
-/// Cached viewport dimensions to avoid redundant Win32 API calls.
-cached_viewport_width: u32 = 0,
-cached_viewport_height: u32 = 0,
-
-/// GL fence from the previous frame for async GPU completion tracking.
-/// Used with swap_chain_count=2 on Windows to ensure the GPU is done
-/// with the previous frame before reusing its buffers.
-prev_fence: ?gl.GLsync = null,
-
-/// Frame timing stats for performance monitoring (Win32 only).
-/// Logs min/avg/max frame times and fence wait times every 300 frames (~5s at 60fps).
-perf: if (builtin.os.tag == .windows) PerfStats else void = if (builtin.os.tag == .windows) .{} else {},
-
-const PerfStats = struct {
-    frame_start: ?std.time.Instant = null,
-    fence_wait_ns: u64 = 0,
-    /// Lifetime totals (never reset)
-    lifetime_count: u64 = 0,
-    lifetime_frame_ns: u64 = 0,
-    lifetime_fence_ns: u64 = 0,
-    lifetime_min_ns: u64 = std.math.maxInt(u64),
-    lifetime_max_ns: u64 = 0,
-
-    fn recordFrameStart(self: *PerfStats) void {
-        self.frame_start = std.time.Instant.now() catch null;
-        self.fence_wait_ns = 0;
-    }
-
-    fn recordFenceWait(self: *PerfStats, ns: u64) void {
-        self.fence_wait_ns = ns;
-    }
-
-    fn recordFrameEnd(self: *PerfStats) void {
-        const start = self.frame_start orelse return;
-        const end = std.time.Instant.now() catch return;
-        const elapsed = end.since(start);
-
-        self.lifetime_count += 1;
-        self.lifetime_frame_ns += elapsed;
-        self.lifetime_fence_ns += self.fence_wait_ns;
-        if (elapsed < self.lifetime_min_ns) self.lifetime_min_ns = elapsed;
-        if (elapsed > self.lifetime_max_ns) self.lifetime_max_ns = elapsed;
-    }
-
-    /// Write lifetime summary to a fixed path. Called from deinit.
-    fn writeSummary(self: *const PerfStats) void {
-        if (self.lifetime_count == 0) return;
-        const avg_us = self.lifetime_frame_ns / self.lifetime_count / std.time.ns_per_us;
-        const min_us = self.lifetime_min_ns / std.time.ns_per_us;
-        const max_us = self.lifetime_max_ns / std.time.ns_per_us;
-        const avg_fence_us = self.lifetime_fence_ns / self.lifetime_count / std.time.ns_per_us;
-
-        var buf: [512]u8 = undefined;
-        const content = std.fmt.bufPrint(&buf, "frames={d}\navg_us={d}\nmin_us={d}\nmax_us={d}\nfence_avg_us={d}\n", .{
-            self.lifetime_count,
-            avg_us,
-            min_us,
-            max_us,
-            avg_fence_us,
-        }) catch return;
-
-        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        defer arena.deinit();
-        const allocator = arena.allocator();
-
-        const temp_path = std.process.getEnvVarOwned(allocator, "TEMP") catch ".";
-        const perf_path = std.fs.path.join(allocator, &.{ temp_path, "ghostty_perf.txt" }) catch return;
-
-        const file = std.fs.createFileAbsolute(perf_path, .{}) catch return;
-        defer file.close();
-        _ = file.writeAll(content) catch {};
-    }
-};
-
 /// NOTE: This is an error{}!OpenGL instead of just OpenGL for parity with
 ///       Metal, since it needs to be fallible so does this, even though it
 ///       can't actually fail.
@@ -131,10 +56,6 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) error{}!OpenGL {
 }
 
 pub fn deinit(self: *OpenGL) void {
-    if (comptime builtin.os.tag == .windows) {
-        self.perf.writeSummary();
-    }
-    if (self.prev_fence) |fence| gl.deleteSync(fence);
     self.* = undefined;
 }
 
@@ -241,16 +162,17 @@ fn prepareContext(getProcAddress: anytype) !void {
 pub fn surfaceInit(surface: *apprt.Surface) !void {
     _ = surface;
 
-    switch (build_config.app_runtime) {
-        .none => {},
+    switch (apprt.runtime) {
+        else => @compileError("unsupported app runtime for OpenGL"),
 
         // GTK uses global OpenGL context so we load from null.
-        .gtk => try prepareContext(null),
+        apprt.gtk,
+        => try prepareContext(null),
 
-        .win32, .winui3 => {
-            // Win32/WinUI 3 manages its own OpenGL context via WGL.
-            // The context is already current when this is called.
-            try prepareContext(null);
+        apprt.embedded => {
+            // TODO(mitchellh): this does nothing today to allow libghostty
+            // to compile for OpenGL targets but libghostty is strictly
+            // broken for rendering on this platforms.
         },
     }
 
@@ -268,56 +190,28 @@ pub fn surfaceInit(surface: *apprt.Surface) !void {
 /// thread for final main thread setup requirements.
 pub fn finalizeSurfaceInit(self: *const OpenGL, surface: *apprt.Surface) !void {
     _ = self;
-
-    switch (build_config.app_runtime) {
-        .win32, .winui3 => {
-            // Release the OpenGL context from the main thread so the
-            // renderer thread can acquire it.
-            surface.app.releaseGLContext();
-        },
-        else => {},
-    }
+    _ = surface;
 }
 
 /// Callback called by renderer.Thread when it begins.
 pub fn threadEnter(self: *const OpenGL, surface: *apprt.Surface) !void {
     _ = self;
+    _ = surface;
 
-    switch (build_config.app_runtime) {
-        .none => {},
+    switch (apprt.runtime) {
+        else => @compileError("unsupported app runtime for OpenGL"),
 
-        .win32, .winui3 => {
-            // Make the OpenGL context current on this (renderer) thread.
-            try surface.app.makeGLContextCurrent();
-            try prepareContext(null);
-
-            // Disable driver-level VSync (swap interval = 0) so that SwapBuffers
-            // returns immediately. VSync timing is handled externally by the
-            // DwmFlush-based VSync thread in the renderer.
-            const wgl = struct {
-                extern "opengl32" fn wglGetProcAddress(lpszProc: [*:0]const u8) callconv(.winapi) ?*const anyopaque;
-            };
-            const wglSwapIntervalEXT: ?*const fn (c_int) callconv(.winapi) std.os.windows.BOOL =
-                @ptrCast(wgl.wglGetProcAddress("wglSwapIntervalEXT"));
-            if (wglSwapIntervalEXT) |setSwapInterval| {
-                const result = setSwapInterval(0);
-                log.info("wglSwapIntervalEXT(0) = {}", .{result});
-            } else {
-                log.warn("wglSwapIntervalEXT not available", .{});
-            }
-            // Verify the swap interval was actually set.
-            const wglGetSwapIntervalEXT: ?*const fn () callconv(.winapi) c_int =
-                @ptrCast(wgl.wglGetProcAddress("wglGetSwapIntervalEXT"));
-            if (wglGetSwapIntervalEXT) |getSwapInterval| {
-                log.info("swap interval = {}", .{getSwapInterval()});
-            }
-        },
-
-        .gtk => {
+        apprt.gtk => {
             // GTK doesn't support threaded OpenGL operations as far as I can
             // tell, so we use the renderer thread to setup all the state
             // but then do the actual draws and texture syncs and all that
             // on the main thread. As such, we don't do anything here.
+        },
+
+        apprt.embedded => {
+            // TODO(mitchellh): this does nothing today to allow libghostty
+            // to compile for OpenGL targets but libghostty is strictly
+            // broken for rendering on this platforms.
         },
     }
 }
@@ -326,20 +220,16 @@ pub fn threadEnter(self: *const OpenGL, surface: *apprt.Surface) !void {
 pub fn threadExit(self: *const OpenGL) void {
     _ = self;
 
-    switch (build_config.app_runtime) {
-        .none => {},
+    switch (apprt.runtime) {
+        else => @compileError("unsupported app runtime for OpenGL"),
 
-        .gtk => {
+        apprt.gtk => {
             // We don't need to do any unloading for GTK because we may
             // be sharing the global bindings with other windows.
         },
 
-        .win32, .winui3 => {
-            // Release the OpenGL context from the renderer thread.
-            const win32_gl = struct {
-                extern "opengl32" fn wglMakeCurrent(hdc: ?std.os.windows.HANDLE, hglrc: ?std.os.windows.HANDLE) callconv(.winapi) std.os.windows.BOOL;
-            };
-            _ = win32_gl.wglMakeCurrent(null, null);
+        apprt.embedded => {
+            // TODO: see threadEnter
         },
     }
 }
@@ -347,98 +237,30 @@ pub fn threadExit(self: *const OpenGL) void {
 pub fn displayRealized(self: *const OpenGL) void {
     _ = self;
 
-    switch (build_config.app_runtime) {
-        .none, .win32, .winui3 => {},
-
-        .gtk => prepareContext(null) catch |err| {
+    switch (apprt.runtime) {
+        apprt.gtk => prepareContext(null) catch |err| {
             log.warn(
                 "Error preparing GL context in displayRealized, err={}",
                 .{err},
             );
         },
+
+        else => @compileError("only GTK should be calling displayRealized"),
     }
 }
 
 /// Actions taken before doing anything in `drawFrame`.
 ///
-/// On Win32, we must manually update the OpenGL viewport to match the
-/// current window client area, because there is no GLArea equivalent
-/// that does this automatically (unlike GTK).
+/// Right now there's nothing we need to do for OpenGL.
 pub fn drawFrameStart(self: *OpenGL) void {
-    switch (build_config.app_runtime) {
-        .win32, .winui3 => {
-            self.perf.recordFrameStart();
-
-            // Wait on the previous frame's GL fence to ensure the GPU
-            // has finished reading from the frame buffers we're about to reuse.
-            // With swap_chain_count=2, this gives the GPU one full frame
-            // of CPU processing time to complete, so the wait is typically free.
-            if (self.prev_fence) |fence| {
-                const fence_start = std.time.Instant.now() catch null;
-                // 1 second timeout as safety; should complete near-instantly.
-                _ = gl.clientWaitSync(fence, 1_000_000_000);
-                gl.deleteSync(fence);
-                self.prev_fence = null;
-                if (fence_start) |fs| {
-                    if (std.time.Instant.now() catch null) |fe| {
-                        self.perf.recordFenceWait(fe.since(fs));
-                    }
-                }
-            }
-
-            const win32_api = struct {
-                const HWND = std.os.windows.HANDLE;
-                const BOOL = std.os.windows.BOOL;
-                const LONG = c_long;
-                const RECT = extern struct {
-                    left: LONG = 0,
-                    top: LONG = 0,
-                    right: LONG = 0,
-                    bottom: LONG = 0,
-                };
-                extern "opengl32" fn wglGetCurrentDC() callconv(.winapi) ?std.os.windows.HANDLE;
-                extern "user32" fn WindowFromDC(hdc: std.os.windows.HANDLE) callconv(.winapi) ?HWND;
-                extern "user32" fn GetClientRect(hWnd: HWND, lpRect: *RECT) callconv(.winapi) BOOL;
-            };
-            const hdc = win32_api.wglGetCurrentDC() orelse return;
-            const hwnd = win32_api.WindowFromDC(hdc) orelse return;
-            var rect: win32_api.RECT = .{};
-            if (win32_api.GetClientRect(hwnd, &rect) != 0) {
-                const w: u32 = @intCast(rect.right - rect.left);
-                const h: u32 = @intCast(rect.bottom - rect.top);
-                if (w != self.cached_viewport_width or h != self.cached_viewport_height) {
-                    self.cached_viewport_width = w;
-                    self.cached_viewport_height = h;
-                    gl.glad.context.Viewport.?(0, 0, @intCast(w), @intCast(h));
-                }
-            }
-        },
-        else => {},
-    }
+    _ = self;
 }
 
 /// Actions taken after `drawFrame` is done.
+///
+/// Right now there's nothing we need to do for OpenGL.
 pub fn drawFrameEnd(self: *OpenGL) void {
-    switch (build_config.app_runtime) {
-        .win32, .winui3 => {
-            // Swap the front and back buffers to display the rendered frame.
-            const win32_gl = struct {
-                extern "opengl32" fn wglGetCurrentDC() callconv(.winapi) ?std.os.windows.HANDLE;
-                extern "gdi32" fn SwapBuffers(hdc: std.os.windows.HANDLE) callconv(.winapi) std.os.windows.BOOL;
-            };
-            if (win32_gl.wglGetCurrentDC()) |hdc| {
-                _ = win32_gl.SwapBuffers(hdc);
-            }
-
-            // Insert a fence after SwapBuffers to track when the GPU finishes
-            // this frame. The next drawFrameStart() will wait on this fence
-            // before reusing the frame's buffers.
-            self.prev_fence = gl.fenceSync();
-
-            self.perf.recordFrameEnd();
-        },
-        else => {},
-    }
+    _ = self;
 }
 
 pub fn initShaders(
@@ -455,14 +277,7 @@ pub fn initShaders(
 
 /// Get the current size of the runtime surface.
 pub fn surfaceSize(self: *const OpenGL) !struct { width: u32, height: u32 } {
-    // On Win32, use the cached viewport from drawFrameStart to avoid
-    // a redundant glGetIntegerv call every frame.
-    if (comptime build_config.app_runtime == .win32 or build_config.app_runtime == .winui3) {
-        return .{
-            .width = self.cached_viewport_width,
-            .height = self.cached_viewport_height,
-        };
-    }
+    _ = self;
     var viewport: [4]gl.c.GLint = undefined;
     gl.glad.context.GetIntegerv.?(gl.c.GL_VIEWPORT, &viewport);
     return .{
