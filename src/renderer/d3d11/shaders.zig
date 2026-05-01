@@ -1,3 +1,4 @@
+//! UPSTREAM-SHARED-OK: fork-only file in src/renderer/d3d11/ — D3D11 backend
 //! D3D11 shader compilation and management.
 //!
 //! Mirrors the OpenGL shaders.zig structure: defines Shaders, Uniforms,

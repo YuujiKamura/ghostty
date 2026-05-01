@@ -1,3 +1,4 @@
+// UPSTREAM-SHARED-OK: fork-only file in src/renderer/shaders/hlsl/ — D3D11 shaders
 #include "common.hlsl"
 
 // Values `atlas` can take.

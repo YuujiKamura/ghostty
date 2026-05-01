@@ -1,3 +1,6 @@
+//! UPSTREAM-SHARED-OK: fork-only file in upstream-shared dir; perf-stats
+//! tracking for renderer frame timing, used by D3D11 backend on Windows.
+
 const std = @import("std");
 
 const log = std.log.scoped(.renderer_perf);

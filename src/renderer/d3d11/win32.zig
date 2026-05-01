@@ -1,3 +1,4 @@
+//! UPSTREAM-SHARED-OK: fork-only file in src/renderer/d3d11/ — D3D11 backend
 //! Win32 types and functions used by the D3D11 renderer.
 
 const std = @import("std");

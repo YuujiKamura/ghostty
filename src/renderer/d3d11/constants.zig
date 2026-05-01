@@ -1,3 +1,4 @@
+//! UPSTREAM-SHARED-OK: fork-only file in src/renderer/d3d11/ — D3D11 backend
 //! D3D11-specific shader constant definitions.
 //!
 //! This file defines the layout of dynamic data passed to shaders that

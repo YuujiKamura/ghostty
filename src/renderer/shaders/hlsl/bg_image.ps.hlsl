@@ -1,3 +1,4 @@
+// UPSTREAM-SHARED-OK: fork-only file in src/renderer/shaders/hlsl/ — D3D11 shaders
 #include "common.hlsl"
 
 // D3D11 SV_Position in pixel shader is already in screen coords, origin upper-left.

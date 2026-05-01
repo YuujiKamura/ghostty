@@ -1,3 +1,6 @@
+//! UPSTREAM-SHARED-OK: fork-only file in upstream-shared dir; D3D11 backend
+//! is peer to renderer/Metal.zig and renderer/OpenGL.zig per upstream pattern.
+//!
 //! Graphics API wrapper for Direct3D 11.
 //!
 //! Implements the GraphicsAPI interface required by GenericRenderer,

@@ -1,3 +1,6 @@
+//! UPSTREAM-SHARED-OK: fork-only file in upstream-shared dir; Win32-specific
+//! DwmFlush-based VSync thread, accessed via renderer/vsync.zig dispatch.
+
 const std = @import("std");
 const builtin = @import("builtin");
 const xev = @import("xev");

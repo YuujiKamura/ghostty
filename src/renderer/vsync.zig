@@ -1,3 +1,7 @@
+//! UPSTREAM-SHARED-OK: fork-only file in upstream-shared dir; abstracts
+//! platform-specific VSync (Win32 DwmFlush thread, macOS CVDisplayLink) so
+//! the generic renderer doesn't carry platform branches.
+//!
 //! Unified VSync provider for the generic renderer.
 //!
 //! Wraps platform-specific VSync mechanisms (macOS CVDisplayLink,

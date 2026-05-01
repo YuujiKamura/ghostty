@@ -1,3 +1,6 @@
+//! UPSTREAM-SHARED-OK: fork-only file in upstream-shared dir; consolidates
+//! shared GPU layout types between renderer backends to keep them in sync.
+//!
 //! Shared shader data types used by both OpenGL and D3D11 renderers.
 //!
 //! These types define the GPU-side layout of uniforms and per-instance

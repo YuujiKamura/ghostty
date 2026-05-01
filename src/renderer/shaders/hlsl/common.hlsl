@@ -1,3 +1,4 @@
+// UPSTREAM-SHARED-OK: fork-only file in src/renderer/shaders/hlsl/ — D3D11 shaders
 // These are common definitions to be shared across shaders, the first
 // line of any shader that needs these should be `#include "common.hlsl"`.
 //

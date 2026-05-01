@@ -1,3 +1,4 @@
+// UPSTREAM-SHARED-OK: fork-only file in src/renderer/shaders/hlsl/ — D3D11 shaders
 #include "common.hlsl"
 
 Texture2D<float4> image_tex : register(t0);

@@ -1,3 +1,4 @@
+//! UPSTREAM-SHARED-OK: fork-only file in src/renderer/d3d11/ — D3D11 backend
 //! D3D11 GPU buffer wrapper.
 //!
 //! Provides a Buffer(T) type similar to OpenGL's buffer.zig,
