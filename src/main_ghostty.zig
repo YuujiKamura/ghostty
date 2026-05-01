@@ -124,6 +124,12 @@ fn logFn(
     comptime format: []const u8,
     args: anytype,
 ) void {
+    // In tests, swallow all log output. Negative-path tests deliberately
+    // exercise error branches that fire log.warn/log.err, and the resulting
+    // noise hides actual test failures (cf. 2026-05-01 Overlay 3-fail
+    // hidden for a full day under warning flood).
+    if (builtin.is_test) return;
+
     // On Mac, we use unified logging. To view this:
     //
     //   sudo log stream --level debug --predicate 'subsystem=="com.mitchellh.ghostty"'
