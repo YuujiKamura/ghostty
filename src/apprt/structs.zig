@@ -54,6 +54,8 @@ pub const Clipboard = enum(Backing) {
             .{ .name = "GhosttyApprtClipboard" },
         ),
 
+        // UPSTREAM-SHARED-OK: switch coverage forced by Runtime enum extension
+        // (.win32 added in apprt/runtime.zig); no behavior change here.
         .none, .win32 => void,
     };
 };
@@ -88,6 +90,8 @@ pub const ClipboardRequest = union(ClipboardRequestType) {
             .{ .name = "GhosttyClipboardRequest" },
         ),
 
+        // UPSTREAM-SHARED-OK: switch coverage forced by Runtime enum extension
+        // (.win32 added in apprt/runtime.zig); no behavior change here.
         .none, .win32 => void,
     };
 };

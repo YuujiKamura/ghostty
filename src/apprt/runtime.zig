@@ -11,6 +11,8 @@ pub const Runtime = enum {
     /// approach to building the application.
     gtk,
 
+    // UPSTREAM-SHARED-OK: canonical apprt registration for Windows targets;
+    // Runtime enum is the central extension point — variants must live here.
     /// Win32. Native Windows application using the Win32 API directly.
     win32,
 

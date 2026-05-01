@@ -682,6 +682,8 @@ pub const InitialSize = extern struct {
             .{ .name = "GhosttyApprtInitialSize" },
         ),
 
+        // UPSTREAM-SHARED-OK: switch coverage forced by Runtime enum extension
+        // (.win32/.winui3 added in apprt/runtime.zig); no behavior change here.
         .none, .win32, .winui3 => void,
     };
 };

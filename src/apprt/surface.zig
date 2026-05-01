@@ -126,11 +126,18 @@ pub const Message = union(enum) {
                 .{ .name = "GhosttyApprtChildExited" },
             ),
 
+            // UPSTREAM-SHARED-OK: switch coverage forced by Runtime enum extension
+            // (.win32 added in apprt/runtime.zig); no behavior change here.
             .none, .win32 => void,
         };
     };
 };
 
+// UPSTREAM-SHARED-OK: Phase 2.3 (#232) BoundedMailbox API contract.
+// `Mailbox.push`/`pushTimeout` is the apprt-shared interface that termio
+// (`src/termio/*`) and renderer (`src/renderer/generic.zig`) already call
+// against the new signature. Cannot be wrapped in `apprt/winui3/` because
+// non-winui3 callers below the apprt layer depend on it.
 /// A surface mailbox.
 ///
 /// Phase 2.3 (#232): the underlying `App.Mailbox` is a `BoundedMailbox`
