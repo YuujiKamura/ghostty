@@ -38,3 +38,45 @@ zig-out-winui3/
 zig-out-archives/
 zig-out-*/
 tmp/
+
+# Zig cache variants (per-session caches, ZIG_GLOBAL_CACHE_DIR= sandboxes)
+.zig-cache-*/
+.zig-global-cache/
+
+# Zig content-addressable cache (created next to .zig-cache when running tests)
+# These are hash-named files/dirs (32-hex chars). Zig sometimes drops them at repo root.
+/b/
+/h/
+/o/
+/p/
+/z/
+
+# Past worktree leftovers / transient audit copies
+/ghostty-win-audit-230/
+
+# UIA smoke test artifacts
+tests/winui3/.last-results.json
+tests/winui3/results/
+
+# .dispatch/ — session briefs, reports, peer coordination files.
+# Catch-all ignore; only RULES.md is intentional and tracked.
+.dispatch/*
+!.dispatch/RULES.md
+
+# Root-level AI investigation / draft / phase-result markdown.
+# These accumulate during diagnosis and should not ship in version control.
+# Intentional project docs (AGENTS, CLAUDE, README, PLAN, etc.) stay tracked.
+/FINAL_IME_INVESTIGATION.md
+/IME_EVIDENCE_ANALYSIS.md
+/ISSUE_DRAFT.md
+/LOADCOMP_FIX.md
+/MRT_ALTERNATIVES.md
+/MRT_FACTORY_ANALYSIS.md
+/MRT_FIX.md
+/PHASE1_PHASE2_RESULTS.md
+/PHASE3_STRATEGY.md
+/PRI_RESULT.md
+/SURFACE_LOADCOMP.md
+/TABVIEWROOT_LOADCOMP.md
+/VISUALTREE_RESULT.md
+/VTH_DEBUG.md
