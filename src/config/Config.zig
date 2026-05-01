@@ -2404,8 +2404,12 @@ keybind: Keybinds = .{},
 /// The value `clipboard` will always copy text to the selection clipboard
 /// as well as the system clipboard.
 ///
-/// Middle-click paste will always use the selection clipboard. Middle-click
-/// paste is always enabled even if this is `false`.
+/// Middle-click primary paste (see `middle-click-action`) is enabled by
+/// default even if this is `false`. The clipboard it pastes from follows
+/// this setting: with `true` (or `false`) it reads from the selection
+/// clipboard (falling back to the system clipboard on platforms without a
+/// selection clipboard); with `clipboard` it reads from the system
+/// clipboard.
 ///
 /// The default value is true on Linux and macOS.
 @"copy-on-select": CopyOnSelect = switch (builtin.os.tag) {
@@ -2426,6 +2430,16 @@ keybind: Keybinds = .{},
 ///
 /// The default value is `context-menu`.
 @"right-click-action": RightClickAction = .@"context-menu",
+
+/// The action to take when the user middle-clicks on the terminal surface.
+///
+/// Valid values:
+///   * `primary-paste` - Paste from the selection (or system) clipboard per
+///      `copy-on-select`.
+///   * `ignore` - Do nothing, ignore the middle click.
+///
+/// The default value is `primary-paste`.
+@"middle-click-action": MiddleClickAction = .@"primary-paste",
 
 /// The time in milliseconds between clicks to consider a click a repeat
 /// (double, triple, etc.) or an entirely new single click. A value of zero will
@@ -4625,6 +4639,7 @@ pub fn finalize(self: *Config) !void {
 
     // Apprt-specific defaults
     switch (build_config.app_runtime) {
+        // UPSTREAM-SHARED-OK: exhaustive switch must cover Windows apprts; their finalize is a no-op like .none.
         .none, .win32, .winui3 => {},
         .gtk => {
             switch (self.@"gtk-single-instance") {
@@ -6397,6 +6412,22 @@ pub const RepeatableFontVariation = struct {
     }
 };
 
+/// Returns true if the given key event would trigger a keybinding
+/// if it were to be processed. This is useful for determining if
+/// a key event should be sent to the terminal or not.
+pub fn keyEventIsBinding(
+    self: *Config,
+    event: inputpkg.KeyEvent,
+) bool {
+    switch (event.action) {
+        .release => return false,
+        .press, .repeat => {},
+    }
+
+    // If we have a keybinding for this event then we return true.
+    return self.keybind.set.getEvent(event) != null;
+}
+
 /// Stores a set of keybinds.
 pub const Keybinds = struct {
     set: inputpkg.Binding.Set = .{},
@@ -6747,13 +6778,27 @@ pub const Keybinds = struct {
             // Semantic prompts
             try self.set.put(
                 alloc,
-                .{ .key = .{ .physical = .page_up }, .mods = .{ .shift = true, .ctrl = true } },
+                .{ .key = .{ .physical = .arrow_up }, .mods = .{ .shift = true, .ctrl = true } },
                 .{ .jump_to_prompt = -1 },
             );
             try self.set.put(
                 alloc,
-                .{ .key = .{ .physical = .page_down }, .mods = .{ .shift = true, .ctrl = true } },
+                .{ .key = .{ .physical = .arrow_down }, .mods = .{ .shift = true, .ctrl = true } },
                 .{ .jump_to_prompt = 1 },
+            );
+
+            // Move tab
+            try self.set.putFlags(
+                alloc,
+                .{ .key = .{ .physical = .page_up }, .mods = .{ .shift = true, .ctrl = true } },
+                .{ .move_tab = -1 },
+                .{ .performable = true },
+            );
+            try self.set.putFlags(
+                alloc,
+                .{ .key = .{ .physical = .page_down }, .mods = .{ .shift = true, .ctrl = true } },
+                .{ .move_tab = 1 },
+                .{ .performable = true },
             );
 
             // Search
@@ -8620,6 +8665,15 @@ pub const RightClickAction = enum {
     @"context-menu",
 };
 
+/// Options for middle-click actions.
+pub const MiddleClickAction = enum {
+    /// Paste from the selection/standard clipboard per `copy-on-select`.
+    @"primary-paste",
+
+    /// No action is taken on middle click.
+    ignore,
+};
+
 /// Shell integration values
 pub const ShellIntegration = enum {
     none,
@@ -9030,7 +9084,8 @@ pub const GtkTitlebarStyle = enum(c_int) {
             .{ .name = "GhosttyGtkTitlebarStyle" },
         ),
 
-        .none, .win32 => void,
+        // UPSTREAM-SHARED-OK: Windows apprts don't use GObject; void matches the .none arm semantics.
+        .none, .win32, .winui3 => void,
     };
 };
 
@@ -9745,7 +9800,8 @@ pub const WindowDecoration = enum(c_int) {
             .{ .name = "GhosttyConfigWindowDecoration" },
         ),
 
-        .none, .win32 => void,
+        // UPSTREAM-SHARED-OK: Windows apprts don't use GObject; void matches the .none arm semantics.
+        .none, .win32, .winui3 => void,
     };
 
     pub fn parseCLI(input_: ?[]const u8) !WindowDecoration {
@@ -10370,6 +10426,18 @@ test "clone preserves conditional state" {
     try testing.expectEqual(.dark, dest._conditional_state.theme);
 }
 
+// UPSTREAM-SHARED-OK: theme-loading tests compare realpath() output against
+// forward-slash strings; on Windows realpath returns backslashes, so this
+// helper normalizes for cross-platform test parity. Test-only.
+fn normalizePathForTest(path: []u8) []u8 {
+    if (comptime builtin.os.tag == .windows) {
+        for (path) |*byte| if (byte.* == '\\') {
+            byte.* = '/';
+        };
+    }
+    return path;
+}
+
 test "clone can then change conditional state" {
     // This tests a particular bug sequence where:
     //   1. Load light
@@ -10402,26 +10470,9 @@ test "clone can then change conditional state" {
         try writer.end();
     }
     var light_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const light_raw = try td.dir.realpath("theme_light", &light_buf);
-    var light_final: [std.fs.max_path_bytes]u8 = undefined;
-    @memcpy(light_final[0..light_raw.len], light_raw);
-    if (comptime builtin.os.tag == .windows) {
-        for (light_final[0..light_raw.len]) |*byte| if (byte.* == '\\') {
-            byte.* = '/';
-        };
-    }
-    const light = light_final[0..light_raw.len];
-
+    const light = normalizePathForTest(try td.dir.realpath("theme_light", &light_buf));
     var dark_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const dark_raw = try td.dir.realpath("theme_dark", &dark_buf);
-    var dark_final: [std.fs.max_path_bytes]u8 = undefined;
-    @memcpy(dark_final[0..dark_raw.len], dark_raw);
-    if (comptime builtin.os.tag == .windows) {
-        for (dark_final[0..dark_raw.len]) |*byte| if (byte.* == '\\') {
-            byte.* = '/';
-        };
-    }
-    const dark = dark_final[0..dark_raw.len];
+    const dark = normalizePathForTest(try td.dir.realpath("theme_dark", &dark_buf));
 
     var cfg_light = try Config.default(alloc);
     defer cfg_light.deinit();
@@ -10571,11 +10622,7 @@ test "theme loading" {
         try writer.end();
     }
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = if (comptime builtin.os.tag == .windows) blk: {
-        const p = try td.dir.realpath("theme", &path_buf);
-        const sep_idx = std.mem.indexOf(u8, p, "\\") orelse 0;
-        break :blk p[sep_idx..];
-    } else try td.dir.realpath("theme", &path_buf);
+    const path = normalizePathForTest(try td.dir.realpath("theme", &path_buf));
 
     var cfg = try Config.default(alloc);
     defer cfg.deinit();
@@ -10614,11 +10661,7 @@ test "theme loading preserves conditional state" {
         try writer.end();
     }
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = if (comptime builtin.os.tag == .windows) blk: {
-        const p = try td.dir.realpath("theme", &path_buf);
-        const sep_idx = std.mem.indexOf(u8, p, "\\") orelse 0;
-        break :blk p[sep_idx..];
-    } else try td.dir.realpath("theme", &path_buf);
+    const path = normalizePathForTest(try td.dir.realpath("theme", &path_buf));
 
     var cfg = try Config.default(alloc);
     defer cfg.deinit();
@@ -10651,11 +10694,7 @@ test "theme priority is lower than config" {
         try writer.end();
     }
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = if (comptime builtin.os.tag == .windows) blk: {
-        const p = try td.dir.realpath("theme", &path_buf);
-        const sep_idx = std.mem.indexOf(u8, p, "\\") orelse 0;
-        break :blk p[sep_idx..];
-    } else try td.dir.realpath("theme", &path_buf);
+    const path = normalizePathForTest(try td.dir.realpath("theme", &path_buf));
 
     var cfg = try Config.default(alloc);
     defer cfg.deinit();
@@ -10699,26 +10738,9 @@ test "theme loading correct light/dark" {
         try writer.end();
     }
     var light_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const light_raw = try td.dir.realpath("theme_light", &light_buf);
-    var light_final: [std.fs.max_path_bytes]u8 = undefined;
-    @memcpy(light_final[0..light_raw.len], light_raw);
-    if (comptime builtin.os.tag == .windows) {
-        for (light_final[0..light_raw.len]) |*byte| if (byte.* == '\\') {
-            byte.* = '/';
-        };
-    }
-    const light = light_final[0..light_raw.len];
-
+    const light = normalizePathForTest(try td.dir.realpath("theme_light", &light_buf));
     var dark_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const dark_raw = try td.dir.realpath("theme_dark", &dark_buf);
-    var dark_final: [std.fs.max_path_bytes]u8 = undefined;
-    @memcpy(dark_final[0..dark_raw.len], dark_raw);
-    if (comptime builtin.os.tag == .windows) {
-        for (dark_final[0..dark_raw.len]) |*byte| if (byte.* == '\\') {
-            byte.* = '/';
-        };
-    }
-    const dark = dark_final[0..dark_raw.len];
+    const dark = normalizePathForTest(try td.dir.realpath("theme_dark", &dark_buf));
 
     // Light
     {
