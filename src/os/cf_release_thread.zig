@@ -10,11 +10,7 @@ const macos = @import("macos");
 
 const internal_os = @import("../os/main.zig");
 const xev = @import("../global.zig").xev;
-const datastruct = @import("../datastruct/main.zig");
-const BlockingQueue = datastruct.BlockingQueue;
-// #251: BoundedMailbox lives in apprt/winui3/ to keep upstream-shared
-// `src/datastruct/` clean.
-const BoundedMailbox = @import("../apprt/winui3/safe_mailbox.zig").BoundedMailbox;
+const BlockingQueue = @import("../datastruct/main.zig").BlockingQueue;
 
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.cf_release_thread);
@@ -31,12 +27,7 @@ pub const Message = union(enum) {
 /// The type used for sending messages to the thread. For now this is
 /// hardcoded with a capacity. We can make this a comptime parameter in
 /// the future if we want it configurable.
-///
-/// Phase 2.3 (#232): migrated to `BoundedMailbox` with `null` default
-/// timeout — the only producer is the font shaper's `endFrame`, which
-/// runs on the renderer worker thread and explicitly opts into a 5s
-/// bounded wait via `pushTimeout`. There is no UI-thread producer.
-pub const Mailbox = BoundedMailbox(Message, 64, null);
+pub const Mailbox = BlockingQueue(Message, 64);
 
 /// Allocator used for some state
 alloc: std.mem.Allocator,
@@ -149,15 +140,13 @@ fn threadMain_(self: *Thread) !void {
 
 /// Drain the mailbox, handling all the messages in our terminal implementation.
 fn drainMailbox(self: *Thread) !void {
-    // Phase 2.3 (#232): `popOrNull` flattens both `.empty` and `.shutdown`
-    // results into `null` to preserve the existing drain semantics.
     // If we're draining, we just drain the mailbox and return.
     if (self.flags.drain) {
-        while (self.mailbox.popOrNull()) |_| {}
+        while (self.mailbox.pop()) |_| {}
         return;
     }
 
-    while (self.mailbox.popOrNull()) |message| {
+    while (self.mailbox.pop()) |message| {
         // log.debug("mailbox message={}", .{message});
         switch (message) {
             .release => |msg| {
