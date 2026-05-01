@@ -536,10 +536,11 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 var uniforms = try UniformBuffer.init(api.uniformBufferOptions(), 1);
                 errdefer uniforms.deinit();
 
-                var constants = if (@hasDecl(shaderpkg, "constants"))
-                    try Buffer(shaderpkg.constants.TerminalShaderConstants).init(api.uniformBufferOptions(), 1)
-                else
-                    .{};
+                var constants: @FieldType(FrameState, "constants") =
+                    if (comptime @hasDecl(shaderpkg, "constants"))
+                        try Buffer(shaderpkg.constants.TerminalShaderConstants).init(api.uniformBufferOptions(), 1)
+                    else
+                        .{};
                 errdefer constants.deinit();
 
                 // Create GPU buffers for our cells.

@@ -538,6 +538,37 @@ pub const IClosable = extern struct {
     }
 };
 
+pub const ICompositionTargetStatics = extern struct {
+    pub const IID = GUID{ .data1 = 0x2b1af03d, .data2 = 0x1ed2, .data3 = 0x4b59, .data4 = .{ 0xbd, 0x00, 0x75, 0x94, 0xee, 0x92, 0x83, 0x2b } };
+    lpVtbl: *const VTable,
+    pub const VTable = extern struct {
+        QueryInterface: *const fn (*anyopaque, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
+        AddRef: *const fn (*anyopaque) callconv(.winapi) u32,
+        Release: *const fn (*anyopaque) callconv(.winapi) u32,
+        GetIids: VtblPlaceholder,
+        GetRuntimeClassName: VtblPlaceholder,
+        GetTrustLevel: VtblPlaceholder,
+        add_Rendering: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        remove_Rendering: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+        add_SurfaceContentsLost: *const fn (*anyopaque, ?*anyopaque, *EventRegistrationToken) callconv(.winapi) HRESULT,
+        remove_SurfaceContentsLost: *const fn (*anyopaque, EventRegistrationToken) callconv(.winapi) HRESULT,
+    };
+    pub fn release(self: *@This()) void {
+        comRelease(self);
+    }
+    pub fn queryInterface(self: *@This(), comptime T: type) !*T {
+        return comQueryInterface(self, T);
+    }
+    pub fn addRendering(self: *@This(), handler: ?*anyopaque) !EventRegistrationToken {
+        var token: EventRegistrationToken = 0;
+        try hrCheck(self.lpVtbl.add_Rendering(@ptrCast(self), handler, &token));
+        return token;
+    }
+    pub fn removeRendering(self: *@This(), token: EventRegistrationToken) !void {
+        try hrCheck(self.lpVtbl.remove_Rendering(@ptrCast(self), token));
+    }
+};
+
 // --- WinUI3 Controls: ISplitButton, IMenuFlyout ---
 // IIDs extracted from Microsoft.UI.Xaml.winmd via win-zig-bindgen.
 

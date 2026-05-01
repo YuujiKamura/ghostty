@@ -31,6 +31,7 @@ pub const Buffer = bufferpkg.Buffer;
 pub const Sampler = @import("d3d11/Sampler.zig");
 pub const Texture = @import("d3d11/Texture.zig");
 pub const shaders = @import("d3d11/shaders.zig");
+pub const constants = @import("d3d11/constants.zig");
 
 pub const custom_shader_target: shadertoy.Target = .hlsl;
 /// D3D11: +Y = down (screen coordinates), unlike OpenGL.

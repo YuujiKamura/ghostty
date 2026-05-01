@@ -3113,6 +3113,25 @@ pub fn stowedExceptionHandler(exception_info: *os.EXCEPTION_POINTERS) callconv(.
     if (code == 0xE06D7363) return 0;
     // MS_VC_EXCEPTION: SetThreadName via RaiseException (debugger thread naming).
     if (code == 0x406D1388) return 0;
+    // DBG_PRINTEXCEPTION_C: Windows uses this to deliver OutputDebugStringA
+    // payloads. Decode the message string (arg0=length, arg1=ANSI ptr) so we
+    // can see what D3D11 debug layer is shouting about.
+    if (code == 0x40010006 or code == 0x4001000A) {
+        if (rec.NumberParameters >= 2) {
+            const len = rec.ExceptionInformation[0];
+            const ansi_ptr_addr = rec.ExceptionInformation[1];
+            if (len > 0 and ansi_ptr_addr != 0) {
+                const ptr: [*]const u8 = @ptrFromInt(ansi_ptr_addr);
+                // Trim final NUL/newline if present.
+                var n: usize = if (len > 0) len - 1 else 0;
+                while (n > 0 and (ptr[n - 1] == 0 or ptr[n - 1] == '\n' or ptr[n - 1] == '\r')) n -= 1;
+                if (n > 0) {
+                    log.info("dbg_print: {s}", .{ptr[0..n]});
+                }
+            }
+        }
+        return 0;
+    }
     log.err("!!! EXCEPTION code=0x{X:0>8} addr={?} !!!", .{ code, rec.ExceptionAddress });
     return 0; // EXCEPTION_CONTINUE_SEARCH
 }

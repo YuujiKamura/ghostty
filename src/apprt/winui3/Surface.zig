@@ -611,12 +611,13 @@ pub fn Surface(comptime App: type) type {
                 } else |_| {}
 
                 if (self.rendering_token != 0) {
-                    const class_name = winrt.hstring("Microsoft.UI.Xaml.Media.CompositionTarget") catch {};
-                    defer winrt.deleteHString(class_name);
-                    if (winrt.getActivationFactory(com.ICompositionTargetStatics, class_name)) |statics| {
-                        defer statics.release();
-                        statics.removeRendering(self.rendering_token) catch {};
-                        self.rendering_token = 0;
+                    if (winrt.hstring("Microsoft.UI.Xaml.Media.CompositionTarget")) |class_name| {
+                        defer winrt.deleteHString(class_name);
+                        if (winrt.getActivationFactory(com.ICompositionTargetStatics, class_name)) |statics| {
+                            defer statics.release();
+                            statics.removeRendering(self.rendering_token) catch {};
+                            self.rendering_token = 0;
+                        } else |_| {}
                     } else |_| {}
                 }
 

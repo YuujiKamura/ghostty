@@ -117,5 +117,6 @@ pub const IDesktopWindowXamlSource = native.IDesktopWindowXamlSource;
 pub const IDesktopWindowXamlSourceFactory = native.IDesktopWindowXamlSourceFactory;
 pub const IDesktopChildSiteBridge = native.IDesktopChildSiteBridge;
 pub const IClosable = native.IClosable;
+pub const ICompositionTargetStatics = native.ICompositionTargetStatics;
 
 pub const IID_EventHandler = gen.IID_EventHandler;
