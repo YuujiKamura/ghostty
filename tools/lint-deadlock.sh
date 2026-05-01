@@ -223,9 +223,14 @@ run_rule \
     "error" \
     "src/Surface.zig" \
     "src/apprt/winui3" \
-    "src/apprt/win32" \
-    "src/apprt/embedded.zig" \
-    "src/apprt/gtk/class/application.zig"
+    "src/apprt/win32"
+# Note: src/apprt/embedded.zig and src/apprt/gtk/* were previously listed
+# above. They were dropped per the fork-sprawl cleanup (.dispatch/team-sprawl-A1):
+# we do not ship the embedded/gtk apprts, so cross-apprt-contamination edits
+# (including #218-family fixes) are not our responsibility — those files are
+# kept verbatim from upstream. Re-adding them here would force us to either
+# carry local edits in non-shipping apprts or LINT-ALLOW them, both of which
+# violate heavy-fork-stewardship. See `wrap-first-in-apprt`.
 
 # Rule 2: `INFINITE` argument to a Win32 wait / message-wait API.
 #
