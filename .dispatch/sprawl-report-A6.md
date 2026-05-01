@@ -72,7 +72,27 @@ src/fontconfig/windows/conf.d/README           annot=1
 
 ## Test gate
 
-Build-runner crash unrelated to A6 changes (pre-existing Zig 0.15.2 + build script `convertPathArg` `assert(!std.fs.path.isAbsolute(...))` panic in configure phase, repros on `zig build --help`-adjacent steps). `zig ast-check` passes for moved files and for `discovery.zig`. `zig fmt --check` clean. Functional test deferred to A4-coordinated build pass.
+Per hub addendum (commit-bucketed test gate):
+
+| Commit hash | Category | Gate | Result |
+|---|---|---|---|
+| `3a0475751` directwrite/dwrite_generated MOVE + discovery.zig path/annotation | (b) logic/move/wrap | `zig build test -Dapp-runtime=win32 -Dtest-filter="font"` | **PASS** (EXIT=0) |
+| `aba70c04f` opentype/glyf/coretext REVERT | (a) revert | `zig fmt --check` + `zig ast-check` + (b) covers it | **PASS** |
+| `ad441b0a9` backend/face/library/shape/SharedGridSet/harfbuzz annotations | (a) annotation only | fmt + ast-check + (b) covers it | **PASS** |
+| `e12c672ec` fontconfig/* annotations (XML/text only, no Zig) | (a) annotation only | doc/comment-only | **PASS** (no Zig surface) |
+
+Highest category in chunk → (b) ran for all Zig changes. Invocation:
+
+```
+env -u ZIG_GLOBAL_CACHE_DIR zig build test -Dapp-runtime=win32 \
+  -Dtest-filter="font" \
+  --prefix zig-out-a6-test \
+  --global-cache-dir "$HOME/.cache/zig"
+```
+
+`zig fmt --check` and `zig ast-check` clean on all 9 touched .zig files prior to test run. Test output included expected `[font_shaper] (warn): failed to parse font feature setting` lines from negative-path test cases.
+
+**Note on infra recovery:** the earlier observed `ZIG_GLOBAL_CACHE_DIR= zig build` panic (`convertPathArg`/`unable to find module 'zigimg'`) was caused by parallel-team `p/` directory pollution when the empty global-cache-dir env var redirected Zig to a half-populated package cache from a peer session. Setting `--global-cache-dir "$HOME/.cache/zig"` explicitly bypasses that pollution and lets the proper dependency tree resolve.
 
 ## Issues filed
 
