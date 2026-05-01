@@ -1991,6 +1991,17 @@ pub fn Surface(comptime App: type) type {
             };
         }
 
+        /// Ctx for `dispatchUtf16Units` that forwards each UTF-16 code
+        /// unit to `handleCharEvent`. Returns false from `emit` once the
+        /// surface is closed so the dispatcher stops cleanly.
+        const SurfaceTsfOutputCtx = struct {
+            surface: *Self,
+            pub fn emit(self: *@This(), unit: u16) bool {
+                self.surface.handleCharEvent(unit);
+                return !self.surface.closed;
+            }
+        };
+
         /// Called by TSF when text is finalized (user confirmed candidate / pressed Enter).
         /// Sends each code unit to the PTY via handleCharEvent, matching the pattern
         /// used by flushImeTextBoxCommittedDelta.
@@ -2000,26 +2011,8 @@ pub fn Surface(comptime App: type) type {
 
             log.debug("TSF output: {} bytes", .{text_utf8.len});
 
-            // Convert UTF-8 to UTF-16 code units and feed each one through
-            // handleCharEvent, which already handles surrogate pairs.
-            const view = std.unicode.Utf8View.initUnchecked(text_utf8);
-            var it = view.iterator();
-            while (it.nextCodepoint()) |cp| {
-                if (cp <= 0xFFFF) {
-                    // BMP: single UTF-16 code unit
-                    self.handleCharEvent(@intCast(cp));
-                    if (self.closed) return;
-                } else {
-                    // Supplementary plane: encode as surrogate pair
-                    const v = cp - 0x10000;
-                    const high: u16 = @intCast(0xD800 + (v >> 10));
-                    const low: u16 = @intCast(0xDC00 + (v & 0x3FF));
-                    self.handleCharEvent(high);
-                    if (self.closed) return;
-                    self.handleCharEvent(low);
-                    if (self.closed) return;
-                }
-            }
+            var ctx = SurfaceTsfOutputCtx{ .surface = self };
+            dispatchUtf16Units(text_utf8, &ctx);
         }
 
         /// Returns cursor screen-coordinate rectangle for TSF/IME candidate window placement.
@@ -2763,3 +2756,107 @@ pub fn Surface(comptime App: type) type {
         }
     }; // return struct
 } // pub fn Surface
+
+const dispatch_std = @import("std");
+
+/// Iterate UTF-8 `text` and emit each Unicode scalar as 1 or 2 UTF-16 code
+/// units to `ctx.emit(u16) bool`. Supplementary-plane scalars (>= 0x10000)
+/// are encoded as a high+low surrogate pair. `emit` returns true to keep
+/// dispatching, false to stop early (e.g. the consumer has been closed).
+///
+/// `ctx` must be a pointer to a struct with
+/// `pub fn emit(*Self, u16) bool`.
+pub fn dispatchUtf16Units(text: []const u8, ctx: anytype) void {
+    if (text.len == 0) return;
+    const view = dispatch_std.unicode.Utf8View.initUnchecked(text);
+    var it = view.iterator();
+    while (it.nextCodepoint()) |cp| {
+        if (cp <= 0xFFFF) {
+            if (!ctx.emit(@intCast(cp))) return;
+        } else {
+            const v = cp - 0x10000;
+            const high: u16 = @intCast(0xD800 + (v >> 10));
+            const low: u16 = @intCast(0xDC00 + (v & 0x3FF));
+            if (!ctx.emit(high)) return;
+            if (!ctx.emit(low)) return;
+        }
+    }
+}
+
+const RecordingCtx = struct {
+    units: dispatch_std.ArrayListUnmanaged(u16) = .empty,
+    closed: bool = false,
+    pub fn deinit(self: *@This(), alloc: dispatch_std.mem.Allocator) void {
+        self.units.deinit(alloc);
+    }
+    pub fn emit(self: *@This(), unit: u16) bool {
+        self.units.append(dispatch_std.testing.allocator, unit) catch unreachable;
+        return !self.closed;
+    }
+};
+
+test "dispatchUtf16Units: pure ASCII emits one unit per byte" {
+    const testing = dispatch_std.testing;
+    var ctx = RecordingCtx{};
+    defer ctx.deinit(testing.allocator);
+
+    dispatchUtf16Units("abc", &ctx);
+
+    try testing.expectEqualSlices(u16, &.{ 0x61, 0x62, 0x63 }, ctx.units.items);
+}
+
+test "dispatchUtf16Units: BMP CJK emits single code unit" {
+    const testing = dispatch_std.testing;
+    var ctx = RecordingCtx{};
+    defer ctx.deinit(testing.allocator);
+
+    dispatchUtf16Units("\u{65E5}", &ctx); // U+65E5 日
+
+    try testing.expectEqualSlices(u16, &.{0x65E5}, ctx.units.items);
+}
+
+test "dispatchUtf16Units: supplementary plane emits surrogate pair" {
+    const testing = dispatch_std.testing;
+    var ctx = RecordingCtx{};
+    defer ctx.deinit(testing.allocator);
+
+    dispatchUtf16Units("\u{20BB7}", &ctx); // U+20BB7 𠮷
+
+    try testing.expectEqualSlices(u16, &.{ 0xD842, 0xDFB7 }, ctx.units.items);
+}
+
+test "dispatchUtf16Units: mixed BMP and supplementary" {
+    const testing = dispatch_std.testing;
+    var ctx = RecordingCtx{};
+    defer ctx.deinit(testing.allocator);
+
+    dispatchUtf16Units("a\u{65E5}\u{20BB7}", &ctx);
+
+    try testing.expectEqualSlices(
+        u16,
+        &.{ 0x61, 0x65E5, 0xD842, 0xDFB7 },
+        ctx.units.items,
+    );
+}
+
+test "dispatchUtf16Units: emit returning false halts mid-stream" {
+    const testing = dispatch_std.testing;
+    const StopAfterFirst = struct {
+        units: dispatch_std.ArrayListUnmanaged(u16) = .empty,
+        pub fn deinit(self: *@This(), alloc: dispatch_std.mem.Allocator) void {
+            self.units.deinit(alloc);
+        }
+        pub fn emit(self: *@This(), unit: u16) bool {
+            self.units.append(dispatch_std.testing.allocator, unit) catch unreachable;
+            return false; // signal "stop after this emit"
+        }
+    };
+
+    var ctx = StopAfterFirst{};
+    defer ctx.deinit(testing.allocator);
+
+    dispatchUtf16Units("abc", &ctx);
+
+    // Only the first emit should land; emit returning false halts the loop.
+    try testing.expectEqualSlices(u16, &.{0x61}, ctx.units.items);
+}
