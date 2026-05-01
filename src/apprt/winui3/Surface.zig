@@ -2029,21 +2029,25 @@ pub fn Surface(comptime App: type) type {
             // Convert to integer pixel coordinates.
             // imePoint divides by content_scale, so we need to multiply back to get
             // physical pixels for ClientToScreen.
-            const scale_x: f64 = if (self.content_scale.x > 0) @as(f64, @floatCast(self.content_scale.x)) else 1.0;
-            const scale_y: f64 = if (self.content_scale.y > 0) @as(f64, @floatCast(self.content_scale.y)) else 1.0;
-
-            const left_px: i32 = @intFromFloat(ime_pos.x * scale_x);
-            const top_px: i32 = @intFromFloat(ime_pos.y * scale_y);
-            const bottom_px: i32 = @intFromFloat((ime_pos.y + ime_pos.height) * scale_y);
+            const px_rect = computeImePixelRect(
+                self.content_scale.x,
+                self.content_scale.y,
+                ime_pos,
+            );
 
             // Convert client coordinates to screen coordinates using the main HWND.
             const hwnd = self.app.hwnd orelse {
                 log.debug("TSF getTsfCursorRect: no hwnd", .{});
-                return .{ .left = left_px, .top = top_px, .right = left_px + 1, .bottom = bottom_px };
+                return .{
+                    .left = px_rect.left,
+                    .top = px_rect.top,
+                    .right = px_rect.right,
+                    .bottom = px_rect.bottom,
+                };
             };
 
-            var pt_top_left = os.POINT{ .x = left_px, .y = top_px };
-            var pt_bottom_right = os.POINT{ .x = left_px + 1, .y = bottom_px };
+            var pt_top_left = os.POINT{ .x = px_rect.left, .y = px_rect.top };
+            var pt_bottom_right = os.POINT{ .x = px_rect.right, .y = px_rect.bottom };
             _ = os.ClientToScreen(hwnd, &pt_top_left);
             _ = os.ClientToScreen(hwnd, &pt_bottom_right);
 
@@ -2574,8 +2578,8 @@ pub fn Surface(comptime App: type) type {
             if (!value) return;
 
             const now = std.time.nanoTimestamp();
-            const min_interval_ns = 100 * std.time.ns_per_ms;
-            if (now - self.last_bell_ns < min_interval_ns) return;
+            const min_interval_ns: i128 = 100 * std.time.ns_per_ms;
+            if (!shouldRingBell(now, self.last_bell_ns, min_interval_ns)) return;
             self.last_bell_ns = now;
 
             log.info("Surface.setBellRinging: Ringing visual/audio bell", .{});
@@ -2859,4 +2863,117 @@ test "dispatchUtf16Units: emit returning false halts mid-stream" {
 
     // Only the first emit should land; emit returning false halts the loop.
     try testing.expectEqualSlices(u16, &.{0x61}, ctx.units.items);
+}
+
+const dispatch_apprt = @import("../../apprt.zig");
+
+/// Throttle predicate for `setBellRinging`. Returns true when enough time has
+/// elapsed since the last bell ring to permit another. All values are in
+/// nanoseconds. The boundary case `(now - last) == min_interval` rings.
+pub fn shouldRingBell(now_ns: i128, last_ns: i128, min_interval_ns: i128) bool {
+    return (now_ns - last_ns) >= min_interval_ns;
+}
+
+test "shouldRingBell: well past interval rings" {
+    const ms = dispatch_std.time.ns_per_ms;
+    try dispatch_std.testing.expect(shouldRingBell(200 * ms, 0, 100 * ms));
+}
+
+test "shouldRingBell: under interval is silent" {
+    const ms = dispatch_std.time.ns_per_ms;
+    try dispatch_std.testing.expect(!shouldRingBell(50 * ms, 0, 100 * ms));
+}
+
+test "shouldRingBell: exactly at interval boundary rings" {
+    const ms = dispatch_std.time.ns_per_ms;
+    try dispatch_std.testing.expect(shouldRingBell(100 * ms, 0, 100 * ms));
+}
+
+test "shouldRingBell: zero delta is silent" {
+    const ms = dispatch_std.time.ns_per_ms;
+    try dispatch_std.testing.expect(!shouldRingBell(500 * ms, 500 * ms, 100 * ms));
+}
+
+test "shouldRingBell: zero min_interval always rings" {
+    try dispatch_std.testing.expect(shouldRingBell(0, 0, 0));
+}
+
+/// Pixel-space rectangle in client coordinates (pre-`ClientToScreen`).
+pub const ImePixelRect = struct {
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+};
+
+/// Convert an IME caret position (DIPs, from `Surface.imePoint()`) into a
+/// 1-pixel-wide client-space rectangle suitable for `ClientToScreen`. Scale
+/// values <= 0 are treated as 1.0 to avoid divide-by-zero / NaN propagation
+/// from upstream content-scale glitches. The `right = left + 1` invariant
+/// matches what TSF expects for a thin caret.
+pub fn computeImePixelRect(
+    scale_x: f32,
+    scale_y: f32,
+    ime: dispatch_apprt.IMEPos,
+) ImePixelRect {
+    const sx: f64 = if (scale_x > 0) @as(f64, @floatCast(scale_x)) else 1.0;
+    const sy: f64 = if (scale_y > 0) @as(f64, @floatCast(scale_y)) else 1.0;
+    const left_px: i32 = @intFromFloat(ime.x * sx);
+    const top_px: i32 = @intFromFloat(ime.y * sy);
+    const bottom_px: i32 = @intFromFloat((ime.y + ime.height) * sy);
+    return .{
+        .left = left_px,
+        .top = top_px,
+        .right = left_px + 1,
+        .bottom = bottom_px,
+    };
+}
+
+test "computeImePixelRect: nominal scale=1 maps DIP to pixel 1:1" {
+    const r = computeImePixelRect(1.0, 1.0, .{ .x = 10, .y = 20, .width = 7, .height = 15 });
+    try dispatch_std.testing.expectEqual(@as(i32, 10), r.left);
+    try dispatch_std.testing.expectEqual(@as(i32, 20), r.top);
+    try dispatch_std.testing.expectEqual(@as(i32, 11), r.right);
+    try dispatch_std.testing.expectEqual(@as(i32, 35), r.bottom);
+}
+
+test "computeImePixelRect: scale_x=0 falls back to 1.0 (no divide-by-zero)" {
+    const r = computeImePixelRect(0.0, 1.0, .{ .x = 10, .y = 20, .width = 7, .height = 15 });
+    try dispatch_std.testing.expectEqual(@as(i32, 10), r.left);
+    try dispatch_std.testing.expectEqual(@as(i32, 11), r.right);
+    try dispatch_std.testing.expectEqual(@as(i32, 20), r.top);
+    try dispatch_std.testing.expectEqual(@as(i32, 35), r.bottom);
+}
+
+test "computeImePixelRect: scale_y=0 falls back to 1.0" {
+    const r = computeImePixelRect(1.0, 0.0, .{ .x = 10, .y = 20, .width = 7, .height = 15 });
+    try dispatch_std.testing.expectEqual(@as(i32, 20), r.top);
+    try dispatch_std.testing.expectEqual(@as(i32, 35), r.bottom);
+}
+
+test "computeImePixelRect: negative scale falls back to 1.0" {
+    const r = computeImePixelRect(-2.0, -2.0, .{ .x = 10, .y = 20, .width = 7, .height = 15 });
+    try dispatch_std.testing.expectEqual(@as(i32, 10), r.left);
+    try dispatch_std.testing.expectEqual(@as(i32, 35), r.bottom);
+}
+
+test "computeImePixelRect: scale_x=2.0 doubles x coords, scale_y unchanged" {
+    const r = computeImePixelRect(2.0, 1.0, .{ .x = 10, .y = 20, .width = 7, .height = 15 });
+    try dispatch_std.testing.expectEqual(@as(i32, 20), r.left);
+    try dispatch_std.testing.expectEqual(@as(i32, 21), r.right);
+    try dispatch_std.testing.expectEqual(@as(i32, 20), r.top);
+    try dispatch_std.testing.expectEqual(@as(i32, 35), r.bottom);
+}
+
+test "computeImePixelRect: scale_y=2.0 doubles y coords" {
+    const r = computeImePixelRect(1.0, 2.0, .{ .x = 10, .y = 20, .width = 7, .height = 15 });
+    try dispatch_std.testing.expectEqual(@as(i32, 40), r.top);
+    try dispatch_std.testing.expectEqual(@as(i32, 70), r.bottom);
+}
+
+test "computeImePixelRect: right is always left+1 (thin caret invariant)" {
+    const r1 = computeImePixelRect(1.0, 1.0, .{ .x = 0, .y = 0, .width = 0, .height = 0 });
+    try dispatch_std.testing.expectEqual(r1.left + 1, r1.right);
+    const r2 = computeImePixelRect(3.5, 1.0, .{ .x = 100, .y = 0, .width = 50, .height = 0 });
+    try dispatch_std.testing.expectEqual(r2.left + 1, r2.right);
 }
