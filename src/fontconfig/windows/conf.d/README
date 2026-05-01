@@ -1,2 +1,7 @@
 Optional Fontconfig snippets for Windows can be placed here.
 The bundled fonts.conf includes this directory with ignore_missing="yes".
+
+UPSTREAM-SHARED-OK: src/fontconfig/ is a fork-only tree; logical home
+is src/apprt/winui3/fontconfig/conf.d/. Move deferred (couples with
+src/build/GhosttyResources.zig install path, A4 territory).
+#264 / wrap-first-in-apprt.
