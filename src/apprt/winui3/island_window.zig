@@ -6,7 +6,7 @@
 ///   - OnSize: SiteBridge child HWND sizing (manual fallback if ResizePolicy unavailable)
 ///   - SetContent/Close: XAML root element lifecycle
 ///
-/// Ref: github.com/microsoft/terminal/blob/main/src/cascadia/WindowsTerminal/IslandWindow.cpp
+// Ref: microsoft/terminal src/cascadia/WindowsTerminal/IslandWindow.cpp#IslandWindow @ e4e3f08efca9 — XAML Islands host pattern: top-level HWND with WS_EX_NOREDIRECTIONBITMAP hosting a DesktopWindowXamlSource via WindowId interop
 const std = @import("std");
 const com = @import("com.zig");
 const os = @import("os.zig");
@@ -37,6 +37,7 @@ const CLASS_NAME = std.unicode.utf8ToUtf16LeStringLiteral("GhosttyWindow");
 var class_registered: bool = false;
 
 /// WT: IslandWindow::MakeWindow()
+// Ref: microsoft/terminal src/cascadia/WindowsTerminal/IslandWindow.cpp#MakeWindow @ e4e3f08efca9 — register class once, CreateWindowExW with WS_EX_NOREDIRECTIONBITMAP and pass `this` via CREATESTRUCT.lpCreateParams → GWLP_USERDATA
 ///
 /// Registers the window class (once) and creates the top-level HWND.
 /// `app_ptr` is stored via lpParam → WM_CREATE → GWLP_USERDATA so the
@@ -109,6 +110,7 @@ pub fn makeWindow(app_ptr: *anyopaque, wndproc_fn: os.WNDPROC) !IslandWindow {
 }
 
 /// WT: IslandWindow::Initialize()
+// Ref: microsoft/terminal src/cascadia/WindowsTerminal/IslandWindow.cpp#Initialize @ e4e3f08efca9 — activate DesktopWindowXamlSource, call Initialize(WindowId{ HWND }), then drive ResizePolicy or fall back to GW_CHILD SiteBridge HWND for manual sizing
 ///
 /// Creates a DesktopWindowXamlSource via the activation factory,
 /// initializes it with this window's HWND, and attempts to set the
@@ -163,6 +165,7 @@ pub fn setContent(self: *IslandWindow, content: ?*anyopaque) !void {
 }
 
 /// WT: IslandWindow::OnSize()
+// Ref: microsoft/terminal src/cascadia/WindowsTerminal/IslandWindow.cpp#OnSize @ e4e3f08efca9 — manual SetWindowPos on the interop child HWND when ResizePolicy is not active; no-op when the SiteBridge auto-resizes
 ///
 /// When using manual sizing (no ResizePolicy), resizes the interop HWND
 /// to match the given client dimensions. When auto_resize is true, this
@@ -183,6 +186,7 @@ pub fn onSize(self: *IslandWindow, width: c_int, height: c_int) void {
 }
 
 /// WT: IslandWindow::Close()
+// Ref: microsoft/terminal src/cascadia/WindowsTerminal/IslandWindow.cpp#Close @ e4e3f08efca9 — strict order avoids leaking the XAML tree: SetContent(null) → xaml_source.Close() (IClosable) → DestroyWindow on the host HWND
 ///
 /// Follows Windows Terminal's close sequence to prevent leaks:
 ///   1. SetContent(null) — detach XAML tree

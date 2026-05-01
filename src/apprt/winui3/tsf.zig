@@ -2,6 +2,10 @@
 //!
 //! This is a Zig port of Windows Terminal's TSF implementation, derived from
 //! Leonard Hecker's rewrite in PR #17067 (microsoft/terminal#17067).
+//
+// Ref: microsoft/terminal src/cascadia/TerminalControl/TSFInputControl.cpp#TSFInputControl @ e4e3f08efca9 — direct ITfThreadMgrEx on the top-level HWND (not on a XAML TextBox) to bypass focus races and composition desync
+// Ref: microsoft/terminal src/cascadia/TerminalControl/TSFInputControl.cpp#_doCompositionUpdate @ e4e3f08efca9 — walk GUID_PROP_COMPOSING / GUID_PROP_ATTRIBUTE ranges via TrackProperties to split finalized text from active preedit
+// Ref: microsoft/terminal pull/17067 @ e4e3f08efca9 — Hecker's TSF rewrite (replaced XAML TextBox); this port preserves the async EditSession proxy and the handleOutput / handlePreedit callback split
 //!
 //! ## Design decisions inherited from WT PR #17067
 //!

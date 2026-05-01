@@ -3,6 +3,9 @@
 //! Registers Tapped + PointerEntered/Exited handlers on Border elements
 //! defined in TabViewRoot.xaml (Column 2 of the titlebar Grid).
 //! Close button gets red hover (#C42B1C), others get subtle white overlay.
+//
+// Ref: microsoft/terminal src/cascadia/TerminalApp/MinMaxCloseControl.xaml @ e4e3f08efca9 — XAML-rendered Min/Max/Close in the titlebar Grid (DWM cannot draw caption buttons after WM_NCCALCSIZE removes the NC area), with #C42B1C red hover on Close
+// Ref: microsoft/terminal src/cascadia/TerminalApp/MinMaxCloseControl.cpp#_OnMinimizeClick @ e4e3f08efca9 — post WM_SYSCOMMAND SC_MINIMIZE / SC_MAXIMIZE / SC_RESTORE / SC_CLOSE to the host HWND from the XAML click handler
 
 const std = @import("std");
 const com = @import("com.zig");

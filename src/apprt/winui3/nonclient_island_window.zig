@@ -7,7 +7,7 @@
 ///   - Drag bar child window (input sink for titlebar mouse events)
 ///   - Dark mode + caption color via DWM attributes
 ///
-/// Ref: github.com/microsoft/terminal/blob/main/src/cascadia/WindowsTerminal/NonClientIslandWindow.cpp
+// Ref: microsoft/terminal src/cascadia/WindowsTerminal/NonClientIslandWindow.cpp#NonClientIslandWindow @ e4e3f08efca9 — custom titlebar via WM_NCCALCSIZE + DwmExtendFrameIntoClientArea + transparent drag-bar child HWND
 const std = @import("std");
 const os = @import("os.zig");
 const IslandWindow = @import("island_window.zig");
@@ -71,6 +71,7 @@ fn isDebugDragBarStatic() bool {
 
 // ---------------------------------------------------------------------------
 // Construction — WT: NonClientIslandWindow::MakeWindow()
+// Ref: microsoft/terminal src/cascadia/WindowsTerminal/NonClientIslandWindow.cpp#MakeWindow @ e4e3f08efca9 — wrap IslandWindow + apply WS_CLIPCHILDREN so parent does not paint over the drag bar child HWND
 // ---------------------------------------------------------------------------
 
 pub fn init(self: *NonClientIslandWindow, app_ptr: *anyopaque) !void {
@@ -128,6 +129,7 @@ pub fn destroyDragBarWindow(self: *NonClientIslandWindow) void {
 
 // ---------------------------------------------------------------------------
 // DWM frame management — WT: _UpdateFrameMargins()
+// Ref: microsoft/terminal src/cascadia/WindowsTerminal/NonClientIslandWindow.cpp#_UpdateFrameMargins @ e4e3f08efca9 — compute -frame.top via AdjustWindowRectExForDpi as the cyTopHeight margin for DwmExtendFrameIntoClientArea
 // ---------------------------------------------------------------------------
 
 /// WT uses AdjustWindowRectExForDpi to compute -frame.top as the margin.
@@ -191,6 +193,7 @@ pub fn updateFrameMargins(self: *NonClientIslandWindow) void {
 
 // ---------------------------------------------------------------------------
 // WM_NCCALCSIZE — WT: _OnNcCalcSize
+// Ref: microsoft/terminal src/cascadia/WindowsTerminal/NonClientIslandWindow.cpp#_OnNcCalcSize @ e4e3f08efca9 — let DefWindowProc compute borders, then restore original top to remove system titlebar; offset by resize-handle height when zoomed
 // ---------------------------------------------------------------------------
 
 pub fn onNcCalcSize(hwnd: os.HWND, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
@@ -217,6 +220,7 @@ pub fn onNcCalcSize(hwnd: os.HWND, wparam: os.WPARAM, lparam: os.LPARAM) os.LRES
 
 // ---------------------------------------------------------------------------
 // WM_NCHITTEST — WT: _OnNcHitTest
+// Ref: microsoft/terminal src/cascadia/WindowsTerminal/NonClientIslandWindow.cpp#_OnNcHitTest @ e4e3f08efca9 — defer to DefWindowProc; only override HTCLIENT into HTTOP/HTCAPTION for resize handle and titlebar drag area
 // ---------------------------------------------------------------------------
 
 pub fn onNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
@@ -257,6 +261,7 @@ pub fn onNcHitTest(hwnd: os.HWND, lparam: os.LPARAM) os.LRESULT {
 
 // ---------------------------------------------------------------------------
 // Island positioning — WT: _UpdateIslandPosition
+// Ref: microsoft/terminal src/cascadia/WindowsTerminal/NonClientIslandWindow.cpp#_UpdateIslandPosition @ e4e3f08efca9 — shift the XAML island down by topBorderHeight so the 1px top stripe is reserved for resize / Fitt's Law
 // ---------------------------------------------------------------------------
 
 /// WT places the island at HWND_BOTTOM with SWP_SHOWWINDOW | SWP_NOACTIVATE.
@@ -373,6 +378,8 @@ pub fn getDragAreaLeft(self: *NonClientIslandWindow) c_int {
 
 // ---------------------------------------------------------------------------
 // Helpers — WT: _GetTopBorderHeight, _GetResizeHandleHeight
+// Ref: microsoft/terminal src/cascadia/WindowsTerminal/NonClientIslandWindow.cpp#_GetTopBorderHeight @ e4e3f08efca9 — return topBorderVisibleHeight (1) when normal, 0 when maximized/fullscreen
+// Ref: microsoft/terminal src/cascadia/WindowsTerminal/NonClientIslandWindow.cpp#_GetResizeHandleHeight @ e4e3f08efca9 — SM_CXPADDEDBORDER + SM_CYSIZEFRAME at the window's DPI
 // ---------------------------------------------------------------------------
 
 fn isDebugDragBar(self: *const NonClientIslandWindow) bool {
@@ -396,6 +403,7 @@ fn getResizeHandleHeight(hwnd: os.HWND) c_int {
 
 // ---------------------------------------------------------------------------
 // Drag bar window creation — WT: MakeWindow() drag bar section
+// Ref: microsoft/terminal src/cascadia/WindowsTerminal/NonClientIslandWindow.cpp#MakeWindow @ e4e3f08efca9 — register a private wndclass for the transparent drag-bar child HWND (cbWndExtra = sizeof(NonClientIslandWindow*)) sitting at HWND_TOP over the titlebar
 // ---------------------------------------------------------------------------
 
 fn createDragBarWindow(self: *NonClientIslandWindow) ?os.HWND {
