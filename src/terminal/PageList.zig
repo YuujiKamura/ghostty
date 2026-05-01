@@ -14656,7 +14656,9 @@ test "PageList split preserves hyperlinks" {
 }
 
 // ============================================================
-// Issue #138: Scrollback limit regression tests for PageList
+// UPSTREAM-SHARED-OK: Issue #138 scrollback regression tests live next to the
+// code they exercise (upstream-shared PageList). They have no apprt coupling
+// and are upstream-PR candidates.
 // ============================================================
 
 test "PageList max_size 0 means no scrollback not unlimited" {
