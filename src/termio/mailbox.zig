@@ -5,7 +5,9 @@ const renderer = @import("../renderer.zig");
 const termio = @import("../termio.zig");
 const datastruct = @import("../datastruct/main.zig");
 const BlockingQueue = datastruct.BlockingQueue;
-const BoundedMailbox = datastruct.BoundedMailbox;
+// #251: BoundedMailbox lives in apprt/winui3/ to keep upstream-shared
+// `src/datastruct/` clean.
+const BoundedMailbox = @import("../apprt/winui3/safe_mailbox.zig").BoundedMailbox;
 
 const log = std.log.scoped(.io_writer);
 

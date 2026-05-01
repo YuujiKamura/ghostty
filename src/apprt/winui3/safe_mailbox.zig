@@ -726,7 +726,7 @@ test "compile-time .forever variant does not exist (#232 structural guarantee)" 
 }
 
 // To verify the compile-time guarantee experientially, uncomment this
-// test and run `zig test src/datastruct/bounded_mailbox.zig`. It MUST
+// test and run `zig test src/apprt/winui3/safe_mailbox.zig`. It MUST
 // fail with `BoundedMailbox(T, N, null).push() is unbounded — ...`.
 //
 // Leaving this active by default would prevent the file from compiling,

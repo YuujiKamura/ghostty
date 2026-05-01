@@ -63,8 +63,10 @@ const testing = std.testing;
 // Imported as named modules so this file can sit outside `src/` and
 // still build via `zig test` with `--dep blocking_queue --dep
 // bounded_mailbox -Mroot=... -Mblocking_queue=src/datastruct/
-// blocking_queue.zig -Mbounded_mailbox=src/datastruct/
-// bounded_mailbox.zig`.
+// blocking_queue.zig -Mbounded_mailbox=src/apprt/winui3/safe_mailbox.zig`.
+// (Path moved per #251 — file relocated from `src/datastruct/`. The named
+// module is still called `bounded_mailbox` because the public type name
+// is unchanged.)
 const blocking_queue = @import("blocking_queue");
 const BlockingQueue = blocking_queue.BlockingQueue;
 const bounded_mailbox = @import("bounded_mailbox");

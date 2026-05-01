@@ -14,7 +14,10 @@ const configpkg = @import("config.zig");
 const Config = configpkg.Config;
 const datastruct = @import("datastruct/main.zig");
 const BlockingQueue = datastruct.BlockingQueue;
-const BoundedMailbox = datastruct.BoundedMailbox;
+// #251: BoundedMailbox lives in apprt/winui3/ to keep upstream-shared
+// `src/datastruct/` clean. Imported directly so this remains a fork-only
+// edit (the symbol is no longer re-exported from `datastruct/main.zig`).
+const BoundedMailbox = @import("apprt/winui3/safe_mailbox.zig").BoundedMailbox;
 const renderer = @import("renderer.zig");
 const font = @import("font/main.zig");
 
