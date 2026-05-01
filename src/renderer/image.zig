@@ -1171,6 +1171,175 @@ test "shader_data.Image: round-trip through bytes preserves field values" {
     try testing.expectEqual(original.dest_size, restored.dest_size);
 }
 
+test "Image.isPending true for pending and replace variants" {
+    var data = [_]u8{0};
+    const pending: Image.Pending = .{
+        .height = 1,
+        .width = 1,
+        .pixel_format = .gray,
+        .data = &data,
+    };
+
+    const i_pending: Image = .{ .pending = pending };
+    try testing.expect(i_pending.isPending());
+
+    const i_unload_pending: Image = .{ .unload_pending = pending };
+    try testing.expect(i_unload_pending.isPending());
+
+    const i_replace: Image = .{ .replace = .{ .texture = undefined, .pending = pending } };
+    try testing.expect(i_replace.isPending());
+
+    const i_unload_replace: Image = .{ .unload_replace = .{ .texture = undefined, .pending = pending } };
+    try testing.expect(i_unload_replace.isPending());
+}
+
+test "Image.isPending false for ready and unload_ready" {
+    const i_ready: Image = .{ .ready = undefined };
+    try testing.expect(!i_ready.isPending());
+
+    const i_unload_ready: Image = .{ .unload_ready = undefined };
+    try testing.expect(!i_unload_ready.isPending());
+}
+
+test "Image.hasTexture true for ready/replace and their unload variants" {
+    var data = [_]u8{0};
+    const pending: Image.Pending = .{
+        .height = 1,
+        .width = 1,
+        .pixel_format = .gray,
+        .data = &data,
+    };
+
+    const i_ready: Image = .{ .ready = undefined };
+    try testing.expect(i_ready.hasTexture());
+
+    const i_unload_ready: Image = .{ .unload_ready = undefined };
+    try testing.expect(i_unload_ready.hasTexture());
+
+    const i_replace: Image = .{ .replace = .{ .texture = undefined, .pending = pending } };
+    try testing.expect(i_replace.hasTexture());
+
+    const i_unload_replace: Image = .{ .unload_replace = .{ .texture = undefined, .pending = pending } };
+    try testing.expect(i_unload_replace.hasTexture());
+}
+
+test "Image.hasTexture false for pending-only variants" {
+    var data = [_]u8{0};
+    const pending: Image.Pending = .{
+        .height = 1,
+        .width = 1,
+        .pixel_format = .gray,
+        .data = &data,
+    };
+
+    const i_pending: Image = .{ .pending = pending };
+    try testing.expect(!i_pending.hasTexture());
+
+    const i_unload_pending: Image = .{ .unload_pending = pending };
+    try testing.expect(!i_unload_pending.hasTexture());
+}
+
+test "Image.isUnloading true only for unload_* variants" {
+    var data = [_]u8{0};
+    const pending: Image.Pending = .{
+        .height = 1,
+        .width = 1,
+        .pixel_format = .gray,
+        .data = &data,
+    };
+
+    const i_unload_pending: Image = .{ .unload_pending = pending };
+    try testing.expect(i_unload_pending.isUnloading());
+    const i_unload_ready: Image = .{ .unload_ready = undefined };
+    try testing.expect(i_unload_ready.isUnloading());
+    const i_unload_replace: Image = .{ .unload_replace = .{ .texture = undefined, .pending = pending } };
+    try testing.expect(i_unload_replace.isUnloading());
+
+    const i_pending: Image = .{ .pending = pending };
+    try testing.expect(!i_pending.isUnloading());
+    const i_ready: Image = .{ .ready = undefined };
+    try testing.expect(!i_ready.isUnloading());
+    const i_replace: Image = .{ .replace = .{ .texture = undefined, .pending = pending } };
+    try testing.expect(!i_replace.isUnloading());
+}
+
+test "Image.markForUnload pending -> unload_pending preserves data" {
+    var data = [_]u8{ 0xAB, 0xCD, 0xEF, 0x12 };
+    const pending: Image.Pending = .{
+        .height = 1,
+        .width = 1,
+        .pixel_format = .rgba,
+        .data = &data,
+    };
+    var img: Image = .{ .pending = pending };
+    img.markForUnload();
+    try testing.expectEqual(std.meta.Tag(Image).unload_pending, std.meta.activeTag(img));
+    try testing.expectEqual(@intFromPtr(&data[0]), @intFromPtr(img.unload_pending.data));
+    try testing.expectEqual(@as(u32, 1), img.unload_pending.width);
+    try testing.expectEqual(@as(u32, 1), img.unload_pending.height);
+    try testing.expectEqual(Image.Pending.PixelFormat.rgba, img.unload_pending.pixel_format);
+}
+
+test "Image.markForUnload ready -> unload_ready" {
+    var img: Image = .{ .ready = undefined };
+    img.markForUnload();
+    try testing.expectEqual(std.meta.Tag(Image).unload_ready, std.meta.activeTag(img));
+}
+
+test "Image.markForUnload is idempotent on unload_* variants" {
+    var data = [_]u8{0};
+    const pending: Image.Pending = .{
+        .height = 1,
+        .width = 1,
+        .pixel_format = .gray,
+        .data = &data,
+    };
+
+    var img1: Image = .{ .unload_pending = pending };
+    img1.markForUnload();
+    try testing.expectEqual(std.meta.Tag(Image).unload_pending, std.meta.activeTag(img1));
+
+    var img2: Image = .{ .unload_ready = undefined };
+    img2.markForUnload();
+    try testing.expectEqual(std.meta.Tag(Image).unload_ready, std.meta.activeTag(img2));
+
+    var img3: Image = .{ .unload_replace = .{ .texture = undefined, .pending = pending } };
+    img3.markForUnload();
+    try testing.expectEqual(std.meta.Tag(Image).unload_replace, std.meta.activeTag(img3));
+}
+
+test "State.kittyRequiresUpdate false for fresh state and terminal" {
+    var term = try terminal.Terminal.init(testing.allocator, .{ .cols = 10, .rows = 10 });
+    defer term.deinit(testing.allocator);
+
+    var s: State = .empty;
+    defer s.deinit(testing.allocator);
+
+    try testing.expect(!s.kittyRequiresUpdate(&term));
+}
+
+test "State.kittyRequiresUpdate true when kitty_images dirty" {
+    var term = try terminal.Terminal.init(testing.allocator, .{ .cols = 10, .rows = 10 });
+    defer term.deinit(testing.allocator);
+    term.screens.active.kitty_images.dirty = true;
+
+    var s: State = .empty;
+    defer s.deinit(testing.allocator);
+
+    try testing.expect(s.kittyRequiresUpdate(&term));
+}
+
+test "State.kittyRequiresUpdate true when kitty_virtual set" {
+    var term = try terminal.Terminal.init(testing.allocator, .{ .cols = 10, .rows = 10 });
+    defer term.deinit(testing.allocator);
+
+    var s: State = .empty;
+    defer s.deinit(testing.allocator);
+    s.kitty_virtual = true;
+
+    try testing.expect(s.kittyRequiresUpdate(&term));
+}
+
 test "Overlay.pendingImage byte layout matches Pending.rgba expectations" {
     const sz = @import("size.zig").Size{
         .screen = .{ .width = 8, .height = 4 },
