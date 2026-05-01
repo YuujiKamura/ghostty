@@ -39,6 +39,118 @@ const log = std.log.scoped(.generic_renderer);
 /// Disabled by default to reduce Debug build overhead.
 const log_hot_path = false;
 
+/// Toggle a boolean flag and force a full redraw via the dirty tracker.
+///
+/// Extracted as a free helper so the toggle invariant
+/// (flip-then-mark-dirty) can be unit-tested without instantiating the
+/// templated `Renderer(GraphicsAPI)` type.
+pub fn toggleFlagAndMarkDirty(
+    flag: *bool,
+    dirty: *terminal.RenderState.Dirty,
+) void {
+    flag.* = !flag.*;
+    dirty.* = .full;
+}
+
+/// Replace an owned (heap-allocated) optional string with a duplicate of
+/// `new`, freeing the previous value. `new == null` clears the slot.
+///
+/// Extracted as a free helper so the alloc/free invariant of
+/// `Renderer.setTsfPreedit` can be unit-tested without the full
+/// `Renderer(GraphicsAPI)` template.
+pub fn replaceOwnedString(
+    alloc: Allocator,
+    slot: *?[]const u8,
+    new: ?[]const u8,
+) !void {
+    if (slot.*) |old| alloc.free(old);
+    slot.* = if (new) |n| try alloc.dupe(u8, n) else null;
+}
+
+test "toggleFlagAndMarkDirty flips false -> true and marks .full" {
+    var flag: bool = false;
+    var dirty: terminal.RenderState.Dirty = .false;
+    toggleFlagAndMarkDirty(&flag, &dirty);
+    try std.testing.expectEqual(true, flag);
+    try std.testing.expectEqual(@as(terminal.RenderState.Dirty, .full), dirty);
+}
+
+test "toggleFlagAndMarkDirty flips true -> false and marks .full" {
+    var flag: bool = true;
+    var dirty: terminal.RenderState.Dirty = .false;
+    toggleFlagAndMarkDirty(&flag, &dirty);
+    try std.testing.expectEqual(false, flag);
+    try std.testing.expectEqual(@as(terminal.RenderState.Dirty, .full), dirty);
+}
+
+test "toggleFlagAndMarkDirty over 3 cycles returns to original and always marks .full" {
+    var flag: bool = false;
+    var dirty: terminal.RenderState.Dirty = .partial;
+    toggleFlagAndMarkDirty(&flag, &dirty);
+    try std.testing.expectEqual(true, flag);
+    try std.testing.expectEqual(@as(terminal.RenderState.Dirty, .full), dirty);
+    dirty = .false;
+    toggleFlagAndMarkDirty(&flag, &dirty);
+    try std.testing.expectEqual(false, flag);
+    try std.testing.expectEqual(@as(terminal.RenderState.Dirty, .full), dirty);
+    dirty = .partial;
+    toggleFlagAndMarkDirty(&flag, &dirty);
+    try std.testing.expectEqual(true, flag);
+    try std.testing.expectEqual(@as(terminal.RenderState.Dirty, .full), dirty);
+}
+
+test "toggleFlagAndMarkDirty upgrades dirty=.partial to .full" {
+    var flag: bool = false;
+    var dirty: terminal.RenderState.Dirty = .partial;
+    toggleFlagAndMarkDirty(&flag, &dirty);
+    try std.testing.expectEqual(@as(terminal.RenderState.Dirty, .full), dirty);
+}
+
+test "replaceOwnedString sets value when slot is null" {
+    const alloc = std.testing.allocator;
+    var slot: ?[]const u8 = null;
+    try replaceOwnedString(alloc, &slot, "hello");
+    defer if (slot) |s| alloc.free(s);
+    try std.testing.expect(slot != null);
+    try std.testing.expectEqualStrings("hello", slot.?);
+}
+
+test "replaceOwnedString frees previous value before storing new one" {
+    const alloc = std.testing.allocator;
+    var slot: ?[]const u8 = null;
+    try replaceOwnedString(alloc, &slot, "first");
+    try replaceOwnedString(alloc, &slot, "second");
+    defer if (slot) |s| alloc.free(s);
+    try std.testing.expectEqualStrings("second", slot.?);
+}
+
+test "replaceOwnedString clears slot when new is null" {
+    const alloc = std.testing.allocator;
+    var slot: ?[]const u8 = null;
+    try replaceOwnedString(alloc, &slot, "value");
+    try replaceOwnedString(alloc, &slot, null);
+    try std.testing.expect(slot == null);
+}
+
+test "replaceOwnedString null -> null is a no-op" {
+    const alloc = std.testing.allocator;
+    var slot: ?[]const u8 = null;
+    try replaceOwnedString(alloc, &slot, null);
+    try std.testing.expect(slot == null);
+}
+
+test "replaceOwnedString stores duplicated bytes (caller buffer can be freed)" {
+    const alloc = std.testing.allocator;
+    var slot: ?[]const u8 = null;
+    {
+        const tmp = try alloc.dupe(u8, "ephemeral");
+        defer alloc.free(tmp);
+        try replaceOwnedString(alloc, &slot, tmp);
+    }
+    defer if (slot) |s| alloc.free(s);
+    try std.testing.expectEqualStrings("ephemeral", slot.?);
+}
+
 /// Create a renderer type with the provided graphics API wrapper.
 ///
 /// The graphics API wrapper must provide the interface outlined below.
@@ -156,15 +268,14 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         /// Custom shader uniform values.
         custom_shader_uniforms: shadertoy.Uniforms,
 
-        /// Timestamp we rendered out first frame.
-        ///
-        /// This is used when updating custom shader uniforms.
-        first_frame_time: ?std.time.Instant = null,
+        /// Current application time in seconds, provided by the UI layer.
+        current_time: f32 = 0,
 
-        /// Timestamp when we rendered out more recent frame.
-        ///
-        /// This is used when updating custom shader uniforms.
-        last_frame_time: ?std.time.Instant = null,
+        /// Application time of the previous frame in seconds.
+        last_time: f32 = 0,
+
+        /// The current FPS, provided by the UI layer.
+        current_fps: f32 = 0,
 
         /// The font structures.
         font_grid: *font.SharedGrid,
@@ -227,11 +338,13 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         /// Our overlay state, if any.
         overlay: ?Overlay = null,
 
+        /// Sampler used by the image pixel shader. Without this the GPU falls
+        /// back to a default sampler and emits DEVICE_DRAW_SAMPLER_NOT_SET
+        /// debug-layer warnings on every image draw call.
+        image_sampler: ?GraphicsAPI.Sampler = null,
+
         /// Whether to show the debug overlay.
         show_debug_overlay: bool = false,
-
-        /// The current FPS.
-        current_fps: f64 = 0,
 
         /// The current TSF preedit text.
         tsf_preedit: ?[]const u8 = null,
@@ -340,6 +453,13 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             /// Custom shader state, this is null if we have no custom shaders.
             custom_shader_state: ?CustomShaderState = null,
 
+            constants: if (@hasDecl(shaderpkg, "constants"))
+                Buffer(shaderpkg.constants.TerminalShaderConstants)
+            else
+                struct {
+                    pub fn deinit(_: @This()) void {}
+                },
+
             const UniformBuffer = Buffer(shaderpkg.Uniforms);
             const CellBgBuffer = Buffer(shaderpkg.CellBg);
             const CellTextBuffer = Buffer(shaderpkg.CellText);
@@ -351,6 +471,12 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 // a frame is drawn.
                 var uniforms = try UniformBuffer.init(api.uniformBufferOptions(), 1);
                 errdefer uniforms.deinit();
+
+                var constants = if (@hasDecl(shaderpkg, "constants"))
+                    try Buffer(shaderpkg.constants.TerminalShaderConstants).init(api.uniformBufferOptions(), 1)
+                else
+                    .{};
+                errdefer constants.deinit();
 
                 // Create GPU buffers for our cells.
                 //
@@ -400,6 +526,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
                 return .{
                     .uniforms = uniforms,
+                    .constants = constants,
                     .cells = cells,
                     .cells_bg = cells_bg,
                     .bg_image_buffer = bg_image_buffer,
@@ -413,6 +540,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             pub fn deinit(self: *FrameState) void {
                 self.target.deinit();
                 self.uniforms.deinit();
+                self.constants.deinit();
                 self.cells.deinit();
                 self.cells_bg.deinit();
                 self.grayscale.deinit();
@@ -787,6 +915,12 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
             try result.initShaders();
 
+            // Image pipeline sampler. The image pixel shader (shaders/hlsl/image.ps.hlsl)
+            // expects a sampler at slot 0; without one D3D11 falls back to defaults
+            // and emits DEVICE_DRAW_SAMPLER_NOT_SET warnings. We create one explicit
+            // sampler shared across all image draw calls (overlay + kitty).
+            result.image_sampler = GraphicsAPI.Sampler.init(api.samplerOptions()) catch null;
+
             // Ensure our undefined values above are correctly initialized.
             result.updateFontGridUniforms();
             result.updateScreenSizeUniforms();
@@ -798,6 +932,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
         pub fn deinit(self: *Self) void {
             if (self.overlay) |*overlay| overlay.deinit(self.alloc);
+            if (self.image_sampler) |*s| s.deinit();
             self.terminal_state.deinit(self.alloc);
             if (self.search_selected_match) |*m| m.arena.deinit();
             if (self.search_matches) |*m| m.arena.deinit();
@@ -1008,6 +1143,16 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         pub fn setVisible(self: *Self, visible: bool) void {
             // Pause/resume VSync based on visibility and focus state.
             self.vsync.setVisibilityPaused(visible, self.focused);
+        }
+
+        /// Set frame-specific constants (time, FPS).
+        ///
+        /// Must be called on the render thread.
+        pub fn setFrameConstants(self: *Self, time_sec: f32, fps: f32) void {
+            // Renderer does not compute; it only records.
+            self.last_time = self.current_time;
+            self.current_time = time_sec;
+            self.current_fps = fps;
         }
 
         /// Set the new font grid.
@@ -1410,22 +1555,6 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             self.api.drawFrameStart();
             defer self.api.drawFrameEnd();
 
-            // Calculate current FPS.
-            {
-                const now = std.time.Instant.now() catch null;
-                if (now) |n| {
-                    if (self.last_frame_time) |last| {
-                        const elapsed_ns = n.since(last);
-                        if (elapsed_ns > 0) {
-                            const fps = @as(f64, 1_000_000_000.0) / @as(f64, @floatFromInt(elapsed_ns));
-                            // Exponential moving average for stability
-                            self.current_fps = self.current_fps * 0.9 + fps * 0.1;
-                        }
-                    }
-                    self.last_frame_time = n;
-                }
-            }
-
             // Retrieve the most up-to-date surface size from the Graphics API
             const surface_size = try self.api.surfaceSize();
 
@@ -1520,6 +1649,16 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             // Update per-frame custom shader uniforms.
             try self.updateCustomShaderUniformsForFrame();
 
+            // Sync frame-specific constants (time, FPS).
+            // These are provided by the UI layer via Renderer.Message.
+            if (@hasDecl(shaderpkg, "constants")) {
+                const frame_constants = shaderpkg.constants.TerminalShaderConstants{
+                    .time = self.current_time,
+                    .fps = self.current_fps,
+                };
+                try frame.constants.sync(&.{frame_constants});
+            }
+
             // Setup our frame data
             try frame.uniforms.sync(&.{self.uniforms});
             try frame.cells_bg.sync(self.cells.bg_cells);
@@ -1578,6 +1717,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     .ready => |texture| pass.step(.{
                         .pipeline = self.shaders.pipelines.bg_image,
                         .uniforms = frame.uniforms.buffer,
+                        .constants = if (@hasDecl(shaderpkg, "constants")) frame.constants.buffer else null,
                         .buffers = &.{frame.bg_image_buffer.buffer},
                         .textures = &.{texture},
                         .draw = .{ .type = .triangle, .vertex_count = 3 },
@@ -1587,6 +1727,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     var bg_color_step: @TypeOf(pass).Step = .{
                         .pipeline = self.shaders.pipelines.bg_color,
                         .uniforms = frame.uniforms.buffer,
+                        .constants = if (@hasDecl(shaderpkg, "constants")) frame.constants.buffer else null,
                         .buffers = &.{ null, frame.cells_bg.buffer },
                         .draw = .{ .type = .triangle, .vertex_count = 3 },
                     };
@@ -1603,12 +1744,14 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     self.shaders.pipelines.image,
                     &pass,
                     .kitty_below_bg,
+                    self.image_sampler,
                 );
 
                 // Then we draw any opaque cell backgrounds.
                 var cell_bg_step: @TypeOf(pass).Step = .{
                     .pipeline = self.shaders.pipelines.cell_bg,
                     .uniforms = frame.uniforms.buffer,
+                    .constants = if (@hasDecl(shaderpkg, "constants")) frame.constants.buffer else null,
                     .buffers = &.{ null, frame.cells_bg.buffer },
                     .draw = .{ .type = .triangle, .vertex_count = 3 },
                 };
@@ -1623,12 +1766,14 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     self.shaders.pipelines.image,
                     &pass,
                     .kitty_below_text,
+                    self.image_sampler,
                 );
 
                 // Text.
                 var cell_text_step: @TypeOf(pass).Step = .{
                     .pipeline = self.shaders.pipelines.cell_text,
                     .uniforms = frame.uniforms.buffer,
+                    .constants = if (@hasDecl(shaderpkg, "constants")) frame.constants.buffer else null,
                     .buffers = &.{
                         frame.cells.buffer,
                         frame.cells_bg.buffer,
@@ -1654,6 +1799,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     self.shaders.pipelines.image,
                     &pass,
                     .kitty_above_text,
+                    self.image_sampler,
                 );
 
                 // Debug overlay. We do this before any custom shader state
@@ -1663,6 +1809,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     self.shaders.pipelines.image,
                     &pass,
                     .overlay,
+                    self.image_sampler,
                 );
             }
 
@@ -1903,17 +2050,14 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         }
 
         pub fn toggleDebugOverlay(self: *Self) !void {
-            self.show_debug_overlay = !self.show_debug_overlay;
-            self.markDirty();
+            toggleFlagAndMarkDirty(&self.show_debug_overlay, &self.terminal_state.dirty);
         }
 
         pub fn setTsfPreedit(self: *Self, preedit: ?[:0]const u8) !void {
-            if (self.tsf_preedit) |old| self.alloc.free(old);
-            if (preedit) |new| {
-                self.tsf_preedit = try self.alloc.dupe(u8, new);
-            } else {
-                self.tsf_preedit = null;
-            }
+            // tsf_preedit is stored as a non-sentinel ?[]const u8; use the
+            // generic free helper to keep the alloc/free invariant in one
+            // place (also exercised by unit tests).
+            try replaceOwnedString(self.alloc, &self.tsf_preedit, preedit);
         }
 
         /// Resize the screen.
@@ -2106,20 +2250,9 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
             const uniforms: *shadertoy.Uniforms = &self.custom_shader_uniforms;
 
-            const now = try std.time.Instant.now();
-            defer self.last_frame_time = now;
-            const first_frame_time = self.first_frame_time orelse t: {
-                self.first_frame_time = now;
-                break :t now;
-            };
-            const last_frame_time = self.last_frame_time orelse now;
-
-            const since_ns: f32 = @floatFromInt(now.since(first_frame_time));
-            uniforms.time = since_ns / std.time.ns_per_s;
-
-            const delta_ns: f32 = @floatFromInt(now.since(last_frame_time));
-            uniforms.time_delta = delta_ns / std.time.ns_per_s;
-
+            // Renderer does not compute; it uses provided time.
+            uniforms.time = self.current_time;
+            uniforms.time_delta = self.current_time - self.last_time;
             uniforms.frame += 1;
 
             const screen = self.size.screen;
@@ -2287,7 +2420,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             };
 
             overlay.show_debug_overlay = self.show_debug_overlay;
-            overlay.fps = self.current_fps;
+            overlay.fps = @floatCast(self.current_fps);
             overlay.tsf_preedit = self.tsf_preedit;
 
             overlay.applyFeatures(

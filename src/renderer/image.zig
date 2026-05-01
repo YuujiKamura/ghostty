@@ -101,12 +101,18 @@ pub const State = struct {
     ///
     /// Any placements that have non-uploaded images are ignored. Any
     /// graphics API errors during drawing are also ignored.
+    ///
+    /// `sampler` is used by the image pixel shader to sample the texture. If
+    /// none is provided, the GPU falls back to its default sampler — which
+    /// works but emits a `DEVICE_DRAW_SAMPLER_NOT_SET` D3D11 debug warning
+    /// and shouldn't be relied on.
     pub fn draw(
         self: *State,
         api: *GraphicsAPI,
         pipeline: GraphicsAPI.Pipeline,
         pass: *GraphicsAPI.RenderPass,
         placement_type: DrawPlacements,
+        sampler: ?GraphicsAPI.Sampler,
     ) void {
         const placements: []const Placement = switch (placement_type) {
             .kitty_below_bg => self.kitty_placements.items[0..self.kitty_bg_end],
@@ -170,6 +176,7 @@ pub const State = struct {
                 .pipeline = pipeline,
                 .buffers = &.{buf.buffer},
                 .textures = &.{texture},
+                .samplers = &.{sampler},
                 .draw = .{
                     .type = .triangle_strip,
                     .vertex_count = 4,
@@ -956,3 +963,239 @@ pub const Image = union(enum) {
         };
     }
 };
+
+// ============================================================================
+// Pipeline diagnostic tests for image .overlay.
+//
+// These tests fence off each stage of the image pipeline that runs on the
+// CPU side. The on-screen overlay is invisible despite a known-good z2d
+// surface (verified by writing PNG dumps), so we instrument every stage
+// and compare against expected byte-for-byte / value-for-value behavior.
+// Anything returning weird values is the suspect.
+// ============================================================================
+
+const testing = std.testing;
+
+test "Image.Pending.PixelFormat.bpp matches expected byte counts" {
+    try testing.expectEqual(@as(usize, 1), Image.Pending.PixelFormat.gray.bpp());
+    try testing.expectEqual(@as(usize, 2), Image.Pending.PixelFormat.gray_alpha.bpp());
+    try testing.expectEqual(@as(usize, 3), Image.Pending.PixelFormat.rgb.bpp());
+    try testing.expectEqual(@as(usize, 3), Image.Pending.PixelFormat.bgr.bpp());
+    try testing.expectEqual(@as(usize, 4), Image.Pending.PixelFormat.rgba.bpp());
+    try testing.expectEqual(@as(usize, 4), Image.Pending.PixelFormat.bgra.bpp());
+}
+
+test "Image.Pending.len is width * height * bpp" {
+    var buf: [16]u8 = undefined;
+    const p: Image.Pending = .{
+        .height = 4,
+        .width = 1,
+        .pixel_format = .rgba,
+        .data = &buf,
+    };
+    try testing.expectEqual(@as(usize, 16), p.len());
+    try testing.expectEqual(@as(usize, 16), p.dataSlice().len);
+}
+
+test "Image.Pending.dataSlice points at provided buffer" {
+    var buf = [_]u8{ 0xAA, 0xBB, 0xCC, 0xDD };
+    const p: Image.Pending = .{
+        .height = 1,
+        .width = 1,
+        .pixel_format = .rgba,
+        .data = &buf,
+    };
+    try testing.expectEqualSlices(u8, &buf, p.dataSlice());
+    try testing.expectEqual(@intFromPtr(&buf[0]), @intFromPtr(p.dataSlice().ptr));
+}
+
+test "Image.Id ordering keeps overlay separate from kitty" {
+    // zLessThan: kitty < overlay; same-tag kitty IDs ordered numerically.
+    try testing.expect(!Id.zLessThan(.overlay, .overlay));
+    try testing.expect(Id.zLessThan(.{ .kitty = 1 }, .{ .kitty = 2 }));
+    try testing.expect(Id.zLessThan(.{ .kitty = 5 }, .overlay));
+    try testing.expect(!Id.zLessThan(.overlay, .{ .kitty = 1 }));
+}
+
+test "State.overlayUpdate(null) when nothing exists is a no-op" {
+    var s: State = .empty;
+    defer s.deinit(testing.allocator);
+    try s.overlayUpdate(testing.allocator, null);
+    try testing.expectEqual(@as(usize, 0), s.overlay_placements.items.len);
+    try testing.expect(s.images.get(.overlay) == null);
+}
+
+test "State.overlayUpdate stores image data byte-for-byte in image map" {
+    var s: State = .empty;
+    defer s.deinit(testing.allocator);
+
+    const sz = @import("size.zig").Size{
+        .screen = .{ .width = 8, .height = 4 },
+        .cell = .{ .width = 4, .height = 4 },
+        .padding = .{},
+    };
+    var overlay = try Overlay.init(testing.allocator, sz);
+    defer overlay.deinit(testing.allocator);
+
+    // Paint a recognizable pattern into the surface buffer.
+    const buf = overlay.surface.image_surface_rgba.buf;
+    for (buf, 0..) |*px, i| {
+        const v: u8 = @intCast(i & 0xFF);
+        px.* = .{ .r = v, .g = v +% 1, .b = v +% 2, .a = v +% 3 };
+    }
+    const expected_first_4 = [_]u8{ buf[0].r, buf[0].g, buf[0].b, buf[0].a };
+
+    try s.overlayUpdate(testing.allocator, overlay);
+
+    const entry = s.images.get(.overlay) orelse return error.TestFailed;
+    // The image must own its own copy of the bytes (alloc.dupe). It can be in
+    // either pending or replace state depending on whether this is a first
+    // upload, but in both cases data should match the surface input.
+    const stored_data = switch (entry.image) {
+        .pending => |p| p.dataSlice(),
+        .replace => |r| r.pending.dataSlice(),
+        else => return error.TestFailed,
+    };
+    try testing.expectEqualSlices(u8, &expected_first_4, stored_data[0..4]);
+    try testing.expectEqual(buf.len * 4, stored_data.len);
+}
+
+test "State.overlayUpdate creates a single full-surface placement" {
+    var s: State = .empty;
+    defer s.deinit(testing.allocator);
+
+    const sz = @import("size.zig").Size{
+        .screen = .{ .width = 80, .height = 60 },
+        .cell = .{ .width = 10, .height = 20 },
+        .padding = .{},
+    };
+    var overlay = try Overlay.init(testing.allocator, sz);
+    defer overlay.deinit(testing.allocator);
+
+    try s.overlayUpdate(testing.allocator, overlay);
+
+    try testing.expectEqual(@as(usize, 1), s.overlay_placements.items.len);
+    const p = s.overlay_placements.items[0];
+    try testing.expectEqual(Id.overlay, p.image_id);
+    try testing.expectEqual(@as(i32, 0), p.x);
+    try testing.expectEqual(@as(i32, 0), p.y);
+    try testing.expectEqual(@as(u32, 0), p.cell_offset_x);
+    try testing.expectEqual(@as(u32, 0), p.cell_offset_y);
+    // The placement covers the full surface (terminal area, not the screen with padding).
+    const term = sz.terminal();
+    try testing.expectEqual(@as(u32, term.width), p.width);
+    try testing.expectEqual(@as(u32, term.height), p.height);
+    try testing.expectEqual(p.width, p.source_width);
+    try testing.expectEqual(p.height, p.source_height);
+
+    // Image was registered.
+    try testing.expect(s.images.get(.overlay) != null);
+}
+
+test "Color.debug_text rgba is opaque pure green" {
+    const c = Overlay.Color.debug_text.rgba();
+    try testing.expectEqual(@as(u8, 0), c.r);
+    try testing.expectEqual(@as(u8, 255), c.g);
+    try testing.expectEqual(@as(u8, 0), c.b);
+    try testing.expectEqual(@as(u8, 255), c.a);
+}
+
+test "Color.debug_text.pixel asPixel round-trip preserves color" {
+    const p = Overlay.Color.debug_text.pixel();
+    const back = @import("z2d").pixel.RGBA.fromPixel(p);
+    try testing.expectEqual(@as(u8, 0), back.r);
+    try testing.expectEqual(@as(u8, 255), back.g);
+    try testing.expectEqual(@as(u8, 0), back.b);
+    try testing.expectEqual(@as(u8, 255), back.a);
+}
+
+test "Overlay.init produces a fully transparent surface" {
+    const sz = @import("size.zig").Size{
+        .screen = .{ .width = 16, .height = 8 },
+        .cell = .{ .width = 4, .height = 4 },
+        .padding = .{},
+    };
+    var overlay = try Overlay.init(testing.allocator, sz);
+    defer overlay.deinit(testing.allocator);
+
+    for (overlay.surface.image_surface_rgba.buf) |px| {
+        try testing.expectEqual(@as(u8, 0), px.r);
+        try testing.expectEqual(@as(u8, 0), px.g);
+        try testing.expectEqual(@as(u8, 0), px.b);
+        try testing.expectEqual(@as(u8, 0), px.a);
+    }
+}
+
+test "Overlay.init populates debug_font as a usable z2d Font" {
+    const sz = @import("size.zig").Size{
+        .screen = .{ .width = 16, .height = 8 },
+        .cell = .{ .width = 4, .height = 4 },
+        .padding = .{},
+    };
+    var overlay = try Overlay.init(testing.allocator, sz);
+    defer overlay.deinit(testing.allocator);
+    // The font must not be a zeroed/invalid handle; loadBuffer succeeded if init
+    // returned (it's `catch unreachable`), so simply touch a property to prove it.
+    // The mere ability to compile & call this without crash is the assertion.
+    _ = overlay.debug_font;
+}
+
+test "shader_data.Image vertex struct layout: size, alignment, field offsets" {
+    const ShaderImage = @import("shader_data.zig").Image;
+    // For D3D11 InputLayout to read PER_INSTANCE_DATA correctly, the struct
+    // must be extern with deterministic offsets and a stride that's a multiple
+    // of the largest alignment.
+    try testing.expectEqual(@as(usize, 0), @offsetOf(ShaderImage, "grid_pos"));
+    try testing.expectEqual(@as(usize, 8), @offsetOf(ShaderImage, "cell_offset"));
+    try testing.expectEqual(@as(usize, 16), @offsetOf(ShaderImage, "source_rect"));
+    try testing.expectEqual(@as(usize, 32), @offsetOf(ShaderImage, "dest_size"));
+    // align(16) on source_rect forces the struct alignment to 16, so the total
+    // size must be a multiple of 16. dest_size ends at 32+8=40, so size=48.
+    try testing.expectEqual(@as(usize, 16), @alignOf(ShaderImage));
+    try testing.expectEqual(@as(usize, 48), @sizeOf(ShaderImage));
+}
+
+test "shader_data.Image: round-trip through bytes preserves field values" {
+    const ShaderImage = @import("shader_data.zig").Image;
+    const original: ShaderImage = .{
+        .grid_pos = .{ 1.0, 2.0 },
+        .cell_offset = .{ 3.0, 4.0 },
+        .source_rect = .{ 5.0, 6.0, 7.0, 8.0 },
+        .dest_size = .{ 1240.0, 904.0 },
+    };
+    const bytes = std.mem.asBytes(&original);
+    const restored: *const ShaderImage = std.mem.bytesAsValue(ShaderImage, bytes);
+    try testing.expectEqual(original.grid_pos, restored.grid_pos);
+    try testing.expectEqual(original.cell_offset, restored.cell_offset);
+    try testing.expectEqual(original.source_rect, restored.source_rect);
+    try testing.expectEqual(original.dest_size, restored.dest_size);
+}
+
+test "Overlay.pendingImage byte layout matches Pending.rgba expectations" {
+    const sz = @import("size.zig").Size{
+        .screen = .{ .width = 8, .height = 4 },
+        .cell = .{ .width = 4, .height = 4 },
+        .padding = .{},
+    };
+    var overlay = try Overlay.init(testing.allocator, sz);
+    defer overlay.deinit(testing.allocator);
+
+    const p = overlay.pendingImage();
+    try testing.expectEqual(Image.Pending.PixelFormat.rgba, p.pixel_format);
+    try testing.expectEqual(@as(u32, 8), p.width);
+    try testing.expectEqual(@as(u32, 4), p.height);
+    try testing.expectEqual(@as(usize, 8 * 4 * 4), p.len());
+
+    // The data pointer must point at the z2d surface buffer with the
+    // exact layout {r,g,b,a, r,g,b,a, ...}.
+    const buf = overlay.surface.image_surface_rgba.buf;
+    try testing.expectEqual(@intFromPtr(buf.ptr), @intFromPtr(p.data));
+
+    // Mutate the surface and verify the bytes are visible through Pending.
+    buf[0] = .{ .r = 0xAB, .g = 0xCD, .b = 0xEF, .a = 0x12 };
+    const ds = p.dataSlice();
+    try testing.expectEqual(@as(u8, 0xAB), ds[0]);
+    try testing.expectEqual(@as(u8, 0xCD), ds[1]);
+    try testing.expectEqual(@as(u8, 0xEF), ds[2]);
+    try testing.expectEqual(@as(u8, 0x12), ds[3]);
+}

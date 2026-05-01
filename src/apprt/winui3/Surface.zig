@@ -86,6 +86,17 @@ pub fn Surface(comptime App: type) type {
         ime_text_changed_token: i64 = 0,
         ime_got_focus_token: i64 = 0,
         ime_lost_focus_token: i64 = 0,
+        rendering_token: i64 = 0,
+
+        /// Last recorded time in seconds for FPS calculation.
+        last_frame_sec: f32 = 0,
+        /// Last recorded timestamp for FPS calculation.
+        last_fps_update_ns: i128 = 0,
+        /// Accumulated frame count for FPS averaging.
+        frame_accum_count: u32 = 0,
+        /// Last FPS value sent to the renderer.
+        last_sent_fps: f32 = 0,
+        first_frame_ns: i128 = 0,
         // TextBox composition tokens removed — TSF is now the sole IME handler.
         // ime_text_comp_start_token, ime_text_comp_change_token, ime_text_comp_end_token removed.
 
@@ -426,6 +437,25 @@ pub fn Surface(comptime App: type) type {
                 break :blk 0;
             };
 
+            // Register Rendering event for per-frame shader constants (time, FPS).
+            // We use the static CompositionTarget class from Microsoft.UI.Xaml.Media.
+            rendering_reg: {
+                const class_name = winrt.hstring("Microsoft.UI.Xaml.Media.CompositionTarget") catch break :rendering_reg;
+                defer winrt.deleteHString(class_name);
+                const statics = winrt.getActivationFactory(com.ICompositionTargetStatics, class_name) catch break :rendering_reg;
+                defer statics.release();
+
+                const RenderingDelegate = gen.EventHandlerImpl(Self, *const fn (*Self, ?*anyopaque, ?*anyopaque) void);
+                const rendering_delegate = try RenderingDelegate.createWithIid(self.app.core_app.alloc, self, &onRendering, &com.IID_EventHandler);
+                defer rendering_delegate.release();
+
+                self.rendering_token = statics.addRendering(rendering_delegate.comPtr()) catch |err| blk: {
+                    log.warn("CompositionTarget.Rendering handler registration failed: {}", .{err});
+                    break :blk 0;
+                };
+                log.info("CompositionTarget.Rendering registered token={}", .{self.rendering_token});
+            }
+
             // Register XAML input event handlers.
             //
             // POINTER events are registered on the surface_grid (parent Grid), NOT on
@@ -579,6 +609,16 @@ pub fn Surface(comptime App: type) type {
                         self.size_changed_token = 0;
                     }
                 } else |_| {}
+
+                if (self.rendering_token != 0) {
+                    const class_name = winrt.hstring("Microsoft.UI.Xaml.Media.CompositionTarget") catch {};
+                    defer winrt.deleteHString(class_name);
+                    if (winrt.getActivationFactory(com.ICompositionTargetStatics, class_name)) |statics| {
+                        defer statics.release();
+                        statics.removeRendering(self.rendering_token) catch {};
+                        self.rendering_token = 0;
+                    } else |_| {}
+                }
 
                 // Unregister pointer events from surface_grid.
                 if (self.surface_grid) |grid| {
@@ -1129,7 +1169,7 @@ pub fn Surface(comptime App: type) type {
             };
 
             // F12 toggles the debug overlay
-            if (ghostty_key == .f12 and pressed) {
+            if (key.shouldToggleDebugOverlay(ghostty_key, pressed)) {
                 if (self.core_surface.renderer_thread.mailbox.push(.toggle_debug_overlay) == .ok) {
                     log.info("debug overlay toggled", .{});
                 }
@@ -2322,6 +2362,33 @@ pub fn Surface(comptime App: type) type {
         }
 
         /// Loaded event callback. Triggered when the SwapChainPanel is added to the visual tree.
+        fn onRendering(self: *Self, _: ?*anyopaque, _: ?*anyopaque) void {
+            if (!self.core_initialized) return;
+
+            const now_ns = std.time.nanoTimestamp();
+            if (self.first_frame_ns == 0) self.first_frame_ns = now_ns;
+            const time_sec: f32 = @floatCast(@as(f64, @floatFromInt(now_ns - self.first_frame_ns)) / 1_000_000_000.0);
+
+            // FPS calculation: update every 500ms.
+            self.frame_accum_count += 1;
+            const fps_delta_ns = now_ns - self.last_fps_update_ns;
+            if (fps_delta_ns >= 500 * std.time.ns_per_ms) {
+                const fps = @as(f32, @floatFromInt(self.frame_accum_count)) / (@as(f32, @floatFromInt(fps_delta_ns)) / 1_000_000_000.0);
+                self.last_sent_fps = fps;
+                self.frame_accum_count = 0;
+                self.last_fps_update_ns = now_ns;
+            }
+
+            // Push the frame constants to the renderer thread mailbox.
+            // Renderer slot 1 will receive this data via TerminalShaderConstants.
+            _ = self.core_surface.renderer_thread.mailbox.push(.{
+                .frame_constants = .{
+                    .time_sec = time_sec,
+                    .fps = self.last_sent_fps,
+                },
+            });
+        }
+
         fn onLoaded(self: *Self, _: *anyopaque, _: *anyopaque) void {
             if (self.in_loaded_handler) return;
             self.in_loaded_handler = true;

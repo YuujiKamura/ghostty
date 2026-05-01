@@ -73,6 +73,12 @@ pub const Message = union(enum) {
         text: ?[:0]const u8,
     },
 
+    /// Frame-specific constants (time, FPS, etc.) provided by the UI layer.
+    frame_constants: struct {
+        time_sec: f32,
+        fps: f32,
+    },
+
     /// The macOS display ID has changed for the window.
     macos_display_id: u32,
 
@@ -122,3 +128,31 @@ pub const Message = union(enum) {
         }
     }
 };
+
+test "Message.deinit: tsf_preedit with text frees the duplicated buffer" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const dup = try alloc.dupeZ(u8, "preedit");
+    const m: Message = .{ .tsf_preedit = .{ .alloc = alloc, .text = dup } };
+    m.deinit(); // must not leak; testing.allocator detects leaks
+}
+
+test "Message.deinit: tsf_preedit with null text is a no-op" {
+    const testing = std.testing;
+    const m: Message = .{ .tsf_preedit = .{ .alloc = testing.allocator, .text = null } };
+    m.deinit();
+}
+
+test "Message.deinit: payload-free variants are no-ops" {
+    const variants = [_]Message{
+        .crash,
+        .reset_cursor_blink,
+        .toggle_debug_overlay,
+        .{ .focus = true },
+        .{ .visible = false },
+        .{ .inspector = true },
+        .{ .macos_display_id = 42 },
+        .{ .frame_constants = .{ .time_sec = 0.0, .fps = 60.0 } },
+    };
+    for (variants) |m| m.deinit();
+}

@@ -507,6 +507,10 @@ fn drainMailbox(self: *Thread) !void {
                 if (v.text) |text| v.alloc.free(text);
             },
 
+            .frame_constants => |v| {
+                self.renderer.setFrameConstants(v.time_sec, v.fps);
+            },
+
             .macos_display_id => |v| {
                 if (@hasDecl(rendererpkg.Renderer, "setMacOSDisplayID")) {
                     try self.renderer.setMacOSDisplayID(v);

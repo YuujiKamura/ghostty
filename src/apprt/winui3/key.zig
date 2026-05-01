@@ -483,6 +483,30 @@ fn normalizedKeyName(k: input.Key) []const u8 {
 
 const WriteFailed = error{WriteFailed};
 
+/// Returns true when this key event should trigger a debug-overlay toggle.
+///
+/// Extracted from `Surface.handleKeyEvent` so the F12-toggle decision can
+/// be unit-tested without instantiating the full WinUI3 surface state.
+pub fn shouldToggleDebugOverlay(k: Key, pressed: bool) bool {
+    return k == .f12 and pressed;
+}
+
+test "shouldToggleDebugOverlay: F12 press toggles" {
+    try std.testing.expect(shouldToggleDebugOverlay(.f12, true));
+}
+
+test "shouldToggleDebugOverlay: F12 release does NOT toggle" {
+    try std.testing.expect(!shouldToggleDebugOverlay(.f12, false));
+}
+
+test "shouldToggleDebugOverlay: non-F12 keys never toggle" {
+    try std.testing.expect(!shouldToggleDebugOverlay(.f11, true));
+    try std.testing.expect(!shouldToggleDebugOverlay(.f1, true));
+    try std.testing.expect(!shouldToggleDebugOverlay(.escape, true));
+    try std.testing.expect(!shouldToggleDebugOverlay(.key_a, true));
+    try std.testing.expect(!shouldToggleDebugOverlay(.enter, true));
+}
+
 test "vkToKey mapping" {
     const testing = std.testing;
     try testing.expectEqual(Key.backspace, vkToKey(VK_BACK).?);
