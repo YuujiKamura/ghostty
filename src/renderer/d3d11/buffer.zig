@@ -279,3 +279,74 @@ pub fn Buffer(comptime T: type) type {
         }
     };
 }
+
+// -----------------------------------------------------------------------------
+// Tests — device-free fast paths only. Anything that touches an ID3D11Device
+// or context belongs in an integration suite; see .dispatch/team-B-report.md
+// (Tier 3) for the list that requires a live device.
+
+test "Buffer.init: len=0 returns device-free zero buffer with options forwarded" {
+    const T = extern struct { x: u32 };
+    const opts: Options = .{
+        .device = null,
+        .context = null,
+        .bind_flags = com.D3D11_BIND_VERTEX_BUFFER,
+        .dynamic = true,
+        .structured = false,
+    };
+
+    const buf = try Buffer(T).init(opts, 0);
+
+    try std.testing.expect(buf.buffer == null);
+    try std.testing.expect(buf.srv == null);
+    try std.testing.expectEqual(@as(usize, 0), buf.len);
+    try std.testing.expectEqual(opts.bind_flags, buf.opts.bind_flags);
+    try std.testing.expectEqual(opts.dynamic, buf.opts.dynamic);
+    try std.testing.expectEqual(opts.structured, buf.opts.structured);
+    try std.testing.expect(buf.opts.device == null);
+    try std.testing.expect(buf.opts.context == null);
+}
+
+test "Buffer.init: len>0 with null device returns error.D3D11Failed" {
+    const T = extern struct { x: u32 };
+    const opts: Options = .{ .device = null };
+    try std.testing.expectError(error.D3D11Failed, Buffer(T).init(opts, 4));
+}
+
+test "Buffer.initFill: empty data returns device-free zero buffer with options forwarded" {
+    const T = extern struct { x: u32 };
+    const opts: Options = .{
+        .device = null,
+        .bind_flags = com.D3D11_BIND_CONSTANT_BUFFER,
+        .dynamic = false,
+        .structured = false,
+    };
+    const empty: []const T = &.{};
+
+    const buf = try Buffer(T).initFill(opts, empty);
+
+    try std.testing.expect(buf.buffer == null);
+    try std.testing.expect(buf.srv == null);
+    try std.testing.expectEqual(@as(usize, 0), buf.len);
+    try std.testing.expectEqual(opts.bind_flags, buf.opts.bind_flags);
+    try std.testing.expectEqual(opts.dynamic, buf.opts.dynamic);
+}
+
+test "Buffer.initFill: non-empty data with null device returns error.D3D11Failed" {
+    const T = extern struct { x: u32 };
+    const opts: Options = .{ .device = null };
+    const data = [_]T{.{ .x = 1 }, .{ .x = 2 }};
+    try std.testing.expectError(error.D3D11Failed, Buffer(T).initFill(opts, &data));
+}
+
+test "Buffer.deinit: null-safe on default-constructed Buffer and idempotent" {
+    const T = extern struct { x: u32 };
+    // A default-constructed Buffer (e.g. via @"struct"(.{})) has buffer=null,
+    // srv=null. deinit() must tolerate this and stay idempotent so that
+    // double-deinit during error unwinding does not crash.
+    var buf: Buffer(T) = .{ .opts = .{}, .len = 0 };
+    buf.deinit();
+    buf.deinit(); // call twice — must not double-release.
+    try std.testing.expect(buf.buffer == null);
+    try std.testing.expect(buf.srv == null);
+}

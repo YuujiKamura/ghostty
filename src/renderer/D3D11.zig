@@ -540,3 +540,57 @@ pub fn resizeSwapChain(self: *D3D11, width: u32, height: u32) void {
 }
 
 const error_set = error{D3D11InitFailed};
+
+// -----------------------------------------------------------------------------
+// Tests — surfaceSize is a pure getter over surface_width/surface_height.
+// All other init/teardown paths require a live D3D11 device + DXGI factory
+// + HWND and are covered as integration concerns, not unit tests.
+
+test "D3D11.surfaceSize: returns cached surface_width and surface_height" {
+    var d3d11: D3D11 = .{
+        .alloc = std.testing.allocator,
+        .blending = .native,
+        .surface_width = 1280,
+        .surface_height = 720,
+    };
+    const sz = try d3d11.surfaceSize();
+    try std.testing.expectEqual(@as(u32, 1280), sz.width);
+    try std.testing.expectEqual(@as(u32, 720), sz.height);
+}
+
+test "D3D11.surfaceSize: zero dimensions round-trip without coercion" {
+    var d3d11: D3D11 = .{
+        .alloc = std.testing.allocator,
+        .blending = .native,
+    };
+    // Default-init both surface_width and surface_height should be 0.
+    const sz = try d3d11.surfaceSize();
+    try std.testing.expectEqual(@as(u32, 0), sz.width);
+    try std.testing.expectEqual(@as(u32, 0), sz.height);
+}
+
+test "D3D11.surfaceSize: max u32 dimensions round-trip" {
+    var d3d11: D3D11 = .{
+        .alloc = std.testing.allocator,
+        .blending = .linear,
+        .surface_width = std.math.maxInt(u32),
+        .surface_height = std.math.maxInt(u32),
+    };
+    const sz = try d3d11.surfaceSize();
+    try std.testing.expectEqual(std.math.maxInt(u32), sz.width);
+    try std.testing.expectEqual(std.math.maxInt(u32), sz.height);
+}
+
+test "D3D11.surfaceSize: blending field is independent of size getter" {
+    var d3d11: D3D11 = .{
+        .alloc = std.testing.allocator,
+        .blending = .@"linear-corrected",
+        .surface_width = 800,
+        .surface_height = 600,
+    };
+    const sz = try d3d11.surfaceSize();
+    try std.testing.expectEqual(@as(u32, 800), sz.width);
+    try std.testing.expectEqual(@as(u32, 600), sz.height);
+    // Sanity check: surfaceSize must not mutate blending or other fields.
+    try std.testing.expectEqual(configpkg.Config.AlphaBlending.@"linear-corrected", d3d11.blending);
+}
