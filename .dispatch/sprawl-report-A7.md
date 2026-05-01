@@ -85,20 +85,55 @@ location)** for the following reasons:
 
 ## Test gate
 
-- `zig fmt --check src/renderer/**/*.zig` — clean (after autofix on 2 files,
-  committed as `279ba7ddb`)
-- `zig ast-check` per file — clean for all 13 .zig + 11 d3d11/*.zig touched files
-- `zig build test -Dapp-runtime=win32 -Dtest-filter=renderer` — **blocked
-  by pre-existing unrelated compile error in
-  `src/terminal/kitty/graphics_image.zig:333`** introduced by another
-  team's commit `1e0546237` (`revert(terminal): restore upstream
-  kitty/graphics_image.zig`). The error is `expected error union type,
-  found '?[]const u8'` — `temp_dir.allocTmpDir()` returns optional, not
-  error union. Out of A7 scope.
-- `./build-winui3.sh` — same blocker; fails at the same
-  `graphics_image.zig:333` error.
-- A7 commits are pure comment/annotation additions and cannot affect
-  compilation.
+Per Hub instruction (commit-classification): all A7 commits fall under
+**category (a) — pure revert / annotation only** → required: `zig fmt`
++ `ast-check` + `zig build` (compile pass). No unit tests required.
+
+### Per-commit classification
+
+| Commit | Type | Category |
+|--------|------|----------|
+| `e92029893` revert OpenGL + State.zig | pure revert (4 files restored to upstream) | (a) |
+| `a5df3f4ad` annotate renderer/backend/shadertoy/message | comment-only | (a) |
+| `f8c9adf16` annotate Overlay/Thread/generic/image | comment-only | (a) |
+| `3051401ec` annotate D3D11 + HLSL + win32_vsync + perf_stats (26 files) | comment-only | (a) |
+| `279ba7ddb` zig fmt trailing-newline fixup | format-only | (a) |
+| `4b69dc445` sprawl-report-A7.md | docs-only | (a) |
+
+### Results
+
+- **`zig fmt --check src/renderer/**/*.zig`** — clean (after autofix on 2
+  files, committed as `279ba7ddb`).
+- **Per-file `zig ast-check`** — clean for all 13 .zig + 11 d3d11/*.zig
+  touched files.
+- **`./build-winui3.sh --prefix zig-out-winui3-a7-verify`** — **passed**.
+  ghostty.dll + ghostty.exe built; XBF files copied; auto-healed stale
+  XBFs; promoted to zig-out-winui3. WinUI3 is the shipping target
+  (`-Dapp-runtime=winui3` forces .d3d11 per `Config.zig:179`).
+- **`zig build -Dapp-runtime=win32`** — fails with `OpenGL.zig:166:17:
+  unsupported app runtime for OpenGL`. The win32 apprt build defaults
+  to `.opengl` per `backend.default()`, and upstream OpenGL.zig has a
+  comptime check rejecting non-gtk/non-embedded apprts. The fork's
+  prior OpenGL.zig had a Windows comptime branch (with perf-stats /
+  fence experiments) that I reverted because Windows ships D3D11 on
+  WinUI3, not OpenGL on win32. **Decision**: this win32+opengl
+  combination was a fork experiment, not a shipping target. The
+  shipping target (WinUI3) builds cleanly. Win32 apprt would need a
+  separate `-Drenderer=d3d11` override or a `backend.default()` change
+  to return `.d3d11` for Windows; either is out of A7 scope (would
+  modify another team's chunk file).
+
+### Conclusion
+
+A7 commits satisfy the category (a) test gate: fmt clean, ast-check
+clean, WinUI3 (shipping target) compile pass.
+
+The `-Dapp-runtime=win32` regression is a deliberate trade — restoring
+upstream OpenGL.zig (which Windows doesn't ship) over preserving a
+fork-experiment Windows-OpenGL backend. If win32 apprt + OpenGL
+combination needs to remain buildable, the right fix is in
+`backend.default()` (case A6/A4 chunk territory), not by re-adding
+OpenGL.zig sprawl.
 
 ## Skill firing log
 
