@@ -41,6 +41,87 @@ const renderer_locked_circuit_threshold: u32 = 5;
 const renderer_locked_circuit_window_ns: i64 = 1 * std.time.ns_per_s;
 const renderer_locked_circuit_open_ns: i64 = 100 * std.time.ns_per_ms;
 
+// ── UI-thread stall watchdog (#212) ──
+//
+// Two atomic timestamps that let an external observer (deckpilot daemon,
+// test harness, etc.) detect "CP posted a WM_APP_CONTROL_INPUT but the UI
+// thread never drained it" faster and more deterministically than
+// IsHungAppWindow. Strictly observational: this module records timestamps
+// and answers `isStalled(threshold_ns)`; it does NOT take any action on
+// detection (kill / recover are explicitly out of scope per #212).
+//
+// Storage is i64 nanoseconds since the UNIX epoch (`std.time.nanoTimestamp`
+// truncated to i64). i64 covers ~292 years from 1970, so safe through 2262.
+// Sentinel value `0` means "never recorded".
+//
+// Memory ordering:
+//   - Writers use `.release` so that any state mutated before the store is
+//     visible to a reader that performs an `.acquire` load.
+//   - Readers use `.acquire` for the same reason.
+var pending_posted_at: std.atomic.Value(i64) = std.atomic.Value(i64).init(0);
+var last_drained_at: std.atomic.Value(i64) = std.atomic.Value(i64).init(0);
+
+fn nowNs() i64 {
+    return @as(i64, @intCast(std.time.nanoTimestamp()));
+}
+
+/// Record that a `WM_APP_CONTROL_INPUT` was just posted from the CP pipe
+/// thread. Called immediately after `PostMessageW`.
+fn recordPendingPost() void {
+    pending_posted_at.store(nowNs(), .release);
+}
+
+/// Record that the UI thread just finished `drainPendingInputs`. Called at
+/// the bottom of the drain handler.
+fn recordDrain() void {
+    last_drained_at.store(nowNs(), .release);
+}
+
+/// Pure stall predicate suitable for unit tests: takes the current
+/// timestamp and threshold explicitly so synthetic clocks can be injected.
+///
+/// Stalled iff: (a) we've actually posted at least once, (b) more than
+/// `threshold_ns` has elapsed since the most recent post, AND (c) no
+/// drain has caught up to that post (`last_drained_at < pending_posted_at`).
+///
+/// The first clause matters: with both atomics at 0 (fresh boot), the
+/// raw `(now - 0 > threshold) and (0 < 0)` would be `(true) and (false)`
+/// = false anyway, but the explicit guard makes the intent obvious and
+/// guards against future refactors that could change the sentinel.
+pub fn isStalledAt(now_ns: i64, threshold_ns: i64) bool {
+    const posted = pending_posted_at.load(.acquire);
+    const drained = last_drained_at.load(.acquire);
+    if (posted == 0) return false;
+    return (now_ns - posted > threshold_ns) and (drained < posted);
+}
+
+/// Production stall predicate. Reads the monotonic wall clock and delegates
+/// to `isStalledAt`. Daemon-side observers (deckpilot etc.) call this.
+pub fn isStalled(threshold_ns: i64) bool {
+    return isStalledAt(nowNs(), threshold_ns);
+}
+
+/// Snapshot of the watchdog atomics for the daemon-side observer. Both
+/// fields are i64 nanoseconds since UNIX epoch; `0` means "never recorded".
+pub const Observation = struct {
+    pending_posted_at: i64,
+    last_drained_at: i64,
+};
+
+pub fn lastObservation() Observation {
+    return .{
+        .pending_posted_at = pending_posted_at.load(.acquire),
+        .last_drained_at = last_drained_at.load(.acquire),
+    };
+}
+
+/// Test-only: reset both timestamps to 0. Lets each test start from a
+/// known-clean state regardless of test ordering.
+fn resetWatchdogForTest() void {
+    pending_posted_at.store(0, .release);
+    last_drained_at.store(0, .release);
+}
+
 const ResponseCache = struct {
     req: ?[]u8 = null,
     resp: ?[]u8 = null,
@@ -554,6 +635,11 @@ pub const ControlPlane = struct {
                 log.info("drainPendingInputs: ack cmd_id={}", .{max_cmd_id});
             }
         }
+
+        // #212: stamp the drain timestamp unconditionally (even when the
+        // pending list was empty) — a spurious WM_APP_CONTROL_INPUT that
+        // finds nothing to drain is still a UI-thread liveness signal.
+        recordDrain();
     }
 
     pub fn drainPendingImeInjects(self: *ControlPlane) ?[]u8 {
@@ -629,6 +715,11 @@ pub const ControlPlane = struct {
         if (result == 0) {
             return 0;
         }
+        // #212: record post timestamp only after a successful PostMessageW.
+        // A failed post leaves the prior `pending_posted_at` value in place,
+        // which is correct: if an earlier post is still undrained, that
+        // pending stall signal must continue to fire.
+        recordPendingPost();
         return cmd_id;
     }
 
@@ -1036,4 +1127,81 @@ test "handleRequestWith returns deterministic ERR for unsupported command" {
     const resp = cp.handleRequestWith("RAW_INPUT|test-client|hello", std.testing.allocator, null, contractBackend);
     defer std.testing.allocator.free(resp);
     try std.testing.expectEqualStrings("ERR|UNSUPPORTED|RAW_INPUT\n", resp);
+}
+
+// ── #212: UI-thread stall watchdog ──
+//
+// These tests drive the module-level `pending_posted_at` / `last_drained_at`
+// atomics directly via `resetWatchdogForTest` + the public store helpers,
+// so the assertions don't depend on the wall clock or on any actual UI
+// thread. `isStalledAt` takes the synthetic `now_ns` so each test pins a
+// deterministic time.
+
+test "isStalled: fresh state never alarms (no posts, no drains)" {
+    resetWatchdogForTest();
+    // Both sentinels at 0. Even at very large `now_ns` and tiny threshold,
+    // we must NOT report stalled — that would be a spurious alarm before
+    // CP has actually seen any traffic.
+    try std.testing.expect(!isStalledAt(1_000_000_000_000, 1));
+    try std.testing.expect(!isStalledAt(0, 0));
+}
+
+test "isStalled: post without subsequent drain past threshold returns true" {
+    resetWatchdogForTest();
+    const t_post: i64 = 1_000_000_000;
+    pending_posted_at.store(t_post, .release);
+    // 5ms threshold, simulate 10ms elapsed since post.
+    const threshold_ns: i64 = 5 * std.time.ns_per_ms;
+    const now: i64 = t_post + 10 * std.time.ns_per_ms;
+    try std.testing.expect(isStalledAt(now, threshold_ns));
+}
+
+test "isStalled: post and drain at same instant is not stalled" {
+    resetWatchdogForTest();
+    const t: i64 = 1_000_000_000;
+    pending_posted_at.store(t, .release);
+    last_drained_at.store(t, .release);
+    // Even far past the post timestamp, drained==posted means caught up,
+    // so we are not stalled. (drained < posted is false.)
+    const threshold_ns: i64 = 1 * std.time.ns_per_ms;
+    const now: i64 = t + 1 * std.time.ns_per_s;
+    try std.testing.expect(!isStalledAt(now, threshold_ns));
+}
+
+test "isStalled: post→drain→repost within threshold is not stalled" {
+    resetWatchdogForTest();
+    const t1: i64 = 1_000_000_000;
+    pending_posted_at.store(t1, .release);
+    last_drained_at.store(t1 + 1 * std.time.ns_per_ms, .release);
+    // Second post happens AFTER the first drain — drained < posted now true.
+    const t2: i64 = t1 + 5 * std.time.ns_per_ms;
+    pending_posted_at.store(t2, .release);
+    // 50ms threshold; only 10ms has elapsed since the second post.
+    const threshold_ns: i64 = 50 * std.time.ns_per_ms;
+    const now: i64 = t2 + 10 * std.time.ns_per_ms;
+    try std.testing.expect(!isStalledAt(now, threshold_ns));
+}
+
+test "isStalled: post→drain→repost past threshold returns true" {
+    resetWatchdogForTest();
+    const t1: i64 = 1_000_000_000;
+    pending_posted_at.store(t1, .release);
+    last_drained_at.store(t1 + 1 * std.time.ns_per_ms, .release);
+    const t2: i64 = t1 + 5 * std.time.ns_per_ms;
+    pending_posted_at.store(t2, .release);
+    // 50ms threshold; 100ms has elapsed since the second post — stalled.
+    const threshold_ns: i64 = 50 * std.time.ns_per_ms;
+    const now: i64 = t2 + 100 * std.time.ns_per_ms;
+    try std.testing.expect(isStalledAt(now, threshold_ns));
+}
+
+test "lastObservation reflects the most recent stored values" {
+    resetWatchdogForTest();
+    const tp: i64 = 12_345;
+    const td: i64 = 67_890;
+    pending_posted_at.store(tp, .release);
+    last_drained_at.store(td, .release);
+    const obs = lastObservation();
+    try std.testing.expectEqual(tp, obs.pending_posted_at);
+    try std.testing.expectEqual(td, obs.last_drained_at);
 }
