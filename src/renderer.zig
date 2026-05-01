@@ -18,6 +18,7 @@ pub const GenericRenderer = @import("renderer/generic.zig").Renderer;
 pub const Metal = @import("renderer/Metal.zig");
 pub const OpenGL = @import("renderer/OpenGL.zig");
 pub const WebGL = @import("renderer/WebGL.zig");
+// UPSTREAM-SHARED-OK: D3D11 backend is peer to Metal/OpenGL/WebGL — single import line, comptime-only cost
 pub const D3D11 = @import("renderer/D3D11.zig");
 pub const Options = @import("renderer/Options.zig");
 pub const Overlay = @import("renderer/Overlay.zig");
@@ -40,6 +41,7 @@ pub const Renderer = switch (build_config.renderer) {
     .metal => GenericRenderer(Metal),
     .opengl => GenericRenderer(OpenGL),
     .webgl => WebGL,
+    // UPSTREAM-SHARED-OK: comptime branch on build_config.renderer, no runtime cost
     .d3d11 => GenericRenderer(D3D11),
 };
 

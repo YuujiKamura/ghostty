@@ -40,6 +40,7 @@ pub const Uniforms = extern struct {
 };
 
 /// The target to load shaders for.
+// UPSTREAM-SHARED-OK: hlsl is peer to glsl/msl, transpiler dispatch lives next to siblings
 pub const Target = enum { glsl, msl, hlsl };
 
 /// Load a set of shaders from files and convert them to the target
@@ -276,6 +277,7 @@ pub fn glslFromSpv(alloc: Allocator, spv: []const u8) ![:0]const u8 {
 }
 
 /// Convert SPIR-V binary to HLSL.
+// UPSTREAM-SHARED-OK: peer transpiler to glslFromSpv/mslFromSpv, used by D3D11 backend only
 pub fn hlslFromSpv(alloc: Allocator, spv: []const u8) ![:0]const u8 {
     const c = spvcross.c;
     return try spvCross(alloc, c.SPVC_BACKEND_HLSL, spv, (struct {

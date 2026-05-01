@@ -64,6 +64,10 @@ pub const Message = union(enum) {
     /// Activate or deactivate the inspector.
     inspector: bool,
 
+    // UPSTREAM-SHARED-OK: WinUI3-specific Message variants below — Zig tagged unions
+    // cannot be extended externally, so apprt-specific renderer messages live in this
+    // shared enum. Variants are inert on non-winui3 builds (no dispatch path).
+
     /// Toggle the debug overlay.
     toggle_debug_overlay,
 

@@ -6,6 +6,7 @@ pub const Backend = enum {
     opengl,
     metal,
     webgl,
+    // UPSTREAM-SHARED-OK: enum variant for d3d11 backend — irreducible enum extension
     d3d11,
 
     pub fn default(
