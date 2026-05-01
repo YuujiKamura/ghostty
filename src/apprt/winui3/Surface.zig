@@ -1132,14 +1132,25 @@ pub fn Surface(comptime App: type) type {
         // --- Event handlers called from WndProc ---
 
         pub fn updateSize(self: *Self, width: u32, height: u32) void {
-            if (width == 0 or height == 0) return;
-            log.info("Surface.updateSize: {}x{} -> {}x{}", .{ self.size.width, self.size.height, width, height });
-            self.size = .{ .width = width, .height = height };
+            const next = maybeNewSize(self.size, width, height) orelse return;
+            log.info("Surface.updateSize: {}x{} -> {}x{}", .{ self.size.width, self.size.height, next.width, next.height });
+            self.size = next;
             if (self.core_initialized) {
                 self.core_surface.sizeCallback(self.size) catch |err| {
                     log.warn("size callback error: {}", .{err});
                 };
             }
+        }
+
+        /// Decide whether `updateSize` should accept the proposed (w, h).
+        /// Returns null when either dimension is zero (caller should no-op).
+        /// Otherwise returns the new size — equality with `prev` is intentionally
+        /// NOT short-circuited here because callers still want the size callback
+        /// to fire on identical-but-resent dimensions (matches inlined behavior).
+        fn maybeNewSize(prev: apprt.SurfaceSize, w: u32, h: u32) ?apprt.SurfaceSize {
+            _ = prev;
+            if (w == 0 or h == 0) return null;
+            return .{ .width = w, .height = h };
         }
 
         pub fn updateContentScale(self: *Self) void {
@@ -2494,11 +2505,16 @@ pub fn Surface(comptime App: type) type {
         /// log spam on the hot mouse-move path.
         /// Mark mouse shape dirty; actual cursor change is deferred to flushDirtyUi().
         pub fn setMouseShape(self: *Self, shape: terminal.MouseShape) void {
-            if (self.last_mouse_shape) |prev| {
-                if (prev == shape) return;
-            }
+            if (!shouldChangeMouseShape(self.last_mouse_shape, shape)) return;
             self.pending_mouse_shape = shape;
             self.dirty.mouse_shape = true;
+        }
+
+        /// Predicate: should we record a pending mouse-shape change?
+        /// Dedups against the last applied shape.
+        fn shouldChangeMouseShape(prev: ?terminal.MouseShape, next: terminal.MouseShape) bool {
+            const p = prev orelse return true;
+            return p != next;
         }
 
         /// Apply pending mouse shape change.
@@ -2546,10 +2562,16 @@ pub fn Surface(comptime App: type) type {
             log.info("Surface.commandFinished: duration={}ns", .{value.duration.duration});
 
             // Minimal notification: command failure emits an audible signal.
-            if (value.exit_code) |code| {
-                if (code != 0) _ = os.MessageBeep(os.MB_OK);
-            }
+            if (shouldBeepForExit(value.exit_code)) _ = os.MessageBeep(os.MB_OK);
             return true;
+        }
+
+        /// Predicate: emit an audible signal when a command finished with a
+        /// non-null, non-zero exit code. `null` = no exit info available
+        /// (treated as success/silent).
+        fn shouldBeepForExit(exit_code: ?u8) bool {
+            const code = exit_code orelse return false;
+            return code != 0;
         }
 
         /// Ring the audible/visual bell.  Throttled to at most once per 100ms
@@ -2578,6 +2600,66 @@ pub fn Surface(comptime App: type) type {
             try std.testing.expectEqual(@as(f64, 1.0), computeFraction(255));
             try std.testing.expectEqual(@as(f64, 0.0), computeFraction(0));
             try std.testing.expectEqual(@as(f64, 0.5), computeFraction(50));
+        }
+
+        test "shouldBeepForExit: null exit code is silent" {
+            try std.testing.expectEqual(false, shouldBeepForExit(null));
+        }
+
+        test "shouldBeepForExit: zero exit code is silent" {
+            try std.testing.expectEqual(false, shouldBeepForExit(0));
+        }
+
+        test "shouldBeepForExit: non-zero codes beep" {
+            try std.testing.expectEqual(true, shouldBeepForExit(1));
+            try std.testing.expectEqual(true, shouldBeepForExit(2));
+            try std.testing.expectEqual(true, shouldBeepForExit(255));
+        }
+
+        test "maybeNewSize: zero width is rejected" {
+            const prev: apprt.SurfaceSize = .{ .width = 800, .height = 600 };
+            try std.testing.expectEqual(@as(?apprt.SurfaceSize, null), maybeNewSize(prev, 0, 480));
+        }
+
+        test "maybeNewSize: zero height is rejected" {
+            const prev: apprt.SurfaceSize = .{ .width = 800, .height = 600 };
+            try std.testing.expectEqual(@as(?apprt.SurfaceSize, null), maybeNewSize(prev, 640, 0));
+        }
+
+        test "maybeNewSize: zero width and zero height both rejected" {
+            const prev: apprt.SurfaceSize = .{ .width = 800, .height = 600 };
+            try std.testing.expectEqual(@as(?apprt.SurfaceSize, null), maybeNewSize(prev, 0, 0));
+        }
+
+        test "maybeNewSize: non-zero dimensions accepted (different from prev)" {
+            const prev: apprt.SurfaceSize = .{ .width = 800, .height = 600 };
+            const got = maybeNewSize(prev, 1024, 768);
+            try std.testing.expect(got != null);
+            try std.testing.expectEqual(@as(u32, 1024), got.?.width);
+            try std.testing.expectEqual(@as(u32, 768), got.?.height);
+        }
+
+        test "maybeNewSize: identical dimensions still accepted (matches inlined behavior)" {
+            const prev: apprt.SurfaceSize = .{ .width = 800, .height = 600 };
+            const got = maybeNewSize(prev, 800, 600);
+            try std.testing.expect(got != null);
+            try std.testing.expectEqual(@as(u32, 800), got.?.width);
+            try std.testing.expectEqual(@as(u32, 600), got.?.height);
+        }
+
+        test "shouldChangeMouseShape: null prev always changes" {
+            try std.testing.expectEqual(true, shouldChangeMouseShape(null, .text));
+            try std.testing.expectEqual(true, shouldChangeMouseShape(null, .default));
+        }
+
+        test "shouldChangeMouseShape: same shape is dedup'd" {
+            try std.testing.expectEqual(false, shouldChangeMouseShape(.default, .default));
+            try std.testing.expectEqual(false, shouldChangeMouseShape(.text, .text));
+        }
+
+        test "shouldChangeMouseShape: different shape changes" {
+            try std.testing.expectEqual(true, shouldChangeMouseShape(.default, .text));
+            try std.testing.expectEqual(true, shouldChangeMouseShape(.text, .default));
         }
 
         test "pointerToCursorPos applies surface origin offset" {
