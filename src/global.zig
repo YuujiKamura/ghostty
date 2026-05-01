@@ -3,7 +3,13 @@ const builtin = @import("builtin");
 const build_config = @import("build_config.zig");
 const cli = @import("cli.zig");
 const internal_os = @import("os/main.zig");
-const fontconfig_env = @import("os/fontconfig_env.zig");
+// fork-local: fontconfig env helper relocated under apprt/winui3 per #254 / the
+// 2026-04-27 fork-isolation audit (item 7). Imported lazily through a
+// build_config gate so non-winui3 builds don't depend on a winui3-only file.
+const winui3_fontconfig_env = if (build_config.app_runtime == .winui3)
+    @import("apprt/winui3/font/env.zig")
+else
+    struct {};
 const fontconfig = @import("fontconfig");
 const glslang = @import("glslang");
 const harfbuzz = @import("harfbuzz");
@@ -175,9 +181,11 @@ pub const GlobalState = struct {
         self.resources_dir = try apprt.runtime.resourcesDir(self.alloc);
         errdefer self.resources_dir.deinit(self.alloc);
 
-        if (comptime build_config.font_backend.hasFontconfig()) {
+        if (comptime build_config.font_backend.hasFontconfig() and
+            build_config.app_runtime == .winui3)
+        {
             if (self.resources_dir.app()) |resources_dir| {
-                var env_vars = try fontconfig_env.buildEnvVars(self.alloc, resources_dir);
+                var env_vars = try winui3_fontconfig_env.buildEnvVars(self.alloc, resources_dir);
                 defer env_vars.deinit(self.alloc);
 
                 if (env_vars.file_value) |file_value| {

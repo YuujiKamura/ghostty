@@ -1,3 +1,9 @@
+//! WinUI3-local fontconfig env helper. Builds FONTCONFIG_FILE and
+//! FONTCONFIG_PATH values from the resources dir so the bundled fontconfig
+//! data ships under our app share dir without sprawling into upstream-shared
+//! `src/os/`. Relocated from `src/os/fontconfig_env.zig` per #254 / the
+//! 2026-04-27 fork-isolation audit (item 7).
+
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
