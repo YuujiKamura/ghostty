@@ -409,3 +409,127 @@ test "bindTexturesToShaderStages assigns slot index per array position" {
     try std.testing.expectEqual(@as(com.UINT, 0), rec.ps_calls.items[0].slot);
     try std.testing.expectEqual(@as(com.UINT, 2), rec.ps_calls.items[1].slot);
 }
+
+test "begin: round-trips empty attachments slice with zero-init step_number/context" {
+    const opts: Options = .{ .attachments = &.{} };
+    const pass = begin(opts);
+    try std.testing.expectEqual(@as(usize, 0), pass.step_number);
+    try std.testing.expectEqual(@as(?*com.ID3D11DeviceContext, null), pass.context);
+    try std.testing.expectEqual(@as(usize, 0), pass.attachments.len);
+    // Empty slice: ptr equality is undefined for zero-length slices, so just
+    // assert the length contract.
+}
+
+test "begin: round-trips non-empty attachments slice by pointer identity" {
+    const sentinel_attachments = [_]Options.Attachment{
+        .{ .target = .{ .texture = .{
+            .texture = null,
+            .srv = null,
+            .width = 0,
+            .height = 0,
+            .format = .R8G8B8A8_UNORM,
+        } }, .clear_color = null },
+        .{ .target = .{ .texture = .{
+            .texture = null,
+            .srv = null,
+            .width = 0,
+            .height = 0,
+            .format = .R8G8B8A8_UNORM,
+        } }, .clear_color = .{ 1.0, 0.0, 0.0, 1.0 } },
+    };
+    const opts: Options = .{ .attachments = &sentinel_attachments };
+    const pass = begin(opts);
+    try std.testing.expectEqual(@as(usize, 2), pass.attachments.len);
+    try std.testing.expectEqual(opts.attachments.ptr, pass.attachments.ptr);
+    try std.testing.expectEqual(@as(usize, 0), pass.step_number);
+    try std.testing.expectEqual(@as(?*com.ID3D11DeviceContext, null), pass.context);
+}
+
+test "setContext: assigns sentinel pointer verbatim" {
+    var pass = begin(.{ .attachments = &.{} });
+    const sentinel: *com.ID3D11DeviceContext = @ptrFromInt(0xCAFE);
+    pass.setContext(sentinel);
+    try std.testing.expectEqual(@as(?*com.ID3D11DeviceContext, sentinel), pass.context);
+}
+
+test "setContext: overwrite replaces a prior context" {
+    var pass = begin(.{ .attachments = &.{} });
+    const first: *com.ID3D11DeviceContext = @ptrFromInt(0xCAFE);
+    const second: *com.ID3D11DeviceContext = @ptrFromInt(0xBEEF);
+    pass.setContext(first);
+    pass.setContext(second);
+    try std.testing.expectEqual(@as(?*com.ID3D11DeviceContext, second), pass.context);
+}
+
+test "complete: is a no-op — state unchanged after the call" {
+    // Pin the no-op contract: complete() must not mutate Self. Future
+    // maintainers who silently introduce side effects here will fail this.
+    const sentinel_attachments = [_]Options.Attachment{
+        .{ .target = .{ .texture = .{
+            .texture = null,
+            .srv = null,
+            .width = 0,
+            .height = 0,
+            .format = .R8G8B8A8_UNORM,
+        } }, .clear_color = null },
+    };
+    var pass = begin(.{ .attachments = &sentinel_attachments });
+    const ctx_sentinel: *com.ID3D11DeviceContext = @ptrFromInt(0xCAFE);
+    pass.setContext(ctx_sentinel);
+    pass.step_number = 7; // simulate post-step state
+
+    const before_ptr = pass.attachments.ptr;
+    const before_len = pass.attachments.len;
+    const before_step = pass.step_number;
+    const before_ctx = pass.context;
+
+    pass.complete();
+
+    try std.testing.expectEqual(before_ptr, pass.attachments.ptr);
+    try std.testing.expectEqual(before_len, pass.attachments.len);
+    try std.testing.expectEqual(before_step, pass.step_number);
+    try std.testing.expectEqual(before_ctx, pass.context);
+}
+
+test "complete: callable on default-constructed pass (no context, no attachments)" {
+    const pass = begin(.{ .attachments = &.{} });
+    pass.complete();
+    // Reaching here = no panic, no UB, no mutation of `const` self.
+    try std.testing.expectEqual(@as(usize, 0), pass.step_number);
+}
+
+test "traceDiagnostics: shape and field types" {
+    const diag = traceDiagnostics();
+    // Compile-time shape check via @TypeOf.
+    try std.testing.expectEqual(bool, @TypeOf(diag.enabled));
+    try std.testing.expectEqual(u64, @TypeOf(diag.bind_counter));
+    try std.testing.expectEqual(bool, @TypeOf(diag.sentinel_emitted));
+}
+
+test "traceDiagnostics: idempotent — two consecutive reads agree" {
+    // Pure read of cached atomics; back-to-back calls in a single thread must
+    // observe identical values.
+    const a = traceDiagnostics();
+    const b = traceDiagnostics();
+    try std.testing.expectEqual(a.enabled, b.enabled);
+    try std.testing.expectEqual(a.bind_counter, b.bind_counter);
+    try std.testing.expectEqual(a.sentinel_emitted, b.sentinel_emitted);
+}
+
+test "traceDiagnostics: enabled implies sentinel_emitted; disabled implies !sentinel_emitted" {
+    // Cross-field invariant: the sentinel print only fires when env-var-driven
+    // tracing is on. Either both bits are set or both are clear.
+    const diag = traceDiagnostics();
+    try std.testing.expectEqual(diag.enabled, diag.sentinel_emitted);
+}
+
+test "traceDiagnostics: default-off path with GHOSTTY_TRACE_BG_CELLS unset" {
+    // When the env var is absent, the predicate must cache `enabled=false`,
+    // never print the sentinel, and leave bind_counter at zero (no
+    // bindResources call has occurred — only this test file's free helpers).
+    if (std.process.hasEnvVarConstant("GHOSTTY_TRACE_BG_CELLS")) return error.SkipZigTest;
+    const diag = traceDiagnostics();
+    try std.testing.expectEqual(false, diag.enabled);
+    try std.testing.expectEqual(false, diag.sentinel_emitted);
+    try std.testing.expectEqual(@as(u64, 0), diag.bind_counter);
+}

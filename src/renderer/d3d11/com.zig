@@ -1160,3 +1160,47 @@ pub const D3D11_RTV_DIMENSION_TEXTURE2D: UINT = 4;
 
 /// DXGI_SWAP_CHAIN flags
 pub const DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING: UINT = 2048;
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+test "hrCheck: S_OK (0) returns ok" {
+    try hrCheck(@as(HRESULT, 0));
+}
+
+test "hrCheck: S_FALSE (1) returns ok (any non-negative is success)" {
+    // S_FALSE is documented as a success code by Windows: hr >= 0.
+    try hrCheck(@as(HRESULT, 1));
+}
+
+test "hrCheck: max-positive HRESULT returns ok" {
+    // 0x7FFFFFFF is the largest positive c_long; sign bit clear ⇒ success.
+    try hrCheck(@as(HRESULT, 0x7FFFFFFF));
+}
+
+test "hrCheck: E_FAIL (0x80004005) returns error.D3D11Failed" {
+    const e_fail: HRESULT = @bitCast(@as(u32, 0x80004005));
+    try std.testing.expectError(error.D3D11Failed, hrCheck(e_fail));
+}
+
+test "hrCheck: E_INVALIDARG (0x80070057) returns error.D3D11Failed" {
+    const e_invalidarg: HRESULT = @bitCast(@as(u32, 0x80070057));
+    try std.testing.expectError(error.D3D11Failed, hrCheck(e_invalidarg));
+}
+
+test "hrCheck: E_OUTOFMEMORY (0x8007000E) returns error.D3D11Failed" {
+    const e_oom: HRESULT = @bitCast(@as(u32, 0x8007000E));
+    try std.testing.expectError(error.D3D11Failed, hrCheck(e_oom));
+}
+
+test "hrCheck: -1 (sign bit set) returns error.D3D11Failed" {
+    // Boundary: smallest negative HRESULT must trip the predicate.
+    try std.testing.expectError(error.D3D11Failed, hrCheck(@as(HRESULT, -1)));
+}
+
+test "hrCheck: most-negative HRESULT returns error.D3D11Failed" {
+    // 0x80000000 is the most-negative c_long; sign bit set ⇒ failure.
+    const min_neg: HRESULT = @bitCast(@as(u32, 0x80000000));
+    try std.testing.expectError(error.D3D11Failed, hrCheck(min_neg));
+}
