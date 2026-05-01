@@ -330,16 +330,21 @@ pub const LoadingImage = struct {
     fn isPathInTempDir(path: []const u8) bool {
         if (std.mem.startsWith(u8, path, "/tmp")) return true;
         if (std.mem.startsWith(u8, path, "/dev/shm")) return true;
-        const dir = temp_dir.allocTmpDir(std.heap.page_allocator) catch return false;
-        defer temp_dir.freeTmpDir(std.heap.page_allocator, dir);
-        if (std.mem.startsWith(u8, path, dir)) return true;
+        // UPSTREAM-SHARED-OK: fork's temp_dir.allocTmpDir returns ?[]const u8
+        // (optional) while upstream returns an error union. The `if`-pattern
+        // adapts the call site without changing semantics; reverting requires
+        // also reverting src/os/file.zig (A1 territory).
+        if (temp_dir.allocTmpDir(std.heap.page_allocator)) |dir| {
+            defer temp_dir.freeTmpDir(std.heap.page_allocator, dir);
+            if (std.mem.startsWith(u8, path, dir)) return true;
 
-        // The temporary dir is sometimes a symlink. On macOS for
-        // example /tmp is /private/var/...
-        var buf: [std.fs.max_path_bytes]u8 = undefined;
-        if (posix.realpath(dir, &buf)) |real_dir| {
-            if (std.mem.startsWith(u8, path, real_dir)) return true;
-        } else |_| {}
+            // The temporary dir is sometimes a symlink. On macOS for
+            // example /tmp is /private/var/...
+            var buf: [std.fs.max_path_bytes]u8 = undefined;
+            if (posix.realpath(dir, &buf)) |real_dir| {
+                if (std.mem.startsWith(u8, path, real_dir)) return true;
+            } else |_| {}
+        }
 
         return false;
     }
