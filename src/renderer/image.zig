@@ -589,7 +589,7 @@ pub const State = struct {
         // If any error happens, we unload the image and it is invalid.
         errdefer gop.value_ptr.image.markForUnload();
 
-        gop.value_ptr.image.prepForUpload(alloc) catch |err| {
+        gop.value_ptr.image.prepUpload(alloc) catch |err| {
             log.warn("error preparing image for upload err={}", .{err});
             return error.ImageConversionError;
         };
@@ -873,8 +873,12 @@ pub const Image = union(enum) {
     }
 
     /// Prepare the pending image data for upload to the GPU.
-    /// This doesn't need GPU access so is safe to call any time.
-    fn prepForUpload(self: *Image, alloc: Allocator) wuffs.Error!void {
+    /// This is the **device-free** prep step: format conversion to RGBA
+    /// and any other CPU-side massaging the pending bytes need before
+    /// `Texture.init`. Does not touch the GPU, so it is safe to call
+    /// outside the renderer thread and is unit-testable without a device.
+    /// Idempotent: calling on an already-RGBA pending is a no-op.
+    pub fn prepUpload(self: *Image, alloc: Allocator) wuffs.Error!void {
         assert(self.isPending());
         try self.convert(alloc);
     }
@@ -893,7 +897,7 @@ pub const Image = union(enum) {
 
         // No error recover is required after this call because it just
         // converts in place and is idempotent.
-        try self.prepForUpload(alloc);
+        try self.prepUpload(alloc);
 
         // Get our pending info
         const p = self.getPending().?;
@@ -1367,4 +1371,125 @@ test "Overlay.pendingImage byte layout matches Pending.rgba expectations" {
     try testing.expectEqual(@as(u8, 0xCD), ds[1]);
     try testing.expectEqual(@as(u8, 0xEF), ds[2]);
     try testing.expectEqual(@as(u8, 0x12), ds[3]);
+}
+
+test "Image.prepUpload: rgba pending is a no-op (no realloc, no format change)" {
+    const w: u32 = 2;
+    const h: u32 = 2;
+    const data = try testing.allocator.alloc(u8, w * h * 4);
+    @memset(data, 0xAB);
+
+    var img: Image = .{ .pending = .{
+        .width = w,
+        .height = h,
+        .pixel_format = .rgba,
+        .data = data.ptr,
+    } };
+    defer img.deinit(testing.allocator);
+
+    const original_ptr = @intFromPtr(img.pending.data);
+    try img.prepUpload(testing.allocator);
+
+    try testing.expectEqual(Image.Pending.PixelFormat.rgba, img.pending.pixel_format);
+    // No-op must not realloc the buffer.
+    try testing.expectEqual(original_ptr, @intFromPtr(img.pending.data));
+    try testing.expectEqual(@as(usize, w * h * 4), img.pending.dataSlice().len);
+    // Bytes preserved.
+    for (img.pending.dataSlice()) |b| try testing.expectEqual(@as(u8, 0xAB), b);
+}
+
+test "Image.prepUpload: gray pending is converted to rgba with 4x byte length" {
+    const w: u32 = 3;
+    const h: u32 = 2;
+    const data = try testing.allocator.alloc(u8, w * h * 1);
+    @memset(data, 0x80);
+
+    var img: Image = .{ .pending = .{
+        .width = w,
+        .height = h,
+        .pixel_format = .gray,
+        .data = data.ptr,
+    } };
+    defer img.deinit(testing.allocator);
+
+    try img.prepUpload(testing.allocator);
+
+    try testing.expectEqual(Image.Pending.PixelFormat.rgba, img.pending.pixel_format);
+    try testing.expectEqual(@as(usize, w * h * 4), img.pending.dataSlice().len);
+    // wuffs gToRgba expands grey to {g,g,g,0xFF} per pixel; verify the alpha
+    // channel is opaque on every pixel and the colour channels carry the gray.
+    const ds = img.pending.dataSlice();
+    var i: usize = 0;
+    while (i < ds.len) : (i += 4) {
+        try testing.expectEqual(@as(u8, 0x80), ds[i + 0]);
+        try testing.expectEqual(@as(u8, 0x80), ds[i + 1]);
+        try testing.expectEqual(@as(u8, 0x80), ds[i + 2]);
+        try testing.expectEqual(@as(u8, 0xFF), ds[i + 3]);
+    }
+}
+
+test "Image.prepUpload: rgb pending is converted to rgba (3 bpp -> 4 bpp)" {
+    const w: u32 = 2;
+    const h: u32 = 1;
+    const data = try testing.allocator.alloc(u8, w * h * 3);
+    // Pixel 0 = (0x10, 0x20, 0x30), Pixel 1 = (0x40, 0x50, 0x60)
+    data[0] = 0x10;
+    data[1] = 0x20;
+    data[2] = 0x30;
+    data[3] = 0x40;
+    data[4] = 0x50;
+    data[5] = 0x60;
+
+    var img: Image = .{ .pending = .{
+        .width = w,
+        .height = h,
+        .pixel_format = .rgb,
+        .data = data.ptr,
+    } };
+    defer img.deinit(testing.allocator);
+
+    try img.prepUpload(testing.allocator);
+
+    try testing.expectEqual(Image.Pending.PixelFormat.rgba, img.pending.pixel_format);
+    try testing.expectEqual(@as(usize, w * h * 4), img.pending.dataSlice().len);
+    const ds = img.pending.dataSlice();
+    // Pixel 0 should preserve RGB and gain opaque alpha.
+    try testing.expectEqual(@as(u8, 0x10), ds[0]);
+    try testing.expectEqual(@as(u8, 0x20), ds[1]);
+    try testing.expectEqual(@as(u8, 0x30), ds[2]);
+    try testing.expectEqual(@as(u8, 0xFF), ds[3]);
+    // Pixel 1.
+    try testing.expectEqual(@as(u8, 0x40), ds[4]);
+    try testing.expectEqual(@as(u8, 0x50), ds[5]);
+    try testing.expectEqual(@as(u8, 0x60), ds[6]);
+    try testing.expectEqual(@as(u8, 0xFF), ds[7]);
+}
+
+test "Image.prepUpload: bgra pending is swizzled to rgba in place of length" {
+    const w: u32 = 1;
+    const h: u32 = 1;
+    const data = try testing.allocator.alloc(u8, w * h * 4);
+    // BGRA = (0x10, 0x20, 0x30, 0x40) -> RGBA should be (0x30, 0x20, 0x10, 0x40).
+    data[0] = 0x10; // B
+    data[1] = 0x20; // G
+    data[2] = 0x30; // R
+    data[3] = 0x40; // A
+
+    var img: Image = .{ .pending = .{
+        .width = w,
+        .height = h,
+        .pixel_format = .bgra,
+        .data = data.ptr,
+    } };
+    defer img.deinit(testing.allocator);
+
+    try img.prepUpload(testing.allocator);
+
+    try testing.expectEqual(Image.Pending.PixelFormat.rgba, img.pending.pixel_format);
+    try testing.expectEqual(@as(usize, w * h * 4), img.pending.dataSlice().len);
+    const ds = img.pending.dataSlice();
+    try testing.expectEqual(@as(u8, 0x30), ds[0]);
+    try testing.expectEqual(@as(u8, 0x20), ds[1]);
+    try testing.expectEqual(@as(u8, 0x10), ds[2]);
+    try testing.expectEqual(@as(u8, 0x40), ds[3]);
 }
