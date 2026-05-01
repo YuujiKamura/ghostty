@@ -9,6 +9,32 @@
 //! it just draws and responds to events. The events come from the application
 //! runtime so the runtime can determine when and how those are delivered
 //! (i.e. with focus, without focus, and so on).
+//!
+//! UPSTREAM-SHARED-OK: This file carries fork-only edits that cannot be
+//! relocated into `src/apprt/winui3/` without rewriting upstream control
+//! flow. See `wrap-first-in-apprt` skill + tracking issue #260. Categories:
+//!
+//!   1. BoundedMailbox migration (#218 / #219 / #232) — every `.forever`
+//!      push site is replaced with `push() != .ok` (drop-on-full) or
+//!      `pushTimeout(., ms)`. Call sites live in upstream callbacks
+//!      (`focusCallback`, `occlusionCallback`, `setFontSize`, `updateConfig`,
+//!      `searchCallback_`, inspector activate/deactivate, crash binding).
+//!   2. Fork-only `*Locked` non-blocking accessors (`hasSelectionLocked`,
+//!      `pwdLocked`, `cursorIsAtPromptLocked`, `panePidLocked`,
+//!      `viewportStringLocked`, `historyStringLocked`) + their blocking
+//!      siblings (`cursorIsAtPrompt`, `panePid`, `viewportString`,
+//!      `historyString`). Required by both win32 and winui3 apprts via
+//!      direct `*Surface` consumption from the CP read lane (#207, #212).
+//!   3. Fork-only scrollbar 16ms throttle (#103) — `last_scrollbar_notify`
+//!      field + `updateScrollbar` body + immediate-notify call sites in
+//!      `selectionScrollTick`, `keyCallback`, `scrollCallback`.
+//!   4. Body-extension bug fixes: `imePoint` mutex coverage + diagnostic
+//!      log (#207 IME race), `preeditCallback` cursorMarkDirty (#133
+//!      first-char loss), `posToViewportForSize` test seam.
+//!   5. `pub fn queueIo` visibility raised so the inspector path can keep
+//!      upstream control flow intact.
+//!   6. `extern fn GetProcessId` Win32 import for `panePid` (Zig std.os.windows
+//!      does not re-export it).
 const Surface = @This();
 
 const apprt = @import("apprt.zig");
@@ -40,6 +66,8 @@ const ProcessInfo = @import("pty.zig").ProcessInfo;
 
 const log = std.log.scoped(.surface);
 
+// UPSTREAM-SHARED-OK: Win32 PID lookup used by fork-only `panePid`/`panePidLocked`;
+// Zig std.os.windows does not re-export GetProcessId, so the extern stays here.
 extern "kernel32" fn GetProcessId(process: internal_os.windows.HANDLE) callconv(.winapi) u32;
 
 // The renderer implementation to use.
@@ -179,6 +207,9 @@ search: ?Search = null,
 last_bell_time: ?std.time.Instant = null,
 
 /// Used to rate limit scrollbar update notifications.
+/// UPSTREAM-SHARED-OK: fork-local scrollbar 16ms throttle (#103); the field
+/// must live on Surface because the throttle is read/written from upstream
+/// scroll/key callback bodies that we cannot move into apprt.
 last_scrollbar_notify: ?std.time.Instant = null,
 
 /// The effect of an input event. This can be used by callers to take
@@ -866,6 +897,11 @@ inline fn surfaceMailbox(self: *Surface) Mailbox {
 ///
 /// We centralize all our logic into this spot so we can intercept
 /// messages for example in readonly mode.
+///
+/// UPSTREAM-SHARED-OK: visibility raised from `fn` to `pub fn` so the
+/// fork-only inspector activate/deactivate paths (and their mailbox-drop
+/// rewrites) can keep upstream control flow intact without duplicating
+/// the body into apprt.
 pub fn queueIo(
     self: *Surface,
     msg: termio.Message,
@@ -2149,6 +2185,9 @@ pub fn hasSelection(self: *const Surface) bool {
 /// See `notes/2026-04-26_cp_stall_source_audit.md` cause (A) and
 /// `apprt/winui3/App.zig:1034 tsfGetCursorRect` for the canonical
 /// tryLock pattern (commit b7de73893, "#212 Tier 4 P0 #1").
+///
+/// UPSTREAM-SHARED-OK: fork-only CP read-lane accessor (#207); bound to
+/// `*Surface` and consumed by both win32 + winui3 apprts.
 pub fn hasSelectionLocked(self: *const Surface) ?bool {
     if (!self.renderer_state.mutex.tryLock()) return null;
     defer self.renderer_state.mutex.unlock();
@@ -2186,6 +2225,7 @@ pub fn pwd(
 ///   - the duplicated pwd string on success.
 ///
 /// See `hasSelectionLocked` for rationale.
+/// UPSTREAM-SHARED-OK: fork-only CP read-lane accessor (#207).
 pub fn pwdLocked(
     self: *const Surface,
     alloc: Allocator,
@@ -2197,6 +2237,9 @@ pub fn pwdLocked(
 }
 
 /// Returns true when the terminal cursor is currently at a shell prompt.
+/// UPSTREAM-SHARED-OK: fork-only Surface accessor used by win32+winui3 CP
+/// snapshot path; thin wrapper over `terminal.cursorIsAtPrompt()` under
+/// renderer mutex.
 pub fn cursorIsAtPrompt(self: *Surface) bool {
     self.renderer_state.mutex.lock();
     defer self.renderer_state.mutex.unlock();
@@ -2205,6 +2248,7 @@ pub fn cursorIsAtPrompt(self: *Surface) bool {
 
 /// Non-blocking variant of `cursorIsAtPrompt`. Returns null when the
 /// mutex is contended.
+/// UPSTREAM-SHARED-OK: fork-only CP read-lane accessor (#207).
 pub fn cursorIsAtPromptLocked(self: *Surface) ?bool {
     if (!self.renderer_state.mutex.tryLock()) return null;
     defer self.renderer_state.mutex.unlock();
@@ -2212,6 +2256,8 @@ pub fn cursorIsAtPromptLocked(self: *Surface) ?bool {
 }
 
 /// Returns the current pane process ID if available.
+/// UPSTREAM-SHARED-OK: fork-only accessor wired into the CP pane snapshot;
+/// uses `extern fn GetProcessId` because Zig std.os.windows doesn't expose it.
 pub fn panePid(self: *const Surface) ?u32 {
     self.renderer_state.mutex.lock();
     defer self.renderer_state.mutex.unlock();
@@ -2239,6 +2285,7 @@ pub fn panePid(self: *const Surface) ?u32 {
 ///     can distinguish from "no pid available" → null).
 ///   - `null` when the mutex was acquired but no PID is available.
 ///   - the PID on success.
+/// UPSTREAM-SHARED-OK: fork-only CP read-lane accessor (#207).
 pub fn panePidLocked(self: *const Surface) error{RendererLocked}!?u32 {
     if (!self.renderer_state.mutex.tryLock()) return error.RendererLocked;
     defer self.renderer_state.mutex.unlock();
@@ -2262,6 +2309,8 @@ pub fn panePidLocked(self: *const Surface) error{RendererLocked}!?u32 {
 }
 
 /// Returns the current viewport contents as plain text.
+/// UPSTREAM-SHARED-OK: fork-only accessor consumed by win32+winui3 CP
+/// `viewport`/`history` snapshot commands.
 pub fn viewportString(self: *Surface, alloc: Allocator) ![]const u8 {
     self.renderer_state.mutex.lock();
     defer self.renderer_state.mutex.unlock();
@@ -2271,6 +2320,7 @@ pub fn viewportString(self: *Surface, alloc: Allocator) ![]const u8 {
 /// Non-blocking variant of `viewportString`. Returns
 /// `error.RendererLocked` when the mutex is contended; callers should
 /// translate that to `ERR|BUSY|renderer_locked` on the pipe.
+/// UPSTREAM-SHARED-OK: fork-only CP read-lane accessor (#207).
 pub fn viewportStringLocked(
     self: *Surface,
     alloc: Allocator,
@@ -2281,6 +2331,7 @@ pub fn viewportStringLocked(
 }
 
 /// Returns the full scrollback + active area as plain text.
+/// UPSTREAM-SHARED-OK: fork-only accessor (HISTORY CP command).
 pub fn historyString(self: *Surface, alloc: Allocator) ![]const u8 {
     self.renderer_state.mutex.lock();
     defer self.renderer_state.mutex.unlock();
@@ -2289,6 +2340,7 @@ pub fn historyString(self: *Surface, alloc: Allocator) ![]const u8 {
 
 /// Non-blocking variant of `historyString`. Returns
 /// `error.RendererLocked` when the mutex is contended.
+/// UPSTREAM-SHARED-OK: fork-only CP read-lane accessor (#207).
 pub fn historyStringLocked(
     self: *Surface,
     alloc: Allocator,

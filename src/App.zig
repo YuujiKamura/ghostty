@@ -1,6 +1,21 @@
 //! App is the primary GUI application for ghostty. This builds the window,
 //! sets up the renderer, etc. The primary run loop is started by calling
 //! the "run" function.
+//!
+//! UPSTREAM-SHARED-OK: fork-only edits in this file (tracked in #260)
+//! cannot be relocated into `src/apprt/winui3/` without rewriting upstream
+//! control flow. Categories:
+//!   1. App.Mailbox migrated from `BlockingQueue` to `BoundedMailbox(.., 0)`
+//!      (#232 Phase 2.3) — drop-on-full default for App's terminal mailbox
+//!      because the UI thread can never park on it (#218). Worker threads
+//!      that want a bounded wait opt in via `pushTimeout`.
+//!   2. `keyEventIsBinding` fork-local public method — peer to existing
+//!      `Config.keyEventIsBinding` and `Surface.keyEventIsBinding`; mirrors
+//!      that pattern at App scope so apprt key dispatchers can pre-check
+//!      without going through Surface.
+//!   3. `drainMailbox` `popOrNull` adapter — required because BoundedMailbox
+//!      `pop()` returns a tagged union; `popOrNull` flattens shutdown/empty
+//!      to `null` while keeping the existing drain loop body intact.
 const App = @This();
 
 const std = @import("std");
@@ -327,6 +342,9 @@ pub fn focusEvent(self: *App, focused: bool) void {
 /// Returns true if the given key event would trigger a keybinding
 /// if it were to be processed. This is useful for determining if
 /// a key event should be sent to the terminal or not.
+/// UPSTREAM-SHARED-OK: fork-local pre-dispatch check; peers with the
+/// existing `Config.keyEventIsBinding` / `Surface.keyEventIsBinding`
+/// without changing either of their bodies.
 pub fn keyEventIsBinding(
     self: *App,
     rt_app: *apprt.App,
