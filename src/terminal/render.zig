@@ -1464,6 +1464,9 @@ test "dirty row resets highlights" {
     }
 }
 
+// UPSTREAM-SHARED-OK: preedit/cursor-dirty regression tests live next to the
+// RenderState code they exercise. They test upstream-shared logic and are
+// upstream-PR candidates.
 test "preedit dirty flag triggers cursor row dirty" {
     const testing = std.testing;
     const alloc = testing.allocator;
