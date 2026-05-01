@@ -20,6 +20,7 @@ const log = std.log.scoped(.renderer_thread);
 
 const DRAW_INTERVAL = 8; // 120 FPS
 const CURSOR_BLINK_INTERVAL = 600;
+const CURSOR_BLINK_VALGRIND_MULTIPLIER = 5;
 
 /// Whether calls to `drawFrame` must be done from the app thread.
 ///
@@ -747,7 +748,11 @@ fn stopCallback(
 }
 
 /// Returns the interval for the blinking cursor in milliseconds.
-fn cursorBlinkInterval() u64 {
+///
+/// Public so the cursor-blink contract (600 ms base, 5x under Valgrind)
+/// can be pinned by tests and audited from outside this file. Only the
+/// renderer thread itself actually calls this at runtime.
+pub fn cursorBlinkInterval() u64 {
     if (std.valgrind.runningOnValgrind() > 0) {
         // If we're running under Valgrind, the cursor blink adds enough
         // churn that it makes some stalls annoying unless you're on a
@@ -756,7 +761,7 @@ fn cursorBlinkInterval() u64 {
         // This is a hack, we should change some of our cursor timer
         // logic to be more efficient:
         // https://github.com/ghostty-org/ghostty/issues/8003
-        return CURSOR_BLINK_INTERVAL * 5;
+        return CURSOR_BLINK_INTERVAL * CURSOR_BLINK_VALGRIND_MULTIPLIER;
     }
 
     return CURSOR_BLINK_INTERVAL;
@@ -852,4 +857,30 @@ test "reset_cursor_blink handler is a pure flag set with no side effects" {
         }
         if (!found) @compileError("cursor_blink_visible field missing from Thread.flags");
     }
+}
+
+test "cursorBlinkInterval: constants pinned at 600 ms / Valgrind 5x" {
+    // Pin the cursor blink contract so silent regressions are caught.
+    // The interval is in milliseconds (consumed by xev.Timer.run).
+    try std.testing.expectEqual(@as(u64, 600), CURSOR_BLINK_INTERVAL);
+    try std.testing.expectEqual(@as(u64, 5), CURSOR_BLINK_VALGRIND_MULTIPLIER);
+}
+
+test "cursorBlinkInterval: returns 600 ms outside Valgrind" {
+    // The test runner is not Valgrind on any of our supported CI configs,
+    // so std.valgrind.runningOnValgrind() returns 0 here and the function
+    // must return the bare CURSOR_BLINK_INTERVAL.
+    if (std.valgrind.runningOnValgrind() > 0) return error.SkipZigTest;
+    try std.testing.expectEqual(@as(u64, 600), cursorBlinkInterval());
+}
+
+test "cursorBlinkInterval: Valgrind branch yields multiplier * base" {
+    // We can't actually run under Valgrind from a regular test, but we
+    // can pin the formula by computing what the Valgrind branch produces.
+    // If the multiplier or base changes, this and the constants test must
+    // be updated together, which is the point.
+    try std.testing.expectEqual(
+        @as(u64, 3000),
+        CURSOR_BLINK_INTERVAL * CURSOR_BLINK_VALGRIND_MULTIPLIER,
+    );
 }

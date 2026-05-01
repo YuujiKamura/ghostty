@@ -156,3 +156,55 @@ test "Message.deinit: payload-free variants are no-ops" {
     };
     for (variants) |m| m.deinit();
 }
+
+test "Message.initChangeConfig: happy path round-trips through deinit without leaks" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var cfg = try configpkg.Config.default(alloc);
+    defer cfg.deinit();
+
+    const m = try Message.initChangeConfig(alloc, &cfg);
+    // testing.allocator's leak detector asserts both `thread` and `impl`
+    // (plus the arena owned by Renderer.DerivedConfig) are freed by deinit.
+    m.deinit();
+
+    // Surface the variant tag so a future refactor can't silently change
+    // which message kind initChangeConfig produces.
+    try testing.expectEqual(
+        @as(std.meta.Tag(Message), .change_config),
+        std.meta.activeTag(m),
+    );
+}
+
+test "Message.initChangeConfig: first allocation failure propagates with no leak" {
+    const testing = std.testing;
+    var cfg = try configpkg.Config.default(testing.allocator);
+    defer cfg.deinit();
+
+    // fail_index = 0 fails the very first allocation
+    // (the `thread_ptr = try alloc.create(...)` call). No errdefer has
+    // anything to clean up at that point, so this asserts the function
+    // cleanly bubbles OutOfMemory without partial state.
+    var fail = std.testing.FailingAllocator.init(testing.allocator, .{ .fail_index = 0 });
+    try testing.expectError(
+        error.OutOfMemory,
+        Message.initChangeConfig(fail.allocator(), &cfg),
+    );
+}
+
+test "Message.initChangeConfig: second allocation failure runs errdefer for thread_ptr" {
+    const testing = std.testing;
+    var cfg = try configpkg.Config.default(testing.allocator);
+    defer cfg.deinit();
+
+    // fail_index = 1 lets the first `alloc.create` succeed and fails the
+    // second one. The errdefer for `thread_ptr` must fire and free the
+    // first allocation; otherwise the FailingAllocator's underlying
+    // testing.allocator leak detector trips on teardown.
+    var fail = std.testing.FailingAllocator.init(testing.allocator, .{ .fail_index = 1 });
+    try testing.expectError(
+        error.OutOfMemory,
+        Message.initChangeConfig(fail.allocator(), &cfg),
+    );
+}
