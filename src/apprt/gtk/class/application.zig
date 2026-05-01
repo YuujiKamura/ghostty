@@ -1455,21 +1455,11 @@ pub const Application = extern struct {
     fn activate(self: *Self) callconv(.c) void {
         log.debug("activate", .{});
 
-        // Queue a new window. Use `.instant` (drop on full) instead of
-        // `.forever` to avoid hanging the GTK UI thread on
-        // `cond_not_full.wait` if the app mailbox is saturated. Although
-        // the app mailbox rarely fills in practice, a hang here at
-        // activation would be fatal at startup with no recovery path.
-        // Sister of #218/#219 (#224).
-        // UPSTREAM-SHARED-OK: BoundedMailbox migration extends Phase 2 (#232)
-        // forces App.Mailbox.Queue.push signature change; GTK callsite updated
-        // to match the new return type. Drop-on-full semantics preserved.
+        // Queue a new window
         const priv = self.private();
-        if (priv.core_app.mailbox.push(.{
+        _ = priv.core_app.mailbox.push(.{
             .new_window = .{},
-        }) != .ok) {
-            log.warn("new_window event dropped (app mailbox full)", .{});
-        }
+        }, .{ .forever = {} });
 
         // Call the parent activate method.
         gio.Application.virtual_methods.activate.call(
@@ -1808,13 +1798,7 @@ pub const Application = extern struct {
         _: ?*glib.Variant,
         self: *Self,
     ) callconv(.c) void {
-        // UPSTREAM-SHARED-OK: BoundedMailbox migration extends Phase 2 (#232).
-        // GTK action handlers run on the GTK UI thread; the legacy `.forever`
-        // here was a hang vector (sister of #218). Drop-on-full + warn is the
-        // safer default for any UI-reachable producer.
-        if (self.core().mailbox.push(.open_config) != .ok) {
-            log.warn("open_config dropped (app mailbox full)", .{});
-        }
+        _ = self.core().mailbox.push(.open_config, .forever);
     }
 
     fn actionPresentSurface(
@@ -1839,19 +1823,15 @@ pub const Application = extern struct {
         if (surface_id == 0) return;
         const surface = self.core().findSurfaceByID(surface_id) orelse return;
 
-        // UPSTREAM-SHARED-OK: BoundedMailbox migration extends Phase 2 (#232).
-        // GTK action handler — drop-on-full + warn for the same reason as
-        // actionOpenConfig.
-        if (self.core().mailbox.push(
+        _ = self.core().mailbox.push(
             .{
                 .surface_message = .{
                     .surface = surface,
                     .message = .present_surface,
                 },
             },
-        ) != .ok) {
-            log.warn("present_surface dropped (app mailbox full)", .{});
-        }
+            .forever,
+        );
     }
 
     //----------------------------------------------------------------

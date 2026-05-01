@@ -20,6 +20,7 @@ const CoreInspector = @import("../inspector/main.zig").Inspector;
 const CoreSurface = @import("../Surface.zig");
 const configpkg = @import("../config.zig");
 const Config = configpkg.Config;
+const String = @import("../main_c.zig").String;
 
 const log = std.log.scoped(.embedded_window);
 
@@ -1465,8 +1466,8 @@ pub const CAPI = struct {
     /// if it were sent to the surface right now. The "right now"
     /// is important because things like trigger sequences are only
     /// valid until the next key event.
-    export fn ghostty_app_key_is_binding(
-        app: *App,
+    export fn ghostty_config_key_is_binding(
+        config: *Config,
         event: KeyEvent,
     ) bool {
         const core_event = event.keyEvent().core() orelse {
@@ -1474,7 +1475,7 @@ pub const CAPI = struct {
             return false;
         };
 
-        return app.core_app.keyEventIsBinding(app, core_event);
+        return config.keyEventIsBinding(core_event);
     }
 
     /// Notify the app that the keyboard was changed. This causes the
@@ -1707,6 +1708,23 @@ pub const CAPI = struct {
             .cell_width_px = surface.core_surface.size.cell.width,
             .cell_height_px = surface.core_surface.size.cell.height,
         };
+    }
+
+    /// Returns the PID of the foreground process for the surface PTY.
+    export fn ghostty_surface_foreground_pid(surface: *Surface) u64 {
+        return surface.core_surface.getProcessInfo(.foreground_pid) orelse 0;
+    }
+
+    /// Returns the PTY name for the surface. The returned string must be
+    /// freed by the caller via ghostty_string_free.
+    export fn ghostty_surface_tty_name(surface: *Surface) String {
+        const tty_name = surface.core_surface.getProcessInfo(.tty_name) orelse return .empty;
+        const copy = surface.app.core_app.alloc.dupeZ(u8, tty_name) catch |err| {
+            log.err("error allocating tty name err={}", .{err});
+            return .empty;
+        };
+
+        return .fromSlice(copy);
     }
 
     /// Update the color scheme of the surface.
@@ -2114,18 +2132,10 @@ pub const CAPI = struct {
     const Darwin = struct {
         export fn ghostty_surface_set_display_id(ptr: *Surface, display_id: u32) void {
             const surface = &ptr.core_surface;
-            // Use `.instant` (drop on full) instead of `.forever` to avoid
-            // hanging the macOS host UI thread when the renderer mailbox is
-            // saturated. A `.forever` push here would park the host's UI
-            // thread on `cond_not_full.wait`, freezing the embedder's
-            // message loop. Display-ID is best-effort: missing one
-            // notification only delays the renderer picking up the new
-            // display until the next event. Sister of #218/#219 (#224).
-            if (surface.renderer_thread.mailbox.push(
+            _ = surface.renderer_thread.mailbox.push(
                 .{ .macos_display_id = display_id },
-            ) != .ok) {
-                log.warn("macos_display_id event dropped (renderer mailbox full)", .{});
-            }
+                .{ .forever = {} },
+            );
             surface.renderer_thread.wakeup.notify() catch {};
         }
 
