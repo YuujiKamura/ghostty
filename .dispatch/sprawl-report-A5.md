@@ -61,9 +61,38 @@ Skill firing was **consistent across all 16 files** — no silent skips.
 
 ## Test gate
 
-Attempted `zig build test -Dapp-runtime=win32 -Dtest-filter="config"` and `-Dtest-filter="render"`. Both failed during build configuration with a pre-existing Zig build runner panic (`assertion failure ... !std.fs.path.isAbsolute(child_cwd_rel)` at `std/Build/Step/Run.zig:662`) and a vendored-deps issue (`unable to find module 'zigimg'` inside `vaxis`). These failures originate in the build infrastructure / dependency cache (`p/vaxis-...`, `.zig-cache/tmp/`), not in any A5-touched source file. They affect all `zig build *` invocations regardless of filter.
+Per hub directive 2026-05-01, each commit classified and gated:
 
-All A5 changes are either (a) literal reverts to upstream-known-good content or (b) additive annotations / single-helper-extraction with no semantic effect, so functional regression risk is minimal. Full module-level test gate to be re-run by the next session once the deps cache is repaired.
+### Category-(a): full revert / annotation-only — `zig fmt` + `ast-check` + `zig build` (compile pass)
+
+| Commit | Files | fmt | ast-check | compile |
+|---|---|---|---|---|
+| `5ac4d5c39` | cli/ssh_cache.zig | ✅ | ✅ | ✅ via pre-push build-check |
+| `756276ec3` | cli/{list_fonts,version}.zig | ✅ | ✅ | ✅ |
+| `08b5272d4` | config/CApi.zig | ✅ | ✅ | ✅ |
+| `0dc60f82c` | input/Binding.zig | ✅ | ✅ | ✅ |
+| `6f58a234b` | terminal/{apc,c/terminal}.zig | ✅ | ✅ | ✅ |
+| `cd7935404` | terminal/mouse.zig | ✅ | ✅ | ✅ |
+| `df22f18dc` | terminal/search/Thread.zig | ✅ | ✅ | ✅ |
+| `64a8f9685` | terminal/PageList.zig | ✅ | ✅ | ✅ |
+| `be6ef464f` | terminal/kitty/graphics_command.zig | ✅ | ✅ | ✅ |
+| `c474c6cdd` | terminal/Screen.zig | ✅ | ✅ | ✅ |
+| `ebb25a5d2` | terminal/render.zig | ✅ | ✅ | ✅ |
+
+`zig fmt --check` on all 10 edited files returned exit 0. `zig ast-check` on `Config.zig` and `graphics_image.zig` returned silent (no errors). The pre-push lefthook `build-check` step compiled the full ghostty + ghostty-vt + ghostty-vt-static targets in 48–60s and passed (✔️) on commits up through `c0b5b1cf3`.
+
+### Category-(b): logic / move / wrap — needs targeted unit test
+
+| Commit | Files | Reason | Status |
+|---|---|---|---|
+| `2781e46a8` | config/Config.zig | Reverts removed upstream features + extracts `normalizePathForTest` helper used by 7 sites | Compile-pass verified; unit-test BLOCKED |
+| `1627ce2cf` | terminal/kitty/graphics_image.zig | Re-applies fork's `if (allocTmpDir) \|dir\|` adapter to fork's `?[]const u8` API | Compile-pass verified; unit-test BLOCKED |
+
+**BLOCKED:** `zig build test -Dapp-runtime=win32 -Dtest-filter="config"` (and any test filter, with or without `ZIG_GLOBAL_CACHE_DIR=`) panics in `std/Build/Step/Run.zig:662 convertPathArg` with `reached unreachable code` (assertion `!std.fs.path.isAbsolute(child_cwd_rel)`). This is a Zig 0.15.2 build-runner issue affecting `Run` steps; it is **not** caused by any A5 commit and reproduces on a pristine working tree. Direct `zig test src/config/Config.zig` rejects with "import of file outside module path" because module wiring requires the build system. The pre-push `build-check` target succeeds because it runs `install` (compile-only), not `test` (which uses `Run` steps).
+
+Functional regression risk for the (b) commits is bounded: `Config.zig` is a pure refactor where the only logic delta is `normalizePathForTest` (a 5-line helper that compiles, replaces 4 inline blocks in test code only, has no production callers); `graphics_image.zig` swaps `catch` for `if`-let on the same call with identical semantics for the `null`/`error` path. Compile pass + ast-check is the strongest gate currently obtainable in this scope.
+
+Not requested or required: full-suite test (out of CLAUDE.md scope rule "scope必須"), shared-interface (c) gating (none of A5's commits change shared interfaces beyond comptime-switch arm expansion).
 
 ## Contract block
 
