@@ -1,5 +1,13 @@
 //! Represents the renderer thread logic. The renderer thread is able to
 //! be woken up to render.
+//!
+//! UPSTREAM-SHARED-OK: fork edits are bounded to (a) Mailbox migration to
+//! BoundedMailbox per #232 (BoundedMailbox itself lives in apprt/winui3/),
+//! (b) reset_cursor_blink semantics aligned with WT to fix continuous-output
+//! cursor stall, (c) WinUI3-specific message handlers (toggle_debug_overlay,
+//! tsf_preedit, frame_constants), (d) Debug-mode log throttling on
+//! reset_cursor_blink. The thread itself is upstream-shared by all renderer
+//! backends; wrapping it whole would invent a parallel apprt thread layer.
 pub const Thread = @This();
 
 const std = @import("std");

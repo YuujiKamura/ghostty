@@ -1,3 +1,12 @@
+// UPSTREAM-SHARED-OK: GenericRenderer is the comptime-generic renderer base
+// used by all backends (Metal, OpenGL, D3D11). Fork edits are scoped to:
+// (a) D3D11-specific TerminalShaderConstants slot wiring (slot 1, dbg_print
+//     decoder) that the Metal/OpenGL backends ignore at comptime,
+// (b) image overlay z=0.0 NDC-range fix for D3D11 (matches Metal behavior),
+// (c) winui3 debug-overlay state pass-through (fps, tsf_preedit) plumbed
+//     from Surface → renderer for any backend.
+// Wrapping this file whole would invent a parallel apprt renderer base;
+// the existing comptime-generic design IS the right factoring boundary.
 const std = @import("std");
 const builtin = @import("builtin");
 const xev = @import("xev");

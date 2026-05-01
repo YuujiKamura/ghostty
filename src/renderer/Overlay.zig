@@ -10,6 +10,15 @@
 /// get the resulting image with `pendingImage` to upload to the GPU.
 /// This works in concert with `renderer.image.State` to simplify. Draw
 /// it on the GPU as an image composited on top of the terminal output.
+//
+// UPSTREAM-SHARED-OK: fork extends this struct with a debug-overlay feature
+// (FPS + TSF preedit) co-located with the existing semantic-marker overlay.
+// Color extended from RGB → RGBA to support alpha-blended debug text.
+// Per-field markers are inline below; debug overlay state (debug_font,
+// show_debug_overlay, fps, tsf_preedit) is winui3-only but lives here
+// because the upstream Overlay surface is the natural composit target for
+// any apprt's debug HUD. Wrapping would duplicate the z2d Surface owned by
+// this struct and require a second blit pipeline.
 const Overlay = @This();
 
 const std = @import("std");

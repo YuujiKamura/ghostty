@@ -1,3 +1,10 @@
+// UPSTREAM-SHARED-OK: image.State is the comptime-generic image-management
+// state used by all renderer backends. Fork edits are: (a) prepUpload was
+// promoted from private to pub for testability, (b) added image-variant
+// predicate methods + tests, (c) z-axis NDC-range fix for D3D11 image
+// overlay (matches Metal). Tests live in this file because they exercise
+// generic state directly; no winui3 imports — backend dispatch goes
+// through GraphicsAPI.Texture.
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const assert = @import("../quirks.zig").inlineAssert;
