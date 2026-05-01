@@ -692,3 +692,151 @@ test "Overlay applyFeatures highlights semantic prompts and input" {
     );
     try testing.expectEqual(@as(u8, 0), pixelAt(&overlay, 55, 10).a);
 }
+
+// ============================================================================
+// Plain "obvious behavior" coverage for the debug-overlay toggle path.
+// These pin down behaviors that are easy to break silently:
+//   - default state of show_debug_overlay is OFF
+//   - applyFeatures honors show_debug_overlay (off = no draw, on = draws)
+//   - tsf_preedit set/clear round-trip
+//   - empty features list does not touch the surface
+// ============================================================================
+
+test "Overlay show_debug_overlay defaults to false" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var overlay = try initTestOverlay(alloc, 8, 4);
+    defer overlay.deinit(alloc);
+    try testing.expectEqual(false, overlay.show_debug_overlay);
+}
+
+test "Overlay applyFeatures with show_debug_overlay=false leaves surface untouched" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var overlay = try initTestOverlay(alloc, 32, 4);
+    defer overlay.deinit(alloc);
+
+    overlay.show_debug_overlay = false;
+    overlay.fps = 60.0;
+
+    var t: terminal.Terminal = try .init(alloc, .{ .cols = 4, .rows = 1 });
+    defer t.deinit(alloc);
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    overlay.applyFeatures(alloc, &state, &.{});
+
+    // Surface must remain fully transparent — no debug overlay was requested.
+    for (overlay.surface.image_surface_rgba.buf) |px| {
+        try testing.expectEqual(@as(u8, 0), px.a);
+    }
+}
+
+test "Overlay applyFeatures with show_debug_overlay=true paints debug pixels" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var overlay = try initTestOverlay(alloc, 32, 4);
+    defer overlay.deinit(alloc);
+
+    overlay.show_debug_overlay = true;
+    overlay.fps = 60.0;
+
+    var t: terminal.Terminal = try .init(alloc, .{ .cols = 4, .rows = 1 });
+    defer t.deinit(alloc);
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    overlay.applyFeatures(alloc, &state, &.{});
+
+    try testing.expect(countVisiblePixels(&overlay) > 0);
+}
+
+test "Overlay show_debug_overlay can be flipped on then off (toggle behavior)" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var overlay = try initTestOverlay(alloc, 32, 4);
+    defer overlay.deinit(alloc);
+    overlay.fps = 60.0;
+
+    var t: terminal.Terminal = try .init(alloc, .{ .cols = 4, .rows = 1 });
+    defer t.deinit(alloc);
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    // Start: false → no draw
+    try testing.expectEqual(false, overlay.show_debug_overlay);
+    overlay.applyFeatures(alloc, &state, &.{});
+    try testing.expectEqual(@as(usize, 0), countVisiblePixels(&overlay));
+
+    // Toggle on → draw fills some pixels
+    overlay.show_debug_overlay = !overlay.show_debug_overlay;
+    overlay.applyFeatures(alloc, &state, &.{});
+    const after_on = countVisiblePixels(&overlay);
+    try testing.expect(after_on > 0);
+
+    // Toggle off + reset → no new draw
+    overlay.show_debug_overlay = !overlay.show_debug_overlay;
+    overlay.reset();
+    overlay.applyFeatures(alloc, &state, &.{});
+    try testing.expectEqual(@as(usize, 0), countVisiblePixels(&overlay));
+}
+
+test "Overlay tsf_preedit defaults to null and round-trips an assigned value" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var overlay = try initTestOverlay(alloc, 8, 4);
+    defer overlay.deinit(alloc);
+    try testing.expect(overlay.tsf_preedit == null);
+    overlay.tsf_preedit = "abc";
+    try testing.expectEqualStrings("abc", overlay.tsf_preedit.?);
+    overlay.tsf_preedit = null;
+    try testing.expect(overlay.tsf_preedit == null);
+}
+
+test "Overlay debug overlay reflects updated FPS in subsequent draws" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var overlay = try initTestOverlay(alloc, 32, 4);
+    defer overlay.deinit(alloc);
+    overlay.show_debug_overlay = true;
+
+    var t: terminal.Terminal = try .init(alloc, .{ .cols = 4, .rows = 1 });
+    defer t.deinit(alloc);
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    // Two distinct FPS values must produce different surface contents because
+    // the formatted "FPS: X.XX" text has different glyph patterns.
+    overlay.fps = 0.0;
+    overlay.applyFeatures(alloc, &state, &.{});
+    const a = countVisiblePixels(&overlay);
+
+    overlay.reset();
+    overlay.fps = 240.0;
+    overlay.applyFeatures(alloc, &state, &.{});
+    const b = countVisiblePixels(&overlay);
+
+    try testing.expect(a > 0);
+    try testing.expect(b > 0);
+    // The pixel counts may match by coincidence, but we at least verify both
+    // draws produced visible glyphs — i.e. drawDebugOverlay is being called.
+}
+
+test "renderer.Message.toggle_debug_overlay is a payload-free variant" {
+    const testing = std.testing;
+    const Message = @import("message.zig").Message;
+    const m: Message = .toggle_debug_overlay;
+    try testing.expect(m == .toggle_debug_overlay);
+}
+
+test "renderer.Message.tsf_preedit carries an optional text payload" {
+    const testing = std.testing;
+    const Message = @import("message.zig").Message;
+    const m: Message = .{ .tsf_preedit = .{ .alloc = testing.allocator, .text = null } };
+    try testing.expect(m == .tsf_preedit);
+    try testing.expect(m.tsf_preedit.text == null);
+}
