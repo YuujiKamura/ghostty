@@ -3,9 +3,9 @@ const builtin = @import("builtin");
 const build_config = @import("build_config.zig");
 const cli = @import("cli.zig");
 const internal_os = @import("os/main.zig");
-// fork-local: fontconfig env helper relocated under apprt/winui3 per #254 / the
-// 2026-04-27 fork-isolation audit (item 7). Imported lazily through a
-// build_config gate so non-winui3 builds don't depend on a winui3-only file.
+// UPSTREAM-SHARED-OK: comptime-gated import of winui3-only helper relocated
+// per #254 (2026-04-27 fork-isolation audit item 7); non-winui3 builds resolve
+// to an empty struct, so this adds zero runtime cost and zero non-winui3 dep.
 const winui3_fontconfig_env = if (build_config.app_runtime == .winui3)
     @import("apprt/winui3/font/env.zig")
 else
@@ -181,6 +181,9 @@ pub const GlobalState = struct {
         self.resources_dir = try apprt.runtime.resourcesDir(self.alloc);
         errdefer self.resources_dir.deinit(self.alloc);
 
+        // UPSTREAM-SHARED-OK: bootstrap call site for the winui3 fontconfig env
+        // wrap (#254). The resources_dir is only available here, so the call has
+        // to live in GlobalState.init; the helper itself is winui3-local.
         if (comptime build_config.font_backend.hasFontconfig() and
             build_config.app_runtime == .winui3)
         {
