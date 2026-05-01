@@ -2444,9 +2444,14 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
             const alloc = self.alloc;
 
-            // If we have no features enabled, don't build an overlay.
-            // If we had a previous overlay, deallocate it.
-            if (features.len == 0 and !self.show_debug_overlay) {
+            // If we have no features enabled, no debug overlay, AND no
+            // active TSF preedit, don't build an overlay. We have to keep
+            // the overlay alive when there's a preedit so the user has a
+            // visible side-channel for what they're typing — Gemini CLI
+            // (and friends) don't render the IME composition string at the
+            // cursor reliably, so the overlay's fixed-position "TSF: ..."
+            // line is the fallback the user reads.
+            if (features.len == 0 and !self.show_debug_overlay and self.tsf_preedit == null) {
                 if (self.overlay) |*old| {
                     old.deinit(alloc);
                     self.overlay = null;

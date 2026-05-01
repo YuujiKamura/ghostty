@@ -162,14 +162,24 @@ pub fn applyFeatures(
         ),
     };
 
-    if (self.show_debug_overlay) {
+    // Draw the debug overlay if either (a) the user explicitly toggled it
+    // on for FPS / diagnostics, or (b) there's an active TSF preedit that
+    // needs to be surfaced to the user (the side-channel fallback for
+    // IME composition not rendering at the cursor — see project memory
+    // `project_ghostty_win_overlay_purpose`).
+    if (self.show_debug_overlay or self.tsf_preedit != null) {
         self.drawDebugOverlay(alloc) catch |err| {
             log.warn("error drawing debug overlay: {}", .{err});
         };
     }
 }
 
-/// Draw the FPS and TSF preedit overlay in the top right corner.
+/// Draw the FPS and/or TSF preedit overlay in the top right corner.
+///
+/// FPS line is only emitted when `show_debug_overlay` is true. The TSF
+/// preedit line is emitted whenever `tsf_preedit` is non-null — i.e. the
+/// preedit channel is independent of the user-facing F12 toggle, because
+/// it's the only visual feedback the user has during IME composition.
 fn drawDebugOverlay(self: *Overlay, alloc: Allocator) !void {
     var ctx: z2d.Context = .init(alloc, &self.surface);
     defer ctx.deinit();
@@ -185,18 +195,21 @@ fn drawDebugOverlay(self: *Overlay, alloc: Allocator) !void {
     ctx.setFontSize(font_size);
 
     var buf: [128]u8 = undefined;
-    const fps_text = std.fmt.bufPrint(&buf, "FPS: {d:.2}", .{self.fps}) catch "FPS: ERROR";
 
     const width = @as(f64, @floatFromInt(self.surface.getWidth()));
     // Simple top-right alignment (fixed offset for now).
     const x = @max(margin, width - right_padding);
-    const y = margin + font_size;
+    var y: f64 = margin + font_size;
 
-    try ctx.showText(fps_text, x, y);
+    if (self.show_debug_overlay) {
+        const fps_text = std.fmt.bufPrint(&buf, "FPS: {d:.2}", .{self.fps}) catch "FPS: ERROR";
+        try ctx.showText(fps_text, x, y);
+        y += line_height;
+    }
 
     if (self.tsf_preedit) |preedit| {
         const tsf_text = std.fmt.bufPrint(&buf, "TSF: {s}", .{preedit}) catch "TSF: ERROR";
-        try ctx.showText(tsf_text, x, y + line_height);
+        try ctx.showText(tsf_text, x, y);
     }
 }
 
@@ -839,4 +852,47 @@ test "renderer.Message.tsf_preedit carries an optional text payload" {
     const m: Message = .{ .tsf_preedit = .{ .alloc = testing.allocator, .text = null } };
     try testing.expect(m == .tsf_preedit);
     try testing.expect(m.tsf_preedit.text == null);
+}
+
+test "Overlay applyFeatures draws preedit even when show_debug_overlay is false" {
+    // Regression: TSF preedit is the user's only visible feedback during
+    // IME composition (Gemini CLI doesn't render the composition string at
+    // the cursor reliably). It MUST surface independently of the F12 debug
+    // toggle, otherwise the user sees nothing while typing.
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var overlay = try initTestOverlay(alloc, 32, 4);
+    defer overlay.deinit(alloc);
+    overlay.show_debug_overlay = false;
+    overlay.tsf_preedit = "あいう";
+
+    var t: terminal.Terminal = try .init(alloc, .{ .cols = 4, .rows = 1 });
+    defer t.deinit(alloc);
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    overlay.applyFeatures(alloc, &state, &.{});
+    try testing.expect(countVisiblePixels(&overlay) > 0);
+}
+
+test "Overlay applyFeatures draws nothing when show_debug_overlay=false and preedit is null" {
+    // Companion of the above: with the debug overlay off and no active
+    // preedit, nothing should be drawn — no FPS, no preedit, untouched
+    // surface.
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var overlay = try initTestOverlay(alloc, 32, 4);
+    defer overlay.deinit(alloc);
+    overlay.show_debug_overlay = false;
+    overlay.tsf_preedit = null;
+
+    var t: terminal.Terminal = try .init(alloc, .{ .cols = 4, .rows = 1 });
+    defer t.deinit(alloc);
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    overlay.applyFeatures(alloc, &state, &.{});
+    try testing.expectEqual(@as(usize, 0), countVisiblePixels(&overlay));
 }
