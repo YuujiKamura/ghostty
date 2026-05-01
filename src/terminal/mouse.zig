@@ -86,6 +86,7 @@ pub const Shape = enum(c_int) {
                 .{ .name = "GhosttyMouseShape" },
             ),
 
+            // UPSTREAM-SHARED-OK: Windows apprts don't use GObject; void matches the .none arm semantics.
             .none, .win32, .winui3 => void,
         };
     };
