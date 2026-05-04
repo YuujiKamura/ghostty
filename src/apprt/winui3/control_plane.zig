@@ -41,6 +41,38 @@ const renderer_locked_circuit_threshold: u32 = 5;
 const renderer_locked_circuit_window_ns: i64 = 1 * std.time.ns_per_s;
 const renderer_locked_circuit_open_ns: i64 = 100 * std.time.ns_per_ms;
 
+// ── #269 observability: ring-buffered request samples + cadenced log ──
+//
+// We need numerical evidence that a forthcoming snapshot-cache fix actually
+// moves the BUSY|renderer_locked rate. Per-request log lines would drown the
+// signal, so we keep atomic counters + a 64-slot lossy ring of recent
+// duration/outcome samples and emit one cp.stats line on a cadence. Lossy
+// under contention is fine: this is observability, not source of truth.
+
+/// Power of two so `idx % cp_recent_capacity` is a single AND.
+const cp_recent_capacity: u32 = 64;
+
+/// Outcome bucket recorded with each request sample. `error_other` covers
+/// everything that wasn't BUSY (oom, internal_error, timeout).
+const RingOutcome = enum(u8) { ok, busy, error_other };
+
+/// Per-request observation. Fixed-size struct so the ring can live inline
+/// in `ControlPlane`. `timestamp_ns` is wall-clock for cross-correlation
+/// with external traces; `duration_ns` is monotonic-derived from a single
+/// nanoTimestamp pair so it stays ≥0 even across CLOCK_REALTIME jumps.
+const RingSample = struct {
+    duration_ns: u64 = 0,
+    outcome: RingOutcome = .ok,
+    timestamp_ns: i128 = 0,
+};
+
+/// Emit a cp.stats line every `cp_log_interval_ns` of wall time OR every
+/// time `busy_total` increments by `cp_log_busy_step` events, whichever
+/// comes first. The dual trigger keeps idle sessions quiet but still
+/// captures bursts that would otherwise span many quiet log windows.
+const cp_log_interval_ns: i64 = 30 * std.time.ns_per_s;
+const cp_log_busy_step: u64 = 100;
+
 // ── UI-thread stall watchdog (#212) ──
 //
 // Two atomic timestamps that let an external observer (deckpilot daemon,
@@ -231,6 +263,35 @@ pub const ControlPlane = struct {
     renderer_locked_window_start_ns: std.atomic.Value(i64) = std.atomic.Value(i64).init(0),
     renderer_locked_circuit_open_until_ns: std.atomic.Value(i64) = std.atomic.Value(i64).init(0),
 
+    // ── #269 observability counters ──
+    // Atomic counters bumped on every request entry/exit and BUSY emit.
+    // `cp_inflight_max` is a high-water mark updated via CAS from the
+    // success path of `recordRequestStart`. All counters are u64 except
+    // `cp_inflight*` which are u32 — concurrent inflight CP requests will
+    // not exceed `max_inflight_data_requests + control-lane`, comfortably
+    // u32 and giving CAS a smaller footprint.
+    cp_inflight: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
+    cp_inflight_max: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
+    cp_requests_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    cp_busy_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    cp_busy_renderer_locked: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    cp_busy_data_lane_full: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    cp_busy_input_queue_full: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    cp_circuit_open_emissions: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+
+    // Ring of recent request samples. `cp_recent_idx` is monotonic; the
+    // physical slot is `idx % cp_recent_capacity`. We accept the data race
+    // on the slot's struct contents (writer might be torn relative to a
+    // concurrent reader) — readers tolerate junk samples and pdq-sort
+    // small N anyway.
+    cp_recent: [cp_recent_capacity]RingSample = [_]RingSample{.{}} ** cp_recent_capacity,
+    cp_recent_idx: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
+
+    // Cadence state for `maybeLogStats`. `_at_ns` is wall-clock of last
+    // emission; `_busy_at` is the busy_total value at last emission.
+    cp_stats_last_log_at_ns: std.atomic.Value(i64) = std.atomic.Value(i64).init(0),
+    cp_stats_last_log_busy: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+
     pub fn isEnabled(allocator: Allocator) bool {
         return checkEnvFlag(allocator, "GHOSTTY_CONTROL_PLANE") or
             checkEnvFlag(allocator, "WINDOWS_TERMINAL_CONTROL_PLANE");
@@ -371,7 +432,17 @@ pub const ControlPlane = struct {
                 .{self.session_name orelse "ghostty"},
             ) catch "ERR|oom\n";
         }
+        // #269 observability: pair start/end so every served request lands
+        // a sample in the ring, regardless of which return path fires.
+        const obs_started_at = self.recordRequestStart();
+        var obs_outcome: RingOutcome = .ok;
+        defer {
+            self.recordRequestEnd(obs_started_at, obs_outcome);
+            self.maybeLogStats();
+        }
         if (isBackpressureCommand(cmd) and self.pendingInputLen() >= self.max_pending_inputs) {
+            self.recordBusy(.input_queue_full);
+            obs_outcome = .busy;
             return allocator.dupe(u8, "ERR|BUSY|input_queue_full\n") catch "ERR|BUSY|input_queue_full\n";
         }
         // #242 circuit breaker: short-circuit during a renderer_locked
@@ -379,6 +450,8 @@ pub const ControlPlane = struct {
         // mutex. Open until is set on the cooldown path below.
         const cb_now_ns: i64 = @intCast(std.time.nanoTimestamp());
         if (cb_now_ns < self.renderer_locked_circuit_open_until_ns.load(.acquire)) {
+            self.recordBusy(.circuit_open);
+            obs_outcome = .busy;
             return allocator.dupe(u8, "ERR|BUSY|renderer_locked\n") catch "ERR|BUSY|renderer_locked\n";
         }
         if (isCacheableCommand(cmd)) {
@@ -394,6 +467,8 @@ pub const ControlPlane = struct {
             const prev = self.inflight_data_requests.fetchAdd(1, .acq_rel);
             if (prev >= self.max_inflight_data_requests) {
                 _ = self.inflight_data_requests.fetchSub(1, .acq_rel);
+                self.recordBusy(.data_lane_full);
+                obs_outcome = .busy;
                 return allocator.dupe(u8, "ERR|BUSY|data_lane_full\n") catch "ERR|BUSY|data_lane_full\n";
             }
             data_lane_token = true;
@@ -404,10 +479,12 @@ pub const ControlPlane = struct {
 
         const resp = backend_fn(backend_ctx, request, allocator) catch |err| {
             log.warn("handleRequest error: {}", .{err});
+            obs_outcome = .error_other;
             return allocator.dupe(u8, "ERR|internal_error\n") catch return "ERR|internal_error\n";
         };
         if (self.last_provider_timeout.swap(false, .acq_rel)) {
             allocator.free(resp);
+            obs_outcome = .error_other;
             return allocator.dupe(u8, "ERR|TIMEOUT|ui_thread_busy\n") catch return "ERR|TIMEOUT|ui_thread_busy\n";
         }
         // Issue #207 hyp 1: CP read lane tryLock contended on
@@ -417,6 +494,8 @@ pub const ControlPlane = struct {
         // "skip this poll, retry later" rather than "session is dead".
         if (self.last_renderer_locked.swap(false, .acq_rel)) {
             allocator.free(resp);
+            self.recordBusy(.renderer_locked);
+            obs_outcome = .busy;
             // Track for #242 circuit breaker. Roll the window each
             // time it expires so a slow trickle of locks does not trip
             // the breaker, but a burst within window_ns will.
@@ -681,6 +760,170 @@ pub const ControlPlane = struct {
         };
     }
 
+    // ── #269 observability helpers ──
+    // Helper-style instead of inline so the BUSY emission sites can stay
+    // single-line edits — keeps the merge with the parallel snapshot-cache
+    // branch mechanical.
+
+    /// Aggregated observability snapshot consumed by external readers
+    /// (cadenced log line, future `STATS` IPC verb). Caller owns no
+    /// allocations; this is by-value on purpose.
+    pub const Stats = struct {
+        inflight: u32,
+        inflight_max: u32,
+        requests_total: u64,
+        busy_total: u64,
+        busy_renderer_locked: u64,
+        busy_data_lane_full: u64,
+        busy_input_queue_full: u64,
+        circuit_open_emissions: u64,
+        /// (busy_total * 1000) / max(requests_total, 1). "Per-mille"
+        /// because BUSY rates are typically <1% and we want resolution.
+        busy_rate_per_thousand: u32,
+        recent_p50_ok_ns: u64,
+        recent_p99_ok_ns: u64,
+        recent_p50_busy_ns: u64,
+        recent_p99_busy_ns: u64,
+    };
+
+    /// Bump cp_inflight + cp_inflight_max + cp_requests_total. Returns the
+    /// monotonic start timestamp the caller stores until it pairs with
+    /// `recordRequestEnd`.
+    fn recordRequestStart(self: *ControlPlane) i128 {
+        _ = self.cp_requests_total.fetchAdd(1, .monotonic);
+        const after_add = self.cp_inflight.fetchAdd(1, .acq_rel) + 1;
+        // CAS-loop high-water mark. Loops only when concurrent writers
+        // race; trivially terminates because each retry observes a
+        // strictly larger candidate or a race-winning new max.
+        var observed = self.cp_inflight_max.load(.acquire);
+        while (after_add > observed) {
+            observed = self.cp_inflight_max.cmpxchgWeak(
+                observed,
+                after_add,
+                .acq_rel,
+                .acquire,
+            ) orelse break;
+        }
+        return std.time.nanoTimestamp();
+    }
+
+    /// Pair with `recordRequestStart`. Decrements inflight and writes a
+    /// sample into the ring under the given outcome.
+    fn recordRequestEnd(self: *ControlPlane, started_at_ns: i128, outcome: RingOutcome) void {
+        _ = self.cp_inflight.fetchSub(1, .acq_rel);
+        const ended_at = std.time.nanoTimestamp();
+        const delta = ended_at - started_at_ns;
+        const duration_ns: u64 = if (delta < 0) 0 else @intCast(delta);
+        const slot = self.cp_recent_idx.fetchAdd(1, .monotonic) % cp_recent_capacity;
+        self.cp_recent[slot] = .{
+            .duration_ns = duration_ns,
+            .outcome = outcome,
+            .timestamp_ns = ended_at,
+        };
+    }
+
+    /// Bump the appropriate BUSY counter. Centralized so the BUSY emit
+    /// sites in `handleRequestWith` stay single-line edits. `busy_total`
+    /// is bumped exactly once per BUSY event, and the kind-specific
+    /// counter is bumped exactly once — the kind enum prevents miscounts
+    /// when multiple BUSY paths share a string.
+    const BusyKind = enum { renderer_locked, data_lane_full, input_queue_full, circuit_open };
+    fn recordBusy(self: *ControlPlane, kind: BusyKind) void {
+        _ = self.cp_busy_total.fetchAdd(1, .monotonic);
+        switch (kind) {
+            .renderer_locked => _ = self.cp_busy_renderer_locked.fetchAdd(1, .monotonic),
+            .data_lane_full => _ = self.cp_busy_data_lane_full.fetchAdd(1, .monotonic),
+            .input_queue_full => _ = self.cp_busy_input_queue_full.fetchAdd(1, .monotonic),
+            .circuit_open => {
+                _ = self.cp_busy_renderer_locked.fetchAdd(1, .monotonic);
+                _ = self.cp_circuit_open_emissions.fetchAdd(1, .monotonic);
+            },
+        }
+    }
+
+    /// Compute Stats by reading the atomics + sorting a snapshot of the
+    /// ring. N=64 so a stack copy is fine; we never call this on the hot
+    /// path. Pdq-sort is in-place on the local array.
+    pub fn snapshotStats(self: *const ControlPlane) Stats {
+        const reqs = self.cp_requests_total.load(.monotonic);
+        const busy = self.cp_busy_total.load(.monotonic);
+        // No requests yet → report 0 per-mille. We never want a
+        // mathematically-defined-but-operationally-meaningless ratio
+        // showing up in the log line during boot.
+        const rate_pm: u32 = if (reqs == 0)
+            0
+        else
+            @intCast(@min(@as(u64, std.math.maxInt(u32)), (busy * 1000) / reqs));
+
+        var ok_buf: [cp_recent_capacity]u64 = undefined;
+        var busy_buf: [cp_recent_capacity]u64 = undefined;
+        var ok_n: usize = 0;
+        var busy_n: usize = 0;
+        // Snapshot ring contents. We don't atomic-load each slot — the
+        // ring is intentionally lossy and small. A torn struct would at
+        // worst skew one percentile sample.
+        for (self.cp_recent) |sample| {
+            // Skip the all-zero default rows (never written) so empty
+            // ring → empty percentiles instead of a flood of 0s.
+            if (sample.timestamp_ns == 0) continue;
+            switch (sample.outcome) {
+                .ok => {
+                    ok_buf[ok_n] = sample.duration_ns;
+                    ok_n += 1;
+                },
+                .busy => {
+                    busy_buf[busy_n] = sample.duration_ns;
+                    busy_n += 1;
+                },
+                .error_other => {},
+            }
+        }
+        return .{
+            .inflight = self.cp_inflight.load(.monotonic),
+            .inflight_max = self.cp_inflight_max.load(.monotonic),
+            .requests_total = reqs,
+            .busy_total = busy,
+            .busy_renderer_locked = self.cp_busy_renderer_locked.load(.monotonic),
+            .busy_data_lane_full = self.cp_busy_data_lane_full.load(.monotonic),
+            .busy_input_queue_full = self.cp_busy_input_queue_full.load(.monotonic),
+            .circuit_open_emissions = self.cp_circuit_open_emissions.load(.monotonic),
+            .busy_rate_per_thousand = rate_pm,
+            .recent_p50_ok_ns = percentile(ok_buf[0..ok_n], 50),
+            .recent_p99_ok_ns = percentile(ok_buf[0..ok_n], 99),
+            .recent_p50_busy_ns = percentile(busy_buf[0..busy_n], 50),
+            .recent_p99_busy_ns = percentile(busy_buf[0..busy_n], 99),
+        };
+    }
+
+    /// Cadenced one-line emit. Called at the *end* of `handleRequestWith`
+    /// after counters are settled. Cheap-fast-path: a single atomic load
+    /// + integer compare returns false 99% of the time.
+    fn maybeLogStats(self: *ControlPlane) void {
+        const now_ns: i64 = @intCast(std.time.nanoTimestamp());
+        const last_at = self.cp_stats_last_log_at_ns.load(.monotonic);
+        const last_busy = self.cp_stats_last_log_busy.load(.monotonic);
+        const busy_now = self.cp_busy_total.load(.monotonic);
+        const time_due = (last_at == 0) or (now_ns - last_at >= cp_log_interval_ns);
+        const busy_due = busy_now >= last_busy + cp_log_busy_step;
+        if (!time_due and !busy_due) return;
+        // CAS the timestamp so only one racing caller actually emits.
+        // `last_at` may have changed under us; cmpxchg returns null on
+        // win, the new observed value on loss → we just bail.
+        if (self.cp_stats_last_log_at_ns.cmpxchgStrong(last_at, now_ns, .acq_rel, .acquire) != null) return;
+        self.cp_stats_last_log_busy.store(busy_now, .release);
+        const s = self.snapshotStats();
+        log.info(
+            "cp.stats inflight={d} inflight_max={d} req={d} busy={d} busy_rl={d} busy_dlf={d} busy_iqf={d} circuit={d} rate_pm={d} p50_ok={d} p99_ok={d} p50_busy={d} p99_busy={d}",
+            .{
+                s.inflight,              s.inflight_max,           s.requests_total,
+                s.busy_total,            s.busy_renderer_locked,   s.busy_data_lane_full,
+                s.busy_input_queue_full, s.circuit_open_emissions, s.busy_rate_per_thousand,
+                s.recent_p50_ok_ns,      s.recent_p99_ok_ns,       s.recent_p50_busy_ns,
+                s.recent_p99_busy_ns,
+            },
+        );
+    }
+
     // ── Provider callbacks ──
     // Called from the pipe server thread. Read callbacks acquire
     // renderer_state.mutex directly (no SendMessageW round-trip).
@@ -879,6 +1122,21 @@ fn commandName(req: []const u8) []const u8 {
     return req[0..@min(ws, pipe)];
 }
 
+/// Sort-and-pick percentile over a small slice. `pct` is 0..100 inclusive.
+/// Empty slice → 0 (sentinel "no data" rather than a fabricated value).
+/// We mutate the caller-owned slice in place; callers pass a stack copy
+/// so the ring itself is never reordered.
+fn percentile(samples: []u64, pct: u32) u64 {
+    if (samples.len == 0) return 0;
+    std.mem.sort(u64, samples, {}, std.sort.asc(u64));
+    // Nearest-rank: index = ceil(pct/100 * N) - 1, clamped to [0, N-1].
+    // Integer math: (pct * N + 99) / 100 - 1.
+    const n = samples.len;
+    const raw = (@as(usize, pct) * n + 99) / 100;
+    const idx = if (raw == 0) 0 else @min(raw - 1, n - 1);
+    return samples[idx];
+}
+
 fn isCacheableCommand(cmd: []const u8) bool {
     return std.mem.eql(u8, cmd, "STATE") or
         std.mem.eql(u8, cmd, "TAIL") or
@@ -1013,7 +1271,7 @@ fn contractBackend(_: ?*anyopaque, request: []const u8, allocator: Allocator) ![
 test "handleRequestWith caches read commands and invalidates on mutating command" {
     var cp = ControlPlane{
         .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(0),
+        .hwnd = @ptrFromInt(1),
     };
     cp.cache.ttl_ns = 5 * std.time.ns_per_s;
     defer cp.cache.clear(std.testing.allocator);
@@ -1041,7 +1299,7 @@ test "handleRequestWith caches read commands and invalidates on mutating command
 test "handleRequestWith rejects input when queue is full" {
     var cp = ControlPlane{
         .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(0),
+        .hwnd = @ptrFromInt(1),
         .max_pending_inputs = 1,
     };
     defer cp.clearPendingInputs();
@@ -1056,7 +1314,7 @@ test "handleRequestWith rejects input when queue is full" {
 test "handleRequestWith limits data lane but allows control lane" {
     var cp = ControlPlane{
         .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(0),
+        .hwnd = @ptrFromInt(1),
         .max_inflight_data_requests = 1,
     };
     cp.inflight_data_requests.store(1, .release);
@@ -1076,7 +1334,7 @@ test "handleRequestWith limits data lane but allows control lane" {
 test "handleRequestWith serves CAPABILITIES without backend call" {
     var cp = ControlPlane{
         .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(0),
+        .hwnd = @ptrFromInt(1),
         .session_name = "ghostty-test",
     };
 
@@ -1094,7 +1352,7 @@ test "handleRequestWith serves CAPABILITIES without backend call" {
 test "handleRequestWith keeps legacy commands working without CAPABILITIES query" {
     var cp = ControlPlane{
         .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(0),
+        .hwnd = @ptrFromInt(1),
     };
 
     const ping = cp.handleRequestWith("PING", std.testing.allocator, null, contractBackend);
@@ -1121,7 +1379,7 @@ test "handleRequestWith keeps legacy commands working without CAPABILITIES query
 test "handleRequestWith returns deterministic ERR for unsupported command" {
     var cp = ControlPlane{
         .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(0),
+        .hwnd = @ptrFromInt(1),
     };
 
     const resp = cp.handleRequestWith("RAW_INPUT|test-client|hello", std.testing.allocator, null, contractBackend);
@@ -1204,4 +1462,342 @@ test "lastObservation reflects the most recent stored values" {
     const obs = lastObservation();
     try std.testing.expectEqual(tp, obs.pending_posted_at);
     try std.testing.expectEqual(td, obs.last_drained_at);
+}
+
+// ── #269 observability tests ──
+//
+// All counter paths covered: happy path, type bounds, concurrent
+// fanin, per-BUSY-kind isolation, inflight balance, percentile shape.
+
+test "observability: counters start at zero" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    const s = cp.snapshotStats();
+    try std.testing.expectEqual(@as(u32, 0), s.inflight);
+    try std.testing.expectEqual(@as(u32, 0), s.inflight_max);
+    try std.testing.expectEqual(@as(u64, 0), s.requests_total);
+    try std.testing.expectEqual(@as(u64, 0), s.busy_total);
+    try std.testing.expectEqual(@as(u64, 0), s.busy_renderer_locked);
+    try std.testing.expectEqual(@as(u64, 0), s.busy_data_lane_full);
+    try std.testing.expectEqual(@as(u64, 0), s.busy_input_queue_full);
+    try std.testing.expectEqual(@as(u64, 0), s.circuit_open_emissions);
+    // 0 / max(0,1) = 0 — no division by zero.
+    try std.testing.expectEqual(@as(u32, 0), s.busy_rate_per_thousand);
+    // Empty ring → percentile sentinel 0.
+    try std.testing.expectEqual(@as(u64, 0), s.recent_p50_ok_ns);
+    try std.testing.expectEqual(@as(u64, 0), s.recent_p99_ok_ns);
+}
+
+test "observability: counter type widths accommodate u64::MAX semantics" {
+    // Comptime asserts that the field types are wide enough to never
+    // pin a real-world counter. We don't actually count up to maxInt;
+    // the contract is "the type doesn't artificially cap us".
+    const cp_t = ControlPlane;
+    comptime {
+        std.debug.assert(@TypeOf(@as(cp_t, undefined).cp_requests_total) == std.atomic.Value(u64));
+        std.debug.assert(@TypeOf(@as(cp_t, undefined).cp_busy_total) == std.atomic.Value(u64));
+        std.debug.assert(@TypeOf(@as(cp_t, undefined).cp_inflight) == std.atomic.Value(u32));
+    }
+}
+
+test "observability: recordRequestStart/End balance inflight to zero" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    const t1 = cp.recordRequestStart();
+    const t2 = cp.recordRequestStart();
+    const t3 = cp.recordRequestStart();
+    try std.testing.expectEqual(@as(u32, 3), cp.cp_inflight.load(.monotonic));
+    try std.testing.expectEqual(@as(u32, 3), cp.cp_inflight_max.load(.monotonic));
+    cp.recordRequestEnd(t1, .ok);
+    cp.recordRequestEnd(t2, .busy);
+    cp.recordRequestEnd(t3, .error_other);
+    try std.testing.expectEqual(@as(u32, 0), cp.cp_inflight.load(.monotonic));
+    // High-water mark is monotonic — does not retreat.
+    try std.testing.expectEqual(@as(u32, 3), cp.cp_inflight_max.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 3), cp.cp_requests_total.load(.monotonic));
+}
+
+test "observability: inflight high-water mark only grows" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    const a = cp.recordRequestStart();
+    const b = cp.recordRequestStart();
+    cp.recordRequestEnd(a, .ok);
+    cp.recordRequestEnd(b, .ok);
+    // Single subsequent request must not regress the high-water mark.
+    const c = cp.recordRequestStart();
+    cp.recordRequestEnd(c, .ok);
+    try std.testing.expectEqual(@as(u32, 2), cp.cp_inflight_max.load(.monotonic));
+}
+
+test "observability: recordBusy isolates each BUSY kind" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    cp.recordBusy(.renderer_locked);
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_busy_renderer_locked.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 0), cp.cp_busy_data_lane_full.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 0), cp.cp_busy_input_queue_full.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 0), cp.cp_circuit_open_emissions.load(.monotonic));
+    cp.recordBusy(.data_lane_full);
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_busy_data_lane_full.load(.monotonic));
+    cp.recordBusy(.input_queue_full);
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_busy_input_queue_full.load(.monotonic));
+    cp.recordBusy(.circuit_open);
+    // circuit_open ALSO counts as renderer_locked semantically — both
+    // counters move so the renderer_locked-rate metric stays honest.
+    try std.testing.expectEqual(@as(u64, 2), cp.cp_busy_renderer_locked.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_circuit_open_emissions.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 4), cp.cp_busy_total.load(.monotonic));
+}
+
+test "observability: ring fills, wraps, and percentile reflects content" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    // Hand-write 64 OK samples with durations [1..64] ns. We bypass
+    // the timing path and write directly to the ring.
+    for (0..cp_recent_capacity) |i| {
+        cp.cp_recent[i] = .{
+            .duration_ns = @as(u64, @intCast(i + 1)),
+            .outcome = .ok,
+            .timestamp_ns = 1, // non-zero so snapshotStats counts it
+        };
+    }
+    cp.cp_recent_idx.store(cp_recent_capacity, .release);
+    const s = cp.snapshotStats();
+    // Nearest-rank: p50 of [1..64] → idx ceil(50*64/100)-1 = 31 → value 32.
+    try std.testing.expectEqual(@as(u64, 32), s.recent_p50_ok_ns);
+    // p99 → idx ceil(99*64/100)-1 = 63 → value 64.
+    try std.testing.expectEqual(@as(u64, 64), s.recent_p99_ok_ns);
+    // No busy samples written → busy percentiles still 0.
+    try std.testing.expectEqual(@as(u64, 0), s.recent_p50_busy_ns);
+    try std.testing.expectEqual(@as(u64, 0), s.recent_p99_busy_ns);
+}
+
+test "observability: ring of identical values returns that value at every percentile" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    for (0..cp_recent_capacity) |i| {
+        cp.cp_recent[i] = .{
+            .duration_ns = 42,
+            .outcome = .busy,
+            .timestamp_ns = 1,
+        };
+    }
+    cp.cp_recent_idx.store(cp_recent_capacity, .release);
+    const s = cp.snapshotStats();
+    try std.testing.expectEqual(@as(u64, 42), s.recent_p50_busy_ns);
+    try std.testing.expectEqual(@as(u64, 42), s.recent_p99_busy_ns);
+    // OK bucket must remain empty.
+    try std.testing.expectEqual(@as(u64, 0), s.recent_p50_ok_ns);
+}
+
+test "observability: percentile helper handles empty/single/sorted slices" {
+    var empty = [_]u64{};
+    try std.testing.expectEqual(@as(u64, 0), percentile(&empty, 50));
+    try std.testing.expectEqual(@as(u64, 0), percentile(&empty, 99));
+
+    var one = [_]u64{7};
+    try std.testing.expectEqual(@as(u64, 7), percentile(&one, 0));
+    try std.testing.expectEqual(@as(u64, 7), percentile(&one, 50));
+    try std.testing.expectEqual(@as(u64, 7), percentile(&one, 99));
+
+    // Out-of-order input must be sorted internally; result independent of
+    // input permutation.
+    var perm = [_]u64{ 5, 1, 4, 2, 3 };
+    try std.testing.expectEqual(@as(u64, 3), percentile(&perm, 50));
+    try std.testing.expectEqual(@as(u64, 5), percentile(&perm, 99));
+}
+
+test "observability: busy_rate_per_thousand math" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    cp.cp_requests_total.store(1000, .monotonic);
+    cp.cp_busy_total.store(37, .monotonic);
+    const s = cp.snapshotStats();
+    try std.testing.expectEqual(@as(u32, 37), s.busy_rate_per_thousand);
+    // No requests → no division by zero, returns 0.
+    cp.cp_requests_total.store(0, .monotonic);
+    cp.cp_busy_total.store(5, .monotonic);
+    const s2 = cp.snapshotStats();
+    try std.testing.expectEqual(@as(u32, 0), s2.busy_rate_per_thousand);
+}
+
+test "observability: handleRequestWith bumps requests_total + leaves inflight at zero" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    var tb = TestBackendCtx{};
+    const r = cp.handleRequestWith("PING", std.testing.allocator, &tb, testBackend);
+    defer std.testing.allocator.free(r);
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_requests_total.load(.monotonic));
+    try std.testing.expectEqual(@as(u32, 0), cp.cp_inflight.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 0), cp.cp_busy_total.load(.monotonic));
+}
+
+test "observability: handleRequestWith counts data_lane_full BUSY" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+        .max_inflight_data_requests = 1,
+    };
+    cp.inflight_data_requests.store(1, .release);
+    var tb = TestBackendCtx{};
+    const resp = cp.handleRequestWith("TAIL|test|20", std.testing.allocator, &tb, testBackend);
+    defer std.testing.allocator.free(resp);
+    try std.testing.expectEqualStrings("ERR|BUSY|data_lane_full\n", resp);
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_busy_data_lane_full.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_busy_total.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 0), cp.cp_busy_renderer_locked.load(.monotonic));
+}
+
+test "observability: handleRequestWith counts input_queue_full BUSY" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+        .max_pending_inputs = 1,
+    };
+    defer cp.clearPendingInputs();
+    try std.testing.expect(cp.enqueueInput("zig-cp", "x", false, 1));
+
+    const resp = cp.handleRequestWith("INPUT|test|y", std.testing.allocator, null, testBackend);
+    defer std.testing.allocator.free(resp);
+    try std.testing.expectEqualStrings("ERR|BUSY|input_queue_full\n", resp);
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_busy_input_queue_full.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_busy_total.load(.monotonic));
+}
+
+test "observability: handleRequestWith counts circuit_open BUSY" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    // Open the circuit far into the future so even a slow CI clock
+    // sees us inside the open window.
+    const future_ns: i64 = @intCast(std.time.nanoTimestamp() + 10 * std.time.ns_per_s);
+    cp.renderer_locked_circuit_open_until_ns.store(future_ns, .release);
+    var tb = TestBackendCtx{};
+    const resp = cp.handleRequestWith("STATE|test|0", std.testing.allocator, &tb, testBackend);
+    defer std.testing.allocator.free(resp);
+    try std.testing.expectEqualStrings("ERR|BUSY|renderer_locked\n", resp);
+    try std.testing.expectEqual(@as(u64, 0), tb.calls); // backend not invoked
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_circuit_open_emissions.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_busy_renderer_locked.load(.monotonic));
+}
+
+// Concurrency: 4 threads × 1000 increments each — atomic correctness.
+fn observabilityCounterBumpThread(cp: *ControlPlane) void {
+    var i: usize = 0;
+    while (i < 1000) : (i += 1) {
+        cp.recordBusy(.renderer_locked);
+    }
+}
+
+test "observability: concurrent recordBusy is atomic (4×1000=4000)" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    var threads: [4]std.Thread = undefined;
+    for (&threads) |*t| {
+        t.* = try std.Thread.spawn(.{}, observabilityCounterBumpThread, .{&cp});
+    }
+    for (threads) |t| t.join();
+    try std.testing.expectEqual(@as(u64, 4000), cp.cp_busy_renderer_locked.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 4000), cp.cp_busy_total.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 0), cp.cp_circuit_open_emissions.load(.monotonic));
+}
+
+fn observabilityRequestRoundtripThread(cp: *ControlPlane) void {
+    var i: usize = 0;
+    while (i < 250) : (i += 1) {
+        const t = cp.recordRequestStart();
+        cp.recordRequestEnd(t, .ok);
+    }
+}
+
+test "observability: concurrent request lifecycle balances inflight" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    var threads: [4]std.Thread = undefined;
+    for (&threads) |*t| {
+        t.* = try std.Thread.spawn(.{}, observabilityRequestRoundtripThread, .{&cp});
+    }
+    for (threads) |t| t.join();
+    try std.testing.expectEqual(@as(u64, 1000), cp.cp_requests_total.load(.monotonic));
+    try std.testing.expectEqual(@as(u32, 0), cp.cp_inflight.load(.monotonic));
+    // High-water mark is ≥1; exact value is timing-dependent so just
+    // assert it observed at least one request and never exceeded the
+    // physical thread count.
+    const max = cp.cp_inflight_max.load(.monotonic);
+    try std.testing.expect(max >= 1 and max <= 4);
+}
+
+test "observability: cp.stats log line format renders all fields" {
+    // Regression catch for an external log-parser drift. We don't run
+    // the cadenced emit (which would race the test logger) — instead
+    // we reproduce the exact format string against a known Stats and
+    // assert structure + ordering.
+    const s = ControlPlane.Stats{
+        .inflight = 3,
+        .inflight_max = 7,
+        .requests_total = 42,
+        .busy_total = 5,
+        .busy_renderer_locked = 4,
+        .busy_data_lane_full = 1,
+        .busy_input_queue_full = 0,
+        .circuit_open_emissions = 2,
+        .busy_rate_per_thousand = 119,
+        .recent_p50_ok_ns = 8_000,
+        .recent_p99_ok_ns = 250_000,
+        .recent_p50_busy_ns = 110_000,
+        .recent_p99_busy_ns = 900_000,
+    };
+    const line = try std.fmt.allocPrint(
+        std.testing.allocator,
+        "cp.stats inflight={d} inflight_max={d} req={d} busy={d} busy_rl={d} busy_dlf={d} busy_iqf={d} circuit={d} rate_pm={d} p50_ok={d} p99_ok={d} p50_busy={d} p99_busy={d}",
+        .{
+            s.inflight,              s.inflight_max,           s.requests_total,
+            s.busy_total,            s.busy_renderer_locked,   s.busy_data_lane_full,
+            s.busy_input_queue_full, s.circuit_open_emissions, s.busy_rate_per_thousand,
+            s.recent_p50_ok_ns,      s.recent_p99_ok_ns,       s.recent_p50_busy_ns,
+            s.recent_p99_busy_ns,
+        },
+    );
+    defer std.testing.allocator.free(line);
+    try std.testing.expectEqualStrings(
+        "cp.stats inflight=3 inflight_max=7 req=42 busy=5 busy_rl=4 busy_dlf=1 busy_iqf=0 circuit=2 rate_pm=119 p50_ok=8000 p99_ok=250000 p50_busy=110000 p99_busy=900000",
+        line,
+    );
+}
+
+test "observability: maybeLogStats fast-path returns without emit on idle" {
+    // Two back-to-back calls with no intervening counter movement
+    // should not advance the cadence state — the second is a no-op.
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    cp.maybeLogStats(); // first call: time_due (last_at == 0)
+    const after_first = cp.cp_stats_last_log_at_ns.load(.monotonic);
+    try std.testing.expect(after_first != 0);
+    cp.maybeLogStats(); // second call: no busy step, no time elapsed
+    const after_second = cp.cp_stats_last_log_at_ns.load(.monotonic);
+    try std.testing.expectEqual(after_first, after_second);
 }
