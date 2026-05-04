@@ -301,6 +301,13 @@ pub const ControlPlane = struct {
     cp_busy_data_lane_full: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
     cp_busy_input_queue_full: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
     cp_circuit_open_emissions: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    // #269: counts requests served by `tryServeStaleSnapshot` instead of
+    // returning BUSY. Symmetric to the cp_busy_* counters so cp.stats can
+    // distinguish "renderer was locked but we served cached" from "renderer
+    // was locked and we returned BUSY". Without this, every stale hit
+    // would still bump cp_busy_renderer_locked and the snapshot cache's
+    // contribution to BUSY-rate reduction would be invisible.
+    cp_cache_hits_stale: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
 
     // Ring of recent request samples. `cp_recent_idx` is monotonic; the
     // physical slot is `idx % cp_recent_capacity`. We accept the data race
@@ -519,12 +526,11 @@ pub const ControlPlane = struct {
         // "skip this poll, retry later" rather than "session is dead".
         if (self.last_renderer_locked.swap(false, .acq_rel)) {
             allocator.free(resp);
-            self.recordBusy(.renderer_locked);
-            obs_outcome = .busy;
-            // Track for #242 circuit breaker. Roll the window each
-            // time it expires so a slow trickle of locks does not trip
-            // the breaker, but a burst within window_ns will.
             const now_ns: i64 = @intCast(std.time.nanoTimestamp());
+            // Circuit-breaker accounting is independent of which
+            // response we ultimately serve: the lock failure happened
+            // and the breaker cares about lock-failure frequency, not
+            // about whether we papered over it with a stale cache hit.
             const w_start = self.renderer_locked_window_start_ns.load(.acquire);
             if (w_start == 0 or now_ns - w_start > renderer_locked_circuit_window_ns) {
                 self.renderer_locked_window_start_ns.store(now_ns, .release);
@@ -541,16 +547,23 @@ pub const ControlPlane = struct {
                     });
                 }
             }
-            // #269: serve a stale snapshot if we have one within the
-            // freshness budget. Wire format is `stale:<age_ms>|<payload>`
-            // — option (a) from the design doc, chosen because deckpilot
-            // commit 63374239820 / 63415a4 already greps for the prefix
-            // in `daemon/ipc.go composeShowStatus`. This converts a hard
-            // BUSY into a soft "old but readable" response and drops the
-            // BUSY rate observed by the daemon during PTY-storm windows.
+            // #269: try the stale snapshot BEFORE accounting as BUSY.
+            // A successful stale-serve is a non-BUSY outcome from the
+            // caller's perspective (deckpilot reads `stale:<age>|...`
+            // as a usable response), so cp.stats must NOT classify it
+            // under busy_renderer_locked or the metric becomes blind
+            // to the very effect the cache exists to produce.
+            // Wire format `stale:<age_ms>|<payload>` is option (a) from
+            // the design doc; deckpilot's `composeShowStatus` already
+            // greps for the prefix.
             if (self.tryServeStaleSnapshot(req, allocator, @intCast(now_ns))) |stale| {
+                _ = self.cp_cache_hits_stale.fetchAdd(1, .monotonic);
+                // obs_outcome stays at its default (.ok) — request was served.
                 return stale;
             }
+            // No usable cache: this is a real user-visible BUSY.
+            self.recordBusy(.renderer_locked);
+            obs_outcome = .busy;
             return allocator.dupe(u8, "ERR|BUSY|renderer_locked\n") catch return "ERR|BUSY|renderer_locked\n";
         }
         if (isCacheableCommand(cmd) and !std.mem.startsWith(u8, std.mem.trim(u8, resp, " \r\n\t"), "ERR|")) {
@@ -876,6 +889,9 @@ pub const ControlPlane = struct {
         busy_data_lane_full: u64,
         busy_input_queue_full: u64,
         circuit_open_emissions: u64,
+        /// #269: requests served from stale snapshot cache after a
+        /// renderer_locked. Diagnostic for snapshot-cache effectiveness.
+        cache_hits_stale: u64,
         /// (busy_total * 1000) / max(requests_total, 1). "Per-mille"
         /// because BUSY rates are typically <1% and we want resolution.
         busy_rate_per_thousand: u32,
@@ -986,6 +1002,7 @@ pub const ControlPlane = struct {
             .busy_data_lane_full = self.cp_busy_data_lane_full.load(.monotonic),
             .busy_input_queue_full = self.cp_busy_input_queue_full.load(.monotonic),
             .circuit_open_emissions = self.cp_circuit_open_emissions.load(.monotonic),
+            .cache_hits_stale = self.cp_cache_hits_stale.load(.monotonic),
             .busy_rate_per_thousand = rate_pm,
             .recent_p50_ok_ns = percentile(ok_buf[0..ok_n], 50),
             .recent_p99_ok_ns = percentile(ok_buf[0..ok_n], 99),
@@ -1012,13 +1029,13 @@ pub const ControlPlane = struct {
         self.cp_stats_last_log_busy.store(busy_now, .release);
         const s = self.snapshotStats();
         log.info(
-            "cp.stats inflight={d} inflight_max={d} req={d} busy={d} busy_rl={d} busy_dlf={d} busy_iqf={d} circuit={d} rate_pm={d} p50_ok={d} p99_ok={d} p50_busy={d} p99_busy={d}",
+            "cp.stats inflight={d} inflight_max={d} req={d} busy={d} busy_rl={d} busy_dlf={d} busy_iqf={d} circuit={d} stale_hits={d} rate_pm={d} p50_ok={d} p99_ok={d} p50_busy={d} p99_busy={d}",
             .{
-                s.inflight,              s.inflight_max,           s.requests_total,
-                s.busy_total,            s.busy_renderer_locked,   s.busy_data_lane_full,
-                s.busy_input_queue_full, s.circuit_open_emissions, s.busy_rate_per_thousand,
-                s.recent_p50_ok_ns,      s.recent_p99_ok_ns,       s.recent_p50_busy_ns,
-                s.recent_p99_busy_ns,
+                s.inflight,               s.inflight_max,           s.requests_total,
+                s.busy_total,             s.busy_renderer_locked,   s.busy_data_lane_full,
+                s.busy_input_queue_full,  s.circuit_open_emissions, s.cache_hits_stale,
+                s.busy_rate_per_thousand, s.recent_p50_ok_ns,       s.recent_p99_ok_ns,
+                s.recent_p50_busy_ns,     s.recent_p99_busy_ns,
             },
         );
     }
@@ -1555,6 +1572,36 @@ test "handleRequestWith serves stale: prefix when renderer is locked and snapsho
     defer std.testing.allocator.free(r2);
     try std.testing.expect(std.mem.startsWith(u8, r2, "stale:"));
     try std.testing.expect(std.mem.indexOf(u8, r2, "|OK|fresh-call=0|") != null);
+
+    // #269 observability invariant: a stale-served request must NOT
+    // count against busy_renderer_locked. If it did, cp.stats would
+    // make the snapshot cache invisible to anyone watching the metric.
+    try std.testing.expectEqual(@as(u64, 0), cp.cp_busy_renderer_locked.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 0), cp.cp_busy_total.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_cache_hits_stale.load(.monotonic));
+}
+
+test "handleRequestWith counts BUSY when snapshot cache miss falls through to BUSY (#269 obs)" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    // Cache initialised but never populated: every locked call must
+    // still emit BUSY, and the BUSY counters must increment exactly
+    // once per emission. This is the negative pair of the test above.
+    cp.snapshot_cache = SnapshotCache.init(std.testing.allocator, 5 * std.time.ns_per_s);
+    defer if (cp.snapshot_cache) |*sc| sc.deinit();
+    defer cp.clearResponseCache();
+    cp.cache.ttl_ns = 0;
+
+    var be = LockedFlipBackend{ .cp = &cp, .fail_pattern = 0b1 }; // call 0 locked
+
+    const r = cp.handleRequestWith("STATE|cli|0", std.testing.allocator, &be, LockedFlipBackend.run);
+    defer std.testing.allocator.free(r);
+    try std.testing.expect(std.mem.startsWith(u8, r, "ERR|BUSY|renderer_locked"));
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_busy_renderer_locked.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_busy_total.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 0), cp.cp_cache_hits_stale.load(.monotonic));
 }
 
 test "handleRequestWith falls through to BUSY when snapshot cache is empty (#269)" {
