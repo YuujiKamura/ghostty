@@ -1305,22 +1305,7 @@ fn isDataLaneCommand(cmd: []const u8) bool {
         std.mem.eql(u8, cmd, "LIST_TABS");
 }
 
-fn loadSessionName(allocator: Allocator, pid: u32) ![]u8 {
-    const env_name = std.process.getEnvVarOwned(allocator, "GHOSTTY_SESSION_NAME") catch null;
-    if (env_name) |value| {
-        const trimmed = std.mem.trim(u8, value, " \t\r\n");
-        if (trimmed.len == 0) {
-            allocator.free(value);
-        } else if (trimmed.ptr == value.ptr and trimmed.len == value.len) {
-            return value;
-        } else {
-            const duped = try allocator.dupe(u8, trimmed);
-            allocator.free(value);
-            return duped;
-        }
-    }
-    return std.fmt.allocPrint(allocator, "ghostty-{d}", .{pid});
-}
+const loadSessionName = @import("session_name.zig").loadSessionName;
 
 // ═══════════════════════════════════════════════════════════════
 // Tests
@@ -2171,3 +2156,7 @@ test "observability: maybeLogStats fast-path returns without emit on idle" {
     const after_second = cp.cp_stats_last_log_at_ns.load(.monotonic);
     try std.testing.expectEqual(after_first, after_second);
 }
+
+// loadSessionName tests live in session_name.zig (extracted so the
+// 4-branch env handling can be tested without dragging the whole
+// apprt module graph into a single-file zig test invocation).
