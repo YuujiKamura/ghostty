@@ -556,10 +556,17 @@ pub const ControlPlane = struct {
             // Wire format `stale:<age_ms>|<payload>` is option (a) from
             // the design doc; deckpilot's `composeShowStatus` already
             // greps for the prefix.
-            if (self.tryServeStaleSnapshot(req, allocator, @intCast(now_ns))) |stale| {
-                _ = self.cp_cache_hits_stale.fetchAdd(1, .monotonic);
-                // obs_outcome stays at its default (.ok) — request was served.
-                return stale;
+            // Only TAIL/HISTORY responses survive the byte-prefixed
+            // `stale:<age_ms>|` envelope without breaking the client
+            // parser; STATE/LIST_TABS clients HasPrefix-check `OK|` at
+            // byte 0 and would treat a stale-wrapped reply as malformed.
+            // See `isStalePrefixSafeCommand`.
+            if (isStalePrefixSafeCommand(cmd)) {
+                if (self.tryServeStaleSnapshot(req, allocator, @intCast(now_ns))) |stale| {
+                    _ = self.cp_cache_hits_stale.fetchAdd(1, .monotonic);
+                    // obs_outcome stays at its default (.ok) — request was served.
+                    return stale;
+                }
             }
             // No usable cache: this is a real user-visible BUSY.
             self.recordBusy(.renderer_locked);
@@ -568,13 +575,14 @@ pub const ControlPlane = struct {
         }
         if (isCacheableCommand(cmd) and !std.mem.startsWith(u8, std.mem.trim(u8, resp, " \r\n\t"), "ERR|")) {
             self.updateCachedResponse(req, resp);
-            // #269: also publish to the stale-fallback cache. The
-            // existing `cache` is fresh-only (TTL-bounded), so it can't
-            // help on the BUSY path; this one keeps the last-known-good
-            // payload around so the very next BUSY can serve it as
-            // `stale:`. We dupe before publishing so the snapshot owns
-            // its own buffer independent of `resp`.
-            self.publishSnapshot(req, resp);
+            // #269: also publish to the stale-fallback cache, but only
+            // for the commands whose wire format can carry the stale
+            // prefix without breaking clients. Storing snapshots we'll
+            // never serve is dead weight, and avoiding the publish
+            // keeps the cache footprint scoped to what's actually used.
+            if (isStalePrefixSafeCommand(cmd)) {
+                self.publishSnapshot(req, resp);
+            }
         }
         return resp;
     }
@@ -1260,6 +1268,20 @@ fn isCacheableCommand(cmd: []const u8) bool {
         std.mem.eql(u8, cmd, "LIST_TABS");
 }
 
+/// #269: which commands are safe to wrap with the `stale:<age_ms>|`
+/// prefix on the wire. The prefix is byte-prefixed to the response,
+/// which is transparent for header-line commands (TAIL/HISTORY: the
+/// `StripTailHeader` step on the client discards the line containing
+/// our prefix and returns the body unchanged) but corrupts client
+/// parsers for single-line commands (STATE/LIST_TABS: clients do
+/// `HasPrefix(resp, "OK|")` and would see `stale:200|OK|...` as a
+/// non-OK response). Until clients adopt a stale-aware envelope, we
+/// only apply the snapshot fallback to the two header-line commands.
+fn isStalePrefixSafeCommand(cmd: []const u8) bool {
+    return std.mem.eql(u8, cmd, "TAIL") or
+        std.mem.eql(u8, cmd, "HISTORY");
+}
+
 fn isMutatingCommand(cmd: []const u8) bool {
     return std.mem.eql(u8, cmd, "INPUT") or
         std.mem.eql(u8, cmd, "RAW_INPUT") or
@@ -1562,13 +1584,16 @@ test "handleRequestWith serves stale: prefix when renderer is locked and snapsho
 
     var be = LockedFlipBackend{ .cp = &cp, .fail_pattern = 0b10 }; // call 0 OK, call 1 locked
 
-    // First call seeds the snapshot cache.
-    const r1 = cp.handleRequestWith("STATE|cli|0", std.testing.allocator, &be, LockedFlipBackend.run);
+    // First call seeds the snapshot cache. TAIL is one of the two
+    // commands whose wire format survives the byte-prefixed `stale:`
+    // envelope; STATE/LIST_TABS deliberately skip the fallback per
+    // `isStalePrefixSafeCommand`.
+    const r1 = cp.handleRequestWith("TAIL|cli|20", std.testing.allocator, &be, LockedFlipBackend.run);
     defer std.testing.allocator.free(r1);
     try std.testing.expect(std.mem.startsWith(u8, r1, "OK|fresh-call=0|"));
 
     // Second call: renderer locked → must serve stale: prefixed payload.
-    const r2 = cp.handleRequestWith("STATE|cli|0", std.testing.allocator, &be, LockedFlipBackend.run);
+    const r2 = cp.handleRequestWith("TAIL|cli|20", std.testing.allocator, &be, LockedFlipBackend.run);
     defer std.testing.allocator.free(r2);
     try std.testing.expect(std.mem.startsWith(u8, r2, "stale:"));
     try std.testing.expect(std.mem.indexOf(u8, r2, "|OK|fresh-call=0|") != null);
@@ -1579,6 +1604,69 @@ test "handleRequestWith serves stale: prefix when renderer is locked and snapsho
     try std.testing.expectEqual(@as(u64, 0), cp.cp_busy_renderer_locked.load(.monotonic));
     try std.testing.expectEqual(@as(u64, 0), cp.cp_busy_total.load(.monotonic));
     try std.testing.expectEqual(@as(u64, 1), cp.cp_cache_hits_stale.load(.monotonic));
+}
+
+test "handleRequestWith does NOT stale-wrap STATE even with hot snapshot (wire-format safety)" {
+    // Regression pin for the follow-up that limited the stale-prefix
+    // envelope to TAIL/HISTORY. STATE is byte-prefixed `OK|...` and a
+    // client doing `HasPrefix(resp, "OK|")` would treat a stale-wrapped
+    // response as malformed; therefore even if a snapshot is hot in
+    // the cache, a renderer_locked STATE request must emit BUSY rather
+    // than serving stale.
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    cp.snapshot_cache = SnapshotCache.init(std.testing.allocator, 5 * std.time.ns_per_s);
+    defer if (cp.snapshot_cache) |*sc| sc.deinit();
+    defer cp.clearResponseCache();
+    cp.cache.ttl_ns = 0;
+
+    // Manually seed the snapshot cache with a STATE entry as if a
+    // prior fresh call had populated it (under the old gating). The
+    // gate must reject this even though the entry exists.
+    cp.publishSnapshot("STATE|cli|0", "OK|seeded=true|");
+    try std.testing.expectEqual(@as(usize, 1), cp.snapshot_cache.?.keyCount());
+
+    var be = LockedFlipBackend{ .cp = &cp, .fail_pattern = 0b1 }; // call 0 locked
+    const r = cp.handleRequestWith("STATE|cli|0", std.testing.allocator, &be, LockedFlipBackend.run);
+    defer std.testing.allocator.free(r);
+
+    try std.testing.expect(std.mem.startsWith(u8, r, "ERR|BUSY|renderer_locked"));
+    try std.testing.expect(!std.mem.startsWith(u8, r, "stale:"));
+    try std.testing.expectEqual(@as(u64, 0), cp.cp_cache_hits_stale.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 1), cp.cp_busy_renderer_locked.load(.monotonic));
+}
+
+test "handleRequestWith does NOT publish STATE/LIST_TABS to snapshot cache (no dead weight)" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    cp.snapshot_cache = SnapshotCache.init(std.testing.allocator, 5 * std.time.ns_per_s);
+    defer if (cp.snapshot_cache) |*sc| sc.deinit();
+    defer cp.clearResponseCache();
+    cp.cache.ttl_ns = 0;
+
+    var be = LockedFlipBackend{ .cp = &cp, .fail_pattern = 0b0 };
+    const r1 = cp.handleRequestWith("STATE|cli|0", std.testing.allocator, &be, LockedFlipBackend.run);
+    defer std.testing.allocator.free(r1);
+    const r2 = cp.handleRequestWith("LIST_TABS|cli|0", std.testing.allocator, &be, LockedFlipBackend.run);
+    defer std.testing.allocator.free(r2);
+    // Neither command is stale-prefix-safe, so neither should leave
+    // a snapshot behind. Storing snapshots we will never serve is
+    // dead weight under sustained PTY load.
+    try std.testing.expectEqual(@as(usize, 0), cp.snapshot_cache.?.keyCount());
+}
+
+test "isStalePrefixSafeCommand classification" {
+    try std.testing.expect(isStalePrefixSafeCommand("TAIL"));
+    try std.testing.expect(isStalePrefixSafeCommand("HISTORY"));
+    try std.testing.expect(!isStalePrefixSafeCommand("STATE"));
+    try std.testing.expect(!isStalePrefixSafeCommand("LIST_TABS"));
+    try std.testing.expect(!isStalePrefixSafeCommand("INPUT"));
+    try std.testing.expect(!isStalePrefixSafeCommand("PING"));
+    try std.testing.expect(!isStalePrefixSafeCommand(""));
 }
 
 test "handleRequestWith counts BUSY when snapshot cache miss falls through to BUSY (#269 obs)" {
