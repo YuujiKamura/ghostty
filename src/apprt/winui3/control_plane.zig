@@ -1,6 +1,8 @@
 const std = @import("std");
 const os = @import("os.zig");
 const D3D11RenderPass = @import("../../renderer/d3d11/RenderPass.zig");
+const cp_snapshot_cache = @import("cp_snapshot_cache.zig");
+const SnapshotCache = cp_snapshot_cache.SnapshotCache;
 
 const zcp = @import("zig-control-plane");
 const ControlPlaneLib = zcp.ControlPlane;
@@ -72,6 +74,16 @@ const RingSample = struct {
 /// captures bursts that would otherwise span many quiet log windows.
 const cp_log_interval_ns: i64 = 30 * std.time.ns_per_s;
 const cp_log_busy_step: u64 = 100;
+
+/// Default staleness budget for the snapshot cache fallback (#269). When
+/// a fresh `tryLock` fails and we can find a published snapshot for the
+/// same request whose age is within this bound, we return it prefixed
+/// with `stale:<age_ms>|` instead of emitting `BUSY|renderer_locked`.
+/// 200ms keeps the deckpilot tail visibly current (humans don't notice
+/// 200ms latency on a polling daemon) while giving the renderer a wide
+/// window to release the mutex. Override via `GHOSTTY_CP_STALE_MS`; set
+/// to 0 to disable the fallback entirely.
+const default_snapshot_cache_max_age_ms: u32 = 200;
 
 // ── UI-thread stall watchdog (#212) ──
 //
@@ -230,6 +242,17 @@ pub const ControlPlane = struct {
     cache_lock: std.Thread.Mutex = .{},
     cache: ResponseCache = .{},
 
+    /// Stale-tolerant snapshot cache (#269). Distinct from `cache` above
+    /// (which is fresh-only and expires on TTL): this one publishes on
+    /// every successful read response and serves the most recent payload
+    /// when a fresh acquisition fails with `error.RendererLocked`. The
+    /// served response is prefixed with `stale:<age_ms>|` so deckpilot
+    /// can distinguish it from a fresh hit. Lazily initialised so unit
+    /// tests that build a `ControlPlane{}` literal don't pay for the
+    /// HashMap allocator slot.
+    snapshot_cache: ?SnapshotCache = null,
+    snapshot_cache_max_age_ns: u64 = @as(u64, default_snapshot_cache_max_age_ms) * std.time.ns_per_ms,
+
     capture_state_fn: ?CaptureStateFn = null,
     capture_tail_fn: ?CaptureTailFn = null,
     capture_history_fn: ?CaptureHistoryFn = null,
@@ -329,6 +352,8 @@ pub const ControlPlane = struct {
         self.cache.ttl_ns = self.loadCacheTtlNs();
         self.max_pending_inputs = self.loadMaxPendingInputs();
         self.max_inflight_data_requests = self.loadMaxInflightDataRequests();
+        self.snapshot_cache_max_age_ns = self.loadSnapshotCacheMaxAgeNs();
+        self.snapshot_cache = SnapshotCache.init(allocator, self.snapshot_cache_max_age_ns);
 
         // Initialize the Zig-native control plane
         self.initControlPlane() catch |err| {
@@ -516,12 +541,67 @@ pub const ControlPlane = struct {
                     });
                 }
             }
+            // #269: serve a stale snapshot if we have one within the
+            // freshness budget. Wire format is `stale:<age_ms>|<payload>`
+            // — option (a) from the design doc, chosen because deckpilot
+            // commit 63374239820 / 63415a4 already greps for the prefix
+            // in `daemon/ipc.go composeShowStatus`. This converts a hard
+            // BUSY into a soft "old but readable" response and drops the
+            // BUSY rate observed by the daemon during PTY-storm windows.
+            if (self.tryServeStaleSnapshot(req, allocator, @intCast(now_ns))) |stale| {
+                return stale;
+            }
             return allocator.dupe(u8, "ERR|BUSY|renderer_locked\n") catch return "ERR|BUSY|renderer_locked\n";
         }
         if (isCacheableCommand(cmd) and !std.mem.startsWith(u8, std.mem.trim(u8, resp, " \r\n\t"), "ERR|")) {
             self.updateCachedResponse(req, resp);
+            // #269: also publish to the stale-fallback cache. The
+            // existing `cache` is fresh-only (TTL-bounded), so it can't
+            // help on the BUSY path; this one keeps the last-known-good
+            // payload around so the very next BUSY can serve it as
+            // `stale:`. We dupe before publishing so the snapshot owns
+            // its own buffer independent of `resp`.
+            self.publishSnapshot(req, resp);
         }
         return resp;
+    }
+
+    /// Try to serve a stale-marked response from the snapshot cache.
+    /// Returns null if the cache is missing the entry, the entry is
+    /// outside the freshness budget, or any allocation along the way
+    /// fails. Caller must free the returned slice.
+    fn tryServeStaleSnapshot(
+        self: *ControlPlane,
+        req: []const u8,
+        allocator: Allocator,
+        now_ns: u64,
+    ) ?[]const u8 {
+        const sc = if (self.snapshot_cache) |*sc| sc else return null;
+        if (sc.max_age_ns == 0) return null;
+        const snap = sc.borrowAny(req) orelse return null;
+        defer sc.release(snap);
+
+        // Compute age with the same skew guard the cache uses.
+        const age_ns: u64 = if (now_ns >= snap.captured_at_ns)
+            now_ns - snap.captured_at_ns
+        else
+            0;
+        if (age_ns > sc.max_age_ns) return null;
+
+        return cp_snapshot_cache.composeStalePayload(allocator, snap.payload, age_ns) catch return null;
+    }
+
+    /// Publish a successful response to the snapshot cache. Best-effort:
+    /// allocator failures here just skip the publish — the next BUSY
+    /// will then fall through to `error.RendererLocked` as before, which
+    /// is no worse than today's behaviour.
+    fn publishSnapshot(self: *ControlPlane, req: []const u8, resp: []const u8) void {
+        const sc = if (self.snapshot_cache) |*sc| sc else return;
+        if (sc.max_age_ns == 0) return;
+
+        const owned = self.allocator.dupe(u8, resp) catch return;
+        const now_ns: u64 = @intCast(std.time.nanoTimestamp());
+        _ = sc.publish(req, owned, now_ns);
     }
 
     fn cpBackend(ctx: ?*anyopaque, request: []const u8, allocator: Allocator) ![]const u8 {
@@ -546,6 +626,10 @@ pub const ControlPlane = struct {
 
         self.clearPendingInputs();
         self.clearResponseCache();
+        if (self.snapshot_cache) |*sc| {
+            sc.deinit();
+            self.snapshot_cache = null;
+        }
         if (self.session_name) |sn| {
             self.allocator.free(sn);
             self.session_name = null;
@@ -598,6 +682,21 @@ pub const ControlPlane = struct {
         const parsed = std.fmt.parseInt(u32, raw, 10) catch return default_max_inflight_data_requests;
         if (parsed == 0) return default_max_inflight_data_requests;
         return @max(@as(u32, 1), @min(parsed, 1024));
+    }
+
+    /// `GHOSTTY_CP_STALE_MS` overrides the snapshot-cache staleness budget
+    /// (#269). 0 disables the fallback (preserves the pre-#269 behaviour
+    /// of always emitting `BUSY|renderer_locked`); unset uses
+    /// `default_snapshot_cache_max_age_ms` (200ms). Hard-capped at 5s so
+    /// a typo can't keep the daemon staring at minute-old data.
+    fn loadSnapshotCacheMaxAgeNs(self: *ControlPlane) u64 {
+        const raw = std.process.getEnvVarOwned(self.allocator, "GHOSTTY_CP_STALE_MS") catch
+            return @as(u64, default_snapshot_cache_max_age_ms) * std.time.ns_per_ms;
+        defer self.allocator.free(raw);
+        const parsed = std.fmt.parseInt(u32, raw, 10) catch
+            return @as(u64, default_snapshot_cache_max_age_ms) * std.time.ns_per_ms;
+        const bounded: u32 = @min(parsed, 5_000);
+        return @as(u64, bounded) * std.time.ns_per_ms;
     }
 
     fn clearResponseCache(self: *ControlPlane) void {
@@ -1386,6 +1485,142 @@ test "handleRequestWith returns deterministic ERR for unsupported command" {
     defer std.testing.allocator.free(resp);
     try std.testing.expectEqualStrings("ERR|UNSUPPORTED|RAW_INPUT\n", resp);
 }
+
+// ── #269: snapshot cache stale-fallback ──
+//
+// We can't drive a real provider here (no XAML runtime in unit tests), but
+// the integration we care about is `handleRequestWith`'s reaction to
+// `last_renderer_locked`. A `lockedThenRecoveringBackend` simulates a
+// renderer that fails the first call (sets `last_renderer_locked`),
+// succeeds the second, fails the third — exercising publish on success
+// and stale-serve on failure with the same request key.
+
+const LockedFlipBackend = struct {
+    cp: *ControlPlane,
+    calls: u32 = 0,
+    /// Bit i (LSB-first) set => call i should signal RendererLocked.
+    fail_pattern: u32,
+
+    fn run(ctx: ?*anyopaque, request: []const u8, allocator: Allocator) ![]const u8 {
+        const self: *LockedFlipBackend = @ptrCast(@alignCast(ctx orelse return error.InvalidContext));
+        const idx = self.calls;
+        self.calls += 1;
+        if (((self.fail_pattern >> @intCast(idx)) & 1) == 1) {
+            // Mimic provCaptureSnapshot: signal locked, return a value
+            // (the upper layer will free it before swapping in BUSY).
+            self.cp.last_renderer_locked.store(true, .release);
+            return try std.fmt.allocPrint(allocator, "PLACEHOLDER|{s}", .{request});
+        }
+        return try std.fmt.allocPrint(allocator, "OK|fresh-call={d}|{s}", .{ idx, request });
+    }
+};
+
+test "handleRequestWith publishes successful reads to snapshot cache (#269)" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    cp.snapshot_cache = SnapshotCache.init(std.testing.allocator, 500 * std.time.ns_per_ms);
+    defer if (cp.snapshot_cache) |*sc| sc.deinit();
+    defer cp.clearResponseCache();
+
+    var be = LockedFlipBackend{ .cp = &cp, .fail_pattern = 0b0 };
+    const r = cp.handleRequestWith("TAIL|cli|20", std.testing.allocator, &be, LockedFlipBackend.run);
+    defer std.testing.allocator.free(r);
+    try std.testing.expect(std.mem.startsWith(u8, r, "OK|fresh-call=0|"));
+    try std.testing.expectEqual(@as(usize, 1), cp.snapshot_cache.?.keyCount());
+}
+
+test "handleRequestWith serves stale: prefix when renderer is locked and snapshot cached (#269)" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    cp.snapshot_cache = SnapshotCache.init(std.testing.allocator, 5 * std.time.ns_per_s);
+    defer if (cp.snapshot_cache) |*sc| sc.deinit();
+    defer cp.clearResponseCache();
+    // Disable the fresh response cache so the second call actually
+    // re-enters the backend rather than short-circuiting from `cache`.
+    cp.cache.ttl_ns = 0;
+
+    var be = LockedFlipBackend{ .cp = &cp, .fail_pattern = 0b10 }; // call 0 OK, call 1 locked
+
+    // First call seeds the snapshot cache.
+    const r1 = cp.handleRequestWith("STATE|cli|0", std.testing.allocator, &be, LockedFlipBackend.run);
+    defer std.testing.allocator.free(r1);
+    try std.testing.expect(std.mem.startsWith(u8, r1, "OK|fresh-call=0|"));
+
+    // Second call: renderer locked → must serve stale: prefixed payload.
+    const r2 = cp.handleRequestWith("STATE|cli|0", std.testing.allocator, &be, LockedFlipBackend.run);
+    defer std.testing.allocator.free(r2);
+    try std.testing.expect(std.mem.startsWith(u8, r2, "stale:"));
+    try std.testing.expect(std.mem.indexOf(u8, r2, "|OK|fresh-call=0|") != null);
+}
+
+test "handleRequestWith falls through to BUSY when snapshot cache is empty (#269)" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    cp.snapshot_cache = SnapshotCache.init(std.testing.allocator, 5 * std.time.ns_per_s);
+    defer if (cp.snapshot_cache) |*sc| sc.deinit();
+    defer cp.clearResponseCache();
+
+    var be = LockedFlipBackend{ .cp = &cp, .fail_pattern = 0b1 }; // first call locked
+    const r = cp.handleRequestWith("STATE|cli|0", std.testing.allocator, &be, LockedFlipBackend.run);
+    defer std.testing.allocator.free(r);
+    try std.testing.expectEqualStrings("ERR|BUSY|renderer_locked\n", r);
+}
+
+test "handleRequestWith falls through to BUSY when snapshot is older than max_age (#269)" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    // 1ns budget — anything published will be stale by the time we ask.
+    cp.snapshot_cache = SnapshotCache.init(std.testing.allocator, 1);
+    defer if (cp.snapshot_cache) |*sc| sc.deinit();
+    defer cp.clearResponseCache();
+    cp.cache.ttl_ns = 0;
+
+    var be = LockedFlipBackend{ .cp = &cp, .fail_pattern = 0b10 };
+
+    const r1 = cp.handleRequestWith("STATE|cli|0", std.testing.allocator, &be, LockedFlipBackend.run);
+    std.testing.allocator.free(r1);
+    // Sleep slightly so even with sub-ns timer resolution the entry is
+    // unambiguously older than the 1ns budget.
+    std.Thread.sleep(2 * std.time.ns_per_ms);
+
+    const r2 = cp.handleRequestWith("STATE|cli|0", std.testing.allocator, &be, LockedFlipBackend.run);
+    defer std.testing.allocator.free(r2);
+    try std.testing.expectEqualStrings("ERR|BUSY|renderer_locked\n", r2);
+}
+
+test "handleRequestWith disables snapshot fallback when GHOSTTY_CP_STALE_MS=0 semantics (#269)" {
+    var cp = ControlPlane{
+        .allocator = std.testing.allocator,
+        .hwnd = @ptrFromInt(1),
+    };
+    // max_age_ns = 0 mirrors the env-driven kill switch.
+    cp.snapshot_cache = SnapshotCache.init(std.testing.allocator, 0);
+    defer if (cp.snapshot_cache) |*sc| sc.deinit();
+    defer cp.clearResponseCache();
+    cp.cache.ttl_ns = 0;
+
+    var be = LockedFlipBackend{ .cp = &cp, .fail_pattern = 0b10 };
+
+    const r1 = cp.handleRequestWith("STATE|cli|0", std.testing.allocator, &be, LockedFlipBackend.run);
+    std.testing.allocator.free(r1);
+
+    const r2 = cp.handleRequestWith("STATE|cli|0", std.testing.allocator, &be, LockedFlipBackend.run);
+    defer std.testing.allocator.free(r2);
+    try std.testing.expectEqualStrings("ERR|BUSY|renderer_locked\n", r2);
+}
+
+// NOTE: full Provider→callback→Surface integration not exercised here;
+// the XAML runtime, renderer mutex, and PTY are absent from `zig build
+// test`. End-to-end coverage happens manually via deckpilot tail under
+// shell flood (the #269 reproducer).
 
 // ── #212: UI-thread stall watchdog ──
 //
