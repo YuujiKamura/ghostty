@@ -9,6 +9,19 @@ pre-commit:
       skip:
         - merge
         - rebase
+    cp-session-smoke:
+      # In-vivo assertion: ghostty.exe boot writes a .session file that
+      # deckpilot's file scan can read. Only fires when staged files touch
+      # the orchestration glue (apprt/winui3, zig-control-plane vendor,
+      # build.zig*, or xaml/), since the smoke launches a real ghostty.exe
+      # and pays ~3s.
+      #
+      # Bypass with SKIP_UIA_SMOKE=1 (env) or LEFTHOOK_EXCLUDE=cp-session-smoke.
+      run: bash tools/precommit-cp-session-smoke.sh
+      fail_text: "CP session-file smoke failed. Run 'pwsh -NoProfile -File tests/winui3/test-cp-session-file-appears.ps1' to reproduce. Bypass: SKIP_UIA_SMOKE=1."
+      skip:
+        - merge
+        - rebase
 
 pre-push:
   commands:
