@@ -5,6 +5,11 @@ pre-commit:
       glob: "*.zig"
       run: zig fmt --check {staged_files}
     vtable-manifest:
+      # Tightened scope: only fires when staged diff could plausibly affect
+      # COM vtable layout. Was unscoped (~50s on every commit) which trained
+      # a bypass habit on docs/scripts commits.
+      # See ~/.agents/skills/precommit-gate-scope-filter/SKILL.md (Bug 1).
+      glob: "{*.zig,build.zig,build.zig.zon,xaml/**,vendor/zig-control-plane,vendor/zig-control-plane/**}"
       run: bash -c "./build-winui3.sh 2>&1 | grep -q 'VTABLE MANIFEST OK'"
       skip:
         - merge

@@ -15,7 +15,7 @@ fi
 # `(/|$)` group is required to catch pointer-only bumps as well as nested
 # files. See ~/.agents/scratch/ghostty-win/lefthook-submodule-regex-fix-2026-05-05.md.
 if ! git diff --cached --name-only --diff-filter=ACMR | \
-     grep -qE '^(src/apprt/winui3/|vendor/zig-control-plane(/|$)|xaml/)|^(build\.zig|build\.zig\.zon)$'; then
+     grep -qE '^(src/apprt/winui3/|vendor/zig-control-plane(/|$)|xaml/)|^(build\.zig|build\.zig\.zon)$|^tools/precommit-cp-session-smoke\.sh$'; then
   echo "[cp-session-smoke] no relevant paths staged, skipping"
   exit 0
 fi
