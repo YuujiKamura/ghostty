@@ -14,7 +14,11 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $outAbs = Join-Path $repoRoot $OutDir
 $runTmpDir = Join-Path $repoRoot "tmp\ime-foreground-e2e-run"
-$debugLogPath = Join-Path $env:USERPROFILE "ghostty_debug.log"
+# Resolved AFTER Start-Ghostty (per-PID file under %TEMP% — see
+# tests/winui3/test-helpers.psm1 :: Get-GhosttyLogPath for the contract).
+# Pre-2026-05-06 this was %USERPROFILE%\ghostty_debug.log which the binary
+# never produced; downstream Wait-LogLine calls silently no-op'd.
+$debugLogPath = $null
 
 New-Item -ItemType Directory -Path $outAbs -Force | Out-Null
 New-Item -ItemType Directory -Path $runTmpDir -Force | Out-Null
@@ -46,7 +50,10 @@ function Assert-NoGhosttyProcess {
 }
 
 function Reset-DebugLog {
-    if (Test-Path $debugLogPath) {
+    # Per-PID log path: a fresh file is created at every Start-Ghostty,
+    # so pre-launch Reset is a no-op when $debugLogPath is unset (script
+    # default). Kept for callers that pass a path post-launch.
+    if ($debugLogPath -and (Test-Path $debugLogPath)) {
         Remove-Item -Path $debugLogPath -Force
     }
 }
@@ -152,6 +159,7 @@ $foregroundOk = $false
 
 try {
     $session = Start-Ghostty -ExePath $exePath -TmpDir $runTmpDir -WorkingDirectory $workingDir
+    $debugLogPath = Join-Path $env:TEMP "ghostty_debug_$($session.Process.Id).log"
     $hwnd = Wait-MainWindowHandle -Process $session.Process -TimeoutMs 20000
     Wait-LogLine -Path $debugLogPath -Pattern "step 9 OK: input HWND=" -TimeoutMs 10000 | Out-Null
     Start-Sleep -Milliseconds 500

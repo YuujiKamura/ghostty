@@ -19,9 +19,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$debugLog = "$env:USERPROFILE\ghostty_debug.log"
 $outDir = Join-Path $repoRoot "tmp\stress-test"
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+# $debugLog is set after Start-Process below — it's a per-PID file under
+# %TEMP% (attachDebugConsole writes to %TEMP%\ghostty_debug_<pid>.log).
 
 # --- Win32 API (no SendInput / no cursor manipulation) ---
 Add-Type @"
@@ -61,16 +62,15 @@ if (-not (Test-Path $exe)) {
     return
 }
 
-# --- Clear old log ---
-if (Test-Path $debugLog) {
-    $backupLog = Join-Path $outDir "pre_stress_debug.log"
-    Copy-Item $debugLog $backupLog -Force
-    Remove-Item $debugLog -Force
-}
-
 # --- Launch ghostty ---
 Write-Host "[stress] Launching ghostty ($Duration sec)..." -ForegroundColor Cyan
 $proc = Start-Process -FilePath $exe -PassThru
+
+# Per-PID log path. Pre-2026-05-06 this script targeted
+# %USERPROFILE%\ghostty_debug.log which the binary never produced. The
+# real path is %TEMP%\ghostty_debug_<pid>.log written by
+# attachDebugConsole(). Fresh per-launch, no pre-clear step needed.
+$debugLog = Join-Path $env:TEMP "ghostty_debug_$($proc.Id).log"
 
 # Wait for window to appear
 $hwnd = [IntPtr]::Zero

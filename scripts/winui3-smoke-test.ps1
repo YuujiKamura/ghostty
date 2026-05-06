@@ -21,9 +21,6 @@ if (-not (Test-Path $ExePath)) {
     exit 1
 }
 
-$debugLog = Join-Path $env:TEMP "ghostty_debug.log"
-if (Test-Path $debugLog) { Remove-Item $debugLog -Force }
-
 $passPattern = if ($Headless) { "App\.init: EXIT OK" } else { "startup stage: init_complete" }
 $passLabel   = if ($Headless) { "App.init EXIT OK (headless)" } else { "init_complete" }
 
@@ -31,6 +28,11 @@ Write-Host "[smoke] Mode: $(if ($Headless) {'headless (CI)'} else {'desktop'})"
 Write-Host "[smoke] Pass condition: $passLabel"
 Write-Host "[smoke] Starting $ExePath ..."
 $proc = Start-Process -FilePath $ExePath -PassThru -WindowStyle Hidden
+
+# Per-PID log path. attachDebugConsole() writes to %TEMP%\ghostty_debug_<pid>.log
+# (see Get-GhosttyLogPath in tests/winui3/test-helpers.psm1 for the canonical
+# resolver). Fresh per launch — no pre-clear step needed.
+$debugLog = Join-Path $env:TEMP "ghostty_debug_$($proc.Id).log"
 
 $deadline = (Get-Date).AddSeconds($TimeoutSec)
 $reached = $false

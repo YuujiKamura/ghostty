@@ -114,29 +114,14 @@ function Invoke-GhosttyTest {
     New-Item -ItemType File -Path $stdoutLog -Force | Out-Null
 
     # ghostty's WinUI3 runtime calls attachDebugConsole() early in App.init
-    # and redirects stderr (via SetStdHandle) to $env:TEMP\ghostty_debug.log.
-    # The stderr pipe we redirect via ProcessStartInfo only catches the first
-    # ~10 lines before the handle swap. The rest -- including "started
-    # subcommand" -- goes to the temp file. We therefore tail that file.
-    $debugLog = Join-Path $env:TEMP "ghostty_debug.log"
-
-    # Delete any prior run's log BEFORE spawning, so we don't confuse a
-    # previous test's FAIL signal with ours. Retry a few times because the
-    # file may still be held by a previous ghostty that hasn't exited yet.
-    for ($i = 0; $i -lt 10; $i++) {
-        try {
-            if (Test-Path $debugLog) { Remove-Item -Path $debugLog -Force -ErrorAction Stop }
-            break
-        } catch {
-            Start-Sleep -Milliseconds 200
-        }
-    }
-    if (Test-Path $debugLog) {
-        # Couldn't delete; at least truncate so old content doesn't leak.
-        try { Clear-Content $debugLog -ErrorAction Stop } catch {
-            Write-Host "[$Label] WARN: could not clear $debugLog -- old content may contaminate detection" -ForegroundColor Yellow
-        }
-    }
+    # and redirects stderr (via SetStdHandle) to
+    # $env:TEMP\ghostty_debug_<pid>.log. The stderr pipe we redirect via
+    # ProcessStartInfo only catches the first ~10 lines before the handle
+    # swap. The rest -- including "started subcommand" -- goes to the
+    # per-PID temp file (resolved AFTER Process.Start below using
+    # $proc.Id). Per-PID means a fresh file per launch — no pre-clear or
+    # truncate dance needed.
+    $debugLog = $null
 
     # Build per-process env via ProcessStartInfo (Start-Process has no -Environment).
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -181,7 +166,8 @@ function Invoke-GhosttyTest {
         }
     }
     $procPid = $proc.Id
-    Write-Host "[$Label] spawned pid=$procPid -> stderr=$stderrLog" -ForegroundColor Green
+    $debugLog = Join-Path $env:TEMP "ghostty_debug_${procPid}.log"
+    Write-Host "[$Label] spawned pid=$procPid -> stderr=$stderrLog (debugLog=$debugLog)" -ForegroundColor Green
 
     # Drain stderr in background Runspace-style: spawn a thread via PS jobs is
     # too heavy; instead we poll the child's StandardError StreamReader

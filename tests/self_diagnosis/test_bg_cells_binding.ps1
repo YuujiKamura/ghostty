@@ -148,10 +148,18 @@ function Get-RecentLogLines([int]$tail = 4000) {
 }
 
 function Resolve-LogPath {
-    $candidates = @(
-        (Join-Path $env:TEMP "ghostty_debug.log"),
-        (Join-Path $env:LOCALAPPDATA "ghostty\ghostty.log")
-    )
+    # Per-PID log written by attachDebugConsole() — preferred when we
+    # launched the process ourselves and know the PID. Falls back to the
+    # legacy fixed-name candidates for the -Attach case where we found a
+    # ghostty we did not launch (and therefore have a PID via Find-Session,
+    # which sets $script:GhosttyPid). Final fallback covers older builds
+    # that wrote to LOCALAPPDATA. Pre-2026-05-06 the first candidate was
+    # the fixed %TEMP%\ghostty_debug.log — broken by per-PID rename.
+    $candidates = @()
+    if ($script:GhosttyPid -and $script:GhosttyPid -gt 0) {
+        $candidates += (Join-Path $env:TEMP "ghostty_debug_$($script:GhosttyPid).log")
+    }
+    $candidates += (Join-Path $env:LOCALAPPDATA "ghostty\ghostty.log")
     foreach ($p in $candidates) {
         if (Test-Path $p) { return $p }
     }

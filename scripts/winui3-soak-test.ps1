@@ -20,7 +20,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$debugLog = "$env:USERPROFILE\ghostty_debug.log"
 $outDir = Join-Path $repoRoot "tmp\soak-test"
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
@@ -35,15 +34,15 @@ if (-not $NoBuild) {
 $exe = if ([System.IO.Path]::IsPathRooted($ExePath)) { $ExePath } else { Join-Path $repoRoot $ExePath }
 if (-not (Test-Path $exe)) { Write-Error "ghostty.exe not found at $exe"; return }
 
-# --- Clear old log ---
-if (Test-Path $debugLog) {
-    Copy-Item $debugLog (Join-Path $outDir "pre_soak_debug.log") -Force
-    Remove-Item $debugLog -Force
-}
-
 # --- Launch ---
 Write-Host "[soak] Launching ghostty (soak $Duration sec)..." -ForegroundColor Cyan
 $proc = Start-Process -FilePath $exe -PassThru
+
+# Per-PID log path. attachDebugConsole() in App.zig writes stderr to
+# %TEMP%\ghostty_debug_<pid>.log. Pre-2026-05-06 this script targeted
+# %USERPROFILE%\ghostty_debug.log which the binary never produced — so log
+# parsing was silently broken. Resolved per-launch from $proc.Id.
+$debugLog = Join-Path $env:TEMP "ghostty_debug_$($proc.Id).log"
 
 # Wait for window
 $maxWait = 20

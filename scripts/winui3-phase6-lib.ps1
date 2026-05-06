@@ -663,8 +663,13 @@ function Start-Phase6Session {
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
     Clear-OldLogs -TmpDir $tmpDir -KeepCount 10
 
-    $debugLogPath = Join-Path $env:USERPROFILE "ghostty_debug.log"
-    "" | Set-Content -Path $debugLogPath -Encoding utf8
+    # DebugLogPath is the per-PID file that ghostty's attachDebugConsole()
+    # actually writes to. Pre-2026-05-06 this was hard-coded to
+    # %USERPROFILE%\ghostty_debug.log which the binary never produced —
+    # so DebugLogPath consumers downstream (Wait-LogLine fallback, copy
+    # on session teardown) silently no-op'd. Resolved AFTER launch using
+    # the spawned PID; canonical implementation in
+    # tests/winui3/test-helpers.psm1 :: Get-GhosttyLogPath.
 
     $backup = Set-Phase6Env -Map $Env
     try {
@@ -675,6 +680,8 @@ function Start-Phase6Session {
     } finally {
         Restore-Phase6Env -Backup $backup
     }
+
+    $debugLogPath = Join-Path $env:TEMP "ghostty_debug_$($baseSession.Process.Id).log"
 
     $session = [pscustomobject]@{
         Process = $baseSession.Process
