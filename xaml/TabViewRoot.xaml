@@ -19,7 +19,8 @@
                           HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                           IsAddTabButtonVisible="False">
             <controls:TabView.TabStripFooter>
-                <controls:SplitButton x:Name="AddTabSplitButton">
+                <controls:SplitButton x:Name="AddTabSplitButton"
+                                     AutomationProperties.AutomationId="AddTabSplitButton">
                     <controls:SplitButton.Flyout>
                         <controls:MenuFlyout x:Name="ProfileFlyout"/>
                     </controls:SplitButton.Flyout>

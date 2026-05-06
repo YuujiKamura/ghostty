@@ -21,45 +21,17 @@ if ($ProcessId -ne 0) {
 Test-Assert -Condition ($elem -ne $null) -Message "$testName - AutomationElement obtained"
 
 # ============================================================
-# 2. Find SplitButton (ControlType.Button with name containing "Add")
-#    or any Button-like element in the tab strip footer area.
+# 2. Find SplitButton by AutomationId="AddTabSplitButton"
+#    (set via AutomationProperties.AutomationId in xaml/TabViewRoot.xaml)
 # ============================================================
-Write-Host "  UIA: Searching for SplitButton (Add Tab) ..." -ForegroundColor DarkGray
+Write-Host "  UIA: Searching for SplitButton by AutomationId='AddTabSplitButton' ..." -ForegroundColor DarkGray
 
-$allButtons = Find-UIAChildren -Element $elem -ControlType ([System.Windows.Automation.ControlType]::Button)
-$splitButton = $null
+$splitButtonIdCondition = New-Object System.Windows.Automation.PropertyCondition(
+    [System.Windows.Automation.AutomationElement]::AutomationIdProperty,
+    "AddTabSplitButton")
+$splitButton = $elem.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $splitButtonIdCondition)
 
-if ($allButtons -ne $null) {
-    $buttonList = @($allButtons)
-    foreach ($btn in $buttonList) {
-        $name = $btn.Current.Name
-        $automationId = $btn.Current.AutomationId
-        Write-Host "    Button: Name='$name' AutomationId='$automationId'" -ForegroundColor DarkGray
-        # SplitButton appears as "AddButton" or "AddTabSplitButton" in UIA
-        if ($automationId -match "AddTab|SplitButton|AddButton" -or $name -match "Add") {
-            $splitButton = $btn
-            break
-        }
-    }
-}
-
-# SplitButton may also appear as a Group or Custom control type in XAML Islands
-if ($splitButton -eq $null) {
-    Write-Host "  UIA: SplitButton not found as Button, searching Group/Custom ..." -ForegroundColor DarkGray
-    $allGroups = Find-UIAChildren -Element $elem -ControlType ([System.Windows.Automation.ControlType]::Group)
-    if ($allGroups -ne $null) {
-        foreach ($grp in @($allGroups)) {
-            $automationId = $grp.Current.AutomationId
-            if ($automationId -match "AddTab|SplitButton") {
-                $splitButton = $grp
-                Write-Host "    Found SplitButton as Group: AutomationId='$automationId'" -ForegroundColor Cyan
-                break
-            }
-        }
-    }
-}
-
-Test-Assert -Condition ($splitButton -ne $null) -Message "$testName - SplitButton found"
+Test-Assert -Condition ($splitButton -ne $null) -Message "$testName - SplitButton found by AutomationId"
 Write-Host "  SplitButton found: Name='$($splitButton.Current.Name)' AutomationId='$($splitButton.Current.AutomationId)'" -ForegroundColor Green
 
 # ============================================================
@@ -204,15 +176,7 @@ foreach ($item in $profileMenuItems) {
     }
 }
 
-# MenuFlyoutItem detection is best-effort — XAML Islands SplitButton secondary
-# button is not reliably accessible via UIA (no ExpandCollapse pattern, Invoke
-# triggers the primary action, not the dropdown). The critical assertions are:
-# 1. SplitButton exists (already passed above)
-# 2. Profile MenuItems visible if flyout is open (optional)
-if ($profileMenuItems.Count -ge 1) {
-    Test-Assert -Condition $cmdPromptFound -Message "$testName - 'Command Prompt' profile found in menu"
-    Write-Host "  $testName PASSED: $($profileMenuItems.Count) profile(s) in dropdown" -ForegroundColor Green
-} else {
-    Write-Host "  $testName INFO: MenuFlyoutItems not visible (flyout may not have opened — XAML Islands UIA limitation)" -ForegroundColor Yellow
-    Write-Host "  $testName PASSED: SplitButton exists, profiles populated at build time (zig test profiles.zig verifies detection)" -ForegroundColor Green
-}
+# Strict assertions — flyout must open and expose profile MenuFlyoutItems.
+Test-Assert -Condition ($profileMenuItems.Count -ge 1) -Message "$testName - at least one MenuFlyoutItem visible"
+Test-Assert -Condition $cmdPromptFound -Message "$testName - 'Command Prompt' profile found in menu"
+Write-Host "  $testName PASSED: $($profileMenuItems.Count) profile(s) in dropdown" -ForegroundColor Green
