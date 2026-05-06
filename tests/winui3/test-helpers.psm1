@@ -1054,58 +1054,108 @@ function Dump-UIATree {
 # Control Plane helpers (deckpilot + direct Named Pipe)
 # ============================================================
 
+function Resolve-DeckpilotExe {
+    <#
+    .SYNOPSIS
+        Locate the deckpilot executable.
+        Order: $env:DECKPILOT_EXE → repo build dir → Get-Command (PATH).
+        Returns absolute path string, or $null if not found.
+        Uses PATH lookup (Get-Command), not Test-Path on a bare command name —
+        the latter only checks literal filesystem paths and returns false for
+        commands resolvable via PATH, which silently disabled CP detection.
+    #>
+    if ($env:DECKPILOT_EXE -and (Test-Path $env:DECKPILOT_EXE)) {
+        return (Resolve-Path $env:DECKPILOT_EXE).Path
+    }
+    $repoBuild = Join-Path $PSScriptRoot "..\..\zig-out-winui3\bin\deckpilot.exe"
+    if (Test-Path $repoBuild) { return (Resolve-Path $repoBuild).Path }
+    $cmd = Get-Command deckpilot -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Path }
+    return $null
+}
+
 function Register-GhosttyCP {
     <#
     .SYNOPSIS
         Confirm a ghostty CP session is discovered by deckpilot.
         Returns the session name (e.g. "ghostty-12345") or $null.
+        Retries with backoff because the CP DLL registers asynchronously
+        after the window is shown — a single point-in-time check races
+        against that registration.
+    .PARAMETER TimeoutMs
+        Total time to keep retrying. Default 8s covers Debug build
+        registration latency observed on dev workstation (~3-6s).
+    .PARAMETER PollIntervalMs
+        Delay between attempts. Default 500ms.
     #>
     [CmdletBinding()]
-    param([Parameter(Mandatory)][int]$ProcessId)
+    param(
+        [Parameter(Mandatory)][int]$ProcessId,
+        [int]$TimeoutMs = 8000,
+        [int]$PollIntervalMs = 500
+    )
 
-    $agentDeck = if ($env:DECKPILOT_EXE) { $env:DECKPILOT_EXE } else { "deckpilot" }
-    if (-not (Test-Path $agentDeck)) { return $null }
+    $agentDeck = Resolve-DeckpilotExe
+    if (-not $agentDeck) { return $null }
 
-    try {
-        $raw = & $agentDeck list --json 2>$null
-        if (-not $raw) { return $null }
-        $json = $raw | ConvertFrom-Json
-        if (-not $json) { return $null }
-        $session = $json | Where-Object { $_.pid -eq $ProcessId }
-        return $session.name
-    } catch {
-        return $null
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMs)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        try {
+            $raw = & $agentDeck list --json 2>$null
+            if ($raw) {
+                $json = $raw | ConvertFrom-Json
+                if ($json) {
+                    $session = $json | Where-Object { $_.pid -eq $ProcessId }
+                    if ($session -and $session.name) { return $session.name }
+                }
+            }
+        } catch {
+            # swallow — keep retrying until deadline
+        }
+        Start-Sleep -Milliseconds $PollIntervalMs
     }
+    return $null
 }
 
 function Find-GhosttyCP {
     <#
     .SYNOPSIS
         Find a ghostty CP session via deckpilot list --json.
-        Returns the session name or $null.
+        Returns the session name or $null. Retries with backoff to absorb
+        the async CP DLL registration window.
     .PARAMETER ProcessId
         If provided, prefer session matching this PID.
+    .PARAMETER TimeoutMs
+        Total time to keep retrying. Default 8s.
+    .PARAMETER PollIntervalMs
+        Delay between attempts. Default 500ms.
     #>
     [CmdletBinding()]
-    param([int]$ProcessId = 0)
+    param(
+        [int]$ProcessId = 0,
+        [int]$TimeoutMs = 8000,
+        [int]$PollIntervalMs = 500
+    )
 
-    $agentDeck = if ($env:DECKPILOT_EXE) { $env:DECKPILOT_EXE } else { "deckpilot" }
-    if (-not (Test-Path $agentDeck)) { return $null }
+    $agentDeck = Resolve-DeckpilotExe
+    if (-not $agentDeck) { return $null }
 
-    try {
-        $json = & $agentDeck list --json 2>$null | ConvertFrom-Json
-        if (-not $json) { return $null }
-        
-        if ($ProcessId -gt 0) {
-            $session = $json | Where-Object { $_.pid -eq $ProcessId }
-            return $session.name
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMs)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        try {
+            $json = & $agentDeck list --json 2>$null | ConvertFrom-Json
+            if ($json) {
+                if ($ProcessId -gt 0) {
+                    $session = $json | Where-Object { $_.pid -eq $ProcessId }
+                    if ($session -and $session.name) { return $session.name }
+                } elseif ($json.Count -gt 0) {
+                    return $json[-1].name
+                }
+            }
+        } catch {
+            # swallow — keep retrying until deadline
         }
-        # Fallback: most recent
-        if ($json.Count -gt 0) {
-            return $json[-1].name
-        }
-    } catch {
-        # Silently ignore
+        Start-Sleep -Milliseconds $PollIntervalMs
     }
     return $null
 }
@@ -1126,10 +1176,10 @@ function Send-GhosttyInput {
         [Parameter(Mandatory)][string]$Text
     )
 
-    $agentDeck = if ($env:DECKPILOT_EXE) { $env:DECKPILOT_EXE } else { "deckpilot" }
+    $agentDeck = Resolve-DeckpilotExe
 
     # Try deckpilot send
-    if (Test-Path $agentDeck) {
+    if ($agentDeck) {
         $prev = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         $sendResult = & $agentDeck send $SessionName $Text 2>$null
@@ -1208,8 +1258,8 @@ function Get-GhosttyOutput {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$SessionName)
 
-    $agentDeck = if ($env:DECKPILOT_EXE) { $env:DECKPILOT_EXE } else { "deckpilot" }
-    if (-not (Test-Path $agentDeck)) { return "" }
+    $agentDeck = Resolve-DeckpilotExe
+    if (-not $agentDeck) { return "" }
 
     $prev = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
@@ -1253,6 +1303,7 @@ Export-ModuleMember -Function @(
     'Get-UIAWindowPattern'
     'Get-UIATransformPattern'
     'Dump-UIATree'
+    'Resolve-DeckpilotExe'
     'Register-GhosttyCP'
     'Find-GhosttyCP'
     'Send-GhosttyInput'

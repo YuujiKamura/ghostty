@@ -201,23 +201,19 @@ try {
     exit 1
 }
 
-# Give XAML time to fully initialize + CP DLL to register session
-Start-Sleep -Milliseconds 3000
+# Give XAML a brief moment to start initializing — Register-GhosttyCP itself
+# retries up to 8s for async CP DLL registration, so this just shaves the
+# first poll.
+Start-Sleep -Milliseconds 500
 
-# Discover the ghostty CP session via deckpilot
-$sessionName = ""
-$registered = Register-GhosttyCP -ProcessId $proc.Id
-if ($registered) {
-    $sessionName = $registered
+# Discover the ghostty CP session via deckpilot. Register-GhosttyCP retries
+# internally; if it returns $null after the timeout, CP truly is unavailable.
+$sessionName = Register-GhosttyCP -ProcessId $proc.Id
+if ($sessionName) {
     Write-Host "  CP session: $sessionName" -ForegroundColor Green
 } else {
-    $discovered = Find-GhosttyCP -ProcessId $proc.Id
-    if ($discovered) {
-        $sessionName = $discovered
-        Write-Host "  CP session (discovered): $sessionName" -ForegroundColor Green
-    } else {
-        Write-Host "  WARN: Could not identify ghostty CP session" -ForegroundColor Yellow
-    }
+    Write-Host "  WARN: Could not identify ghostty CP session (after retry)" -ForegroundColor Yellow
+    $sessionName = ""
 }
 $env:GHOSTTY_CP_SESSION = $sessionName
 

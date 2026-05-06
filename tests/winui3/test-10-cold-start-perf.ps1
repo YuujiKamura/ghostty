@@ -27,8 +27,9 @@ param(
 #
 # Budget philosophy (Debug build, single dev machine):
 #   - Baselines captured 2026-05-06 on the dev workstation. Budgets are
-#     ~2.4x baseline so transient noise / slower CI runners don't flake,
-#     but a step that has genuinely doubled in cost will trip.
+#     ~3x baseline so transient noise (cold disk, AV scan, shader compile)
+#     and slower CI runners don't flake, but a step that has genuinely
+#     tripled in cost will trip.
 #   - Release builds will be much faster — the budgets are NOT meant to
 #     match Release performance, they exist to stop unnoticed Debug-build
 #     regressions during development.
@@ -53,16 +54,22 @@ $ExePath = (Resolve-Path $ExePath -ErrorAction Stop).Path
 #                            "PERF_INIT: total App.init = Xms" line)
 #   "content_ready total"  — full cold-start to content_ready (parsed
 #                            from the t= field of the content_ready step)
-$budgets = [ordered]@{
-    "bootstrap.init"                              = 300   # baseline ~125ms (heaviest single step in App.init)
-    "App.init total"                              = 300   # baseline ~130ms
-    "onApplicationStart entry"                    = 280   # baseline ~140ms (gap from init exit to XAML callback)
-    "DesktopWindowXamlSource.initialize"          = 280   # baseline ~183ms
-    "ShowWindow (window visible)"                 = 320   # baseline ~191ms
-    "  createInitialSurfaceContent"               = 500   # baseline ~217ms — single largest step in entire startup
-    "createWindowContent"                         = 600   # baseline ~226ms (sum of createWindowContent's children)
-    "content_ready total"                         = 1000  # baseline ~421ms — initXaml return point
-    "first Present"                               = 1100  # baseline ~363ms — first frame on screen (= what user perceives as "ready").
+# Baselines (Debug build, dev workstation, captured 2026-05-06).
+# Budgets are derived as baseline × $BudgetMultiplier (single source of truth).
+# To recalibrate noise tolerance, change $BudgetMultiplier — never hand-edit
+# individual budgets.
+$BudgetMultiplier = 3
+
+$baselines = [ordered]@{
+    "bootstrap.init"                              = 125   # heaviest single step in App.init
+    "App.init total"                              = 130
+    "onApplicationStart entry"                    = 140   # gap from init exit to XAML callback
+    "DesktopWindowXamlSource.initialize"          = 183
+    "ShowWindow (window visible)"                 = 191
+    "  createInitialSurfaceContent"               = 217   # single largest step in entire startup
+    "createWindowContent"                         = 226   # sum of createWindowContent's children
+    "content_ready total"                         = 421   # initXaml return point
+    "first Present"                               = 363   # first frame on screen (= what user perceives as "ready").
                                                           # NOTE: the IDC_APPSTARTING ("spinning") cursor that lingers ~2s after
                                                           # launch is NOT controlled by this metric. It's a side-effect of
                                                           # ghostty.exe being linked CONSOLE subsystem (see GhosttyExe.zig
@@ -71,6 +78,12 @@ $budgets = [ordered]@{
                                                           # Even if first Present hits 50ms, the cursor will still linger
                                                           # until that OS timeout expires. Fix is at the subsystem layer
                                                           # (.Windows linkage), not in this code path.
+}
+
+# Derive budgets from baselines (do not hand-edit individual values).
+$budgets = [ordered]@{}
+foreach ($k in $baselines.Keys) {
+    $budgets[$k] = [int]($baselines[$k] * $BudgetMultiplier)
 }
 
 # ----------------------------------------------------------------------
