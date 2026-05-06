@@ -18,14 +18,6 @@ if (-not (Test-Path $exePath)) {
     throw "$testName FAIL: ghostty.exe not found at $exePath"
 }
 
-$logPath = Join-Path $env:TEMP "ghostty_debug.log"
-
-# Record the current log size so we only inspect new output from our process.
-$logOffsetBefore = 0
-if (Test-Path $logPath) {
-    $logOffsetBefore = (Get-Item $logPath).Length
-}
-
 Write-Host "  Launching $exePath ..." -ForegroundColor DarkGray
 
 # The test uses Stop-Process as a fallback to ensure the process exits.
@@ -36,6 +28,13 @@ $proc = Start-Process -FilePath $exePath -PassThru -WindowStyle Minimized
 
 $procId = $proc.Id
 Write-Host "  PID = $procId" -ForegroundColor DarkGray
+
+# Resolve the per-PID debug log path. attachDebugConsole() in App.zig writes
+# to %TEMP%\ghostty_debug_<pid>.log so concurrent instances don't fight over
+# a shared handle. Per-launch fresh file means we don't need the legacy
+# offset-then-tail trick — the whole file is "this run" by definition.
+$logPath = Get-GhosttyLogPath -ProcessId $procId
+$logOffsetBefore = 0
 
 # Verify process starts (PID exists)
 Test-Assert -Condition ($procId -gt 0) -Message "$testName - process started (PID=$procId)"

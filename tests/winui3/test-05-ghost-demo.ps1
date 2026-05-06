@@ -13,14 +13,9 @@ if (-not (Test-Path $exePath)) {
     throw "$testName FAIL: ghostty.exe not found at $exePath"
 }
 
-$logPath = Join-Path $env:TEMP "ghostty_debug.log"
-
 # NOTE: Do NOT kill all ghostty processes — other sessions (deckpilot agents) may be running.
 # We only kill our own process at cleanup (line ~110).
 Start-Sleep -Seconds 1
-
-# Clear log
-if (Test-Path $logPath) { Remove-Item $logPath -Force }
 
 Write-Host "  Launching ghostty ..." -ForegroundColor DarkGray
 
@@ -29,6 +24,9 @@ $proc = Start-Process -FilePath $exePath -PassThru -WindowStyle Minimized
 $procId = $proc.Id
 Write-Host "  PID = $procId" -ForegroundColor DarkGray
 Test-Assert -Condition ($procId -gt 0) -Message "$testName - process started (PID=$procId)"
+
+# Per-PID log path — fresh file per launch, no clear-stale-log step needed.
+$logPath = Get-GhosttyLogPath -ProcessId $procId
 
 # Wait for window + CP
 Start-Sleep -Seconds 6

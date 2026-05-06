@@ -140,6 +140,31 @@ function Invoke-Test {
 }
 
 # ============================================================
+# Perf prelude: cold-start health check
+# ============================================================
+# Runs FIRST (before shared ghostty launch) because cold-start
+# measurement requires a fresh process. test-10 launches and kills its
+# own short-lived ghostty, then exits — independent of the long-lived
+# Ghostty 1 launched below.
+$perfTestName = "test-10-cold-start-perf"
+$shouldRunPerf = (-not $failedNames) -or ($perfTestName -in $failedNames)
+if ($shouldRunPerf) {
+    Write-Host "`n=== Perf prelude: $perfTestName ===" -ForegroundColor Cyan
+    $perfStart = [DateTime]::UtcNow
+    & pwsh.exe -NoProfile -File (Join-Path $PSScriptRoot "$perfTestName.ps1") -ExePath $ExePath
+    $perfExit = $LASTEXITCODE
+    $perfElapsed = ([DateTime]::UtcNow - $perfStart).TotalMilliseconds
+    if ($perfExit -eq 0) {
+        $results += @{ Name = $perfTestName; Status = "PASS"; Time = [int]$perfElapsed; Error = $null }
+    } else {
+        $results += @{ Name = $perfTestName; Status = "FAIL"; Time = [int]$perfElapsed; Error = "cold-start budget exceeded (exit=$perfExit) — see breakdown above" }
+        Write-Host "--- $perfTestName (FAIL) ---" -ForegroundColor Red
+    }
+} else {
+    Write-Host "  SKIP: $perfTestName" -ForegroundColor DarkGray
+}
+
+# ============================================================
 # Launch Ghostty 1 (test target)
 # ============================================================
 Write-Host "`n=== Launching Ghostty 1 (test target) ===" -ForegroundColor Cyan
@@ -210,8 +235,10 @@ if ("phase1-ghost-demo-smoke" -in $phase1Tests) {
         $proc.Refresh()
         Test-Assert -Condition (-not $proc.HasExited) -Message "phase1-ghost-demo-smoke - process alive"
 
-        # Read log to verify init
-        $logPath = Join-Path $env:TEMP "ghostty_debug.log"
+        # Read log to verify init. Per-PID log path — attachDebugConsole()
+        # writes to %TEMP%\ghostty_debug_<pid>.log (see Get-GhosttyLogPath in
+        # test-helpers.psm1).
+        $logPath = Get-GhosttyLogPath -ProcessId $proc.Id
         $logContent = ""
         if (Test-Path $logPath) {
             try {

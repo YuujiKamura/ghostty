@@ -45,7 +45,11 @@ if (-not (Test-Path $exePath)) {
     throw "$testName FAIL: ghostty.exe not found at $exePath"
 }
 
-$logPath = Join-Path $env:TEMP "ghostty_debug.log"
+# Per-mode launches each fill a different per-PID log file inside ghostty
+# (attachDebugConsole writes to %TEMP%\ghostty_debug_<pid>.log) — that path
+# is computed inside Run-One-Mode using the just-launched process's PID
+# rather than a single shared file. See Get-GhosttyLogPath in
+# test-helpers.psm1 for the contract.
 
 # ----------------------------------------------------------------------
 # Helpers
@@ -145,12 +149,16 @@ function Run-One-Mode {
 
         $line = Wait-For-StepFiveInFile -Path $stderrPath -TimeoutMs 15000
         if (-not $line) {
-            # Fall back to the shared ghostty_debug.log — on this
-            # codepath ghostty's own attachDebugConsole may have
-            # taken over stderr.
+            # Fall back to the per-PID debug log that attachDebugConsole
+            # writes to. On this codepath ghostty's SetStdHandle redirect
+            # has overtaken our PowerShell-side -RedirectStandardError, so
+            # post-attachDebugConsole logs (which include initXaml step 5)
+            # land in the per-PID file rather than $stderrPath.
+            $logPath = Get-GhosttyLogPath -ProcessId $proc.Id
             $line = Wait-For-StepFiveInFile -Path $logPath -TimeoutMs 3000
         }
         if (-not $line) {
+            $logPath = Get-GhosttyLogPath -ProcessId $proc.Id
             throw "[$Mode] FAIL: no 'initXaml step 5: ShowWindow' line in $stderrPath OR $logPath within 18 s — process may have crashed pre-step-5"
         }
         if ($line -notmatch [regex]::Escape($ExpectedMarker)) {

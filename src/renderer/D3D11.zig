@@ -17,6 +17,7 @@ const font = @import("../font/main.zig");
 const configpkg = @import("../config.zig");
 const rendererpkg = @import("../renderer.zig");
 const terminal = @import("../terminal/main.zig");
+const renderer_perf = @import("perf.zig");
 const shadertoy = @import("shadertoy.zig");
 const com = @import("d3d11/com.zig");
 const win32 = @import("d3d11/win32.zig");
@@ -356,6 +357,19 @@ pub fn present(self: *D3D11, target: Target) !void {
             present_flags,
             self.use_composition,
         });
+    }
+
+    // Cold-start metric: stamp the first successful Present relative to the
+    // process startup baseline. The IDC_APPSTARTING cursor that Windows
+    // attaches to launched processes is dismissed at OS-defined "input idle"
+    // time, which closely tracks first frame display. Format matches the
+    // PERF_INIT lines emitted by App.zig perfStep so test-10 can grep them.
+    // Baseline lives in renderer/perf.zig (sibling within renderer namespace)
+    // — apprt publishes it via setStartupBaseline(); we just read.
+    if (phr >= 0 and self.present_count == 1) {
+        if (renderer_perf.elapsedMsSinceStartup()) |elapsed_ms| {
+            log.info("PERF_INIT step=\"first Present\" t={d:.1}ms d=-", .{elapsed_ms});
+        }
     }
 
     self.last_target = target;

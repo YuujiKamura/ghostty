@@ -32,6 +32,7 @@ const ime = @import("ime.zig");
 const tabview_runtime = @import("tabview_runtime.zig");
 const profile_menu = @import("profile_menu.zig");
 const tab_index = @import("tab_index.zig");
+const renderer_perf = @import("../../renderer/perf.zig");
 const tab_manager = @import("tab_manager.zig");
 const input_runtime = @import("input_runtime.zig");
 const caption_buttons_mod = @import("caption_buttons.zig");
@@ -307,6 +308,9 @@ tab_content_grid: ?*winrt.IInspectable = null,
 
 /// Whether the app is running.
 running: bool = false,
+/// Wall-clock nanosecond timestamp captured at App.init entry.
+/// Used for cold-start timing instrumentation (PERF lines in debug log).
+init_start_ns: i128 = 0,
 startup_stage: StartupStage = .not_started,
 startup_bootstrapped: bool = false,
 parity_verified: bool = false,
@@ -521,25 +525,49 @@ pub fn init(
 ) !void {
     _ = opts;
 
+    // Cold-start timing baseline. All PERF_INIT lines below report elapsed
+    // milliseconds since this point. Stored on self at the end so initXaml
+    // (called later from Application.Start callback) can chain off the same
+    // baseline. Also published to the renderer-side perf module so the D3D11
+    // backend can stamp first-Present relative to the same epoch (see
+    // src/renderer/perf.zig — kept inside the renderer namespace so backends
+    // don't reach across into apprt for a shared mutable global).
+    const init_start_ns = std.time.nanoTimestamp();
+    renderer_perf.setStartupBaseline(init_start_ns);
+    var prev_ns = init_start_ns;
+
     log.info("App.init: ENTRY (winui3)", .{});
 
-    // Allocate a debug console so log output is visible for GUI apps.
+    // Redirect stderr to a debug log file so log output is preserved for GUI apps.
     os.attachDebugConsole();
-    log.info("App.init: after attachDebugConsole", .{});
+    perfStep("attachDebugConsole", init_start_ns, &prev_ns);
+
+    // Detach the conhost window that Windows auto-allocates because ghostty.exe
+    // is linked as a CONSOLE subsystem binary (see src/build/GhosttyExe.zig).
+    // Stderr was already redirected to the log file by attachDebugConsole(), and
+    // SetStdHandle's value survives FreeConsole(), so panic/log output is preserved.
+    // Doing this at startup (instead of at normal-shutdown only) guarantees the
+    // conhost goes away even when the process lingers — IPC server, watchdog,
+    // child-process handle inheritance, or abnormal exit paths previously kept
+    // the console alive after the main window closed.
+    _ = os.FreeConsole();
+    perfStep("FreeConsole", init_start_ns, &prev_ns);
 
     // WT: BufferedPaintInit() — required once before BeginBufferedPaint in WM_PAINT.
     _ = os.BufferedPaintInit();
+    perfStep("BufferedPaintInit", init_start_ns, &prev_ns);
 
     // Install a Vectored Exception Handler to capture details of
     // STATUS_STOWED_EXCEPTION before the process terminates.
     _ = os.AddVectoredExceptionHandler(1, &stowedExceptionHandler);
-    log.info("App.init: after VEH install", .{});
+    perfStep("VEH install", init_start_ns, &prev_ns);
 
     // Request 1ms timer resolution for smooth animation timing.
     _ = os.timeBeginPeriod(1);
+    perfStep("timeBeginPeriod", init_start_ns, &prev_ns);
 
     logPackageIdentity();
-    log.info("App.init: after logPackageIdentity", .{});
+    perfStep("logPackageIdentity", init_start_ns, &prev_ns);
 
     // Step 1: Bootstrap the Windows App SDK runtime.
     bootstrap.init() catch |err| {
@@ -547,7 +575,7 @@ pub fn init(
         log.err("Windows App SDK bootstrap failed: {}", .{err});
         return error.AppInitFailed;
     };
-    log.info("App.init: after bootstrap.init", .{});
+    perfStep("bootstrap.init", init_start_ns, &prev_ns);
 
     // Step 2: Initialize WinRT.
     winrt.hrCheck(winrt.RoInitialize(winrt.RO_INIT_SINGLETHREADED)) catch |err| {
@@ -555,7 +583,7 @@ pub fn init(
         log.err("RoInitialize failed: {}", .{err});
         return error.AppInitFailed;
     };
-    log.info("App.init: after RoInitialize", .{});
+    perfStep("RoInitialize", init_start_ns, &prev_ns);
 
     // Step 3: Create a DispatcherQueue for the current thread.
     // This is required before creating any XAML objects.
@@ -565,7 +593,7 @@ pub fn init(
         log.err("CreateDispatcherQueueController failed: {}", .{err});
         return error.AppInitFailed;
     };
-    log.info("App.init: after DispatcherQueue", .{});
+    perfStep("DispatcherQueue", init_start_ns, &prev_ns);
 
     // IDispatcherQueue QI is deferred to initXaml — XAML must be initialized first.
 
@@ -573,6 +601,7 @@ pub fn init(
         .core_app = core_app,
         .surfaces = .{},
         .running = true,
+        .init_start_ns = init_start_ns,
         .dq_controller = dq_controller,
         .dispatcher_queue = null,
     };
@@ -595,16 +624,43 @@ pub fn init(
     } else |err| {
         log.warn("App.init: config cache prime failed err={} — newTab will fall back to sync load", .{err});
     }
+    perfStep("config cache prime", init_start_ns, &prev_ns);
 
     // Window/UI creation happens inside run() via Application.Start(callback).
     // WinUI 3 requires Window creation on the XAML thread which is set up by Start().
     log.info("WinUI 3 Islands runtime initialized (window creation deferred to run)", .{});
+    log.info(
+        "PERF_INIT: total App.init = {d:.1}ms",
+        .{@as(f64, @floatFromInt(std.time.nanoTimestamp() - init_start_ns)) / 1_000_000.0},
+    );
+    // Stable marker preserved for existing log-grep tests
+    // (test-05-ghost-demo, run-all-tests phase1-ghost-demo-smoke). Keep the
+    // exact wording — changing it has historically broken the lifecycle
+    // test grep.
     log.info("App.init: EXIT OK", .{});
+}
+
+/// Log the elapsed wall-clock time for a startup step.
+/// Emits two numbers per step: cumulative ms since `init_start_ns`, and
+/// delta ms since `prev_ns` (the previous perfStep call). `prev_ns` is
+/// updated in place so the next call measures the next step's duration.
+/// Format intentionally machine-grep-friendly: `PERF_INIT step="X" t=AAAms d=BBBms`
+fn perfStep(name: []const u8, init_start_ns: i128, prev_ns: *i128) void {
+    const now_ns = std.time.nanoTimestamp();
+    const total_ms = @as(f64, @floatFromInt(now_ns - init_start_ns)) / 1_000_000.0;
+    const delta_ms = @as(f64, @floatFromInt(now_ns - prev_ns.*)) / 1_000_000.0;
+    prev_ns.* = now_ns;
+    log.info("PERF_INIT step=\"{s}\" t={d:.1}ms d={d:.1}ms", .{ name, total_ms, delta_ms });
 }
 
 /// COM callback entry point for Application.Start() delegate.
 /// Called from com_aggregation.InitCallback.invokeFn.
 pub fn onApplicationStart(self: *App) winrt.HRESULT {
+    // Time gap between App.init exit and XAML thread callback firing.
+    log.info(
+        "PERF_INIT step=\"onApplicationStart entry\" t={d:.1}ms d=-",
+        .{@as(f64, @floatFromInt(std.time.nanoTimestamp() - self.init_start_ns)) / 1_000_000.0},
+    );
     self.initXaml() catch |err| {
         log.err("initXaml failed in Application.Start callback: {}", .{err});
         return winrt.E_FAIL;
@@ -614,6 +670,7 @@ pub fn onApplicationStart(self: *App) winrt.HRESULT {
 
 /// Internal XAML initialization — called from onApplicationStart.
 fn initXaml(self: *App) !void {
+    var prev_ns = std.time.nanoTimestamp();
     log.info("initXaml: START (winui3)", .{});
     log.info("initXaml: creating NonClientIslandWindow inside XAML thread", .{});
     self.startup_bootstrapped = false;
@@ -624,6 +681,7 @@ fn initXaml(self: *App) !void {
     // Step 0: Create the Application instance via COM aggregation — UNCHANGED.
     try self.createAggregatedApplication();
     self.setStartupStage(.application_ready);
+    perfStep("createAggregatedApplication", self.init_start_ns, &prev_ns);
 
     // Step 1: Create NonClientIslandWindow (CreateWindowEx + DWM frame).
     log.debug("initXaml step 1: NonClientIslandWindow.init...", .{});
@@ -631,11 +689,13 @@ fn initXaml(self: *App) !void {
     errdefer self.core_app.alloc.destroy(nci);
     try nci.init(self);
     log.debug("initXaml step 1 OK: HWND=0x{x}", .{@intFromPtr(nci.island.hwnd)});
+    perfStep("NonClientIslandWindow.init (HWND created)", self.init_start_ns, &prev_ns);
 
     // Step 2: Initialize DesktopWindowXamlSource with our window's WindowId.
     log.debug("initXaml step 2: island.initialize...", .{});
     try nci.island.initialize();
     log.debug("initXaml step 2 OK: DesktopWindowXamlSource initialized", .{});
+    perfStep("DesktopWindowXamlSource.initialize", self.init_start_ns, &prev_ns);
 
     // Step 3: Create drag bar AFTER DXWS initialization.
     // WS_EX_LAYERED on child windows fails (err=183) if called before
@@ -730,9 +790,11 @@ fn initXaml(self: *App) !void {
         },
     }
     self.setStartupStage(.window_activated);
+    perfStep("ShowWindow (window visible)", self.init_start_ns, &prev_ns);
 
     // Step 6: Create XAML content (TabView + SwapChainPanel).
     try self.createWindowContent();
+    perfStep("createWindowContent", self.init_start_ns, &prev_ns);
     try self.scheduleDebugActions();
     self.syncVisualDiagnostics();
 
@@ -773,6 +835,7 @@ fn initXaml(self: *App) !void {
     input_runtime.focusKeyboardTarget(self);
     self.startup_bootstrapped = true;
     self.setStartupStage(.content_ready);
+    perfStep("content_ready (initXaml DONE)", self.init_start_ns, &prev_ns);
     log.info("initXaml: content_ready, entering message loop", .{});
 
     // --- IPC Server (Named Pipe) ---
@@ -1157,14 +1220,18 @@ fn createAggregatedApplication(self: *App) !void {
 }
 
 fn createWindowContent(self: *App) !void {
+    var prev_ns = std.time.nanoTimestamp();
+
     // Create TabView root (RootGrid) using the islands-specific tabview_runtime.
     const xaml_source = self.nci_window.?.island.xaml_source orelse return error.AppInitFailed;
     const tv = try self.createTabViewRoot(xaml_source);
     self.tab_view = tv;
+    perfStep("  createTabViewRoot", self.init_start_ns, &prev_ns);
 
     if (tv) |tab_view| {
         tabview_runtime.configureDefaults(tab_view);
     }
+    perfStep("  tabview_runtime.configureDefaults", self.init_start_ns, &prev_ns);
 
     // Populate the profile dropdown menu with detected shells.
     if (self.profile_menu_flyout) |flyout| {
@@ -1172,13 +1239,16 @@ fn createWindowContent(self: *App) !void {
             log.warn("Failed to populate profile menu: {}", .{err});
         };
     }
+    perfStep("  populateProfileMenu", self.init_start_ns, &prev_ns);
 
     // Create initial Surface and content.
     try self.createInitialSurfaceContent(tv);
+    perfStep("  createInitialSurfaceContent", self.init_start_ns, &prev_ns);
 
     if (tv) |tab_view| {
         try self.registerTabViewHandlers(tab_view);
     }
+    perfStep("  registerTabViewHandlers", self.init_start_ns, &prev_ns);
 }
 
 fn scheduleDebugActions(self: *App) !void {

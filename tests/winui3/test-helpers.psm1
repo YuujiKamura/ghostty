@@ -239,6 +239,27 @@ $script:POLL_INTERVAL_MS       = 200
 # Process management
 # ============================================================
 
+function Get-GhosttyLogPath {
+    <#
+    .SYNOPSIS
+        Resolve the per-PID debug log path written by ghostty's
+        attachDebugConsole().
+    .DESCRIPTION
+        ghostty redirects stderr to %TEMP%\ghostty_debug_<pid>.log so
+        concurrent instances don't fight over a single shared file
+        (CreateFileW + GENERIC_WRITE + FILE_SHARE_READ would otherwise
+        fail when a second instance launches). Test scripts that need
+        to read this log must compute the path from the launched PID
+        rather than the historical fixed path.
+    .PARAMETER ProcessId
+        The launched ghostty.exe PID (typically from Start-Process
+        -PassThru).
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][int]$ProcessId)
+    return (Join-Path $env:TEMP "ghostty_debug_${ProcessId}.log")
+}
+
 function Start-Ghostty {
     <#
     .SYNOPSIS
@@ -1206,6 +1227,7 @@ function Get-GhosttyOutput {
 # Exports
 # ============================================================
 Export-ModuleMember -Function @(
+    'Get-GhosttyLogPath'
     'Start-Ghostty'
     'Stop-Ghostty'
     'Find-GhosttyWindow'

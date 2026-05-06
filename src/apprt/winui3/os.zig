@@ -384,6 +384,8 @@ pub extern "kernel32" fn GetModuleFileNameW(hModule: ?HINSTANCE, lpFilename: [*]
 pub extern "kernel32" fn RtlCaptureStackBackTrace(FramesToSkip: DWORD, FramesToCapture: DWORD, BackTrace: [*]?*anyopaque, BackTraceHash: ?*DWORD) callconv(.winapi) u16;
 pub extern "kernel32" fn SetUnhandledExceptionFilter(lpTopLevelExceptionFilter: ?VectoredExceptionHandler) callconv(.winapi) ?VectoredExceptionHandler;
 pub extern "kernel32" fn FlushFileBuffers(hFile: std.os.windows.HANDLE) callconv(.winapi) c_int;
+pub extern "kernel32" fn FreeConsole() callconv(.winapi) BOOL;
+pub extern "kernel32" fn GetCurrentProcessId() callconv(.winapi) DWORD;
 
 pub const MODULEENTRY32W = extern struct {
     dwSize: DWORD,
@@ -690,12 +692,21 @@ pub const MB_OK: UINT = 0x00000000;
 const CreateFileW = win32.kernel32.CreateFileW;
 pub fn attachDebugConsole() void {
     // Redirect stderr to a log file in the temp directory.
+    // Per-PID filename so concurrent ghostty instances don't fight over the
+    // same handle (CreateFileW with GENERIC_WRITE + FILE_SHARE_READ would
+    // otherwise fail when a second instance launches).
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
     const temp_path = std.process.getEnvVarOwned(allocator, "TEMP") catch ".";
-    const log_path = std.fs.path.join(allocator, &.{ temp_path, "ghostty_debug.log" }) catch return;
+    const pid = GetCurrentProcessId();
+    const log_filename = std.fmt.allocPrint(
+        allocator,
+        "ghostty_debug_{d}.log",
+        .{pid},
+    ) catch return;
+    const log_path = std.fs.path.join(allocator, &.{ temp_path, log_filename }) catch return;
     const name = std.unicode.utf8ToUtf16LeAllocZ(allocator, log_path) catch return;
     defer allocator.free(name);
 
