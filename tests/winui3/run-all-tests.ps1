@@ -283,7 +283,11 @@ if ("phase1-ghost-demo-smoke" -in $phase1Tests) {
 if ("phase1-noise-ghost-demo" -in $phase1Tests) {
     Invoke-Test -Name "phase1-noise-ghost-demo" -Block {
         if (-not $sessionName) {
-            throw "No CP session available"
+            # Startup discovery raced against async CP registration; retry now.
+            $sessionName = Register-GhosttyCP -ProcessId $proc.Id -TimeoutMs 15000
+            if (-not $sessionName) { throw "No CP session available" }
+            $env:GHOSTTY_CP_SESSION = $sessionName
+            Write-Host "  CP session (late-discovered): $sessionName" -ForegroundColor Green
         }
 
         $hauntTrigger = Join-Path $env:TEMP "ghost-haunt-trigger"
