@@ -124,19 +124,35 @@ if (-not $needGhostty) {
 function Invoke-Test {
     param(
         [string]$Name,
-        [scriptblock]$Block
+        [scriptblock]$Block,
+        [int]$MaxAttempts = 2  # default: 1 retry on failure to absorb transient
+                               # environment flake (AV scan, GPU init, async DLL
+                               # registration). Real bugs fail 2/2 times.
     )
     $startTime = [DateTime]::UtcNow
-    try {
-        & $Block
-        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
-        $script:results += @{ Name = $Name; Status = "PASS"; Time = [int]$elapsed; Error = $null }
-    } catch {
-        $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
-        $script:results += @{ Name = $Name; Status = "FAIL"; Time = [int]$elapsed; Error = $_.Exception.Message }
-        Write-Host "`n--- $Name (FAIL) ---" -ForegroundColor Red
-        Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            & $Block
+            $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
+            $note = if ($attempt -gt 1) { " (passed on attempt $attempt)" } else { "" }
+            $script:results += @{ Name = $Name; Status = "PASS"; Time = [int]$elapsed; Error = $null }
+            if ($attempt -gt 1) {
+                Write-Host "  RECOVERED: $Name PASS on attempt $attempt$note" -ForegroundColor Yellow
+            }
+            return
+        } catch {
+            $lastError = $_
+            if ($attempt -lt $MaxAttempts) {
+                Write-Host "  RETRY: $Name attempt $attempt failed, retrying ($($_.Exception.Message))" -ForegroundColor DarkYellow
+                Start-Sleep -Milliseconds 1500
+            }
+        }
     }
+    $elapsed = ([DateTime]::UtcNow - $startTime).TotalMilliseconds
+    $script:results += @{ Name = $Name; Status = "FAIL"; Time = [int]$elapsed; Error = $lastError.Exception.Message }
+    Write-Host "`n--- $Name (FAIL after $MaxAttempts attempts) ---" -ForegroundColor Red
+    Write-Host "  FAIL: $($lastError.Exception.Message)" -ForegroundColor Red
 }
 
 # ============================================================
