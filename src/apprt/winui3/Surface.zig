@@ -2720,18 +2720,27 @@ pub fn Surface(comptime App: type) type {
             var app: App = undefined;
             app.core_app = &core_app;
             app.surfaces = .{};
+            app.control_plane = null;
 
             var surface: Self = undefined;
             surface.app = &app;
             surface.core_surface = undefined;
             surface.title = null;
+            surface.title_is_heap = false;
+            surface.last_title_update_ns = 0;
+            surface.last_display_title_len = 0;
+            surface.tab_id = 1;
             surface.tab_view_item_inspectable = null;
-            // Only clean up title, not full deinit (which touches XAML objects).
-            defer if (surface.title) |t| alloc.free(t);
+            // Only clean up title if it was heap-allocated, not full deinit.
+            defer if (surface.title_is_heap) {
+                if (surface.title) |t| alloc.free(@constCast(t));
+            };
 
             surface.setTabTitle("Test Title 1");
             try testing.expectEqualStrings("Test Title 1", surface.title.?);
 
+            // Reset throttle timer so the next update isn't skipped.
+            surface.last_title_update_ns = 0;
             surface.setTabTitle("Test Title 2 - Long title");
             try testing.expectEqualStrings("Test Title 2 - Long title", surface.title.?);
         }
