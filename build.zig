@@ -521,6 +521,88 @@ pub fn build(b: *std.Build) !void {
         test_valgrind_step.dependOn(&valgrind_run.step);
     }
 
+    // Regression repro tests (`tests/repro_*.zig`).
+    //
+    // Each repro is a standalone test exercising a specific bug class
+    // (issues #207, #218, #220, #223, #232). They live outside the
+    // main `src/` test_exe because they intentionally reach into one
+    // narrow module (or mirror its algorithm) and need their own
+    // import graph. Wired into the main `test` step here so a
+    // regression cannot be silently reintroduced — `-Dtest-filter=repro`
+    // selects them in isolation. See skill `test-as-executable-specification`.
+    {
+        const ReproImport = struct {
+            name: []const u8,
+            path: []const u8,
+        };
+        const ReproSpec = struct {
+            name: []const u8,
+            path: []const u8,
+            link_libc: bool,
+            imports: []const ReproImport,
+        };
+        const repros = [_]ReproSpec{
+            .{
+                .name = "repro-blocking-queue-consumer-death",
+                .path = "tests/repro_blocking_queue_consumer_death.zig",
+                .link_libc = false,
+                .imports = &.{
+                    .{ .name = "blocking_queue", .path = "src/datastruct/blocking_queue.zig" },
+                },
+            },
+            .{
+                .name = "repro-cp-read-lane-blocked-by-termio",
+                .path = "tests/repro_cp_read_lane_blocked_by_termio.zig",
+                .link_libc = false,
+                .imports = &.{},
+            },
+            .{
+                .name = "repro-dragbar-send-message-hang",
+                .path = "tests/repro_dragbar_send_message_hang.zig",
+                .link_libc = true,
+                .imports = &.{},
+            },
+            .{
+                .name = "repro-focus-mailbox-hang",
+                .path = "tests/repro_focus_mailbox_hang.zig",
+                .link_libc = false,
+                .imports = &.{
+                    .{ .name = "blocking_queue", .path = "src/datastruct/blocking_queue.zig" },
+                    .{ .name = "bounded_mailbox", .path = "src/apprt/winui3/safe_mailbox.zig" },
+                },
+            },
+            .{
+                .name = "repro-watchdog-fires-on-ui-hang",
+                .path = "tests/repro_watchdog_fires_on_ui_hang.zig",
+                .link_libc = true,
+                .imports = &.{},
+            },
+        };
+
+        for (repros) |spec| {
+            const repro_mod = b.createModule(.{
+                .root_source_file = b.path(spec.path),
+                .target = config.baselineTarget(),
+                .optimize = .Debug,
+                .link_libc = if (spec.link_libc) true else null,
+            });
+            for (spec.imports) |imp| {
+                repro_mod.addImport(imp.name, b.createModule(.{
+                    .root_source_file = b.path(imp.path),
+                    .target = config.baselineTarget(),
+                    .optimize = .Debug,
+                }));
+            }
+            const repro_test = b.addTest(.{
+                .name = spec.name,
+                .filters = test_filters,
+                .root_module = repro_mod,
+            });
+            const repro_run = b.addRunArtifact(repro_test);
+            test_step.dependOn(&repro_run.step);
+        }
+    }
+
     // update-translations does what it sounds like and updates the "pot"
     // files. These should be committed to the repo.
     if (i18n) |v| {
