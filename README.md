@@ -62,7 +62,7 @@ This installs the baseline toolchain used by this fork (`zig`, `.NET 9 SDK`, `VS
 |------|-------------|
 | [win-zig-bindgen](https://github.com/YuujiKamura/win-zig-bindgen) | WinMD to Zig COM vtable generator |
 | [zig-control-plane](https://github.com/YuujiKamura/zig-control-plane) | Named Pipe control plane library |
-| [agent-deck](https://github.com/YuujiKamura/agent-deck) | Multi-session AI agent orchestrator (fork of [asheshgoplani/agent-deck](https://github.com/asheshgoplani/agent-deck)) |
+| [deckpilot](https://github.com/YuujiKamura/deckpilot) | Multi-session AI agent orchestrator |
 
 ---
 
