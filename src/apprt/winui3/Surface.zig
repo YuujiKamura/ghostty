@@ -32,6 +32,16 @@ pub fn Surface(comptime App: type) type {
         /// These are disabled by default to reduce Debug build overhead.
         const log_hot_path = false;
 
+        /// Sentinel hwnd for unit-test fixtures. Non-null so that any code path
+        /// that does `if (hwnd) |h| ...` does not silently skip in tests, but
+        /// **must never be dereferenced**: `@ptrFromInt(1)` is not a valid HWND,
+        /// so calling any Win32 API on it is undefined behavior. Mirrors the
+        /// same convention used in `control_plane.zig` (single-source the
+        /// expression so a future hardening of the sentinel does not have to
+        /// hunt down hand-rolled `@ptrFromInt(1)` literals scattered through
+        /// the test suite).
+        const TEST_HWND_SENTINEL: os.HWND = @ptrFromInt(1);
+
         /// The App that owns this surface.
         app: *App,
 
@@ -756,7 +766,7 @@ pub fn Surface(comptime App: type) type {
         /// calls this after releasing XAML resources; the unit-test fixture
         /// uses it as the only `defer` cleanup so the test cannot drift away
         /// from production semantics when fields are added later.
-        pub fn deinitTitleOnly(self: *Self, alloc: std.mem.Allocator) void {
+        fn deinitTitleOnly(self: *Self, alloc: std.mem.Allocator) void {
             if (self.title_is_heap) {
                 if (self.title) |t| {
                     // title_is_heap means it was allocated with dupeZ; cast
@@ -777,7 +787,7 @@ pub fn Surface(comptime App: type) type {
         /// `alloc` is accepted for signature consistency with future test
         /// factories; it is not used today because the title path pulls its
         /// allocator from `app.core_app.alloc`.
-        pub fn initForTest(alloc: std.mem.Allocator, app: *App) Self {
+        fn initForTest(alloc: std.mem.Allocator, app: *App) Self {
             _ = alloc;
             return Self{
                 .app = app,
@@ -2831,16 +2841,26 @@ pub fn Surface(comptime App: type) type {
             var core_app: CoreApp = undefined;
             core_app.alloc = alloc;
 
-            // Stub control plane: only `session_name` is read by
-            // setTabTitle, so a partly-undefined ControlPlane suffices.
+            // Test fixture control plane: setTabTitle only reads
+            // `session_name` (verified by
+            // `grep "self.app.control_plane." src/apprt/winui3/Surface.zig`),
+            // but we still construct a fully-initialized ControlPlane via
+            // struct literal so adding a new required-without-default field
+            // becomes a compile error here rather than UB at first read. The
+            // `TEST_HWND_SENTINEL` constant mirrors the convention used in
+            // `control_plane.zig` test fixtures (non-null but never
+            // dereferenced; setTabTitle does not touch `hwnd`).
             const control_plane_mod = @import("control_plane.zig");
-            var dummy_cp: control_plane_mod.ControlPlane = undefined;
-            dummy_cp.session_name = "ghostty-test";
+            var test_cp: control_plane_mod.ControlPlane = .{
+                .allocator = alloc,
+                .hwnd = TEST_HWND_SENTINEL,
+                .session_name = "ghostty-test",
+            };
 
             var app: App = undefined;
             app.core_app = &core_app;
             app.surfaces = .{};
-            app.control_plane = &dummy_cp;
+            app.control_plane = &test_cp;
 
             var surface = Self.initForTest(alloc, &app);
             surface.tab_id = 7;
@@ -2897,6 +2917,131 @@ pub fn Surface(comptime App: type) type {
             try testing.expectEqualStrings("Same Title", surface.title.?);
             try testing.expectEqual(len_after_first, surface.last_display_title_len);
         }
+
+        test "Surface title 255 byte (static_buf upper bound)" {
+            // Bug detection: pins the static-buf branch boundary. The
+            // setTabTitle code path uses `title.len < title_static_buf.len`
+            // (=256) so a 255-byte title MUST stay on the static buffer
+            // (title_is_heap == false). If the comparison flips to `<=` or
+            // the buffer size shrinks, this test fails before any leak
+            // would surface in production.
+            const testing = std.testing;
+            const alloc = testing.allocator;
+
+            var core_app: CoreApp = undefined;
+            core_app.alloc = alloc;
+
+            var app: App = undefined;
+            app.core_app = &core_app;
+            app.surfaces = .{};
+            app.control_plane = null;
+
+            var surface = Self.initForTest(alloc, &app);
+            defer surface.deinitTitleOnly(alloc);
+
+            var buf: [256]u8 = undefined;
+            @memset(buf[0..255], 'X');
+            buf[255] = 0;
+            const t255: [:0]const u8 = buf[0..255 :0];
+
+            surface.setTabTitle(t255);
+            try testing.expect(!surface.title_is_heap);
+            try testing.expectEqual(@as(usize, 255), surface.title.?.len);
+        }
+
+        test "Surface title 256 byte (heap boundary)" {
+            // Bug detection: pins the heap-branch boundary. With the
+            // current `title.len < 256` check, a 256-byte title MUST
+            // route to dupeZ (title_is_heap == true). If the boundary
+            // ever changes to `<=`, this test catches it before a buffer
+            // overrun lands in production.
+            const testing = std.testing;
+            const alloc = testing.allocator;
+
+            var core_app: CoreApp = undefined;
+            core_app.alloc = alloc;
+
+            var app: App = undefined;
+            app.core_app = &core_app;
+            app.surfaces = .{};
+            app.control_plane = null;
+
+            var surface = Self.initForTest(alloc, &app);
+            defer surface.deinitTitleOnly(alloc);
+
+            var buf: [257]u8 = undefined;
+            @memset(buf[0..256], 'Y');
+            buf[256] = 0;
+            const t256: [:0]const u8 = buf[0..256 :0];
+
+            surface.setTabTitle(t256);
+            try testing.expect(surface.title_is_heap);
+            try testing.expectEqual(@as(usize, 256), surface.title.?.len);
+        }
+
+        test "Surface title cp_active + heap (300byte combo)" {
+            // Bug detection: combines the two previously-separate axes
+            // (cp_active prefix formatting AND heap-allocated title) so
+            // that a regression where cp_active borrows the static_buf
+            // path while title is heap-owned (or vice versa) shows up
+            // as a leak under std.testing.allocator. The cp-prefixed
+            // display-string *shape* is pinned by the dedicated
+            // `Surface title cp_active path` test (short, static-buf
+            // case); this test additionally pins the *cache-write
+            // outcome* for the cp_active + heap-title combination so a
+            // regression that drops the prefix or skips the cache write
+            // is observable here (not as a branch-mirror — see the
+            // assertion comment below).
+            const testing = std.testing;
+            const alloc = testing.allocator;
+
+            var core_app: CoreApp = undefined;
+            core_app.alloc = alloc;
+
+            const control_plane_mod = @import("control_plane.zig");
+            var test_cp: control_plane_mod.ControlPlane = .{
+                .allocator = alloc,
+                .hwnd = TEST_HWND_SENTINEL,
+                .session_name = "ghostty-test",
+            };
+
+            var app: App = undefined;
+            app.core_app = &core_app;
+            app.surfaces = .{};
+            app.control_plane = &test_cp;
+
+            var surface = Self.initForTest(alloc, &app);
+            surface.tab_id = 7;
+            defer surface.deinitTitleOnly(alloc);
+
+            var long_buf: [301]u8 = undefined;
+            @memset(long_buf[0..300], 'A');
+            long_buf[300] = 0;
+            const long_title: [:0]const u8 = long_buf[0..300 :0];
+
+            surface.setTabTitle(long_title);
+
+            // Four observable assertions, no impl-branch mirroring:
+            //   (a) leak-free: pinned by std.testing.allocator at scope exit
+            //       via deinitTitleOnly + the cp_active prefix's allocPrint
+            //       round-trip — the testing allocator surfaces any
+            //       double-alloc / leak in the cp_active+heap interaction.
+            //   (b) heap path was taken (300 >= title_static_buf.len = 256).
+            //   (c) raw title length round-trips intact through dupeZ.
+            //   (d) display-title cache reflects the cp_active prefix:
+            //       prefix "ghostty-test:t_007 " is 19 bytes and the
+            //       title is 300 bytes, so the cached display length is
+            //       19 + 300 = 319. This is a concrete observable for
+            //       this fixture (the test does not branch on cache cap
+            //       or replicate the if/else inside setTabTitle); it
+            //       fails if the cp_active prefix is dropped, if the
+            //       cache write is skipped for heap-owned titles, or if
+            //       the prefix format changes shape.
+            try testing.expect(surface.title_is_heap);
+            try testing.expectEqual(@as(usize, 300), surface.title.?.len);
+            try testing.expectEqual(@as(usize, 319), surface.last_display_title_len);
+        }
+
         test "refactored helper functions exist and are callable" {
             // Static verification that the extracted helper functions are properly
             // declared and have the expected signatures. These cannot be called in
