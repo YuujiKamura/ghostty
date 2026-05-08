@@ -990,6 +990,33 @@ test "ResponseCache clear keeps ttl" {
     try std.testing.expectEqual(@as(i128, 777), cache.ttl_ns);
 }
 
+// ── Test fixtures (file-private) ──
+//
+// Sentinel hwnd for unit tests. Non-null so that any code path that does
+// `if (hwnd) |h| ...` does not silently skip in tests, but **must never be
+// dereferenced**: `@ptrFromInt(1)` is not a valid HWND, so calling any Win32
+// API on it (PostMessageW, SendMessageW, IsWindow, etc.) is undefined
+// behavior in production and either AV or silent OS-level failure under
+// test. The current `handleRequestWith` code path tested below never
+// dereferences `self.hwnd`; that invariant is pinned by the test
+// "control_plane test fixture: hwnd sentinel non-deref tripwire" further down.
+//
+// If you need a test that exercises a hwnd-dereferencing path (provSendInput,
+// provNewTab, provCloseTab, provSwitchTab, provFocus, or any postMessageWarn
+// caller), do NOT use this sentinel — stand up a real message-only window
+// via CreateWindowExW(HWND_MESSAGE, ...) instead.
+const TEST_HWND_SENTINEL: os.HWND = @ptrFromInt(1);
+
+/// Build a minimal `ControlPlane` value suitable for `handleRequestWith`-style
+/// unit tests. Caller is responsible for `defer cp.cache.clear(allocator)`
+/// (and `defer cp.clearPendingInputs()` if they call `enqueueInput`).
+fn testCp(allocator: Allocator) ControlPlane {
+    return .{
+        .allocator = allocator,
+        .hwnd = TEST_HWND_SENTINEL,
+    };
+}
+
 const TestBackendCtx = struct {
     calls: usize = 0,
 };
@@ -1011,10 +1038,7 @@ fn contractBackend(_: ?*anyopaque, request: []const u8, allocator: Allocator) ![
 }
 
 test "handleRequestWith caches read commands and invalidates on mutating command" {
-    var cp = ControlPlane{
-        .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(1),
-    };
+    var cp = testCp(std.testing.allocator);
     cp.cache.ttl_ns = 5 * std.time.ns_per_s;
     defer cp.cache.clear(std.testing.allocator);
 
@@ -1039,11 +1063,8 @@ test "handleRequestWith caches read commands and invalidates on mutating command
 }
 
 test "handleRequestWith rejects input when queue is full" {
-    var cp = ControlPlane{
-        .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(1),
-        .max_pending_inputs = 1,
-    };
+    var cp = testCp(std.testing.allocator);
+    cp.max_pending_inputs = 1;
     defer cp.clearPendingInputs();
 
     try std.testing.expect(cp.enqueueInput("zig-cp", "echo hi", false, 1));
@@ -1054,11 +1075,8 @@ test "handleRequestWith rejects input when queue is full" {
 }
 
 test "handleRequestWith limits data lane but allows control lane" {
-    var cp = ControlPlane{
-        .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(1),
-        .max_inflight_data_requests = 1,
-    };
+    var cp = testCp(std.testing.allocator);
+    cp.max_inflight_data_requests = 1;
     cp.inflight_data_requests.store(1, .release);
 
     var tb = TestBackendCtx{};
@@ -1074,11 +1092,8 @@ test "handleRequestWith limits data lane but allows control lane" {
 }
 
 test "handleRequestWith serves CAPABILITIES without backend call" {
-    var cp = ControlPlane{
-        .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(1),
-        .session_name = "ghostty-test",
-    };
+    var cp = testCp(std.testing.allocator);
+    cp.session_name = "ghostty-test";
 
     var tb = TestBackendCtx{};
     const resp = cp.handleRequestWith("CAPABILITIES", std.testing.allocator, &tb, testBackend);
@@ -1092,10 +1107,8 @@ test "handleRequestWith serves CAPABILITIES without backend call" {
 }
 
 test "handleRequestWith keeps legacy commands working without CAPABILITIES query" {
-    var cp = ControlPlane{
-        .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(1),
-    };
+    var cp = testCp(std.testing.allocator);
+    defer cp.cache.clear(std.testing.allocator);
 
     const ping = cp.handleRequestWith("PING", std.testing.allocator, null, contractBackend);
     defer std.testing.allocator.free(ping);
@@ -1119,14 +1132,53 @@ test "handleRequestWith keeps legacy commands working without CAPABILITIES query
 }
 
 test "handleRequestWith returns deterministic ERR for unsupported command" {
-    var cp = ControlPlane{
-        .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(1),
-    };
+    var cp = testCp(std.testing.allocator);
 
     const resp = cp.handleRequestWith("RAW_INPUT|test-client|hello", std.testing.allocator, null, contractBackend);
     defer std.testing.allocator.free(resp);
     try std.testing.expectEqualStrings("ERR|UNSUPPORTED|RAW_INPUT\n", resp);
+}
+
+test "control_plane test fixture: hwnd sentinel non-deref tripwire" {
+    // Tripwire: pin the invariant that the `handleRequestWith` paths
+    // exercised by the surrounding tests do NOT dereference `self.hwnd`.
+    // `TEST_HWND_SENTINEL` is `@ptrFromInt(1)` — a non-null but invalid
+    // pointer. If a future refactor adds a hwnd-touching call (e.g. routes
+    // a command through `postMessageWarn`, `IsWindow`, or `@intFromPtr`
+    // followed by a real Win32 op) into one of these dispatch paths, this
+    // test will either AV (debug builds) or fail with an unexpected
+    // response, forcing the change author to either:
+    //   (a) update the test fixture to use a real message-only window via
+    //       CreateWindowExW(HWND_MESSAGE, ...), or
+    //   (b) move the test to integration/UIA where a real hwnd exists.
+    //
+    // The command set here mirrors the contracts pinned by
+    // "handleRequestWith keeps legacy commands working ..." and the
+    // CAPABILITIES / queue-full tests above. ack-action commands
+    // (NEW_TAB, CLOSE_TAB, SWITCH_TAB, FOCUS) are intentionally excluded:
+    // those routes dereference hwnd via `provNewTab` / `provCloseTab` /
+    // `provSwitchTab` / `provFocus`, so iterating them with the sentinel
+    // would be the very bug this tripwire detects.
+    var cp = testCp(std.testing.allocator);
+    defer cp.cache.clear(std.testing.allocator);
+
+    const non_deref_cmds = [_][]const u8{
+        "PING",
+        "STATE|c|0",
+        "TAIL|c|1",
+        "INPUT|c|x",
+        "ACK_POLL|c",
+        "CAPABILITIES",
+        "RAW_INPUT|c|x",
+    };
+    for (non_deref_cmds) |cmd| {
+        const resp = cp.handleRequestWith(cmd, std.testing.allocator, null, contractBackend);
+        defer std.testing.allocator.free(resp);
+        // If we got here without segfault on hwnd=TEST_HWND_SENTINEL, the
+        // sentinel is still safe for this command. Response shape is
+        // checked elsewhere; this test only pins the non-deref invariant.
+        try std.testing.expect(resp.len > 0);
+    }
 }
 
 // ── #212: UI-thread stall watchdog ──
