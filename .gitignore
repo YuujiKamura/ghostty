@@ -42,6 +42,7 @@ tmp/
 # Zig cache variants (per-session caches, ZIG_GLOBAL_CACHE_DIR= sandboxes)
 .zig-cache-*/
 .zig-global-cache/
+zig-cache-global/
 
 # Zig content-addressable cache (created next to .zig-cache when running tests)
 # These are hash-named files/dirs (32-hex chars). Zig sometimes drops them at repo root.
