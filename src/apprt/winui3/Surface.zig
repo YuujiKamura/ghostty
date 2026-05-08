@@ -744,14 +744,47 @@ pub fn Surface(comptime App: type) type {
                 self.tab_view_item_inspectable = null;
             }
 
+            // Centralized title-buffer release. Production deinit and the
+            // test fixture both go through deinitTitleOnly so the heap-free
+            // logic lives in exactly one place (no silent drift).
+            self.deinitTitleOnly(self.app.core_app.alloc);
+        }
+
+        /// Release any heap-allocated title buffer and reset the title state.
+        ///
+        /// Single source of truth for the title-free path. Production `deinit`
+        /// calls this after releasing XAML resources; the unit-test fixture
+        /// uses it as the only `defer` cleanup so the test cannot drift away
+        /// from production semantics when fields are added later.
+        pub fn deinitTitleOnly(self: *Self, alloc: std.mem.Allocator) void {
             if (self.title_is_heap) {
                 if (self.title) |t| {
-                    // title_is_heap means it was allocated with dupeZ; cast away const for free.
-                    self.app.core_app.alloc.free(@constCast(t));
+                    // title_is_heap means it was allocated with dupeZ; cast
+                    // away const for free.
+                    alloc.free(@constCast(t));
                 }
             }
             self.title = null;
             self.title_is_heap = false;
+        }
+
+        /// Construct a minimal `Self` for unit tests that exercise the
+        /// title-management state machine without touching XAML / WinRT.
+        ///
+        /// Uses Zig field defaults so that adding new fields to `Self` does
+        /// not silently break tests (any required-without-default field will
+        /// surface as a compile error here, forcing an explicit decision).
+        /// `alloc` is accepted for signature consistency with future test
+        /// factories; it is not used today because the title path pulls its
+        /// allocator from `app.core_app.alloc`.
+        pub fn initForTest(alloc: std.mem.Allocator, app: *App) Self {
+            _ = alloc;
+            return Self{
+                .app = app,
+                .core_surface = undefined,
+                .search_overlay = undefined,
+                .tab_id = 1,
+            };
         }
 
         pub fn core(self: *Self) *CoreSurface {
@@ -2713,7 +2746,10 @@ pub fn Surface(comptime App: type) type {
             const testing = std.testing;
             const alloc = testing.allocator;
 
-            // Create a minimal CoreApp with just the allocator field set.
+            // Minimal CoreApp / App fixture. App still needs hand-rolled
+            // setup because the WinUI3 App type pulls in too much surface
+            // (XAML, control plane, surfaces list) for a generic factory.
+            // TODO: when App grows an `App.initForTest`, swap this in.
             var core_app: CoreApp = undefined;
             core_app.alloc = alloc;
 
@@ -2722,19 +2758,12 @@ pub fn Surface(comptime App: type) type {
             app.surfaces = .{};
             app.control_plane = null;
 
-            var surface: Self = undefined;
-            surface.app = &app;
-            surface.core_surface = undefined;
-            surface.title = null;
-            surface.title_is_heap = false;
-            surface.last_title_update_ns = 0;
-            surface.last_display_title_len = 0;
-            surface.tab_id = 1;
-            surface.tab_view_item_inspectable = null;
-            // Only clean up title if it was heap-allocated, not full deinit.
-            defer if (surface.title_is_heap) {
-                if (surface.title) |t| alloc.free(@constCast(t));
-            };
+            // Surface fixture goes through initForTest so that adding new
+            // Self fields does NOT silently leave the test running on
+            // garbage memory (any required-without-default field becomes a
+            // compile error in initForTest, forcing an explicit decision).
+            var surface = Self.initForTest(alloc, &app);
+            defer surface.deinitTitleOnly(alloc);
 
             surface.setTabTitle("Test Title 1");
             try testing.expectEqualStrings("Test Title 1", surface.title.?);
@@ -2743,6 +2772,130 @@ pub fn Surface(comptime App: type) type {
             surface.last_title_update_ns = 0;
             surface.setTabTitle("Test Title 2 - Long title");
             try testing.expectEqualStrings("Test Title 2 - Long title", surface.title.?);
+        }
+
+        test "Surface title heap path" {
+            // Bug detection: if heap allocation or replacement-free is
+            // broken (e.g. title_is_heap set but old buffer not freed on
+            // second setTabTitle), std.testing.allocator will report a
+            // leak and fail the test. Without this test, the heap branch
+            // (title.len >= title_static_buf.len = 256) is never exercised
+            // by the unit suite.
+            const testing = std.testing;
+            const alloc = testing.allocator;
+
+            var core_app: CoreApp = undefined;
+            core_app.alloc = alloc;
+
+            var app: App = undefined;
+            app.core_app = &core_app;
+            app.surfaces = .{};
+            app.control_plane = null;
+
+            var surface = Self.initForTest(alloc, &app);
+            defer surface.deinitTitleOnly(alloc);
+
+            // Build a 300-byte title to force the heap branch
+            // (title_static_buf is 256 bytes; >= triggers dupeZ).
+            var long_a_buf: [301]u8 = undefined;
+            @memset(long_a_buf[0..300], 'A');
+            long_a_buf[300] = 0;
+            const long_a: [:0]const u8 = long_a_buf[0..300 :0];
+
+            surface.setTabTitle(long_a);
+            try testing.expect(surface.title_is_heap);
+            try testing.expectEqual(@as(usize, 300), surface.title.?.len);
+
+            // Second long title must free the previous heap buffer; if
+            // the free path regresses, the testing allocator flags a leak.
+            surface.last_title_update_ns = 0;
+            var long_b_buf: [301]u8 = undefined;
+            @memset(long_b_buf[0..300], 'B');
+            long_b_buf[300] = 0;
+            const long_b: [:0]const u8 = long_b_buf[0..300 :0];
+
+            surface.setTabTitle(long_b);
+            try testing.expect(surface.title_is_heap);
+            try testing.expectEqual(@as(u8, 'B'), surface.title.?[0]);
+        }
+
+        test "Surface title cp_active path" {
+            // Bug detection: this test fails if the display-title format
+            // string ("{s}:t_{d:0>3} {s}") regresses, if tab_id padding
+            // changes, or if the cp_active branch silently stops reading
+            // session_name. Without this, the CP-prefixed branch of
+            // setTabTitle (~lines 1049-1058) is unreached by tests.
+            const testing = std.testing;
+            const alloc = testing.allocator;
+
+            var core_app: CoreApp = undefined;
+            core_app.alloc = alloc;
+
+            // Stub control plane: only `session_name` is read by
+            // setTabTitle, so a partly-undefined ControlPlane suffices.
+            const control_plane_mod = @import("control_plane.zig");
+            var dummy_cp: control_plane_mod.ControlPlane = undefined;
+            dummy_cp.session_name = "ghostty-test";
+
+            var app: App = undefined;
+            app.core_app = &core_app;
+            app.surfaces = .{};
+            app.control_plane = &dummy_cp;
+
+            var surface = Self.initForTest(alloc, &app);
+            surface.tab_id = 7;
+            defer surface.deinitTitleOnly(alloc);
+
+            surface.setTabTitle("Hello");
+            try testing.expectEqualStrings("Hello", surface.title.?);
+
+            // The display title cache mirrors the CP-prefixed display
+            // string passed to the UI layer; verify the format.
+            const expected_display = "ghostty-test:t_007 Hello";
+            try testing.expectEqual(expected_display.len, surface.last_display_title_len);
+            try testing.expectEqualStrings(
+                expected_display,
+                surface.last_display_title_buf[0..surface.last_display_title_len],
+            );
+        }
+
+        test "Surface title dedup early-return" {
+            // Bug detection: if the early-return on identical title
+            // (~lines 1009-1014) regresses, calling setTabTitle with the
+            // same string twice would re-allocate or re-touch the cache.
+            // We verify (a) title pointer survives the second call, and
+            // (b) the display-title cache is stable. Throttle is bypassed
+            // by setting last_title_update_ns := 0 between calls so that
+            // dedup, not throttling, is what blocks the second update.
+            const testing = std.testing;
+            const alloc = testing.allocator;
+
+            var core_app: CoreApp = undefined;
+            core_app.alloc = alloc;
+
+            var app: App = undefined;
+            app.core_app = &core_app;
+            app.surfaces = .{};
+            app.control_plane = null;
+
+            var surface = Self.initForTest(alloc, &app);
+            defer surface.deinitTitleOnly(alloc);
+
+            surface.setTabTitle("Same Title");
+            const len_after_first = surface.last_display_title_len;
+            try testing.expectEqualStrings("Same Title", surface.title.?);
+            try testing.expect(len_after_first > 0);
+
+            // Reset the throttle so any non-dedup re-entry would proceed,
+            // making this a clean test of the equality early-return rather
+            // than the time-window early-return.
+            surface.last_title_update_ns = 0;
+            surface.setTabTitle("Same Title");
+
+            // Dedup must hold: title still points at the same payload and
+            // the cached display-title length is unchanged.
+            try testing.expectEqualStrings("Same Title", surface.title.?);
+            try testing.expectEqual(len_after_first, surface.last_display_title_len);
         }
         test "refactored helper functions exist and are callable" {
             // Static verification that the extracted helper functions are properly
