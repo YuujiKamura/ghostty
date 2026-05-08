@@ -16,6 +16,7 @@
 //! Pattern follows src/font/directwrite.zig.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const log = std.log.scoped(.d3d11);
 
 // --- Windows base types ---
@@ -42,7 +43,13 @@ pub const D3D11Error = error{D3D11Failed};
 
 pub inline fn hrCheck(hr: HRESULT) D3D11Error!void {
     if (hr >= 0) return;
-    log.err("D3D11 HRESULT failed: 0x{x:0>8}", .{@as(u32, @bitCast(hr))});
+    // Suppress in test builds: zig 0.15.2 test_runner counts log.err calls
+    // as test failures (lib/compiler/test_runner.zig:277). The hrCheck tests
+    // intentionally pass failure HRESULTs to verify the error return, and
+    // logging the error trips the runner. Production keeps the log.
+    if (!builtin.is_test) {
+        log.err("D3D11 HRESULT failed: 0x{x:0>8}", .{@as(u32, @bitCast(hr))});
+    }
     return error.D3D11Failed;
 }
 
