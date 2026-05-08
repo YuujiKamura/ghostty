@@ -1013,7 +1013,7 @@ fn contractBackend(_: ?*anyopaque, request: []const u8, allocator: Allocator) ![
 test "handleRequestWith caches read commands and invalidates on mutating command" {
     var cp = ControlPlane{
         .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(0),
+        .hwnd = @ptrFromInt(1),
     };
     cp.cache.ttl_ns = 5 * std.time.ns_per_s;
     defer cp.cache.clear(std.testing.allocator);
@@ -1041,7 +1041,7 @@ test "handleRequestWith caches read commands and invalidates on mutating command
 test "handleRequestWith rejects input when queue is full" {
     var cp = ControlPlane{
         .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(0),
+        .hwnd = @ptrFromInt(1),
         .max_pending_inputs = 1,
     };
     defer cp.clearPendingInputs();
@@ -1056,7 +1056,7 @@ test "handleRequestWith rejects input when queue is full" {
 test "handleRequestWith limits data lane but allows control lane" {
     var cp = ControlPlane{
         .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(0),
+        .hwnd = @ptrFromInt(1),
         .max_inflight_data_requests = 1,
     };
     cp.inflight_data_requests.store(1, .release);
@@ -1076,7 +1076,7 @@ test "handleRequestWith limits data lane but allows control lane" {
 test "handleRequestWith serves CAPABILITIES without backend call" {
     var cp = ControlPlane{
         .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(0),
+        .hwnd = @ptrFromInt(1),
         .session_name = "ghostty-test",
     };
 
@@ -1094,7 +1094,7 @@ test "handleRequestWith serves CAPABILITIES without backend call" {
 test "handleRequestWith keeps legacy commands working without CAPABILITIES query" {
     var cp = ControlPlane{
         .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(0),
+        .hwnd = @ptrFromInt(1),
     };
 
     const ping = cp.handleRequestWith("PING", std.testing.allocator, null, contractBackend);
@@ -1121,7 +1121,7 @@ test "handleRequestWith keeps legacy commands working without CAPABILITIES query
 test "handleRequestWith returns deterministic ERR for unsupported command" {
     var cp = ControlPlane{
         .allocator = std.testing.allocator,
-        .hwnd = @ptrFromInt(0),
+        .hwnd = @ptrFromInt(1),
     };
 
     const resp = cp.handleRequestWith("RAW_INPUT|test-client|hello", std.testing.allocator, null, contractBackend);
