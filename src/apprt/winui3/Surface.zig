@@ -224,10 +224,24 @@ pub fn Surface(comptime App: type) type {
             /// No keydown state -- let WM_CHAR through as a standalone event.
             none,
             /// WM_KEYDOWN was consumed -- suppress the next WM_CHAR.
-            consumed,
+            /// Payload is the timestamp (ms since epoch) when this state
+            /// was set. handleCharEvent treats it as stale and demotes to
+            /// .none once STALE_CONSUMED_THRESHOLD_MS has elapsed, so a
+            /// later unpaired WM_CHAR from a different input source
+            /// (mobile/remote, IME commit without paired WM_KEYDOWN) is
+            /// no longer swallowed by a leftover .consumed flag.
+            consumed: i64,
             /// WM_KEYDOWN returned .ignored -- merge with next WM_CHAR.
             pending: PendingKey,
         };
+
+        /// Above this age, a .consumed state is treated as stale by
+        /// handleCharEvent. A normal WM_KEYDOWN -> WM_CHAR pair traverses
+        /// the message loop in microseconds, so any gap exceeding 100ms
+        /// almost certainly means the originating WM_KEYDOWN was for a
+        /// key that does not produce WM_CHAR (F-keys, arrows, plain
+        /// modifiers) and the .consumed flag is stale.
+        const STALE_CONSUMED_THRESHOLD_MS: i64 = 100;
 
         const PendingKey = struct {
             key_code: input.Key,
@@ -1279,8 +1293,10 @@ pub fn Surface(comptime App: type) type {
 
             // Suppress any subsequent WM_CHAR for consumed press events.
             // (Releases don't produce WM_CHAR.)
+            // Store the current time so handleCharEvent can recognize a
+            // stale .consumed that was never paired with a WM_CHAR.
             if (pressed) {
-                self.pending_keydown = .consumed;
+                self.pending_keydown = .{ .consumed = std.time.milliTimestamp() };
             }
         }
 
@@ -1291,50 +1307,64 @@ pub fn Surface(comptime App: type) type {
             const state = self.pending_keydown;
             self.pending_keydown = .none;
 
-            switch (state) {
+            const state_tag: PendingKeydownTag = switch (state) {
+                .none => .none,
+                .consumed => |at_ms| blk: {
+                    // Demote stale .consumed (no paired WM_CHAR within
+                    // STALE_CONSUMED_THRESHOLD_MS) to .none so a later
+                    // independent WM_CHAR from mobile/remote/IME paths
+                    // is not silently dropped. See PendingKeydown.consumed
+                    // docs for the bug scenario this addresses.
+                    const now_ms = std.time.milliTimestamp();
+                    if (isStaleConsumedState(at_ms, now_ms, STALE_CONSUMED_THRESHOLD_MS)) {
+                        log.debug("handleCharEvent: stale .consumed (age={d}ms > {d}ms), demoting to .none for char=0x{X:0>4}", .{ now_ms - at_ms, STALE_CONSUMED_THRESHOLD_MS, char_code });
+                        break :blk .none;
+                    }
+                    break :blk .consumed;
+                },
+                .pending => .pending,
+            };
+
+            var codepoint: u21 = undefined;
+            switch (decideCharAction(state_tag, char_code, self.pending_high_surrogate != 0)) {
                 // WM_KEYDOWN was already consumed (function key, keybinding, etc.)
                 // -- suppress this WM_CHAR to avoid double input.
-                .consumed => {
+                .suppress => {
                     log.debug("handleCharEvent: SUPPRESSED char=0x{X:0>4} (pending_keydown=consumed)", .{char_code});
                     return;
                 },
-
-                // .pending or .none -- process the character below.
-                .pending, .none => {},
-            }
-            log.debug("handleCharEvent: char=0x{X:0>4} state={s}", .{ char_code, @tagName(state) });
-
-            var codepoint: u21 = undefined;
-
-            if (char_code >= 0xD800 and char_code <= 0xDBFF) {
                 // High surrogate -- store and wait for the low surrogate.
                 // Restore pending state so the low surrogate WM_CHAR can use it.
-                self.pending_high_surrogate = char_code;
-                self.pending_keydown = state;
-                return;
-            } else if (char_code >= 0xDC00 and char_code <= 0xDFFF) {
+                .store_high_surrogate => {
+                    self.pending_high_surrogate = char_code;
+                    self.pending_keydown = state;
+                    return;
+                },
+                // Orphaned low surrogate -- discard.
+                .discard_orphan_low => return,
                 // Low surrogate -- combine with pending high surrogate.
-                if (self.pending_high_surrogate != 0) {
+                .combine_low_surrogate => {
                     const high: u21 = self.pending_high_surrogate;
                     const low: u21 = char_code;
                     codepoint = ((high - 0xD800) << 10) + (low - 0xDC00) + 0x10000;
                     self.pending_high_surrogate = 0;
-                } else {
-                    // Orphaned low surrogate -- discard.
-                    return;
-                }
-            } else {
+                },
                 // BMP character -- clear any stale pending surrogate.
-                self.pending_high_surrogate = 0;
-                codepoint = @intCast(char_code);
+                .emit_bmp => {
+                    self.pending_high_surrogate = 0;
+                    codepoint = @intCast(char_code);
+                },
             }
+            log.debug("handleCharEvent: char=0x{X:0>4} state={s}", .{ char_code, @tagName(state) });
 
             var buf: [4]u8 = undefined;
             const len = std.unicode.utf8Encode(codepoint, &buf) catch return;
 
             // Build the KeyEvent.  If we have a pending physical key from
             // WM_KEYDOWN (.pending), merge it with the text into one unified
-            // event.  Otherwise (.none -- e.g. IME commit), send standalone text.
+            // event.  Otherwise (.none -- e.g. IME commit, or a stale
+            // .consumed demoted by the age check above), send standalone
+            // text without a paired physical key.
             const ev: input.KeyEvent = switch (state) {
                 .pending => |pk| .{
                     .action = .press,
@@ -1343,12 +1373,11 @@ pub fn Surface(comptime App: type) type {
                     .unshifted_codepoint = pk.unshifted_codepoint,
                     .utf8 = buf[0..len],
                 },
-                .none => .{
+                .none, .consumed => .{
                     .action = .press,
                     .key = .unidentified,
                     .utf8 = buf[0..len],
                 },
-                .consumed => unreachable,
             };
 
             const result = self.core_surface.keyCallback(ev) catch |err| {
@@ -3283,4 +3312,160 @@ test "computeImePixelRect: right is always left+1 (thin caret invariant)" {
     try dispatch_std.testing.expectEqual(r1.left + 1, r1.right);
     const r2 = computeImePixelRect(3.5, 1.0, .{ .x = 100, .y = 0, .width = 50, .height = 0 });
     try dispatch_std.testing.expectEqual(r2.left + 1, r2.right);
+}
+
+/// Pure-logic tag mirror of Surface.PendingKeydown.
+/// Module-scope so that decideCharAction can be tested without instantiating
+/// Surface(App) (which depends on WinUI3 COM types).
+pub const PendingKeydownTag = enum { none, consumed, pending };
+
+/// What handleCharEvent should do for a given (state, char_code, surrogate)
+/// triple. Returned by decideCharAction; the actual side effects (logging,
+/// surrogate buffer update, keyCallback invocation) live in handleCharEvent.
+pub const CharDecision = enum {
+    /// pending_keydown was .consumed -- drop this WM_CHAR to avoid double
+    /// input from a WM_KEYDOWN that already produced a key event.
+    /// BUG NOTE: if .consumed was set by a key that does not produce WM_CHAR
+    /// (F-keys, arrows, plain modifiers), this state lingers and eats the
+    /// next unrelated WM_CHAR -- e.g. the first char from mobile/remote
+    /// input that bypasses WM_KEYDOWN.
+    suppress,
+    /// High surrogate (U+D800..U+DBFF) -- buffer it and wait for the low.
+    store_high_surrogate,
+    /// Low surrogate (U+DC00..U+DFFF) with a buffered high -- combine.
+    combine_low_surrogate,
+    /// Low surrogate with no buffered high -- discard as orphan.
+    discard_orphan_low,
+    /// Normal BMP code unit -- proceed to KeyEvent dispatch.
+    emit_bmp,
+};
+
+/// Decide what handleCharEvent should do, given the captured pending-keydown
+/// state, the incoming UTF-16 code unit, and whether a high surrogate is
+/// already buffered. Pure function; safe for unit tests.
+pub fn decideCharAction(
+    state_tag: PendingKeydownTag,
+    char_code: u16,
+    has_pending_high_surrogate: bool,
+) CharDecision {
+    if (state_tag == .consumed) return .suppress;
+    if (char_code >= 0xD800 and char_code <= 0xDBFF) return .store_high_surrogate;
+    if (char_code >= 0xDC00 and char_code <= 0xDFFF) {
+        if (has_pending_high_surrogate) return .combine_low_surrogate;
+        return .discard_orphan_low;
+    }
+    return .emit_bmp;
+}
+
+test "decideCharAction: .consumed state suppresses any BMP char (current behavior)" {
+    try dispatch_std.testing.expectEqual(
+        CharDecision.suppress,
+        decideCharAction(.consumed, 0x3042, false),
+    );
+}
+
+test "decideCharAction: .none state emits BMP char" {
+    try dispatch_std.testing.expectEqual(
+        CharDecision.emit_bmp,
+        decideCharAction(.none, 0x3042, false),
+    );
+}
+
+test "decideCharAction: .pending state emits BMP char (will merge with keydown)" {
+    try dispatch_std.testing.expectEqual(
+        CharDecision.emit_bmp,
+        decideCharAction(.pending, 0x0041, false),
+    );
+}
+
+test "decideCharAction: high surrogate buffers and waits" {
+    try dispatch_std.testing.expectEqual(
+        CharDecision.store_high_surrogate,
+        decideCharAction(.none, 0xD842, false),
+    );
+}
+
+test "decideCharAction: low surrogate with buffered high combines" {
+    try dispatch_std.testing.expectEqual(
+        CharDecision.combine_low_surrogate,
+        decideCharAction(.none, 0xDFB7, true),
+    );
+}
+
+test "decideCharAction: orphan low surrogate discarded" {
+    try dispatch_std.testing.expectEqual(
+        CharDecision.discard_orphan_low,
+        decideCharAction(.none, 0xDC00, false),
+    );
+}
+
+test "decideCharAction: .consumed input still suppresses (spec, not bug)" {
+    // decideCharAction is a pure decision over the captured state. Whether
+    // .consumed is "fresh" or "stale" is determined upstream by
+    // isStaleConsumedState; if upstream demotes to .none, this function
+    // never sees .consumed for that char. The bug ("mobile/remote first
+    // char loss") lives in the upstream age check, not here.
+    const decision = decideCharAction(.consumed, 0x3069, false);
+    try dispatch_std.testing.expectEqual(CharDecision.suppress, decision);
+}
+
+/// Returns true if a `.consumed` state set at `consumed_at_ms` is stale at
+/// `now_ms` -- i.e. more than `threshold_ms` have passed since the
+/// originating WM_KEYDOWN, so any incoming WM_CHAR is almost certainly
+/// from an unrelated input source (mobile/remote bridge, IME commit
+/// without a paired WM_KEYDOWN) and should be processed normally instead
+/// of being swallowed by the leftover .consumed flag. Pure -- the caller
+/// supplies the clock for testability.
+pub fn isStaleConsumedState(consumed_at_ms: i64, now_ms: i64, threshold_ms: i64) bool {
+    return (now_ms - consumed_at_ms) > threshold_ms;
+}
+
+test "isStaleConsumedState: 0ms elapsed is fresh" {
+    try dispatch_std.testing.expect(!isStaleConsumedState(1000, 1000, 100));
+}
+
+test "isStaleConsumedState: 50ms elapsed is fresh" {
+    try dispatch_std.testing.expect(!isStaleConsumedState(1000, 1050, 100));
+}
+
+test "isStaleConsumedState: exactly at threshold is fresh (strict >)" {
+    try dispatch_std.testing.expect(!isStaleConsumedState(1000, 1100, 100));
+}
+
+test "isStaleConsumedState: 1ms past threshold is stale" {
+    try dispatch_std.testing.expect(isStaleConsumedState(1000, 1101, 100));
+}
+
+test "isStaleConsumedState: 1 second past threshold is stale" {
+    try dispatch_std.testing.expect(isStaleConsumedState(1000, 2000, 100));
+}
+
+test "stale-.consumed-demote scenario: upstream age check sends .none, char emits (mobile first-char FIX)" {
+    // End-to-end view of the fix: handleKeyEvent set .consumed at T0.
+    // No WM_CHAR followed (e.g. an F-key). At T0+200ms, a mobile/remote
+    // bridge injects 'ど' via WM_(IME_)CHAR. handleCharEvent runs
+    // isStaleConsumedState(T0, T0+200, 100) -> true, demotes state_tag to
+    // .none, then calls decideCharAction(.none, 0x3069, false). This
+    // assertion verifies that the demoted path emits the char instead of
+    // suppressing it.
+    const consumed_at: i64 = 1000;
+    const now: i64 = 1200; // 200ms later -- past 100ms threshold
+    try dispatch_std.testing.expect(isStaleConsumedState(consumed_at, now, 100));
+
+    const state_tag_after_demote: PendingKeydownTag = .none;
+    const decision = decideCharAction(state_tag_after_demote, 0x3069, false);
+    try dispatch_std.testing.expectEqual(CharDecision.emit_bmp, decision);
+}
+
+test "fresh-.consumed scenario: paired WM_KEYDOWN/WM_CHAR still suppresses (no regression)" {
+    // Regular Win32 message loop: WM_KEYDOWN -> WM_CHAR within microseconds.
+    // isStaleConsumedState(T0, T0+0, 100) -> false, state_tag stays
+    // .consumed, decideCharAction returns suppress, char is dropped to
+    // avoid double-input from a function key etc.
+    const consumed_at: i64 = 5000;
+    const now: i64 = 5000;
+    try dispatch_std.testing.expect(!isStaleConsumedState(consumed_at, now, 100));
+
+    const decision = decideCharAction(.consumed, 0x0041, false); // 'A' immediately after WM_KEYDOWN
+    try dispatch_std.testing.expectEqual(CharDecision.suppress, decision);
 }
