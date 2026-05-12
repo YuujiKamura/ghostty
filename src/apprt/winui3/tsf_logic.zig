@@ -38,17 +38,40 @@ pub fn decodeAndEmitUtf16(utf8: []const u8, emit_fn: *const fn (u16) void) usize
     return count;
 }
 
-/// After TSF commits text, the same characters may also arrive via
-/// CharacterReceived (WM_CHAR). Non-ASCII chars should be suppressed
-/// while `tsf_just_committed` is true to avoid doubled characters.
-/// The flag is consumed by the first CharacterReceived after the commit,
-/// regardless of whether that event is suppressed.
+/// Above this age (ms), a `tsf_just_committed_at_ms` timestamp is treated
+/// as stale: the duplicate WM_CHAR we would have suppressed must have
+/// arrived in the same Win32 message-pump cycle as the TSF commit, so a
+/// gap exceeding 100ms almost certainly means CharacterReceived was
+/// never going to fire for that commit (e.g. focus moved away or the
+/// user just paused) and a later unrelated char would otherwise be
+/// silently swallowed.
+pub const STALE_COMMIT_THRESHOLD_MS: i64 = 100;
+
+/// After TSF commits text, the same finalized non-ASCII characters may
+/// also arrive via CharacterReceived (WM_CHAR). To deduplicate, callers
+/// set `tsf_just_committed_at_ms` to a fresh timestamp at commit time;
+/// the first CharacterReceived after the commit then consumes the flag
+/// and, if non-ASCII, is suppressed.
 ///
-/// Returns `true` when the character event should be suppressed.
-pub fn shouldSuppressCharAfterCommit(tsf_just_committed: *bool, char_code: u16) bool {
-    const should_suppress = tsf_just_committed.* and char_code > 0x7F;
-    tsf_just_committed.* = false;
-    return should_suppress;
+/// The flag is consumed (set to 0) on every call, regardless of whether
+/// the event is suppressed. If the timestamp is 0 (never set) or older
+/// than `threshold_ms` (stale, e.g. the user paused before typing the
+/// next char), this function returns `false` so the incoming char is
+/// processed normally — preventing the "first Japanese char dropped
+/// after a stale commit" bug observed via mobile/remote input bridges.
+///
+/// Pure -- the caller supplies `now_ms` so tests do not need a real clock.
+pub fn shouldSuppressCharAfterCommit(
+    tsf_just_committed_at_ms: *i64,
+    now_ms: i64,
+    char_code: u16,
+    threshold_ms: i64,
+) bool {
+    const at_ms = tsf_just_committed_at_ms.*;
+    tsf_just_committed_at_ms.* = 0; // always consume the flag
+    if (at_ms == 0) return false; // never set
+    if (now_ms - at_ms > threshold_ms) return false; // stale
+    return char_code > 0x7F;
 }
 
 // ===================================================================
@@ -130,33 +153,57 @@ test "decodeAndEmitUtf16 - empty input" {
     try std.testing.expectEqual(@as(usize, 0), test_emit_count);
 }
 
-test "shouldSuppressCharAfterCommit - non-ASCII suppressed when flag set" {
-    var flag = true;
-    try std.testing.expect(shouldSuppressCharAfterCommit(&flag, 0x30C6)); // テ
-    try std.testing.expect(!flag);
+test "shouldSuppressCharAfterCommit - fresh non-ASCII suppressed" {
+    var at_ms: i64 = 1000;
+    try std.testing.expect(shouldSuppressCharAfterCommit(&at_ms, 1000, 0x30C6, STALE_COMMIT_THRESHOLD_MS)); // テ
+    try std.testing.expectEqual(@as(i64, 0), at_ms); // consumed
 }
 
-test "shouldSuppressCharAfterCommit - ASCII not suppressed even when flag set" {
-    var flag = true;
-    try std.testing.expect(!shouldSuppressCharAfterCommit(&flag, 0x41)); // 'A'
-    try std.testing.expect(!flag);
+test "shouldSuppressCharAfterCommit - fresh ASCII not suppressed" {
+    var at_ms: i64 = 1000;
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, 1000, 0x41, STALE_COMMIT_THRESHOLD_MS)); // 'A'
+    try std.testing.expectEqual(@as(i64, 0), at_ms); // consumed
 }
 
 test "shouldSuppressCharAfterCommit - boundary 0x7F not suppressed" {
-    var flag = true;
-    try std.testing.expect(!shouldSuppressCharAfterCommit(&flag, 0x7F)); // DEL
-    try std.testing.expect(!flag);
+    var at_ms: i64 = 1000;
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, 1000, 0x7F, STALE_COMMIT_THRESHOLD_MS)); // DEL
+    try std.testing.expectEqual(@as(i64, 0), at_ms);
 }
 
 test "shouldSuppressCharAfterCommit - boundary 0x80 suppressed" {
-    var flag = true;
-    try std.testing.expect(shouldSuppressCharAfterCommit(&flag, 0x80));
-    try std.testing.expect(!flag);
+    var at_ms: i64 = 1000;
+    try std.testing.expect(shouldSuppressCharAfterCommit(&at_ms, 1000, 0x80, STALE_COMMIT_THRESHOLD_MS));
+    try std.testing.expectEqual(@as(i64, 0), at_ms);
 }
 
-test "shouldSuppressCharAfterCommit - flag false, nothing suppressed" {
-    var flag = false;
-    try std.testing.expect(!shouldSuppressCharAfterCommit(&flag, 0x30C6));
-    try std.testing.expect(!shouldSuppressCharAfterCommit(&flag, 0x41));
-    try std.testing.expect(!flag);
+test "shouldSuppressCharAfterCommit - timestamp 0 (never set), nothing suppressed" {
+    var at_ms: i64 = 0;
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, 1000, 0x30C6, STALE_COMMIT_THRESHOLD_MS));
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, 1000, 0x41, STALE_COMMIT_THRESHOLD_MS));
+    try std.testing.expectEqual(@as(i64, 0), at_ms);
+}
+
+test "shouldSuppressCharAfterCommit - stale (>threshold) non-ASCII not suppressed (mobile/remote first-char FIX)" {
+    // Issue #123 Fix 4 left tsf_just_committed=true persisting across the
+    // gap between a TSF commit and the user's next typing burst from a
+    // mobile/remote bridge. With the age check, a >100ms gap demotes the
+    // suppression so the first Japanese char from the next burst emits.
+    var at_ms: i64 = 1000;
+    const now_ms: i64 = 1101; // 101ms later -- past threshold
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, now_ms, 0x3069, STALE_COMMIT_THRESHOLD_MS)); // ど
+    try std.testing.expectEqual(@as(i64, 0), at_ms); // still consumed
+}
+
+test "shouldSuppressCharAfterCommit - exactly at threshold (strict >) still suppresses" {
+    var at_ms: i64 = 1000;
+    const now_ms: i64 = 1100; // exactly 100ms -- still within
+    try std.testing.expect(shouldSuppressCharAfterCommit(&at_ms, now_ms, 0x30C6, STALE_COMMIT_THRESHOLD_MS));
+    try std.testing.expectEqual(@as(i64, 0), at_ms);
+}
+
+test "shouldSuppressCharAfterCommit - 1 second past threshold not suppressed" {
+    var at_ms: i64 = 1000;
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, 2000, 0x30C6, STALE_COMMIT_THRESHOLD_MS));
+    try std.testing.expectEqual(@as(i64, 0), at_ms);
 }

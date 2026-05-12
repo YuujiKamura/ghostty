@@ -353,10 +353,14 @@ window_title: ?[:0]u8 = null,
 /// TSF (Text Services Framework) implementation for IME composition.
 tsf_impl: ?Tsf.TsfImplementation = null,
 
-/// Set by tsfHandleOutput when committed text is sent. Consumed by the next
-/// CharacterReceived to suppress duplicated non-ASCII text that may also
-/// arrive through the XAML input path after a TSF commit.
-tsf_just_committed: bool = false,
+/// Timestamp (ms since epoch) when tsfHandleOutput last committed text.
+/// Consumed by the next CharacterReceived to suppress duplicated non-ASCII
+/// text that may also arrive through the XAML input path after a TSF
+/// commit. 0 means "no pending commit". The receiver also treats a
+/// timestamp older than tsf_logic.STALE_COMMIT_THRESHOLD_MS as stale so
+/// the suppression does not eat the first Japanese char of an unrelated
+/// later typing burst (e.g. via a mobile/remote input bridge).
+tsf_just_committed_at_ms: i64 = 0,
 
 /// DispatcherQueueController — must be kept alive for the lifetime of the app.
 dq_controller: ?*winrt.IInspectable = null,
@@ -1322,7 +1326,9 @@ fn tsfHandleOutput(userdata: ?*anyopaque, utf8: []const u8) void {
     // Signal that TSF just committed text. If XAML also delivers the same
     // finalized non-ASCII characters via CharacterReceived, suppress that
     // duplicate path and keep TSF output as the sole source of committed text.
-    app.tsf_just_committed = true;
+    // Store the current time so a later CharacterReceived can tell whether
+    // the duplicate it is about to consume is still fresh.
+    app.tsf_just_committed_at_ms = std.time.milliTimestamp();
 
     // Decode UTF-8 into codepoints and send each as a UTF-16 char event,
     // which follows the same path as IME commit via handleCharEvent.
@@ -3128,7 +3134,7 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
                             log.debug("TSF_INJECT: textEditSinkOnEndEdit requesting edit session (compositions={})", .{tsf_impl._compositions});
                         }
 
-                        // 4. tsfHandleOutput — the real commit path (sets tsf_just_committed)
+                        // 4. tsfHandleOutput — the real commit path (sets tsf_just_committed_at_ms)
                         tsfHandleOutput(@ptrCast(self), utf8_text);
 
                         // 5. OnEndComposition

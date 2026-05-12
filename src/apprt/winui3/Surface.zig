@@ -1699,12 +1699,16 @@ pub fn Surface(comptime App: type) type {
                 // After TSF commits text via tsfHandleOutput, the same finalized
                 // non-ASCII characters may also arrive via CharacterReceived.
                 // Suppress that duplicate XAML path and rely on TSF output alone.
-                // Logic extracted to tsf_logic for testability.
-                if (self.app.tsf_just_committed) {
+                // The age check inside shouldSuppressCharAfterCommit demotes a
+                // stale commit timestamp (>tsf_logic.STALE_COMMIT_THRESHOLD_MS)
+                // back to "no suppression" so the first Japanese char of an
+                // unrelated later typing burst is not silently dropped.
+                if (self.app.tsf_just_committed_at_ms != 0) {
                     const ea_peek: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
                     const ch_peek = ea_peek.Character() catch return;
-                    if (tsf_logic.shouldSuppressCharAfterCommit(&self.app.tsf_just_committed, ch_peek)) {
-                        log.debug("xaml_surface: CharacterReceived ch=0x{x} SUPPRESSED (tsf_just_committed, non-ASCII)", .{ch_peek});
+                    const now_ms = std.time.milliTimestamp();
+                    if (tsf_logic.shouldSuppressCharAfterCommit(&self.app.tsf_just_committed_at_ms, now_ms, ch_peek, tsf_logic.STALE_COMMIT_THRESHOLD_MS)) {
+                        log.debug("xaml_surface: CharacterReceived ch=0x{x} SUPPRESSED (tsf commit fresh, non-ASCII)", .{ch_peek});
                         return;
                     }
                 }
