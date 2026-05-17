@@ -1298,14 +1298,17 @@ pub fn Surface(comptime App: type) type {
             //
             // A modifier key (Shift/Ctrl/Alt/Super) never produces a paired
             // WM_CHAR, so a `.consumed` state would be spurious -- it would
-            // suppress the *next* unrelated character. See
-            // consumedPressLeavesConsumed for the Shift+symbol IME bug this
-            // guards against.
+            // suppress the *next* unrelated character. The .none-vs-.consumed
+            // decision lives in pendingKeydownTagForConsumedPress (pure, unit
+            // tested); this switch only attaches the timestamp the impure
+            // .consumed payload needs. See that helper for the Shift+symbol
+            // IME bug this guards against.
             if (pressed) {
-                self.pending_keydown = if (consumedPressLeavesConsumed(ghostty_key))
-                    .{ .consumed = std.time.milliTimestamp() }
-                else
-                    .none;
+                self.pending_keydown = switch (pendingKeydownTagForConsumedPress(ghostty_key)) {
+                    .none => .none,
+                    .consumed => .{ .consumed = std.time.milliTimestamp() },
+                    .pending => unreachable, // never produced for a consumed press
+                };
             }
         }
 
@@ -3484,15 +3487,15 @@ test "fresh-.consumed scenario: paired WM_KEYDOWN/WM_CHAR still suppresses (no r
     try dispatch_std.testing.expectEqual(CharDecision.suppress, decision);
 }
 
-/// Whether a consumed (non-text-key) WM_KEYDOWN press should leave a
-/// `.consumed` pending_keydown state behind so the *paired* WM_CHAR is
-/// suppressed.
+/// The pending_keydown state a consumed (non-text-key) WM_KEYDOWN press
+/// should leave behind. Returns the tag only; handleKeyEvent's switch
+/// attaches the timestamp the impure `.consumed` payload needs.
 ///
-/// Modifier keys (Shift/Ctrl/Alt/Super) never produce a paired WM_CHAR.
-/// Leaving `.consumed` behind for them is spurious: it suppresses the
-/// *next* unrelated character. That character can arrive with no
-/// WM_KEYDOWN of its own to reset pending_keydown -- e.g. an IME commit
-/// delivered via TSF output / WM_IME_CHAR. The reported failure is
+/// Modifier keys (Shift/Ctrl/Alt/Super) map to `.none`. A modifier never
+/// produces a paired WM_CHAR, so a `.consumed` state would be spurious: it
+/// suppresses the *next* unrelated character. That character can arrive
+/// with no WM_KEYDOWN of its own to reset pending_keydown -- e.g. an IME
+/// commit delivered via TSF output / WM_IME_CHAR. The reported failure is
 /// Shift+5 -> '%' (and Shift+6 -> '&', etc.) on a Japanese IME: the Shift
 /// WM_KEYDOWN sets `.consumed`; the digit WM_KEYDOWN is swallowed by the
 /// IME as VK_PROCESSKEY and never reaches handleKeyEvent to reset the
@@ -3501,55 +3504,60 @@ test "fresh-.consumed scenario: paired WM_KEYDOWN/WM_CHAR still suppresses (no r
 /// rescue this -- the commit lands well within 100ms of the modifier
 /// keydown, so the `.consumed` is still "fresh".
 ///
-/// Non-modifier consumed keys (function keys, arrows) can still produce a
-/// WM_CHAR in dead-key scenarios, so they keep setting `.consumed`.
-pub fn consumedPressLeavesConsumed(k: dispatch_input.Key) bool {
-    return !k.modifier();
+/// Non-modifier consumed keys (function keys, arrows) map to `.consumed`;
+/// they can still produce a WM_CHAR in dead-key scenarios that must be
+/// suppressed. `.pending` is never returned -- text keys take the
+/// `.pending` branch earlier in handleKeyEvent and never reach here.
+pub fn pendingKeydownTagForConsumedPress(k: dispatch_input.Key) PendingKeydownTag {
+    return if (k.modifier()) .none else .consumed;
 }
 
-test "consumedPressLeavesConsumed: modifier keys leave .none (Shift+symbol IME fix)" {
-    // A modifier press must NOT leave `.consumed`: it never has a paired
-    // WM_CHAR, so `.consumed` would suppress the next IME-committed char.
-    try dispatch_std.testing.expect(!consumedPressLeavesConsumed(.shift_left));
-    try dispatch_std.testing.expect(!consumedPressLeavesConsumed(.shift_right));
-    try dispatch_std.testing.expect(!consumedPressLeavesConsumed(.control_left));
-    try dispatch_std.testing.expect(!consumedPressLeavesConsumed(.control_right));
-    try dispatch_std.testing.expect(!consumedPressLeavesConsumed(.alt_left));
-    try dispatch_std.testing.expect(!consumedPressLeavesConsumed(.alt_right));
-    try dispatch_std.testing.expect(!consumedPressLeavesConsumed(.meta_left));
-    try dispatch_std.testing.expect(!consumedPressLeavesConsumed(.meta_right));
+test "pendingKeydownTagForConsumedPress: modifier keys map to .none (Shift+symbol IME fix)" {
+    // A modifier press must map to `.none`: it never has a paired WM_CHAR,
+    // so `.consumed` would suppress the next IME-committed char.
+    inline for (.{
+        .shift_left,   .shift_right,
+        .control_left, .control_right,
+        .alt_left,     .alt_right,
+        .meta_left,    .meta_right,
+    }) |mod_key| {
+        try dispatch_std.testing.expectEqual(
+            PendingKeydownTag.none,
+            pendingKeydownTagForConsumedPress(mod_key),
+        );
+    }
 }
 
-test "consumedPressLeavesConsumed: non-modifier consumed keys keep .consumed" {
-    // Function keys / arrows / Enter can still emit a WM_CHAR in dead-key
-    // states, so they keep `.consumed` to suppress that paired char.
-    try dispatch_std.testing.expect(consumedPressLeavesConsumed(.f5));
-    try dispatch_std.testing.expect(consumedPressLeavesConsumed(.f12));
-    try dispatch_std.testing.expect(consumedPressLeavesConsumed(.arrow_up));
-    try dispatch_std.testing.expect(consumedPressLeavesConsumed(.enter));
-    try dispatch_std.testing.expect(consumedPressLeavesConsumed(.escape));
+test "pendingKeydownTagForConsumedPress: non-modifier consumed keys map to .consumed" {
+    // Function keys / arrows / Enter can emit a WM_CHAR in dead-key states,
+    // so they keep `.consumed` to suppress that paired char.
+    inline for (.{ .f5, .f12, .arrow_up, .enter, .escape }) |key_tag| {
+        try dispatch_std.testing.expectEqual(
+            PendingKeydownTag.consumed,
+            pendingKeydownTagForConsumedPress(key_tag),
+        );
+    }
 }
 
-test "Shift+symbol IME scenario: modifier press -> .none lets the committed symbol emit" {
-    // Reproduction of the reported bug, as a state-flow assertion:
-    //   1. Shift WM_KEYDOWN -> handleKeyEvent consumes it (modifier).
-    //      With the fix, that leaves pending_keydown = .none, not .consumed.
+test "Shift+symbol IME scenario: modifier press -> committed symbol emits, not suppressed" {
+    // End-to-end over the two real pure functions on the production path:
+    //   1. Shift WM_KEYDOWN -> handleKeyEvent consumes it (modifier); the
+    //      pending_keydown it leaves is pendingKeydownTagForConsumedPress(.shift_left).
     //   2. The digit WM_KEYDOWN is swallowed by the Japanese IME as
-    //      VK_PROCESSKEY and never reaches handleKeyEvent -- pending_keydown
-    //      is unchanged.
-    //   3. The IME commits '%' (U+0025) via TSF output / WM_IME_CHAR.
-    //      handleCharEvent runs decideCharAction over the captured state.
-    // Pre-fix: step 1 left `.consumed`, so step 3 -> .suppress, '%' lost.
-    // Post-fix: step 1 leaves `.none`, so step 3 -> .emit_bmp, '%' typed.
-    const leaves_consumed = consumedPressLeavesConsumed(.shift_left);
-    try dispatch_std.testing.expect(!leaves_consumed);
-    const state_after_modifier: PendingKeydownTag = if (leaves_consumed) .consumed else .none;
+    //      VK_PROCESSKEY and never reaches handleKeyEvent -- the state is
+    //      unchanged.
+    //   3. The IME commits the symbol via TSF output / WM_IME_CHAR;
+    //      handleCharEvent runs decideCharAction over that state.
+    // This chains the *real* decision (no hand-mirrored if/else): if
+    // pendingKeydownTagForConsumedPress regresses to `.consumed` for a
+    // modifier, decideCharAction returns .suppress here and the test fails.
+    const after_shift = pendingKeydownTagForConsumedPress(.shift_left);
     try dispatch_std.testing.expectEqual(
         CharDecision.emit_bmp,
-        decideCharAction(state_after_modifier, 0x0025, false), // '%'
+        decideCharAction(after_shift, 0x0025, false), // '%' (Shift+5)
     );
     try dispatch_std.testing.expectEqual(
         CharDecision.emit_bmp,
-        decideCharAction(state_after_modifier, 0x0026, false), // '&'
+        decideCharAction(after_shift, 0x0026, false), // '&' (Shift+6)
     );
 }
