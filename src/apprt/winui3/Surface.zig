@@ -1319,22 +1319,13 @@ pub fn Surface(comptime App: type) type {
             const state = self.pending_keydown;
             self.pending_keydown = .none;
 
-            const state_tag: PendingKeydownTag = switch (state) {
-                .none => .none,
-                .consumed => |at_ms| blk: {
-                    // Demote stale .consumed (no paired WM_CHAR within
-                    // STALE_CONSUMED_THRESHOLD_MS) to .none so a later
-                    // independent WM_CHAR from mobile/remote/IME paths
-                    // is not silently dropped. See PendingKeydown.consumed
-                    // docs for the bug scenario this addresses.
-                    const now_ms = std.time.milliTimestamp();
-                    if (isStaleConsumedState(at_ms, now_ms, STALE_CONSUMED_THRESHOLD_MS)) {
-                        log.debug("handleCharEvent: stale .consumed (age={d}ms > {d}ms), demoting to .none for char=0x{X:0>4}", .{ now_ms - at_ms, STALE_CONSUMED_THRESHOLD_MS, char_code });
-                        break :blk .none;
-                    }
-                    break :blk .consumed;
-                },
-                .pending => .pending,
+            const now_ms = std.time.milliTimestamp();
+            const state_tag = resolvePendingKeydownTag(state, now_ms, STALE_CONSUMED_THRESHOLD_MS);
+            // Log when stale .consumed is demoted: observe the resolved result,
+            // don't re-implement the decision.
+            if (state_tag == .none) switch (state) {
+                .consumed => |at_ms| log.debug("handleCharEvent: stale .consumed (age={d}ms > {d}ms), demoting to .none for char=0x{X:0>4}", .{ now_ms - at_ms, STALE_CONSUMED_THRESHOLD_MS, char_code }),
+                else => {},
             };
 
             var codepoint: u21 = undefined;
@@ -3110,6 +3101,66 @@ pub fn Surface(comptime App: type) type {
             const cleanup_fn = @TypeOf(Self.cleanupXamlElements);
             try testing.expect(@TypeOf(cleanup_fn) != void);
         }
+        /// Maps a PendingKeydown union to PendingKeydownTag, folding the
+        /// stale-.consumed demote decision into the return value. Clock is
+        /// injected via now_ms -- no std.time call inside, keeping this pure.
+        fn resolvePendingKeydownTag(state: PendingKeydown, now_ms: i64, threshold_ms: i64) PendingKeydownTag {
+            return switch (state) {
+                .none => .none,
+                .consumed => |at_ms| if ((now_ms - at_ms) > threshold_ms) .none else .consumed,
+                .pending => .pending,
+            };
+        }
+
+        // Sentinel constants for resolvePendingKeydownTag tests (single-source).
+        const TEST_RES_CONSUMED_AT_MS: i64 = 1000;
+        const TEST_RES_THRESHOLD_MS: i64 = 100;
+        const TEST_RES_FRESH_NOW_MS: i64 = 1000; // 0ms elapsed -- fresh
+        const TEST_RES_STALE_NOW_MS: i64 = 1101; // 101ms elapsed -- past threshold
+        const TEST_RES_BOUNDARY_NOW_MS: i64 = 1100; // exactly at threshold -- fresh (strict >)
+
+        test "pending-keydown resolvePendingKeydownTag: .none maps to .none" {
+            const test_state: PendingKeydown = .none;
+            try std.testing.expectEqual(PendingKeydownTag.none, resolvePendingKeydownTag(test_state, TEST_RES_FRESH_NOW_MS, TEST_RES_THRESHOLD_MS));
+        }
+
+        test "pending-keydown resolvePendingKeydownTag: .pending maps to .pending" {
+            const test_key: PendingKey = .{ .key_code = .unidentified, .mods = .{}, .unshifted_codepoint = 0 };
+            const test_state: PendingKeydown = .{ .pending = test_key };
+            try std.testing.expectEqual(PendingKeydownTag.pending, resolvePendingKeydownTag(test_state, TEST_RES_FRESH_NOW_MS, TEST_RES_THRESHOLD_MS));
+        }
+
+        test "pending-keydown resolvePendingKeydownTag: fresh .consumed stays .consumed" {
+            const test_state: PendingKeydown = .{ .consumed = TEST_RES_CONSUMED_AT_MS };
+            try std.testing.expectEqual(PendingKeydownTag.consumed, resolvePendingKeydownTag(test_state, TEST_RES_FRESH_NOW_MS, TEST_RES_THRESHOLD_MS));
+        }
+
+        test "pending-keydown resolvePendingKeydownTag: stale .consumed demotes to .none" {
+            const test_state: PendingKeydown = .{ .consumed = TEST_RES_CONSUMED_AT_MS };
+            try std.testing.expectEqual(PendingKeydownTag.none, resolvePendingKeydownTag(test_state, TEST_RES_STALE_NOW_MS, TEST_RES_THRESHOLD_MS));
+        }
+
+        test "pending-keydown resolvePendingKeydownTag: exactly at threshold is fresh (strict >)" {
+            const test_state: PendingKeydown = .{ .consumed = TEST_RES_CONSUMED_AT_MS };
+            try std.testing.expectEqual(PendingKeydownTag.consumed, resolvePendingKeydownTag(test_state, TEST_RES_BOUNDARY_NOW_MS, TEST_RES_THRESHOLD_MS));
+        }
+
+        test "pending-keydown scenario: stale-.consumed demote emits char (mobile first-char fix)" {
+            // Regression gate: if resolvePendingKeydownTag stops demoting stale
+            // .consumed to .none, decideCharAction sees .consumed and returns
+            // suppress -- this test fails. Exercises the full production chain.
+            const test_state: PendingKeydown = .{ .consumed = TEST_RES_CONSUMED_AT_MS };
+            const tag = resolvePendingKeydownTag(test_state, TEST_RES_STALE_NOW_MS, TEST_RES_THRESHOLD_MS);
+            const decision = decideCharAction(tag, 0x3069, false); // U+3069 'ど'
+            try std.testing.expectEqual(CharDecision.emit_bmp, decision);
+        }
+
+        test "pending-keydown scenario: fresh-.consumed suppresses char (no double-input regression)" {
+            const test_state: PendingKeydown = .{ .consumed = TEST_RES_CONSUMED_AT_MS };
+            const tag = resolvePendingKeydownTag(test_state, TEST_RES_FRESH_NOW_MS, TEST_RES_THRESHOLD_MS);
+            const decision = decideCharAction(tag, 0x0041, false); // 'A'
+            try std.testing.expectEqual(CharDecision.suppress, decision);
+        }
     }; // return struct
 } // pub fn Surface
 
@@ -3419,71 +3470,10 @@ test "decideCharAction: orphan low surrogate discarded" {
 test "decideCharAction: .consumed input still suppresses (spec, not bug)" {
     // decideCharAction is a pure decision over the captured state. Whether
     // .consumed is "fresh" or "stale" is determined upstream by
-    // isStaleConsumedState; if upstream demotes to .none, this function
+    // resolvePendingKeydownTag; if upstream demotes to .none, this function
     // never sees .consumed for that char. The bug ("mobile/remote first
     // char loss") lives in the upstream age check, not here.
     const decision = decideCharAction(.consumed, 0x3069, false);
-    try dispatch_std.testing.expectEqual(CharDecision.suppress, decision);
-}
-
-/// Returns true if a `.consumed` state set at `consumed_at_ms` is stale at
-/// `now_ms` -- i.e. more than `threshold_ms` have passed since the
-/// originating WM_KEYDOWN, so any incoming WM_CHAR is almost certainly
-/// from an unrelated input source (mobile/remote bridge, IME commit
-/// without a paired WM_KEYDOWN) and should be processed normally instead
-/// of being swallowed by the leftover .consumed flag. Pure -- the caller
-/// supplies the clock for testability.
-pub fn isStaleConsumedState(consumed_at_ms: i64, now_ms: i64, threshold_ms: i64) bool {
-    return (now_ms - consumed_at_ms) > threshold_ms;
-}
-
-test "isStaleConsumedState: 0ms elapsed is fresh" {
-    try dispatch_std.testing.expect(!isStaleConsumedState(1000, 1000, 100));
-}
-
-test "isStaleConsumedState: 50ms elapsed is fresh" {
-    try dispatch_std.testing.expect(!isStaleConsumedState(1000, 1050, 100));
-}
-
-test "isStaleConsumedState: exactly at threshold is fresh (strict >)" {
-    try dispatch_std.testing.expect(!isStaleConsumedState(1000, 1100, 100));
-}
-
-test "isStaleConsumedState: 1ms past threshold is stale" {
-    try dispatch_std.testing.expect(isStaleConsumedState(1000, 1101, 100));
-}
-
-test "isStaleConsumedState: 1 second past threshold is stale" {
-    try dispatch_std.testing.expect(isStaleConsumedState(1000, 2000, 100));
-}
-
-test "stale-.consumed-demote scenario: upstream age check sends .none, char emits (mobile first-char FIX)" {
-    // End-to-end view of the fix: handleKeyEvent set .consumed at T0.
-    // No WM_CHAR followed (e.g. an F-key). At T0+200ms, a mobile/remote
-    // bridge injects 'ど' via WM_(IME_)CHAR. handleCharEvent runs
-    // isStaleConsumedState(T0, T0+200, 100) -> true, demotes state_tag to
-    // .none, then calls decideCharAction(.none, 0x3069, false). This
-    // assertion verifies that the demoted path emits the char instead of
-    // suppressing it.
-    const consumed_at: i64 = 1000;
-    const now: i64 = 1200; // 200ms later -- past 100ms threshold
-    try dispatch_std.testing.expect(isStaleConsumedState(consumed_at, now, 100));
-
-    const state_tag_after_demote: PendingKeydownTag = .none;
-    const decision = decideCharAction(state_tag_after_demote, 0x3069, false);
-    try dispatch_std.testing.expectEqual(CharDecision.emit_bmp, decision);
-}
-
-test "fresh-.consumed scenario: paired WM_KEYDOWN/WM_CHAR still suppresses (no regression)" {
-    // Regular Win32 message loop: WM_KEYDOWN -> WM_CHAR within microseconds.
-    // isStaleConsumedState(T0, T0+0, 100) -> false, state_tag stays
-    // .consumed, decideCharAction returns suppress, char is dropped to
-    // avoid double-input from a function key etc.
-    const consumed_at: i64 = 5000;
-    const now: i64 = 5000;
-    try dispatch_std.testing.expect(!isStaleConsumedState(consumed_at, now, 100));
-
-    const decision = decideCharAction(.consumed, 0x0041, false); // 'A' immediately after WM_KEYDOWN
     try dispatch_std.testing.expectEqual(CharDecision.suppress, decision);
 }
 
