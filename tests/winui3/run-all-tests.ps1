@@ -235,20 +235,41 @@ try {
 }
 
 # Give XAML a brief moment to start initializing — Register-GhosttyCP itself
-# retries up to 8s for async CP DLL registration, so this just shaves the
-# first poll.
+# retries for async CP DLL registration, so this just shaves the first poll.
 Start-Sleep -Milliseconds 500
 
-# Discover the ghostty CP session via deckpilot. Register-GhosttyCP retries
-# internally; if it returns $null after the timeout, CP truly is unavailable.
-$sessionName = Register-GhosttyCP -ProcessId $proc.Id
+# CP-session discovery is LAZY + memoized — never latched.
+#
+# Why: Register-GhosttyCP races async CP registration. A single startup
+# probe that loses that race used to latch $sessionName = "" for the whole
+# run, so every CP-dependent test downstream threw "No CP session
+# available" even after the session became discoverable seconds later —
+# one unlucky 8s window failed phase2/phase3 deterministically.
+#
+# Get-CpSession discovers on first need and caches only SUCCESS: a failed
+# probe is not remembered, so a later test re-probes and can still succeed
+# once registration completes. Slow CP registration now costs the first
+# CP-using test a few extra seconds instead of failing the suite.
+$script:cpSessionName = $null
+function Get-CpSession {
+    param([int]$TimeoutMs = 20000)
+    if ($script:cpSessionName) { return $script:cpSessionName }
+    $name = Register-GhosttyCP -ProcessId $proc.Id -TimeoutMs $TimeoutMs
+    if ($name) {
+        $script:cpSessionName = $name
+        $env:GHOSTTY_CP_SESSION = $name
+    }
+    return $name
+}
+
+# Warm-up probe — non-fatal. Just shaves latency off the first real use;
+# a miss here is fine because every CP-dependent test re-probes via Get-CpSession.
+$sessionName = Get-CpSession -TimeoutMs 8000
 if ($sessionName) {
     Write-Host "  CP session: $sessionName" -ForegroundColor Green
 } else {
-    Write-Host "  WARN: Could not identify ghostty CP session (after retry)" -ForegroundColor Yellow
-    $sessionName = ""
+    Write-Host "  WARN: CP session not yet registered — tests will re-probe lazily" -ForegroundColor Yellow
 }
-$env:GHOSTTY_CP_SESSION = $sessionName
 
 # ============================================================
 # Phase 1: Lifecycle
@@ -295,7 +316,9 @@ if ("phase1-ghost-demo-smoke" -in $phase1Tests) {
         Remove-Item -Path $hauntTrigger -ErrorAction SilentlyContinue
         Remove-Item -Path $exitTrigger -ErrorAction SilentlyContinue
 
-        # Run ghost-demo (stays alive until exit trigger)
+        # Run ghost-demo (stays alive until exit trigger).
+        # CP use here is optional — re-probe lazily, warn-and-skip if absent.
+        $sessionName = Get-CpSession
         if ($sessionName) {
             $sendOk = Send-GhosttyInput -SessionName $sessionName -Text "python `"$playPy`" --fps 60"
             if ($sendOk) {
@@ -315,12 +338,9 @@ if ("phase1-ghost-demo-smoke" -in $phase1Tests) {
 # --- Phase 1: noise ghost-demo (haunting triggered via file) ---
 if ("phase1-noise-ghost-demo" -in $phase1Tests) {
     Invoke-Test -Name "phase1-noise-ghost-demo" -Block {
+        $sessionName = Get-CpSession
         if (-not $sessionName) {
-            # Startup discovery raced against async CP registration; retry now.
-            $sessionName = Register-GhosttyCP -ProcessId $proc.Id -TimeoutMs 15000
-            if (-not $sessionName) { throw "No CP session available" }
-            $env:GHOSTTY_CP_SESSION = $sessionName
-            Write-Host "  CP session (late-discovered): $sessionName" -ForegroundColor Green
+            throw "No CP session: deckpilot did not list PID $($proc.Id) within 20s"
         }
 
         $hauntTrigger = Join-Path $env:TEMP "ghost-haunt-trigger"
@@ -391,8 +411,9 @@ if (-not (Test-Path $deckpilot)) {
     # --- Phase 2: send/show roundtrip ---
     if ("phase2-send-show-roundtrip" -in $phase2Tests) {
         Invoke-Test -Name "phase2-send-show-roundtrip" -Block {
+            $sessionName = Get-CpSession
             if (-not $sessionName) {
-                throw "No CP session available"
+                throw "No CP session: deckpilot did not list PID $($proc.Id) within 20s"
             }
 
             $marker = "roundtrip_marker_$(Get-Random)"
@@ -421,8 +442,9 @@ if (-not (Test-Path $deckpilot)) {
     # --- Phase 3: ASCII input ---
     if ("phase3-ascii-input" -in $phase3Tests) {
         Invoke-Test -Name "phase3-ascii-input" -Block {
+            $sessionName = Get-CpSession
             if (-not $sessionName) {
-                throw "No CP session available"
+                throw "No CP session: deckpilot did not list PID $($proc.Id) within 20s"
             }
 
             $marker = "keyboard_test_marker_$(Get-Random)"
@@ -441,8 +463,9 @@ if (-not (Test-Path $deckpilot)) {
     # --- Phase 3: Japanese input ---
     if ("phase3-japanese-input" -in $phase3Tests) {
         Invoke-Test -Name "phase3-japanese-input" -Block {
+            $sessionName = Get-CpSession
             if (-not $sessionName) {
-                throw "No CP session available"
+                throw "No CP session: deckpilot did not list PID $($proc.Id) within 20s"
             }
 
             # NOTE: CJK input via ConPTY INPUT requires TSF path (not yet wired for deckpilot send).
