@@ -1369,13 +1369,7 @@ pub fn Surface(comptime App: type) type {
             // .consumed demoted by the age check above), send standalone
             // text without a paired physical key.
             const ev: input.KeyEvent = switch (state) {
-                .pending => |pk| .{
-                    .action = .press,
-                    .key = pk.key_code,
-                    .mods = pk.mods,
-                    .unshifted_codepoint = pk.unshifted_codepoint,
-                    .utf8 = buf[0..len],
-                },
+                .pending => |pk| pendingTextKeyEvent(pk, codepoint, buf[0..len]),
                 .none, .consumed => .{
                     .action = .press,
                     .key = .unidentified,
@@ -3101,6 +3095,56 @@ pub fn Surface(comptime App: type) type {
             const cleanup_fn = @TypeOf(Self.cleanupXamlElements);
             try testing.expect(@TypeOf(cleanup_fn) != void);
         }
+        /// Build the unified key event for a text key whose WM_KEYDOWN
+        /// was deferred to WM_CHAR. Merges the physical key info from the
+        /// pending keydown with the committed `utf8` text.
+        ///
+        /// `consumed_mods` is load-bearing for the kitty keyboard
+        /// protocol: the encoder only takes its raw-text fast path when
+        /// the effective binding mods (mods minus consumed) are empty.
+        /// If a Shift that was used to produce a symbol is left
+        /// un-consumed, a plain symbol gets encoded as a CSI-u sequence
+        /// instead of the literal byte -- which a TUI (e.g. Claude Code)
+        /// running with only the `disambiguate` flag cannot read back as
+        /// text. That is the "Shift+symbol can't be typed" bug.
+        fn pendingTextKeyEvent(
+            pk: PendingKey,
+            produced_codepoint: u21,
+            utf8: []const u8,
+        ) input.KeyEvent {
+            return .{
+                .action = .press,
+                .key = pk.key_code,
+                .mods = pk.mods,
+                .consumed_mods = consumedTextMods(
+                    pk.mods,
+                    pk.unshifted_codepoint,
+                    produced_codepoint,
+                ),
+                .unshifted_codepoint = pk.unshifted_codepoint,
+                .utf8 = utf8,
+            };
+        }
+
+        /// Infer which modifiers Windows consumed to produce committed
+        /// text. Windows -- unlike GTK, which reports consumed mods
+        /// explicitly -- gives no such signal, so we deduce it: Shift is
+        /// consumed when it is held and it actually changed the
+        /// character (Shift+5 -> '%', Shift+a -> 'A'). A held Shift that
+        /// left the character unchanged (Shift+Space) stays un-consumed
+        /// so it is still reported as a modifier.
+        fn consumedTextMods(
+            mods: input.Mods,
+            unshifted_codepoint: u21,
+            produced_codepoint: u21,
+        ) input.Mods {
+            var consumed: input.Mods = .{};
+            if (mods.shift and produced_codepoint != unshifted_codepoint) {
+                consumed.shift = true;
+            }
+            return consumed;
+        }
+
         /// Maps a PendingKeydown union to PendingKeydownTag, folding the
         /// stale-.consumed demote decision into the return value. Clock is
         /// injected via now_ms -- no std.time call inside, keeping this pure.
@@ -3160,6 +3204,79 @@ pub fn Surface(comptime App: type) type {
             const tag = resolvePendingKeydownTag(test_state, TEST_RES_FRESH_NOW_MS, TEST_RES_THRESHOLD_MS);
             const decision = decideCharAction(tag, 0x0041, false); // 'A'
             try std.testing.expectEqual(CharDecision.suppress, decision);
+        }
+
+        test "consumedTextMods: Shift+symbol consumes shift (Shift+5 -> %)" {
+            const result = consumedTextMods(.{ .shift = true }, '5', '%');
+            try std.testing.expectEqual(input.Mods{ .shift = true }, result);
+        }
+
+        test "consumedTextMods: Shift+letter consumes shift (Shift+a -> A)" {
+            const result = consumedTextMods(.{ .shift = true }, 'a', 'A');
+            try std.testing.expectEqual(input.Mods{ .shift = true }, result);
+        }
+
+        test "consumedTextMods: no shift held consumes nothing" {
+            const result = consumedTextMods(.{}, 'a', 'a');
+            try std.testing.expectEqual(input.Mods{}, result);
+        }
+
+        test "consumedTextMods: shift held but char unchanged is not consumed (Shift+Space)" {
+            const result = consumedTextMods(.{ .shift = true }, ' ', ' ');
+            try std.testing.expectEqual(input.Mods{}, result);
+        }
+
+        test "consumedTextMods: unknown unshifted codepoint with shift consumes shift" {
+            // vkToUnshiftedCodepoint may return 0 for an OEM key; a
+            // shifted text key should still count shift as consumed.
+            const result = consumedTextMods(.{ .shift = true }, 0, '~');
+            try std.testing.expectEqual(input.Mods{ .shift = true }, result);
+        }
+
+        test "kitty disambiguate: Shift+symbol text key encodes as the raw byte" {
+            // Regression gate for the "Shift+symbol can't be typed in
+            // Claude Code" bug. With the kitty keyboard protocol active
+            // (the `disambiguate` flag a TUI requests), a shifted symbol
+            // must reach the PTY as its literal byte, not a CSI-u
+            // sequence. This fails if pendingTextKeyEvent stops tagging
+            // the Shift consumed by the symbol -- the encoder would then
+            // emit "\x1b[53;2u" instead of "%".
+            const key_encode = @import("../../input/key_encode.zig");
+
+            // Shift+5 -> '%': physical key digit_5, shift held,
+            // unshifted codepoint '5', committed text "%".
+            const pk: PendingKey = .{
+                .key_code = .digit_5,
+                .mods = .{ .shift = true },
+                .unshifted_codepoint = '5',
+            };
+            const ev = pendingTextKeyEvent(pk, '%', "%");
+
+            var buf: [64]u8 = undefined;
+            var writer: std.Io.Writer = .fixed(&buf);
+            try key_encode.encode(&writer, ev, .{
+                .kitty_flags = .{ .disambiguate = true },
+            });
+            try std.testing.expectEqualStrings("%", writer.buffered());
+        }
+
+        test "kitty disambiguate: unshifted text key still encodes as the raw byte" {
+            // Companion to the Shift+symbol gate: a plain key with no
+            // modifiers must keep going out as raw text.
+            const key_encode = @import("../../input/key_encode.zig");
+            const pk: PendingKey = .{
+                .key_code = .key_a,
+                .mods = .{},
+                .unshifted_codepoint = 'a',
+            };
+            const ev = pendingTextKeyEvent(pk, 'a', "a");
+
+            var buf: [64]u8 = undefined;
+            var writer: std.Io.Writer = .fixed(&buf);
+            try key_encode.encode(&writer, ev, .{
+                .kitty_flags = .{ .disambiguate = true },
+            });
+            try std.testing.expectEqualStrings("a", writer.buffered());
         }
     }; // return struct
 } // pub fn Surface
