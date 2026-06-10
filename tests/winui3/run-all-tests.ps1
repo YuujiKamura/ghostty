@@ -580,6 +580,29 @@ Write-Host "`n=== Stopping Ghostty ===" -ForegroundColor Cyan
 Stop-Ghostty -Process $proc
 
 # ============================================================
+# Phase 6: Window stacking (self-contained — launches its own 2 ghosttys)
+# Runs AFTER the shared Ghostty 1 is stopped so the unique-rect setup in
+# the test is not disturbed by suite-owned windows.
+# ============================================================
+Write-Host "`n=== Phase 6: Window stacking ===" -ForegroundColor Cyan
+
+$stackTestName = "test-11-window-stack"
+$shouldRunStack = (-not $failedNames) -or ($stackTestName -in $failedNames)
+if ($shouldRunStack) {
+    $stackPath = Join-Path $PSScriptRoot "$stackTestName.ps1"
+    if (-not (Test-Path $stackPath)) {
+        Write-Host "  SKIP: $stackTestName (not found)" -ForegroundColor Yellow
+    } else {
+        Invoke-Test -Name $stackTestName -Block {
+            # In-process call: assertion failures throw and are caught by Invoke-Test.
+            & $stackPath -ExePath $ExePath 6>&1 | Write-Host
+        }
+    }
+} else {
+    Write-Host "  SKIP: $stackTestName" -ForegroundColor DarkGray
+}
+
+# ============================================================
 # Phase 5: Regression repro (opt-in via -IncludeRegressionRepro)
 # Closes #245. Asserts the multi-session shell-flood load shape that
 # silently killed sessions on 2026-04-27 (#244) does NOT regress.

@@ -81,16 +81,45 @@ pub fn makeWindow(app_ptr: *anyopaque, wndproc_fn: os.WNDPROC) !IslandWindow {
     const base_width: c_int = 1280;
     const base_height: c_int = 960;
     const sys_dpi = os.GetDpiForSystem();
-    const width = @divTrunc(base_width * @as(c_int, @intCast(sys_dpi)), 96);
-    const height = @divTrunc(base_height * @as(c_int, @intCast(sys_dpi)), 96);
+    var x: c_int = os.CW_USEDEFAULT;
+    var y: c_int = os.CW_USEDEFAULT;
+    var width = @divTrunc(base_width * @as(c_int, @intCast(sys_dpi)), 96);
+    var height = @divTrunc(base_height * @as(c_int, @intCast(sys_dpi)), 96);
+
+    // If another Ghostty window already exists (any process), stack the new
+    // window directly on top of it: same position, same size. The rect of a
+    // live window is by definition on-screen, so no monitor clamping needed.
+    // Any failure falls back to the defaults above.
+    if (os.FindWindowW(CLASS_NAME, null)) |existing| {
+        var rect: os.RECT = .{};
+        const got_rect = if (os.IsIconic(existing) != 0) blk: {
+            // Minimized: GetWindowRect would return the off-screen minimized
+            // rect, so use the restored (normal) position instead.
+            var placement: os.WINDOWPLACEMENT = .{};
+            if (os.GetWindowPlacement(existing, &placement) == 0) break :blk false;
+            rect = placement.rcNormalPosition;
+            break :blk true;
+        } else os.GetWindowRect(existing, &rect) != 0;
+
+        if (got_rect and rect.right > rect.left and rect.bottom > rect.top) {
+            x = rect.left;
+            y = rect.top;
+            width = rect.right - rect.left;
+            height = rect.bottom - rect.top;
+            log.info(
+                "stacking on existing GhosttyWindow 0x{x}: pos=({},{}) size={}x{}",
+                .{ @intFromPtr(existing), x, y, width, height },
+            );
+        }
+    }
 
     const hwnd = os.CreateWindowExW(
         os.WS_EX_NOREDIRECTIONBITMAP,
         CLASS_NAME,
         title,
         os.WS_OVERLAPPEDWINDOW | os.WS_CLIPCHILDREN,
-        os.CW_USEDEFAULT,
-        os.CW_USEDEFAULT,
+        x,
+        y,
         width,
         height,
         null, // no parent
