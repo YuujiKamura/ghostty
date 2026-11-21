@@ -5,6 +5,12 @@
 - **Win32**: `zig build -Dapp-runtime=win32 --prefix zig-out-win32`
 - `zig build` を直接叩くな。必ずラッパーか `--prefix` を使え
 
+## 新しいビルドは使用中のビルドと並べて試す（canary）
+- `bash scripts/canary.sh build` で作業ツリーをビルドし `~/.ghostty-win/canary` に置く（使用中の exe はロックも置き換えもしない）
+- `bash scripts/canary.sh launch` で canary の窓を開く。単一インスタンス IPC は別（`GHOSTTY_INSTANCE_ID=canary`）、deckpilot には `ghostty-canary-<時刻>` として出る
+- `bash scripts/canary.sh smoke` で同じ UIA テスト（既定はマウスを動かさない CP 系、`-All` で全部、`-Only a,b` で指定）を使用中のビルドと canary に流して並べる。使用中で PASS・canary で FAIL は退行
+- `bash scripts/canary.sh stop` は canary フォルダの exe から起動した窓だけ閉じる
+
 ## テスト gate（毎 commit・スコープ限定）
 - 触った module だけテスト、フルスイート全件は脳死
   - 例: `Overlay.zig` 触ったら `ZIG_GLOBAL_CACHE_DIR= zig build test -Dapp-runtime=win32 -Dtest-filter="renderer.Overlay"`
