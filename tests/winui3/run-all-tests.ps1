@@ -1,5 +1,5 @@
 # run-all-tests.ps1 — winui3 integration test runner
-# Usage: pwsh.exe -File run-all-tests.ps1
+# Usage: pwsh.exe -File run-all-tests.ps1 [-Only name1,name2] [-OnlyFailed]
 #
 # Ghostty 1 (test target): Started via Start-Ghostty, stays alive for all phases
 # Test driver: PowerShell process calls deckpilot.exe directly (no Ghostty 2 needed)
@@ -13,6 +13,9 @@ param(
     [string]$ExePath,
     [switch]$SkipBuild,
     [switch]$OnlyFailed,
+    # Run only these test names (e.g. -Only phase3-input-tab-routing), the
+    # same way -OnlyFailed narrows the run. Scope a run to the code you touched.
+    [string[]]$Only,
     [switch]$IncludeStress,
     [switch]$IncludeRegressionRepro
 )
@@ -85,6 +88,13 @@ if ($OnlyFailed) {
     $failedNames | ForEach-Object { Write-Host "  - $_" -ForegroundColor Magenta }
 }
 
+# --- Only: explicit test names ---
+if ($Only) {
+    # pwsh -File passes "a,b" as one string; split it.
+    $failedNames = @($Only | ForEach-Object { $_ -split "," } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    Write-Host "`n=== Running only: $($failedNames -join ', ') ===" -ForegroundColor Magenta
+}
+
 # --- Test names ---
 $phase1Tests = @(
     "phase1-ghost-demo-smoke",
@@ -101,7 +111,8 @@ $phase2Tests = @(
 
 $phase3Tests = @(
     "phase3-ascii-input",
-    "phase3-japanese-input"
+    "phase3-japanese-input",
+    "phase3-input-tab-routing"
 )
 
 # --- OnlyFailed: filter ---
@@ -478,6 +489,64 @@ if (-not (Test-Path $deckpilot)) {
     } else {
         Write-Host "  SKIP: phase3-japanese-input" -ForegroundColor DarkGray
     }
+}
+
+# --- Phase 3: INPUT|...|<tab> reaches that tab, not the active one ---
+# Raw CP requests (no deckpilot needed): open a second tab, type into the
+# background tab by index, and check the text shows up there and only there.
+# A tab that does not exist must receive nothing (never the active tab).
+if ("phase3-input-tab-routing" -in $phase3Tests) {
+    Invoke-Test -Name "phase3-input-tab-routing" -Block {
+        $sessionName = Get-CpSession
+        if (-not $sessionName) {
+            throw "No CP session: deckpilot did not list PID $($proc.Id) within 20s"
+        }
+        $pipePath = "\\.\pipe\ghostty-winui3-$sessionName-$($proc.Id)"
+
+        $caps = Invoke-GhosttyCpRequest -PipePath $pipePath -Request "CAPABILITIES"
+        Test-Assert -Condition ($caps -match "features=[^|]*input_tab_routing") -Message "phase3-input-tab-routing - CAPABILITIES advertises input_tab_routing (reply: $($caps.Trim()))"
+
+        $parseTabs = {
+            $raw = Invoke-GhosttyCpRequest -PipePath $pipePath -Request "LIST_TABS"
+            $head = ($raw -split "`n")[0].Trim() -split '\|'
+            [pscustomobject]@{ Count = [int]$head[1]; Active = [int]$head[2] }
+        }
+        $tabs = & $parseTabs
+        if ($tabs.Count -lt 2) {
+            $null = Invoke-GhosttyCpRequest -PipePath $pipePath -Request "NEW_TAB"
+            Wait-Condition -TimeoutMs 10000 -Description "second tab to open" -ScriptBlock { (& $parseTabs).Count -ge 2 }
+            Write-Host "  PASS: phase3-input-tab-routing - second tab opened" -ForegroundColor Green
+            Start-Sleep -Seconds 2   # let the new tab's shell print its prompt
+            $tabs = & $parseTabs
+        }
+        $active = $tabs.Active
+        $background = if ($active -eq 0) { 1 } else { 0 }
+
+        $marker = "tab_route_marker_$(Get-Random)"
+        $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("echo $marker`r"))
+        $resp = Invoke-GhosttyCpRequest -PipePath $pipePath -Request "INPUT|uia|$b64|$background"
+        Test-Assert -Condition ($resp -match "^QUEUED\|") -Message "phase3-input-tab-routing - INPUT to tab $background queued ($($resp.Trim()))"
+
+        Wait-Condition -TimeoutMs 8000 -Description "marker in background tab $background" -ScriptBlock {
+            (Invoke-GhosttyCpRequest -PipePath $pipePath -Request "TAIL|200|$background") -match $marker
+        }
+        Write-Host "  PASS: phase3-input-tab-routing - marker appears in background tab $background" -ForegroundColor Green
+        $activeText = Invoke-GhosttyCpRequest -PipePath $pipePath -Request "TAIL|200|$active"
+        Test-Assert -Condition (-not ($activeText -match $marker)) -Message "phase3-input-tab-routing - marker absent from active tab $active"
+        Test-AssertEqual -Expected $active -Actual (& $parseTabs).Active -Message "phase3-input-tab-routing - active tab unchanged"
+
+        # A tab index past the end: nothing anywhere.
+        $lost = "tab_route_lost_$(Get-Random)"
+        $b64Lost = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("echo $lost`r"))
+        $null = Invoke-GhosttyCpRequest -PipePath $pipePath -Request "INPUT|uia|$b64Lost|$($tabs.Count + 5)"
+        Start-Sleep -Seconds 2
+        foreach ($i in 0..($tabs.Count - 1)) {
+            $t = Invoke-GhosttyCpRequest -PipePath $pipePath -Request "TAIL|200|$i"
+            Test-Assert -Condition (-not ($t -match $lost)) -Message "phase3-input-tab-routing - input for a missing tab not typed into tab $i"
+        }
+    }
+} else {
+    Write-Host "  SKIP: phase3-input-tab-routing" -ForegroundColor DarkGray
 }
 
 # ============================================================

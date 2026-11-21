@@ -1216,9 +1216,10 @@ function Send-GhosttyPipeInput {
         $textWithNewline = $Text + "`n"
         $bytes = [System.Text.Encoding]::UTF8.GetBytes($textWithNewline)
         $b64 = [Convert]::ToBase64String($bytes)
-                # format: INPUT|from|b64|raw
-        # raw=0 (false) for normal text input
-        $request = "INPUT|test-script|$b64|0
+        # format: INPUT|from|b64[|tab]. The optional 4th field is the TAB
+        # (index or id=...), not a raw flag: "|0" would now aim at tab 0.
+        # No tab field = the active tab, which is what callers expect.
+        $request = "INPUT|test-script|$b64
 "
         $requestBytes = [System.Text.Encoding]::UTF8.GetBytes($request)
 
@@ -1245,6 +1246,40 @@ function Send-GhosttyPipeInput {
     } catch {
         Write-Host "  WARN: Direct pipe send failed: $($_.Exception.Message)" -ForegroundColor Yellow
         return $false
+    }
+}
+
+function Invoke-GhosttyCpRequest {
+    <#
+    .SYNOPSIS
+        Send one control-plane request line to a ghostty CP pipe and return
+        the whole reply (the server closes the connection after replying).
+    .PARAMETER PipePath
+        Full pipe path, e.g. \\.\pipe\ghostty-winui3-ghostty-123-123.
+    .PARAMETER Request
+        The request line without the trailing newline, e.g. "LIST_TABS".
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$PipePath,
+        [Parameter(Mandatory)][string]$Request,
+        [int]$TimeoutMs = 3000
+    )
+    $pipeName = $PipePath -replace '^\\\\\.\\pipe\\', ''
+    $pipe = [System.IO.Pipes.NamedPipeClientStream]::new(".", $pipeName, [System.IO.Pipes.PipeDirection]::InOut)
+    try {
+        $pipe.Connect($TimeoutMs)
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Request + "`n")
+        $pipe.Write($bytes, 0, $bytes.Length)
+        $pipe.Flush()
+        $ms = [System.IO.MemoryStream]::new()
+        $buffer = New-Object byte[] 65536
+        while (($n = $pipe.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            $ms.Write($buffer, 0, $n)
+        }
+        return [System.Text.Encoding]::UTF8.GetString($ms.ToArray())
+    } finally {
+        $pipe.Dispose()
     }
 }
 
@@ -1308,5 +1343,6 @@ Export-ModuleMember -Function @(
     'Find-GhosttyCP'
     'Send-GhosttyInput'
     'Send-GhosttyPipeInput'
+    'Invoke-GhosttyCpRequest'
     'Get-GhosttyOutput'
 )

@@ -28,6 +28,9 @@ const PendingInput = struct {
     text: []u8,
     raw: bool = false,
     cmd_id: u32 = 0,
+    /// Tab the request named (INPUT|from|payload|<tab>), or null for the
+    /// active tab. Resolved to a surface on the UI thread at drain time.
+    tab: ?usize = null,
 };
 
 const default_max_pending_inputs: usize = 128;
@@ -367,7 +370,7 @@ pub const ControlPlane = struct {
         if (std.mem.eql(u8, cmd, "CAPABILITIES")) {
             return std.fmt.allocPrint(
                 allocator,
-                "OK|{s}|CAPABILITIES|transport=polling|reads=STATE,CAPTURE_PANE,TAIL,HISTORY,WAIT_FOR,PANE_PID,CURSOR_POS,PANE_TITLE,LIST_TABS|writes=INPUT,RAW_INPUT,PASTE,SEND_KEYS,ACK_POLL|control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS\n",
+                "OK|{s}|CAPABILITIES|transport=polling|reads=STATE,CAPTURE_PANE,TAIL,HISTORY,WAIT_FOR,PANE_PID,CURSOR_POS,PANE_TITLE,LIST_TABS|writes=INPUT,RAW_INPUT,PASTE,SEND_KEYS,ACK_POLL|control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS|features=input_tab_routing\n",
                 .{self.session_name orelse "ghostty"},
             ) catch "ERR|oom\n";
         }
@@ -558,7 +561,7 @@ pub const ControlPlane = struct {
         self.cache.ts_ns = std.time.nanoTimestamp();
     }
 
-    fn enqueueInput(self: *ControlPlane, from: []const u8, text: []const u8, raw: bool, cmd_id: u32) bool {
+    fn enqueueInput(self: *ControlPlane, from: []const u8, text: []const u8, raw: bool, cmd_id: u32, tab: ?usize) bool {
         const owned_from = self.allocator.dupe(u8, from) catch return false;
         const owned_text = self.allocator.dupe(u8, text) catch {
             self.allocator.free(owned_from);
@@ -577,6 +580,7 @@ pub const ControlPlane = struct {
             .text = owned_text,
             .raw = raw,
             .cmd_id = cmd_id,
+            .tab = tab,
         }) catch {
             self.allocator.free(owned_from);
             self.allocator.free(owned_text);
@@ -585,7 +589,18 @@ pub const ControlPlane = struct {
         return true;
     }
 
-    pub fn drainPendingInputs(self: *ControlPlane, surface: anytype) void {
+    /// Write every queued input to its tab's PTY. `router` maps a request's
+    /// tab to a core surface: `router.controlInputSurface(?usize)` returns
+    /// the surface for that tab index (null = the active tab), or null when
+    /// there is no such tab.
+    ///
+    /// - An input that named a tab which no longer exists is dropped and not
+    ///   acknowledged. It is never redirected to another tab: that would
+    ///   type one agent's instructions into another's prompt.
+    /// - An input for the active tab while there is no active surface (a tab
+    ///   is closing or switching) stays queued, ahead of anything queued
+    ///   since, and goes out on the next drain — as before tab routing.
+    pub fn drainPendingInputs(self: *ControlPlane, router: anytype) void {
         self.pending_inputs_lock.lock();
         var pending = self.pending_inputs;
         self.pending_inputs = .{};
@@ -596,12 +611,30 @@ pub const ControlPlane = struct {
 
         const termio = @import("../../termio.zig");
 
+        var requeue: std.ArrayListUnmanaged(PendingInput) = .{};
+        defer requeue.deinit(self.allocator);
+
         var max_cmd_id: u32 = 0;
         for (pending.items) |entry| {
-            defer self.allocator.free(entry.from);
-            defer self.allocator.free(entry.text);
+            var keep = false;
+            defer if (!keep) {
+                self.allocator.free(entry.from);
+                self.allocator.free(entry.text);
+            };
 
-            if (entry.cmd_id > max_cmd_id) max_cmd_id = entry.cmd_id;
+            const surface = router.controlInputSurface(entry.tab) orelse {
+                if (entry.tab == null) {
+                    if (requeue.append(self.allocator, entry)) |_| {
+                        keep = true;
+                        log.warn("drainPendingInputs: no active surface; cmd_id={} kept queued", .{entry.cmd_id});
+                    } else |_| {
+                        log.warn("drainPendingInputs: no active surface and OOM; cmd_id={} dropped", .{entry.cmd_id});
+                    }
+                } else {
+                    log.warn("drainPendingInputs: no surface for tab={?} cmd_id={}; dropped", .{ entry.tab, entry.cmd_id });
+                }
+                continue;
+            };
 
             // Route ALL CP-originated text through queueIo, never textCallback.
             //
@@ -624,6 +657,19 @@ pub const ControlPlane = struct {
                 continue;
             };
             surface.queueIo(msg, .unlocked);
+            if (entry.cmd_id > max_cmd_id) max_cmd_id = entry.cmd_id;
+        }
+
+        if (requeue.items.len > 0) {
+            self.pending_inputs_lock.lock();
+            defer self.pending_inputs_lock.unlock();
+            self.pending_inputs.insertSlice(self.allocator, 0, requeue.items) catch {
+                log.warn("drainPendingInputs: OOM re-queueing {} input(s); dropped", .{requeue.items.len});
+                for (requeue.items) |entry| {
+                    self.allocator.free(entry.from);
+                    self.allocator.free(entry.text);
+                }
+            };
         }
 
         // Update last drained cmd_id for ACK polling
@@ -691,10 +737,9 @@ pub const ControlPlane = struct {
 
     fn provSendInput(ctx: *anyopaque, text: []const u8, raw: bool, tab_index: ?usize) u32 {
         const self: *ControlPlane = @ptrCast(@alignCast(ctx));
-        _ = tab_index; // TODO: route to specific tab
 
         const cmd_id = @atomicRmw(u32, &next_cmd_id, .Add, 1, .monotonic);
-        log.info("provSendInput hwnd=0x{x} len={} raw={} cmd_id={}", .{ @intFromPtr(self.hwnd), text.len, raw, cmd_id });
+        log.info("provSendInput hwnd=0x{x} len={} raw={} tab={?} cmd_id={}", .{ @intFromPtr(self.hwnd), text.len, raw, tab_index, cmd_id });
 
         // Special prefix "\x1b[TSF:" routes text through the TSF commit path
         const tsf_prefix = "\x1b[TSF:";
@@ -706,7 +751,7 @@ pub const ControlPlane = struct {
             return cmd_id;
         }
 
-        if (!self.enqueueInput("zig-cp", text, raw, cmd_id)) {
+        if (!self.enqueueInput("zig-cp", text, raw, cmd_id, tab_index)) {
             log.warn("provSendInput dropped input due to full queue (max={})", .{self.max_pending_inputs});
             return cmd_id;
         }
@@ -1067,7 +1112,7 @@ test "handleRequestWith rejects input when queue is full" {
     cp.max_pending_inputs = 1;
     defer cp.clearPendingInputs();
 
-    try std.testing.expect(cp.enqueueInput("zig-cp", "echo hi", false, 1));
+    try std.testing.expect(cp.enqueueInput("zig-cp", "echo hi", false, 1, null));
 
     const resp = cp.handleRequestWith("INPUT|test-client|echo again", std.testing.allocator, null, testBackend);
     defer std.testing.allocator.free(resp);
@@ -1104,6 +1149,9 @@ test "handleRequestWith serves CAPABILITIES without backend call" {
     try std.testing.expect(std.mem.indexOf(u8, resp, "reads=STATE,CAPTURE_PANE,TAIL,HISTORY,WAIT_FOR,PANE_PID,CURSOR_POS,PANE_TITLE,LIST_TABS") != null);
     try std.testing.expect(std.mem.indexOf(u8, resp, "writes=INPUT,RAW_INPUT,PASTE,SEND_KEYS,ACK_POLL") != null);
     try std.testing.expect(std.mem.indexOf(u8, resp, "control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS") != null);
+    // Clients (deckpilot send --tab) only aim input at a background tab
+    // when the terminal says it routes INPUT|...|<tab> to that tab.
+    try std.testing.expect(std.mem.indexOf(u8, resp, "features=input_tab_routing") != null);
 }
 
 test "handleRequestWith keeps legacy commands working without CAPABILITIES query" {
@@ -1256,4 +1304,146 @@ test "lastObservation reflects the most recent stored values" {
     const obs = lastObservation();
     try std.testing.expectEqual(tp, obs.pending_posted_at);
     try std.testing.expectEqual(td, obs.last_drained_at);
+}
+
+// ── drainPendingInputs tab routing ──
+
+/// Stand-in for a core surface: records the bytes queued to its PTY.
+const TestInputSurface = struct {
+    got: std.ArrayListUnmanaged(u8) = .{},
+
+    fn queueIo(self: *TestInputSurface, msg: @import("../../termio.zig").Message, _: anytype) void {
+        switch (msg) {
+            .write_small => |v| self.got.appendSlice(std.testing.allocator, v.data[0..v.len]) catch unreachable,
+            .write_alloc => |v| {
+                self.got.appendSlice(std.testing.allocator, v.data) catch unreachable;
+                v.alloc.free(v.data);
+            },
+            else => unreachable,
+        }
+    }
+};
+
+/// Stand-in for App: tabs 0..n-1, one of them active.
+const TestInputRouter = struct {
+    surfaces: []TestInputSurface,
+    /// null: no active surface (a tab is closing / switching).
+    active: ?usize,
+
+    pub fn controlInputSurface(self: *TestInputRouter, tab: ?usize) ?*TestInputSurface {
+        const idx = tab orelse (self.active orelse return null);
+        if (idx >= self.surfaces.len) return null;
+        return &self.surfaces[idx];
+    }
+};
+
+// Every window shape (1..3 tabs) x active tab (each tab, or none while a
+// tab is closing) x requested tab (none, each existing tab, one past the
+// end) x input kind (INPUT / RAW_INPUT) x text size (fits the small message
+// / needs an allocation): the text reaches exactly the requested tab (the
+// active one when none was named); a missing tab gets nothing and is not
+// acknowledged; an input for the active tab while there is none stays
+// queued, unacknowledged.
+test "drainPendingInputs routes each input to its tab" {
+    const alloc = std.testing.allocator;
+    const long_text = "x" ** 200;
+    var cases: usize = 0;
+    for (1..4) |n| {
+        for (0..n + 1) |active_choice| {
+            const active: ?usize = if (active_choice == n) null else active_choice;
+            for (0..n + 2) |choice| {
+                const tab: ?usize = if (choice == 0) null else choice - 1;
+                for ([_]bool{ false, true }) |raw| {
+                    for ([_][]const u8{ "hello\r", long_text }) |text| {
+                        cases += 1;
+                        var cp = testCp(alloc);
+                        defer cp.clearPendingInputs();
+
+                        var surfaces: [3]TestInputSurface = .{ .{}, .{}, .{} };
+                        defer for (&surfaces) |*s| s.got.deinit(alloc);
+                        var router: TestInputRouter = .{ .surfaces = surfaces[0..n], .active = active };
+
+                        try std.testing.expect(cp.enqueueInput("t", text, raw, 7, tab));
+                        cp.drainPendingInputs(&router);
+
+                        const target: ?usize = if (tab) |t| (if (t < n) t else null) else active;
+                        for (0..n) |i| {
+                            const want: []const u8 = if (target != null and target.? == i) text else "";
+                            try std.testing.expectEqualStrings(want, surfaces[i].got.items);
+                        }
+                        const acked: u32 = if (target != null) 7 else 0;
+                        try std.testing.expectEqual(acked, cp.last_drained_cmd_id);
+                        const still_queued: usize = if (tab == null and active == null) 1 else 0;
+                        try std.testing.expectEqual(still_queued, cp.pendingInputLen());
+                    }
+                }
+            }
+        }
+    }
+    // sum over n=1..3 of (n+1) active choices * (n+2) tab choices * 2 * 2
+    try std.testing.expectEqual(@as(usize, (2 * 3 + 3 * 4 + 4 * 5) * 4), cases);
+}
+
+// Inputs for the active tab that arrive while no tab is active wait in
+// order, ahead of later inputs, and all go out once a tab is active again.
+test "drainPendingInputs keeps active-tab inputs queued while no tab is active" {
+    const alloc = std.testing.allocator;
+    var cp = testCp(alloc);
+    defer cp.clearPendingInputs();
+    var surfaces: [2]TestInputSurface = .{ .{}, .{} };
+    defer for (&surfaces) |*s| s.got.deinit(alloc);
+    var router: TestInputRouter = .{ .surfaces = surfaces[0..], .active = null };
+
+    try std.testing.expect(cp.enqueueInput("t", "A", false, 1, null));
+    try std.testing.expect(cp.enqueueInput("t", "x", false, 2, 0)); // explicit tab still delivered
+    try std.testing.expect(cp.enqueueInput("t", "B", false, 3, null));
+    cp.drainPendingInputs(&router);
+    try std.testing.expectEqualStrings("x", surfaces[0].got.items);
+    try std.testing.expectEqual(@as(usize, 2), cp.pendingInputLen());
+    try std.testing.expectEqual(@as(u32, 2), cp.last_drained_cmd_id);
+
+    try std.testing.expect(cp.enqueueInput("t", "C", false, 4, null));
+    router.active = 1;
+    cp.drainPendingInputs(&router);
+    try std.testing.expectEqualStrings("ABC", surfaces[1].got.items);
+    try std.testing.expectEqual(@as(usize, 0), cp.pendingInputLen());
+    try std.testing.expectEqual(@as(u32, 4), cp.last_drained_cmd_id);
+}
+
+// One drain carrying inputs for several tabs keeps each tab's order, and
+// the acknowledgement covers the inputs that were delivered.
+test "drainPendingInputs splits a mixed batch by tab in order" {
+    const alloc = std.testing.allocator;
+    var cp = testCp(alloc);
+    defer cp.clearPendingInputs();
+    var surfaces: [2]TestInputSurface = .{ .{}, .{} };
+    defer for (&surfaces) |*s| s.got.deinit(alloc);
+    var router: TestInputRouter = .{ .surfaces = surfaces[0..], .active = 1 };
+
+    try std.testing.expect(cp.enqueueInput("t", "a1", false, 1, 0));
+    try std.testing.expect(cp.enqueueInput("t", "b1", false, 2, null));
+    try std.testing.expect(cp.enqueueInput("t", "a2", true, 3, 0));
+    try std.testing.expect(cp.enqueueInput("t", "zz", false, 4, 5));
+    try std.testing.expect(cp.enqueueInput("t", "b2", true, 5, 1));
+    cp.drainPendingInputs(&router);
+
+    try std.testing.expectEqualStrings("a1a2", surfaces[0].got.items);
+    try std.testing.expectEqualStrings("b1b2", surfaces[1].got.items);
+    try std.testing.expectEqual(@as(u32, 5), cp.last_drained_cmd_id);
+}
+
+// A batch whose only input names a missing tab acknowledges nothing, so the
+// sender's ACK_POLL never reports it as delivered.
+test "drainPendingInputs does not acknowledge an undeliverable input" {
+    const alloc = std.testing.allocator;
+    var cp = testCp(alloc);
+    defer cp.clearPendingInputs();
+    var surfaces: [1]TestInputSurface = .{.{}};
+    defer surfaces[0].got.deinit(alloc);
+    var router: TestInputRouter = .{ .surfaces = surfaces[0..], .active = 0 };
+
+    try std.testing.expect(cp.enqueueInput("t", "lost", false, 9, 3));
+    cp.drainPendingInputs(&router);
+    try std.testing.expectEqualStrings("", surfaces[0].got.items);
+    try std.testing.expectEqual(@as(u32, 0), cp.last_drained_cmd_id);
 }

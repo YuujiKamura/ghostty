@@ -2281,6 +2281,15 @@ pub fn switchToTab(self: *App, idx: usize) void {
     }
 }
 
+/// Core surface a control-plane input goes to: the tab at `tab` (index),
+/// or the active tab when `tab` is null. Null when that tab does not exist.
+/// Called by ControlPlane.drainPendingInputs on the UI thread.
+pub fn controlInputSurface(self: *App, tab: ?usize) ?*CoreSurface {
+    const surface = if (tab) |idx| self.getSurface(idx) else self.activeSurface();
+    const s = surface orelse return null;
+    return &s.core_surface;
+}
+
 /// Get the currently active Surface, or null if none.
 pub fn activeSurface(self: *App) ?*Surface {
     const tab_count = self.countSurfaces();
@@ -3063,14 +3072,11 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
             return 0;
         },
         os.WM_APP_CONTROL_INPUT => {
-            // Drain pending control plane inputs to the active surface PTY.
+            // Drain pending control plane inputs, each to the PTY of the tab
+            // its request named (the active tab when it named none).
             if (self.control_plane) |cp| {
-                if (self.activeSurface()) |surface| {
-                    log.info("WM_APP_CONTROL_INPUT: draining to surface idx={}", .{self.active_surface_idx});
-                    cp.drainPendingInputs(&surface.core_surface);
-                } else {
-                    log.warn("WM_APP_CONTROL_INPUT: no active surface", .{});
-                }
+                log.info("WM_APP_CONTROL_INPUT: draining (active idx={})", .{self.active_surface_idx});
+                cp.drainPendingInputs(self);
             } else {
                 log.warn("WM_APP_CONTROL_INPUT: no control_plane", .{});
             }
