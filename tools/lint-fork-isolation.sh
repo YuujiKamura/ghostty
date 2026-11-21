@@ -96,8 +96,11 @@ is_fork_owned() {
     for prefix in "${FORK_OWNED[@]}"; do
         case "${prefix}" in
             */)
-                # directory prefix — match by leading-string comparison
-                if [ "${path#${prefix}}" != "${path}" ]; then
+                # directory prefix — match by leading-string comparison.
+                # The directory itself also matches: a submodule bump shows
+                # up as the gitlink path without a trailing slash
+                # ("vendor/zig-control-plane").
+                if [ "${path#${prefix}}" != "${path}" ] || [ "${path}/" = "${prefix}" ]; then
                     return 0
                 fi
                 ;;
