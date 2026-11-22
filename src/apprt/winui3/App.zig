@@ -33,6 +33,7 @@ const tabview_runtime = @import("tabview_runtime.zig");
 const profile_menu = @import("profile_menu.zig");
 const tab_index = @import("tab_index.zig");
 const split_view = @import("split_view.zig");
+const session_restore = @import("session_restore.zig");
 const renderer_perf = @import("../../renderer/perf.zig");
 const tab_manager = @import("tab_manager.zig");
 const input_runtime = @import("input_runtime.zig");
@@ -235,6 +236,7 @@ pub const SplitMode = split_view.Mode;
 
 test {
     _ = split_view;
+    _ = session_restore;
 }
 
 const TypedHandler = gen.TypedEventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void);
@@ -301,6 +303,10 @@ split_button_exit_token: ?i64 = null,
 /// One-line header above each split pane ("2  title"). Grid (background)
 /// holding a ContentControl (text). Created lazily on first split.
 split_headers: [2]?SplitHeader = .{ null, null },
+/// Tabs to reopen after "restart and restore tabs" (KS_RESTORE_FILE).
+restore_plan: ?std.json.Parsed(session_restore.Plan) = null,
+/// Command / folder for the next tab created (consumed by applyTabOverride).
+pending_tab_override: ?session_restore.Tab = null,
 
 /// Monotonic counter for stable tab IDs (never reused across tab close/create cycles).
 next_tab_id: u64 = 1,
@@ -921,7 +927,7 @@ fn initXaml(self: *App) !void {
     self.parity_verified = true;
     self.setStartupStage(.parity_checked);
     self.setStartupStage(.init_complete);
-    self.applyLaunchSplitMode();
+    if (self.restore_plan != null) self.finishRestore() else self.applyLaunchSplitMode();
 
     // Dump visual tree after layout pass (needs message pump running).
     // Use SetTimer with 500ms delay so XAML has time to measure+arrange.
@@ -1272,6 +1278,10 @@ fn createWindowContent(self: *App) !void {
     }
     perfStep("  populateProfileMenu", self.init_start_ns, &prev_ns);
 
+    // Restarted by "restart and restore tabs": the first tab reopens the
+    // saved first tab (see applyTabOverride).
+    self.loadRestorePlan();
+
     // Create initial Surface and content.
     try self.createInitialSurfaceContent(tv);
     perfStep("  createInitialSurfaceContent", self.init_start_ns, &prev_ns);
@@ -1489,6 +1499,7 @@ fn createInitialSurfaceContent(self: *App, tab_view: ?*com.ITabView) !void {
     log.info("initXaml step 8: Creating initial Surface...", .{});
     var config = try self.cloneCachedConfig();
     defer config.deinit();
+    self.applyTabOverride(&config);
 
     var surface = try alloc.create(Surface);
     errdefer alloc.destroy(surface);
@@ -1919,6 +1930,8 @@ fn fullCleanup(self: *App) void {
         if (slot.*) |*h| h.release();
         slot.* = null;
     }
+    if (self.restore_plan) |*p| p.deinit();
+    self.restore_plan = null;
 
     if (self.vth_statics) |vth| {
         vth.release();
@@ -2517,6 +2530,157 @@ fn onSplitHeader0Tapped(self: *App, _: ?*anyopaque, _: ?*anyopaque) void {
 
 fn onSplitHeader1Tapped(self: *App, _: ?*anyopaque, _: ?*anyopaque) void {
     self.onSplitHeaderTapped(1);
+}
+
+// ---------------------------------------------------------------------------
+// Restart and restore tabs (session_restore.zig)
+// ---------------------------------------------------------------------------
+
+fn setEnvW(comptime name: []const u8, value: ?[]const u8) void {
+    var vbuf: [1024]u16 = undefined;
+    const name_w = std.unicode.utf8ToUtf16LeStringLiteral(name);
+    if (value) |v| {
+        const n = std.unicode.utf8ToUtf16Le(&vbuf, v) catch return;
+        if (n >= vbuf.len) return;
+        vbuf[n] = 0;
+        _ = std.os.windows.kernel32.SetEnvironmentVariableW(name_w, @ptrCast(&vbuf));
+    } else {
+        _ = std.os.windows.kernel32.SetEnvironmentVariableW(name_w, null);
+    }
+}
+
+fn restoreDir(alloc: Allocator) ![]u8 {
+    const base = try std.process.getEnvVarOwned(alloc, "LOCALAPPDATA");
+    defer alloc.free(base);
+    return std.fs.path.join(alloc, &.{ base, "ghostty-winui3", "restore" });
+}
+
+/// Save every tab (folder + Claude/Codex conversation), start this exe again
+/// with KS_RESTORE_FILE, and quit. The new process waits for this one to
+/// exit before resuming the same conversations.
+pub fn restartWithRestore(self: *App) void {
+    const alloc = self.core_app.alloc;
+    var arena = std.heap.ArenaAllocator.init(alloc);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const procs = session_restore.snapshotProcesses(a);
+    const count = self.countSurfaces();
+    const tabs = a.alloc(session_restore.Tab, count) catch return;
+    for (0..count) |i| {
+        tabs[i] = .{};
+        const surface = self.getSurface(i) orelse continue;
+        const cwd: ?[]const u8 = surface.pwd(a) catch null;
+        const pid = surface.panePid() orelse {
+            tabs[i].cwd = cwd;
+            continue;
+        };
+        tabs[i] = session_restore.inspectTab(a, procs, pid, cwd);
+        log.info("restart: tab {} kind={s} cwd={?s} session={?s}", .{ i, @tagName(tabs[i].kind), tabs[i].cwd, tabs[i].session_id });
+    }
+    const plan = session_restore.Plan{
+        .active = self.active_surface_idx,
+        .split_mode = @tagName(self.split_mode),
+        .split_first = self.split_first_idx,
+        .split_second = self.split_second_idx,
+        .tabs = tabs,
+    };
+    const json = session_restore.writePlan(a, plan) catch return;
+
+    const dir = restoreDir(a) catch return;
+    std.fs.cwd().makePath(dir) catch {};
+    const my_pid = std.os.windows.GetCurrentProcessId();
+    const file = std.fmt.allocPrint(a, "{s}\\restore-{d}.json", .{ dir, my_pid }) catch return;
+    std.fs.cwd().writeFile(.{ .sub_path = file, .data = json }) catch |err| {
+        log.err("restart: cannot write {s}: {}", .{ file, err });
+        return;
+    };
+
+    var exe_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const exe = std.fs.selfExePath(&exe_buf) catch return;
+    var env = std.process.getEnvMap(a) catch return;
+    env.put(session_restore.ENV_FILE, file) catch return;
+    env.put(session_restore.ENV_WAIT_PID, std.fmt.allocPrint(a, "{d}", .{my_pid}) catch return) catch return;
+    var child = std.process.Child.init(&.{exe}, a);
+    child.env_map = &env;
+    child.stdin_behavior = .Ignore;
+    child.stdout_behavior = .Ignore;
+    child.stderr_behavior = .Ignore;
+    child.spawn() catch |err| {
+        log.err("restart: spawn {s} failed: {}", .{ exe, err });
+        return;
+    };
+    log.info("restart: spawned pid for {s}, plan {s} ({} tabs); exiting", .{ exe, file, count });
+    self.running = false;
+    if (self.xaml_app) |xa| xa.Exit() catch {};
+}
+
+/// Read KS_RESTORE_FILE (set by restartWithRestore in the old process).
+fn loadRestorePlan(self: *App) void {
+    const alloc = self.core_app.alloc;
+    const file = std.process.getEnvVarOwned(alloc, session_restore.ENV_FILE) catch return;
+    defer alloc.free(file);
+    // Children (shells) must not inherit these, or a ghostty started from
+    // one of them would restore this window again.
+    setEnvW(session_restore.ENV_FILE, null);
+    if (std.process.getEnvVarOwned(alloc, session_restore.ENV_WAIT_PID)) |pid_s| {
+        defer alloc.free(pid_s);
+        setEnvW(session_restore.ENV_WAIT_PID, null);
+        if (std.fmt.parseInt(u32, pid_s, 10)) |pid| session_restore.waitForPidExit(pid, 15_000) else |_| {}
+    } else |_| {}
+
+    const bytes = std.fs.cwd().readFileAlloc(alloc, file, 4 << 20) catch |err| {
+        log.err("restore: cannot read {s}: {}", .{ file, err });
+        return;
+    };
+    defer alloc.free(bytes);
+    std.fs.cwd().deleteFile(file) catch {};
+    const parsed = session_restore.parsePlan(alloc, bytes) catch |err| {
+        log.err("restore: bad plan {s}: {}", .{ file, err });
+        return;
+    };
+    if (parsed.value.tabs.len == 0) {
+        var p = parsed;
+        p.deinit();
+        return;
+    }
+    self.restore_plan = parsed;
+    self.pending_tab_override = parsed.value.tabs[0];
+    log.info("restore: {} tabs from {s}", .{ parsed.value.tabs.len, file });
+}
+
+/// Open the remaining saved tabs, then reselect the active tab and split.
+fn finishRestore(self: *App) void {
+    const plan = (self.restore_plan orelse return).value;
+    for (plan.tabs[1..]) |t| {
+        self.pending_tab_override = t;
+        self.newTab() catch |err| log.warn("restore: newTab failed: {}", .{err});
+    }
+    self.pending_tab_override = null;
+    const count = self.countSurfaces();
+    if (count == 0) return;
+    const active = @min(plan.active, count - 1);
+    if (self.tab_view) |tv| tv.SetSelectedIndex(@intCast(active)) catch {};
+    const mode = std.meta.stringToEnum(SplitMode, plan.split_mode) orelse .none;
+    const pair = split_view.Pair{ .first = plan.split_first, .second = plan.split_second };
+    if (mode != .none and split_view.pairValid(pair, count)) {
+        self.setSplitPair(pair);
+        self.split_mode = mode; // keep the saved pair (applySplitMode only re-picks when invalid)
+        self.applySplitMode(mode);
+    }
+}
+
+/// Apply the pending restored-tab command / folder to a fresh config clone.
+pub fn applyTabOverride(self: *App, config: *configpkg.Config) void {
+    const t = self.pending_tab_override orelse return;
+    self.pending_tab_override = null;
+    const arena = if (config._arena) |*ar| ar.allocator() else return;
+    if (t.cwd) |cwd| {
+        if (arena.dupe(u8, cwd)) |d| config.@"working-directory" = .{ .path = d } else |_| {}
+    }
+    if (session_restore.restoreCommand(arena, t) catch null) |cmd| {
+        config.command = .{ .shell = cmd };
+    }
 }
 
 /// Keep split-pane headers in sync with tab titles.
@@ -3485,6 +3649,10 @@ pub fn handleWndProcMessage(self: *App, hwnd: os.HWND, msg: os.UINT, wparam: os.
                     }
                 }
             }
+            return 0;
+        },
+        os.WM_APP_RESTART_RESTORE => {
+            self.restartWithRestore();
             return 0;
         },
         os.WM_APP_CONTROL_ACTION => {

@@ -54,6 +54,7 @@ pub fn newTabWithProfile(
     // I/O on the UI thread Ctrl+T hot path. Issue #212 P0 #4.
     var config = try self.cloneCachedConfig();
     defer config.deinit();
+    self.applyTabOverride(&config);
 
     var surface = try alloc.create(Surface);
     errdefer alloc.destroy(surface);

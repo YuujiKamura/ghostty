@@ -620,6 +620,22 @@ if ($shouldRunSplit) {
 }
 
 # ============================================================
+# Phase 8: Restart and restore tabs (self-contained; fake agents + fake home)
+# ============================================================
+Write-Host "`n=== Phase 8: Restart and restore ===" -ForegroundColor Cyan
+
+$restoreTestName = "test-13-restart-restore"
+$shouldRunRestore = (-not $failedNames) -or ($restoreTestName -in $failedNames)
+if ($shouldRunRestore) {
+    $restorePath = Join-Path $PSScriptRoot "$restoreTestName.ps1"
+    Invoke-Test -Name $restoreTestName -Block {
+        & $restorePath -ExePath $ExePath 6>&1 | Write-Host
+    }
+} else {
+    Write-Host "  SKIP: $restoreTestName" -ForegroundColor DarkGray
+}
+
+# ============================================================
 # Phase 5: Regression repro (opt-in via -IncludeRegressionRepro)
 # Closes #245. Asserts the multi-session shell-flood load shape that
 # silently killed sessions on 2026-04-27 (#244) does NOT regress.

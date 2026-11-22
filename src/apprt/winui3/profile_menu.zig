@@ -9,6 +9,8 @@ const Allocator = std.mem.Allocator;
 const com = @import("com.zig");
 const winrt = @import("winrt.zig");
 const profiles_mod = @import("profiles.zig");
+const gen = @import("com_generated.zig");
+const os = @import("os.zig");
 
 const log = std.log.scoped(.winui3);
 
@@ -16,13 +18,47 @@ const log = std.log.scoped(.winui3);
 /// Each profile becomes a MenuFlyoutItem with its name as the display text.
 ///
 /// `app` is *App passed as `anytype` to avoid circular import.
+/// "再起動してタブを復元" — saves the tabs (Claude / Codex conversations
+/// included) and restarts ghostty.exe, e.g. after a rebuild.
+fn addRestartItem(alloc: Allocator, items: anytype, app: anytype) !void {
+    const App = @typeInfo(@TypeOf(app)).pointer.child;
+    const sep_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.MenuFlyoutSeparator");
+    defer winrt.deleteHString(sep_class);
+    if (winrt.activateInstance(sep_class)) |sep| {
+        defer _ = sep.release();
+        items.append(@ptrCast(sep)) catch {};
+    } else |_| {}
+
+    const class_name = try winrt.hstring("Microsoft.UI.Xaml.Controls.MenuFlyoutItem");
+    defer winrt.deleteHString(class_name);
+    const item_insp = try winrt.activateInstance(class_name);
+    defer _ = item_insp.release();
+    const menu_item = try item_insp.queryInterface(com.IMenuFlyoutItem);
+    defer menu_item.release();
+    const label = try winrt.hstringRuntime(alloc, "再起動してタブを復元");
+    defer winrt.deleteHString(label);
+    try menu_item.SetText(label);
+
+    const Handler = gen.RoutedEventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void);
+    const cb = struct {
+        fn f(a: *App, _: ?*anyopaque, _: ?*anyopaque) void {
+            // Leave the XAML callback before tearing the app down.
+            if (a.hwnd) |h| _ = os.PostMessageW(h, os.WM_APP_RESTART_RESTORE, 0, 0);
+        }
+    }.f;
+    const handler = try Handler.createWithIid(alloc, app, &cb, &com.IID_RoutedEventHandler);
+    defer handler.release();
+    var token: i64 = 0;
+    try menu_item.Click(handler.comPtr(), &token);
+    try items.append(@ptrCast(item_insp));
+    log.info("ProfileMenu: added restart-and-restore item", .{});
+}
+
 pub fn populateProfileMenu(
     alloc: Allocator,
     menu_flyout: *com.IMenuFlyout,
     app: anytype,
 ) !void {
-    _ = app; // TODO: wire up Click handlers to app.newTab() with profile-specific command
-
     var detected = try profiles_mod.detectProfiles(alloc);
     defer detected.deinit(alloc);
 
@@ -60,4 +96,6 @@ pub fn populateProfileMenu(
     }
 
     log.info("ProfileMenu: populated {d} profiles", .{detected.items.len});
+
+    try addRestartItem(alloc, items, app);
 }

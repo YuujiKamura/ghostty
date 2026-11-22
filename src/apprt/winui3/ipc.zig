@@ -57,6 +57,8 @@ extern "kernel32" fn DisconnectNamedPipe(
     hNamedPipe: windows.HANDLE,
 ) callconv(.winapi) windows.BOOL;
 
+extern "kernel32" fn CancelSynchronousIo(hThread: windows.HANDLE) callconv(.winapi) windows.BOOL;
+
 extern "kernel32" fn FlushFileBuffers(
     hFile: windows.HANDLE,
 ) callconv(.winapi) windows.BOOL;
@@ -67,6 +69,8 @@ allocator: Allocator,
 pipe_name: [:0]const u16,
 listener_thread: ?std.Thread = null,
 running: std.atomic.Value(bool),
+/// Set by the listener thread when its loop has returned.
+exited: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 hwnd: os.HWND,
 
 /// Create and start the IPC server.
@@ -108,10 +112,24 @@ pub fn deinit(self: *IpcServer) void {
     log.info("IPC server shutting down", .{});
     self.running.store(false, .release);
 
-    // Create a dummy connection to unblock ConnectNamedPipe in the listener.
-    unblockListener(self.pipe_name);
-
+    // Unblock ConnectNamedPipe by cancelling the listener thread's
+    // synchronous I/O. (A dummy client connection is not reliable: every
+    // ghostty process without GHOSTTY_INSTANCE_ID listens on the same
+    // "ghostty-default" name, so the dummy can land on ANOTHER process's
+    // instance and this one blocks forever — closing a window hung whenever
+    // a second ghostty was running, e.g. right after restart-and-restore.)
+    // Retry until the loop exits: the thread may be between calls.
     if (self.listener_thread) |t| {
+        const h = t.getHandle();
+        var tries: u32 = 0;
+        while (!self.exited.load(.acquire) and tries < 400) : (tries += 1) {
+            _ = CancelSynchronousIo(h);
+            std.Thread.sleep(5 * std.time.ns_per_ms);
+        }
+        if (!self.exited.load(.acquire)) {
+            // Last resort: the old dummy-connection unblock.
+            unblockListener(self.pipe_name);
+        }
         t.join();
         self.listener_thread = null;
     }
@@ -183,6 +201,7 @@ fn listenerLoop(self: *IpcServer) void {
         _ = DisconnectNamedPipe(pipe);
         windows.CloseHandle(pipe);
     }
+    self.exited.store(true, .release);
     log.info("IPC listener loop exited", .{});
 }
 

@@ -89,6 +89,9 @@ pub const WM_APP_CLOSE_TAB: UINT = WM_USER + 6;
 pub const WM_APP_IME_INJECT: UINT = WM_USER + 7;
 /// Control plane: inject text through TSF path (simulates TSF composition commit for testing).
 pub const WM_APP_TSF_INJECT: UINT = WM_USER + 8;
+/// Save tabs, start ghostty.exe again and exit (session_restore.zig).
+/// Posted by the "restart and restore tabs" menu item; tests post it directly.
+pub const WM_APP_RESTART_RESTORE: UINT = WM_USER + 10;
 // WM_USER + 9 is reserved (was WM_APP_CP_QUERY, removed — reads now use
 // renderer_state.mutex directly without SendMessageW round-trip).
 
