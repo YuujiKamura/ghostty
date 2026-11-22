@@ -603,6 +603,23 @@ if ($shouldRunStack) {
 }
 
 # ============================================================
+# Phase 7: Split view (self-contained — launches its own ghosttys with
+# KS_SPLIT_VIEW, one per mode; no keyboard/mouse input).
+# ============================================================
+Write-Host "`n=== Phase 7: Split view ===" -ForegroundColor Cyan
+
+$splitTestName = "test-12-split-view"
+$shouldRunSplit = (-not $failedNames) -or ($splitTestName -in $failedNames)
+if ($shouldRunSplit) {
+    $splitPath = Join-Path $PSScriptRoot "$splitTestName.ps1"
+    Invoke-Test -Name $splitTestName -Block {
+        & $splitPath -ExePath $ExePath 6>&1 | Write-Host
+    }
+} else {
+    Write-Host "  SKIP: $splitTestName" -ForegroundColor DarkGray
+}
+
+# ============================================================
 # Phase 5: Regression repro (opt-in via -IncludeRegressionRepro)
 # Closes #245. Asserts the multi-session shell-flood load shape that
 # silently killed sessions on 2026-04-27 (#244) does NOT regress.

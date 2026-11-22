@@ -2,6 +2,7 @@ const std = @import("std");
 const com = @import("com.zig");
 const winrt = @import("winrt.zig");
 const input_runtime = @import("input_runtime.zig");
+const split_view = @import("split_view.zig");
 const surface_binding = @import("surface_binding.zig");
 
 const log = std.log.scoped(.winui3);
@@ -71,15 +72,28 @@ pub fn onSelectionChanged(self: anytype, sender_obj: ?*anyopaque, args_obj: ?*an
         const idx = tv.SelectedIndex() catch return;
         if (idx >= 0 and @as(usize, @intCast(idx)) < self.surfaces.items.len) {
             const new_idx: usize = @intCast(idx);
+            const prev_idx = self.active_surface_idx;
             // Notify old surface it lost focus.
-            if (new_idx != self.active_surface_idx) {
-                if (self.active_surface_idx < self.surfaces.items.len) {
-                    self.surfaces.items[self.active_surface_idx].has_focus = false;
-                    self.surfaces.items[self.active_surface_idx].core_surface.focusCallback(false) catch {};
+            if (new_idx != prev_idx) {
+                self.last_active_surface_idx = prev_idx;
+                if (prev_idx < self.surfaces.items.len) {
+                    self.surfaces.items[prev_idx].has_focus = false;
+                    self.surfaces.items[prev_idx].core_surface.focusCallback(false) catch {};
                 }
             }
             self.active_surface_idx = new_idx;
-            surface_binding.updateSelectedTab(self, new_idx);
+            if (self.split_mode != .none and self.surfaces.items.len >= 2) {
+                const old_pair = self.splitPair();
+                const new_pair = split_view.pairOnSelect(old_pair, prev_idx, new_idx);
+                if (new_pair.first != old_pair.first or new_pair.second != old_pair.second) {
+                    self.setSplitPair(new_pair);
+                    surface_binding.updateSelectedTab(self, new_idx);
+                } else {
+                    surface_binding.refreshSplitHeaders(self);
+                }
+            } else {
+                surface_binding.updateSelectedTab(self, new_idx);
+            }
             self.syncWindowTitleToActiveSurface();
             // Notify new surface it gained focus.
             self.surfaces.items[new_idx].has_focus = true;

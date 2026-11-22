@@ -1152,6 +1152,7 @@ pub fn Surface(comptime App: type) type {
                                 _ = tvi.SetHeader(boxed) catch |err| {
                                     log.warn("setTabTitle: putHeader failed: {}", .{err});
                                 };
+                                self.app.onSurfaceTitleChanged(self);
                             } else |err| {
                                 log.warn("setTabTitle: boxString failed: {}", .{err});
                             }
@@ -1492,6 +1493,7 @@ pub fn Surface(comptime App: type) type {
                 log.debug("onXamlPointerPressed: touch anchor set ({d:.0}, {d:.0})", .{ pos.X, pos.Y });
                 // Focus on touch tap (matches WT _TappedHandler behavior).
                 if (!self.app.resizing) {
+                    self.app.focusSplitSurface(self);
                     input_runtime.focusKeyboardTarget(self.app);
                     if (self.app.tsf_impl) |*tsf_impl| {
                         tsf_impl.focus();
@@ -1517,6 +1519,7 @@ pub fn Surface(comptime App: type) type {
             // Focus the SwapChainPanel — TSF is associated with the main HWND
             // and handles IME composition directly. No TextBox redirection needed.
             if (!self.app.resizing) {
+                self.app.focusSplitSurface(self);
                 input_runtime.focusKeyboardTarget(self.app);
                 // Ensure TSF knows we have focus.
                 if (self.app.tsf_impl) |*tsf_impl| {

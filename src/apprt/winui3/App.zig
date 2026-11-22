@@ -32,6 +32,7 @@ const ime = @import("ime.zig");
 const tabview_runtime = @import("tabview_runtime.zig");
 const profile_menu = @import("profile_menu.zig");
 const tab_index = @import("tab_index.zig");
+const split_view = @import("split_view.zig");
 const renderer_perf = @import("../../renderer/perf.zig");
 const tab_manager = @import("tab_manager.zig");
 const input_runtime = @import("input_runtime.zig");
@@ -230,9 +231,17 @@ pub const KeyboardFocusTarget = enum {
     ime_text_box,
 };
 
+pub const SplitMode = split_view.Mode;
+
+test {
+    _ = split_view;
+}
+
 const TypedHandler = gen.TypedEventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void);
 const SelectionHandler = gen.SelectionChangedEventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void);
 const ResourceManagerRequestedHandler = gen.TypedEventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void);
+const TappedHandler = gen.TappedEventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void);
+const SplitPointerHandler = gen.PointerEventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void);
 
 /// The core application.
 core_app: *CoreApp,
@@ -275,6 +284,23 @@ surfaces_mutex: std.Thread.Mutex = .{},
 surfaces_snapshot: []const *Surface = &[_]*Surface{},
 /// Index of the currently active/selected tab.
 active_surface_idx: usize = 0,
+/// Previously active tab index (used to pair with the active tab on split toggle).
+last_active_surface_idx: ?usize = null,
+/// Side-by-side / top-bottom 2-pane split view state.
+split_mode: SplitMode = .none,
+split_first_idx: usize = 0,
+split_second_idx: usize = 1,
+split_button_panel: ?*com.IPanel = null,
+split_button_ui: ?*com.IUIElement = null,
+split_button_tapped_handler: ?*TappedHandler = null,
+split_button_enter_handler: ?*SplitPointerHandler = null,
+split_button_exit_handler: ?*SplitPointerHandler = null,
+split_button_tapped_token: ?i64 = null,
+split_button_enter_token: ?i64 = null,
+split_button_exit_token: ?i64 = null,
+/// One-line header above each split pane ("2  title"). Grid (background)
+/// holding a ContentControl (text). Created lazily on first split.
+split_headers: [2]?SplitHeader = .{ null, null },
 
 /// Monotonic counter for stable tab IDs (never reused across tab close/create cycles).
 next_tab_id: u64 = 1,
@@ -895,6 +921,7 @@ fn initXaml(self: *App) !void {
     self.parity_verified = true;
     self.setStartupStage(.parity_checked);
     self.setStartupStage(.init_complete);
+    self.applyLaunchSplitMode();
 
     // Dump visual tree after layout pass (needs message pump running).
     // Use SetTimer with 500ms delay so XAML has time to measure+arrange.
@@ -1569,6 +1596,16 @@ fn registerTabViewHandlers(self: *App, tab_view: ?*com.ITabView) !void {
         self.layout_updated_token = try fe.AddLayoutUpdated(self.layout_updated_handler.?.comPtr());
         log.info("initXaml step 7.5: LayoutUpdated handler registered (drag bar repositioning)", .{});
 
+        if (self.split_button_ui) |split_ui| {
+            self.split_button_tapped_handler = try TappedHandler.createWithIid(alloc, self, &onSplitButtonTapped, &com.IID_TappedEventHandler);
+            self.split_button_tapped_token = split_ui.AddTapped(self.split_button_tapped_handler.?.comPtr()) catch null;
+            self.split_button_enter_handler = try SplitPointerHandler.createWithIid(alloc, self, &onSplitButtonPointerEntered, &gen.IID_PointerEventHandler);
+            self.split_button_enter_token = split_ui.AddPointerEntered(self.split_button_enter_handler.?.comPtr()) catch null;
+            self.split_button_exit_handler = try SplitPointerHandler.createWithIid(alloc, self, &onSplitButtonPointerExited, &gen.IID_PointerEventHandler);
+            self.split_button_exit_token = split_ui.AddPointerExited(self.split_button_exit_handler.?.comPtr()) catch null;
+            log.info("initXaml step 7.5: SplitViewButton handlers registered", .{});
+        }
+
         log.info("initXaml step 7.5 OK: TabView event handlers registered", .{});
     }
 }
@@ -1583,10 +1620,18 @@ fn unregisterTabViewHandlers(self: *App, tab_view: *com.ITabView) void {
             fe.RemoveLayoutUpdated(tok) catch {};
         } else |_| {}
     }
+    if (self.split_button_ui) |split_ui| {
+        if (self.split_button_tapped_token) |tok| split_ui.RemoveTapped(tok) catch {};
+        if (self.split_button_enter_token) |tok| split_ui.RemovePointerEntered(tok) catch {};
+        if (self.split_button_exit_token) |tok| split_ui.RemovePointerExited(tok) catch {};
+    }
     self.tab_close_token = null;
     self.add_tab_token = null;
     self.selection_changed_token = null;
     self.layout_updated_token = null;
+    self.split_button_tapped_token = null;
+    self.split_button_enter_token = null;
+    self.split_button_exit_token = null;
 }
 
 fn currentTabItemsSize(self: *App) !u32 {
@@ -1859,6 +1904,21 @@ fn fullCleanup(self: *App) void {
     if (self.selection_changed_handler) |h| h.release();
     if (self.layout_updated_handler) |h| h.release();
     if (self.resource_manager_requested_handler) |h| h.release();
+    if (self.split_button_tapped_handler) |h| h.release();
+    if (self.split_button_enter_handler) |h| h.release();
+    if (self.split_button_exit_handler) |h| h.release();
+    if (self.split_button_panel) |p| {
+        p.release();
+        self.split_button_panel = null;
+    }
+    if (self.split_button_ui) |u| {
+        u.release();
+        self.split_button_ui = null;
+    }
+    for (&self.split_headers) |*slot| {
+        if (slot.*) |*h| h.release();
+        slot.* = null;
+    }
 
     if (self.vth_statics) |vth| {
         vth.release();
@@ -2057,6 +2117,14 @@ pub fn performAction(
             self.closeActiveTab();
             return true;
         },
+        .new_split => {
+            const target_mode: SplitMode = switch (value) {
+                .down, .up => .top_bottom,
+                .right, .left => .left_right,
+            };
+            self.toggleSplitMode(target_mode);
+            return true;
+        },
         .reload_config => {
             log.info("performAction: reload_config", .{});
             // Apply current cache immediately so the caller sees a consistent
@@ -2094,7 +2162,10 @@ pub fn performAction(
         },
         .set_title => {
             log.info("performAction: set_title", .{});
-            self.setTitle(value.title);
+            switch (target) {
+                .app => self.setTitle(value.title),
+                .surface => |core| self.setSurfaceTitle(core.rt_surface, value.title),
+            }
             return true;
         },
         .toggle_fullscreen => {
@@ -2249,6 +2320,256 @@ pub fn closeTab(self: *App, idx: usize) void {
         if (self.xaml_app) |xa| xa.Exit() catch {};
     }
     log.debug("closeTab: EXIT total={}", .{self.countSurfaces()});
+}
+
+/// Cycle split view mode: none -> top_bottom -> left_right -> none.
+/// Top/bottom is first because wide terminal rows are easier to read stacked.
+pub fn cycleSplitView(self: *App) void {
+    self.applySplitMode(split_view.nextMode(self.split_mode));
+}
+
+/// Toggle a specific split mode (used by Ctrl+Shift+E / Ctrl+Shift+O).
+pub fn toggleSplitMode(self: *App, mode: SplitMode) void {
+    self.applySplitMode(split_view.toggleMode(self.split_mode, mode));
+}
+
+pub fn splitPair(self: *const App) split_view.Pair {
+    return .{ .first = self.split_first_idx, .second = self.split_second_idx };
+}
+
+pub fn setSplitPair(self: *App, p: split_view.Pair) void {
+    self.split_first_idx = p.first;
+    self.split_second_idx = p.second;
+}
+
+/// Apply `KS_SPLIT_VIEW` (top_bottom / left_right) at launch. Lets the UIA
+/// suite open split view without sending keys to the foreground window.
+fn applyLaunchSplitMode(self: *App) void {
+    const raw = std.process.getEnvVarOwned(self.core_app.alloc, "KS_SPLIT_VIEW") catch return;
+    defer self.core_app.alloc.free(raw);
+    const mode = split_view.parseMode(raw);
+    if (mode != .none) self.applySplitMode(mode);
+}
+
+fn applySplitMode(self: *App, mode: SplitMode) void {
+    if (mode == .none) {
+        self.split_mode = .none;
+        surface_binding.updateSelectedTab(self, self.active_surface_idx);
+        self.updateSplitButtonVisual();
+        input_runtime.focusKeyboardTarget(self);
+        log.info("applySplitMode: none (active={})", .{self.active_surface_idx});
+        return;
+    }
+
+    var count = self.countSurfaces();
+    if (count < 2) {
+        self.newTab() catch |err| {
+            log.warn("applySplitMode: failed to create second tab: {}", .{err});
+            return;
+        };
+        count = self.countSurfaces();
+        if (count < 2) return;
+    }
+
+    if (self.split_mode == .none or !split_view.pairValid(self.splitPair(), count)) {
+        self.setSplitPair(split_view.initialPair(self.active_surface_idx, self.last_active_surface_idx, count));
+    }
+
+    self.split_mode = mode;
+    surface_binding.updateSelectedTab(self, self.active_surface_idx);
+    self.updateSplitButtonVisual();
+    input_runtime.focusKeyboardTarget(self);
+    log.info("applySplitMode: {s} first={} second={} active={}", .{ @tagName(mode), self.split_first_idx, self.split_second_idx, self.active_surface_idx });
+}
+
+/// Switch active surface focus when clicking a pane in split view.
+pub fn focusSplitSurface(self: *App, target_surface: *Surface) void {
+    if (self.split_mode == .none) return;
+
+    const count = self.countSurfaces();
+    var target_idx: ?usize = null;
+    var i: usize = 0;
+    while (i < count) : (i += 1) {
+        if (self.getSurface(i) == target_surface) {
+            target_idx = i;
+            break;
+        }
+    }
+    const new_idx = target_idx orelse return;
+    if (new_idx == self.active_surface_idx) return;
+
+    if (self.getSurface(self.active_surface_idx)) |old_surface| {
+        old_surface.has_focus = false;
+        old_surface.core_surface.focusCallback(false) catch {};
+    }
+
+    self.last_active_surface_idx = self.active_surface_idx;
+    self.active_surface_idx = new_idx;
+
+    if (self.tab_view) |tv| {
+        self.tab_mutation_in_progress = true;
+        defer self.tab_mutation_in_progress = false;
+        tv.SetSelectedIndex(@intCast(new_idx)) catch {};
+    }
+    self.syncWindowTitleToActiveSurface();
+    surface_binding.refreshSplitHeaders(self);
+    target_surface.has_focus = true;
+    target_surface.core_surface.focusCallback(true) catch {};
+}
+
+/// Header of split pane `slot` (0 = top/left, 1 = bottom/right).
+pub const SplitHeader = struct {
+    /// Grid: background + hit target. Placed in tab_content_grid.
+    root: *winrt.IInspectable,
+    panel: *com.IPanel,
+    /// ContentControl showing the text.
+    label: *com.IContentControl,
+    label_control: *com.IControl,
+    tapped_handler: ?*TappedHandler = null,
+    tapped_token: ?i64 = null,
+
+    pub fn release(self: *SplitHeader) void {
+        if (self.tapped_token) |tok| {
+            if (self.root.queryInterface(com.IUIElement)) |ui| {
+                defer ui.release();
+                ui.RemoveTapped(tok) catch {};
+            } else |_| {}
+        }
+        if (self.tapped_handler) |h| h.release();
+        self.label_control.release();
+        self.label.release();
+        self.panel.release();
+        _ = self.root.release();
+    }
+};
+
+/// Create (once) and return header `slot`. Null if XAML activation fails;
+/// split view then shows panes without headers.
+pub fn ensureSplitHeader(self: *App, slot: usize) ?*SplitHeader {
+    if (self.split_headers[slot] == null) {
+        self.split_headers[slot] = createSplitHeader(self, slot) catch |err| blk: {
+            log.warn("split header {} create failed: {}", .{ slot, err });
+            break :blk null;
+        };
+    }
+    if (self.split_headers[slot]) |*h| return h;
+    return null;
+}
+
+fn createSplitHeader(self: *App, slot: usize) !SplitHeader {
+    const grid_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.Grid");
+    defer winrt.deleteHString(grid_class);
+    const root = try winrt.activateInstance(grid_class);
+    errdefer _ = root.release();
+    const panel = try root.queryInterface(com.IPanel);
+    errdefer panel.release();
+
+    const cc_class = try winrt.hstring("Microsoft.UI.Xaml.Controls.ContentControl");
+    defer winrt.deleteHString(cc_class);
+    const cc_insp = try winrt.activateInstance(cc_class);
+    defer _ = cc_insp.release();
+    const label = try cc_insp.queryInterface(com.IContentControl);
+    errdefer label.release();
+    const label_control = try cc_insp.queryInterface(com.IControl);
+    errdefer label_control.release();
+
+    label_control.SetFontSize(12.0) catch {};
+    label_control.SetPadding(.{ .Left = 8, .Top = 2, .Right = 8, .Bottom = 3 }) catch {};
+    label_control.SetHorizontalContentAlignment(0) catch {}; // Left
+    label_control.SetVerticalContentAlignment(1) catch {}; // Center
+    if (cc_insp.queryInterface(com.IUIElement)) |ui| {
+        defer ui.release();
+        ui.SetIsTabStop(false) catch {};
+        // Clicks land on the Grid behind the label.
+        ui.SetIsHitTestVisible(false) catch {};
+    } else |_| {}
+
+    const children_raw = try panel.Children();
+    const children: *com.IVector = @ptrCast(@alignCast(children_raw));
+    defer children.release();
+    try children.append(@ptrCast(cc_insp));
+
+    var header = SplitHeader{ .root = root, .panel = panel, .label = label, .label_control = label_control };
+
+    // Clicking a header focuses that pane.
+    if (root.queryInterface(com.IUIElement)) |ui| {
+        defer ui.release();
+        const cb: *const fn (*App, ?*anyopaque, ?*anyopaque) void = if (slot == 0) &onSplitHeader0Tapped else &onSplitHeader1Tapped;
+        if (TappedHandler.createWithIid(self.core_app.alloc, self, cb, &com.IID_TappedEventHandler)) |h| {
+            header.tapped_handler = h;
+            header.tapped_token = ui.AddTapped(h.comPtr()) catch null;
+        } else |_| {}
+    } else |_| {}
+    return header;
+}
+
+fn onSplitHeaderTapped(self: *App, slot: usize) void {
+    if (self.split_mode == .none) return;
+    const idx = if (slot == 0) self.split_first_idx else self.split_second_idx;
+    const surface = self.getSurface(idx) orelse return;
+    self.focusSplitSurface(surface);
+    input_runtime.focusKeyboardTarget(self);
+}
+
+fn onSplitHeader0Tapped(self: *App, _: ?*anyopaque, _: ?*anyopaque) void {
+    self.onSplitHeaderTapped(0);
+}
+
+fn onSplitHeader1Tapped(self: *App, _: ?*anyopaque, _: ?*anyopaque) void {
+    self.onSplitHeaderTapped(1);
+}
+
+/// Keep split-pane headers in sync with tab titles.
+pub fn onSurfaceTitleChanged(self: *App, surface: *Surface) void {
+    if (surface_binding.isSplitMember(self, surface)) surface_binding.refreshSplitHeaders(self);
+}
+
+pub fn solidBrush(color: gen.Color) !*gen.ISolidColorBrush {
+    return createSolidColorBrush(color);
+}
+
+pub fn updateSplitButtonVisual(self: *App) void {
+    const panel = self.split_button_panel orelse return;
+    const color_opt: ?gen.Color = switch (self.split_mode) {
+        .none => null,
+        .top_bottom => .{ .A = 120, .R = 0x3A, .G = 0x7A, .B = 0xFE },
+        .left_right => .{ .A = 120, .R = 0x2E, .G = 0xA0, .B = 0x80 },
+    };
+    if (color_opt) |color| {
+        if (createSolidColorBrush(color)) |brush| {
+            defer brush.release();
+            panel.SetBackground(@ptrCast(brush)) catch {};
+        } else |_| {}
+    } else {
+        panel.SetBackground(null) catch {};
+    }
+}
+
+fn createSolidColorBrush(color: gen.Color) !*gen.ISolidColorBrush {
+    const class = try winrt.hstring("Microsoft.UI.Xaml.Media.SolidColorBrush");
+    defer winrt.deleteHString(class);
+    const insp = try winrt.activateInstance(class);
+    defer _ = insp.release();
+    const brush = try insp.queryInterface(gen.ISolidColorBrush);
+    try brush.SetColor(color);
+    return brush;
+}
+
+fn onSplitButtonTapped(self: *App, _: ?*anyopaque, _: ?*anyopaque) void {
+    self.cycleSplitView();
+}
+
+fn onSplitButtonPointerEntered(self: *App, _: ?*anyopaque, _: ?*anyopaque) void {
+    if (self.split_mode != .none) return;
+    const panel = self.split_button_panel orelse return;
+    if (createSolidColorBrush(.{ .A = 35, .R = 255, .G = 255, .B = 255 })) |brush| {
+        defer brush.release();
+        panel.SetBackground(@ptrCast(brush)) catch {};
+    } else |_| {}
+}
+
+fn onSplitButtonPointerExited(self: *App, _: ?*anyopaque, _: ?*anyopaque) void {
+    self.updateSplitButtonVisual();
 }
 /// Close a surface by pointer (called from Surface.close).
 pub fn closeSurface(self: *App, surface: *Surface) void {
@@ -2914,6 +3235,18 @@ fn setTitle(self: *App, title: [:0]const u8) void {
         surface.setTabTitle(title);
     }
     log.info("setTitle: completed", .{});
+}
+
+/// Title change from one terminal: name THAT tab (not whichever tab is
+/// selected), and update the window title only when it is the active tab.
+/// Background tabs — and the unfocused pane in split view — used to rename
+/// the active tab instead.
+fn setSurfaceTitle(self: *App, surface: *Surface, title: [:0]const u8) void {
+    log.info("setSurfaceTitle: \"{s}\"", .{title});
+    surface.setTabTitle(title);
+    if (self.activeSurface()) |active| {
+        if (active == surface) self.setWindowTitleWithSession(title);
+    }
 }
 
 /// Set the window title, using "Ghostty [session-name]" when CP is active.

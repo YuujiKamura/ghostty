@@ -19,12 +19,21 @@
                           HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                           IsAddTabButtonVisible="False">
             <controls:TabView.TabStripFooter>
-                <controls:SplitButton x:Name="AddTabSplitButton"
-                                     AutomationProperties.AutomationId="AddTabSplitButton">
-                    <controls:SplitButton.Flyout>
-                        <controls:MenuFlyout x:Name="ProfileFlyout"/>
-                    </controls:SplitButton.Flyout>
-                </controls:SplitButton>
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <controls:SplitButton x:Name="AddTabSplitButton"
+                                         AutomationProperties.AutomationId="AddTabSplitButton">
+                        <controls:SplitButton.Flyout>
+                            <controls:MenuFlyout x:Name="ProfileFlyout"/>
+                        </controls:SplitButton.Flyout>
+                    </controls:SplitButton>
+                    <Grid x:Name="SplitViewButton" Width="32" Height="32"
+                          CornerRadius="4" Background="Transparent"
+                          AutomationProperties.AutomationId="SplitViewButton"
+                          ToolTipService.ToolTip="Split View: Top/Bottom -> Left/Right -> Off (Ctrl+Shift+E / O)">
+                        <TextBlock Text="&#xE140;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                   Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
+                </StackPanel>
             </controls:TabView.TabStripFooter>
         </controls:TabView>
         <Border x:Name="DragBar" Grid.Column="1"

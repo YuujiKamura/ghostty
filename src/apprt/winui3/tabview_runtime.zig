@@ -94,6 +94,17 @@ pub fn createRoot(
     self.add_tab_split_button = try spltbtn_inspectable.queryInterface(com.ISplitButton);
     log.info("initXaml step 7.5: Found AddTabSplitButton", .{});
 
+    // Find SplitViewButton (optional toggle button in TabStripFooter)
+    if (winrt.hstring("SplitViewButton")) |split_btn_name| {
+        defer winrt.deleteHString(split_btn_name);
+        if (root_fe.FindName(split_btn_name)) |split_btn_insp| {
+            defer _ = split_btn_insp.release();
+            self.split_button_panel = split_btn_insp.queryInterface(com.IPanel) catch null;
+            self.split_button_ui = split_btn_insp.queryInterface(com.IUIElement) catch null;
+            log.info("initXaml step 7.5: Found SplitViewButton", .{});
+        } else |_| {}
+    } else |_| {}
+
     // Find DragBar (Border between tabs and caption buttons)
     const dragbar_name = try winrt.hstring("DragBar");
     defer winrt.deleteHString(dragbar_name);

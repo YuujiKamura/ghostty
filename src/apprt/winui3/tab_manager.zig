@@ -7,6 +7,7 @@ const com = @import("com.zig");
 const winrt = @import("winrt.zig");
 const os = @import("os.zig");
 const tab_index = @import("tab_index.zig");
+const split_view = @import("split_view.zig");
 const input_runtime = @import("input_runtime.zig");
 const surface_binding = @import("surface_binding.zig");
 const profiles = @import("profiles.zig"); // Added import for profiles
@@ -124,8 +125,15 @@ pub fn newTabWithProfile(
     // Select the new tab and switch content (WT-style Clear+Append).
     const size = try tab_items.getSize();
     const new_idx: usize = @intCast(size - 1);
+    const prev_idx = self.active_surface_idx;
+    if (prev_idx < new_idx) {
+        self.last_active_surface_idx = prev_idx;
+    }
     try tab_view.SetSelectedIndex(@intCast(new_idx));
     self.active_surface_idx = new_idx;
+    if (self.split_mode != .none and new_idx >= 1) {
+        self.setSplitPair(split_view.pairOnNewTab(prev_idx, new_idx));
+    }
 
     // Single authoritative panel switch (no more triple-fire).
     surface_binding.updateSelectedTab(self, new_idx);
@@ -196,6 +204,16 @@ pub fn closeTab(self: anytype, idx: usize) bool {
         self.active_surface_idx = self.surfaces.items.len - 1;
     } else if (idx < self.active_surface_idx) {
         self.active_surface_idx -= 1;
+    }
+    self.last_active_surface_idx = null;
+
+    if (self.split_mode != .none) {
+        if (current_len < 2) {
+            self.split_mode = .none;
+            self.updateSplitButtonVisual();
+        } else {
+            self.setSplitPair(split_view.pairOnRemove(self.splitPair(), idx, current_len, self.active_surface_idx));
+        }
     }
 
     // 3. Remove from TabView — guard SelectionChanged side effects (Issue #129).
