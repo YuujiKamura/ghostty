@@ -80,7 +80,7 @@ function Send-CPCommand([int]$procId, [string]$cmd) {
         $pipe.Connect(3000)
         $req = [System.Text.Encoding]::UTF8.GetBytes("$cmd`n")
         $pipe.Write($req, 0, $req.Length); $pipe.Flush()
-        $buf = New-Object byte[] 1024
+        $buf = New-Object byte[] 65536
         $n = $pipe.Read($buf, 0, $buf.Length)
         return [System.Text.Encoding]::UTF8.GetString($buf, 0, $n).Trim()
     } finally { $pipe.Dispose() }
@@ -164,6 +164,20 @@ foreach ($m in $modes) {
                 Test-Assert -Condition (-not $proc.HasExited) -Message "$testName [$($m.Name)] step $i $($st.Cmd) - process alive (resp=$resp)"
                 $got = Get-HeaderNumbers (Find-GhosttyUIAElement -ProcessId $proc.Id)
                 Test-AssertEqual -Expected $st.Expect -Actual $got -Message "$testName [$($m.Name)] step $i $($st.Cmd) - headers ($($st.Why))"
+                if ($st.ContainsKey('Capture') -and $st.Capture -eq '4tabs') {
+                    # Background-tab input while split: tab 1 is shown but not
+                    # focused (tab 4 is). Input addressed to tab 0 lands there only.
+                    $marker = "RT$(Get-Random -Minimum 10000 -Maximum 99999)"  # short: narrow panes wrap long lines
+                    $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("echo $marker`r"))
+                    $r = Send-CPCommand $proc.Id "INPUT|test12|$b64|0"
+                    Start-Sleep -Milliseconds 1500
+                    $t0 = ''; $t3 = ''
+                    for ($k = 0; $k -lt 10; $k++) { $t0 = Send-CPCommand $proc.Id "CAPTURE_PANE|0"; if ($t0 -notmatch 'BUSY') { break }; Start-Sleep -Milliseconds 200 }
+                    for ($k = 0; $k -lt 10; $k++) { $t3 = Send-CPCommand $proc.Id "CAPTURE_PANE|3"; if ($t3 -notmatch 'BUSY') { break }; Start-Sleep -Milliseconds 200 }
+                    $t0 = $t0 -replace '\s', ''; $t3 = $t3 -replace '\s', ''
+                    Test-Assert -Condition ($t0 -like "*$marker*") -Message "$testName [$($m.Name)] - input to background tab 1 lands in tab 1 (resp=$r)"
+                    Test-Assert -Condition ($t3 -notlike "*$marker*") -Message "$testName [$($m.Name)] - focused tab 4 does not get tab 1's input"
+                }
                 if ($st.ContainsKey('Capture')) {
                     $png2 = Join-Path $env:TEMP "ghostty-test12-$($m.Name)-$($st.Capture).png"
                     Save-WindowCapture $hwnd $png2

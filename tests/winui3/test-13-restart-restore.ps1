@@ -63,7 +63,7 @@ function Send-CP([int]$procId, [string]$cmd) {
 }
 function Send-Line([int]$procId, [string]$text) {
     $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("$text`r"))
-    Send-CP $procId "INPUT|test13|$b64|0" | Out-Null
+    Send-CP $procId "INPUT|test13|$b64" | Out-Null
 }
 function Get-Descendants([int]$rootPid) {
     $all = Get-CimInstance Win32_Process

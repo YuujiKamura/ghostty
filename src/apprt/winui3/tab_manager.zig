@@ -159,6 +159,10 @@ pub fn closeTab(self: anytype, idx: usize) bool {
     };
     self.updateSurfacesSnapshot() catch {};
 
+    // Detach XAML handlers here, on the UI thread, before the surface is
+    // freed off-thread (see Surface.detachXamlHandlersOnUiThread).
+    surface.detachXamlHandlersOnUiThread();
+
     // --- LOCK RELEASED HERE ---
     // Now perform heavy XAML/WinRT work without holding surfaces_mutex.
 

@@ -620,6 +620,18 @@ pub fn Surface(comptime App: type) type {
         /// Unregister all XAML event handlers: Loaded/SizeChanged on the panel,
         /// pointer events on the surface_grid, keyboard/focus on the panel,
         /// and IME TextBox events.
+        /// Detach this surface's XAML event handlers. Must run on the UI
+        /// thread: XAML objects are thread-affine, so the Remove* calls made
+        /// later by the off-thread teardown (tab_manager DeferredSurfaceClose)
+        /// fail with RPC_E_WRONG_THREAD and leave the handlers registered.
+        /// XAML then raises GotFocus / LostFocus / Loaded on the closed tab's
+        /// panel with a freed Surface as context (access violation, most
+        /// often in split view where the closed tab was on screen).
+        /// Idempotent: tokens are zeroed, so the later call is a no-op.
+        pub fn detachXamlHandlersOnUiThread(self: *Self) void {
+            self.unregisterXamlEventHandlers();
+        }
+
         fn unregisterXamlEventHandlers(self: *Self) void {
             if (self.swap_chain_panel) |panel| {
                 if (panel.queryInterface(com.IFrameworkElement)) |fe| {
@@ -651,15 +663,19 @@ pub fn Surface(comptime App: type) type {
                         defer grid_ue.release();
                         if (self.pointer_pressed_token != 0) {
                             grid_ue.RemovePointerPressed(self.pointer_pressed_token) catch {};
+                            self.pointer_pressed_token = 0;
                         }
                         if (self.pointer_moved_token != 0) {
                             grid_ue.RemovePointerMoved(self.pointer_moved_token) catch {};
+                            self.pointer_moved_token = 0;
                         }
                         if (self.pointer_released_token != 0) {
                             grid_ue.RemovePointerReleased(self.pointer_released_token) catch {};
+                            self.pointer_released_token = 0;
                         }
                         if (self.pointer_wheel_changed_token != 0) {
                             grid_ue.RemovePointerWheelChanged(self.pointer_wheel_changed_token) catch {};
+                            self.pointer_wheel_changed_token = 0;
                         }
                     } else |_| {}
                 }
@@ -668,18 +684,23 @@ pub fn Surface(comptime App: type) type {
                     defer ue.release();
                     if (self.preview_key_down_token != 0) {
                         ue.RemovePreviewKeyDown(self.preview_key_down_token) catch {};
+                        self.preview_key_down_token = 0;
                     }
                     if (self.preview_key_up_token != 0) {
                         ue.RemovePreviewKeyUp(self.preview_key_up_token) catch {};
+                        self.preview_key_up_token = 0;
                     }
                     if (self.character_received_token != 0) {
                         ue.RemoveCharacterReceived(self.character_received_token) catch {};
+                        self.character_received_token = 0;
                     }
                     if (self.got_focus_token != 0) {
                         ue.RemoveGotFocus(self.got_focus_token) catch {};
+                        self.got_focus_token = 0;
                     }
                     if (self.lost_focus_token != 0) {
                         ue.RemoveLostFocus(self.lost_focus_token) catch {};
+                        self.lost_focus_token = 0;
                     }
                 } else |_| {}
             }
@@ -688,22 +709,28 @@ pub fn Surface(comptime App: type) type {
                     defer ime_ue.release();
                     if (self.ime_preview_key_down_token != 0) {
                         ime_ue.RemovePreviewKeyDown(self.ime_preview_key_down_token) catch {};
+                        self.ime_preview_key_down_token = 0;
                     }
                     if (self.ime_preview_key_up_token != 0) {
                         ime_ue.RemovePreviewKeyUp(self.ime_preview_key_up_token) catch {};
+                        self.ime_preview_key_up_token = 0;
                     }
                     if (self.ime_character_received_token != 0) {
                         ime_ue.RemoveCharacterReceived(self.ime_character_received_token) catch {};
+                        self.ime_character_received_token = 0;
                     }
                     if (self.ime_got_focus_token != 0) {
                         ime_ue.RemoveGotFocus(self.ime_got_focus_token) catch {};
+                        self.ime_got_focus_token = 0;
                     }
                     if (self.ime_lost_focus_token != 0) {
                         ime_ue.RemoveLostFocus(self.ime_lost_focus_token) catch {};
+                        self.ime_lost_focus_token = 0;
                     }
                 } else |_| {}
                 if (self.ime_text_changed_token != 0) {
                     ime_tb.RemoveTextChanged(self.ime_text_changed_token) catch {};
+                    self.ime_text_changed_token = 0;
                 }
                 // TextBox composition tokens removed — TSF is sole IME handler.
                 self.ime_preview_key_down_token = 0;
