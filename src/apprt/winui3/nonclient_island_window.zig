@@ -113,11 +113,21 @@ pub fn createDragBarIfNeeded(self: *NonClientIslandWindow) void {
 /// WT: NonClientIslandWindow::Close()
 /// Clear GWLP_USERDATA on drag bar to prevent callbacks into XAML after close.
 pub fn close(self: *NonClientIslandWindow) void {
+    self.closeImpl(false);
+}
+
+/// close() for after the XAML message loop has ended (App.fullCleanup):
+/// skips IslandWindow's SetContent(null), which crashes on a shut-down core.
+pub fn closeAfterXamlExit(self: *NonClientIslandWindow) void {
+    self.closeImpl(true);
+}
+
+fn closeImpl(self: *NonClientIslandWindow, after_xaml_exit: bool) void {
     if (self.drag_bar_hwnd) |db| {
         _ = os.SetWindowLongPtrW(db, os.GWLP_USERDATA, 0);
     }
     self.destroyDragBarWindow();
-    self.island.close();
+    if (after_xaml_exit) self.island.closeAfterXamlExit() else self.island.close();
 }
 
 pub fn destroyDragBarWindow(self: *NonClientIslandWindow) void {

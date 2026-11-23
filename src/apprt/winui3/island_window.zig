@@ -222,11 +222,25 @@ pub fn onSize(self: *IslandWindow, width: c_int, height: c_int) void {
 ///   2. xaml_source.Close() — release the XAML Islands host
 ///   3. DestroyWindow — destroy the Win32 HWND
 pub fn close(self: *IslandWindow) void {
+    self.closeImpl(true);
+}
+
+/// Same as close() but without Step 1. After Application.Start has returned
+/// the XAML core is shut down and SetContent(null) crashes inside
+/// Microsoft.UI.Xaml.dll (null dereference); the tree goes away with the
+/// source anyway.
+pub fn closeAfterXamlExit(self: *IslandWindow) void {
+    self.closeImpl(false);
+}
+
+fn closeImpl(self: *IslandWindow, detach_content: bool) void {
     if (self.xaml_source) |xs| {
         // Step 1: detach content.
-        xs.setContent(null) catch |err| {
-            log.warn("IslandWindow.close: setContent(null) failed: {}", .{err});
-        };
+        if (detach_content) {
+            xs.setContent(null) catch |err| {
+                log.warn("IslandWindow.close: setContent(null) failed: {}", .{err});
+            };
+        }
 
         // Step 2: close the xaml source (IClosable).
         xs.close() catch |err| {

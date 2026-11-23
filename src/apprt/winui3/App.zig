@@ -1791,22 +1791,7 @@ pub fn terminate(self: *App) void {
         cp.destroy();
         self.control_plane = null;
     }
-    self.watchdog_stop.store(true, .release);
-    if (self.watchdog_thread) |t| {
-        t.join();
-        self.watchdog_thread = null;
-    }
-    if (self.phase4_watchdog) |*wd| {
-        wd.stopAndJoin();
-        self.phase4_watchdog = null;
-    }
-    if (self.cascade_detector) |*det| {
-        det.stopAndJoin();
-        self.cascade_detector = null;
-    }
-    if (self.hwnd) |h| {
-        _ = os.KillTimer(h, HEARTBEAT_TIMER_ID);
-    }
+    self.stopMonitorThreads();
     self.setExitIntent(.terminate);
     self.running = false;
     // Signal XAML to exit the message loop.
@@ -1852,6 +1837,28 @@ pub fn onWindowClose(self: *App) void {
     }
 }
 
+/// Stop the UI-heartbeat watchdog, the phase-4 watchdog and the cascade
+/// detector, and join their threads. They read App / Surface state on their
+/// own threads, so they must be gone before surfaces are freed. Idempotent.
+fn stopMonitorThreads(self: *App) void {
+    self.watchdog_stop.store(true, .release);
+    if (self.watchdog_thread) |t| {
+        t.join();
+        self.watchdog_thread = null;
+    }
+    if (self.phase4_watchdog) |*wd| {
+        wd.stopAndJoin();
+        self.phase4_watchdog = null;
+    }
+    if (self.cascade_detector) |*det| {
+        det.stopAndJoin();
+        self.cascade_detector = null;
+    }
+    if (self.hwnd) |h| {
+        _ = os.KillTimer(h, HEARTBEAT_TIMER_ID);
+    }
+}
+
 fn fullCleanup(self: *App) void {
     log.info(
         "Starting full cleanup (startup={s} bootstrapped={} parity={} close_event={} exit_intent={s})",
@@ -1865,7 +1872,13 @@ fn fullCleanup(self: *App) void {
     );
     const alloc = self.core_app.alloc;
 
-    // 0. Uninitialize TSF before surfaces are destroyed (callbacks reference surfaces).
+    // 0. Stop the monitor threads first. Normal exit (Application.Start
+    //    returning) does not go through terminate(), and the cascade detector
+    //    kept ticking over freed surfaces (access violation in
+    //    cascade_detector loop -> tick on every window close).
+    self.stopMonitorThreads();
+
+    // 0a. Uninitialize TSF before surfaces are destroyed (callbacks reference surfaces).
     if (self.tsf_impl) |*tsf| {
         tsf.uninitialize();
         self.tsf_impl = null;
@@ -1953,9 +1966,12 @@ fn fullCleanup(self: *App) void {
     }
     if (self.tab_view) |tv| tv.release();
 
-    // 5. Close the XAML Islands source and destroy the window.
+    // 5. Close the XAML Islands source and destroy the window. The XAML
+    //    message loop has already ended here, so skip SetContent(null):
+    //    on a shut-down XAML core it dereferences null inside
+    //    Microsoft.UI.Xaml.dll (crash on every window close).
     if (self.nci_window) |nci| {
-        nci.close();
+        nci.closeAfterXamlExit();
         alloc.destroy(nci);
         self.nci_window = null;
     }
