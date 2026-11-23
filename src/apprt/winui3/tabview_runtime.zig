@@ -143,6 +143,43 @@ pub fn createRoot(
     return tv;
 }
 
+/// Width of the XAML caption buttons (min / max / close, 3 x 46 DIP in
+/// TabViewRoot.xaml).
+pub const CAPTION_BUTTONS_DIP: f64 = 3 * 46;
+/// Title-bar width always left free for dragging the window.
+pub const DRAG_MIN_DIP: f64 = 48;
+/// Never squeeze the tab strip below this (one tab + the footer buttons).
+pub const TAB_STRIP_MIN_DIP: f64 = 160;
+
+/// MaxWidth for the TabView so tabs never eat the drag area or push the
+/// caption buttons off the window (Windows Terminal caps its tab row the
+/// same way). The tab strip sits in an Auto column; without a cap it grows
+/// with every tab. With the cap, TabWidthMode.Equal shrinks the tabs and
+/// shows scroll buttons when they still do not fit.
+pub fn tabStripMaxWidth(client_width_px: i32, dpi: u32) f64 {
+    const scale: f64 = if (dpi == 0) 1.0 else @as(f64, @floatFromInt(dpi)) / 96.0;
+    const width_dip = @as(f64, @floatFromInt(@max(client_width_px, 0))) / scale;
+    return @max(TAB_STRIP_MIN_DIP, width_dip - CAPTION_BUTTONS_DIP - DRAG_MIN_DIP);
+}
+
+test "tabStripMaxWidth: leaves caption + drag area at every width and DPI" {
+    const testing = std.testing;
+    for ([_]u32{ 96, 120, 144, 168, 192, 288 }) |dpi| {
+        var w: i32 = 0;
+        while (w <= 8000) : (w += 37) {
+            const m = tabStripMaxWidth(w, dpi);
+            const width_dip = @as(f64, @floatFromInt(w)) * 96.0 / @as(f64, @floatFromInt(dpi));
+            try testing.expect(m >= TAB_STRIP_MIN_DIP);
+            if (width_dip - CAPTION_BUTTONS_DIP - DRAG_MIN_DIP >= TAB_STRIP_MIN_DIP) {
+                // Room is left for the caption buttons and the drag area.
+                try testing.expectApproxEqAbs(width_dip - CAPTION_BUTTONS_DIP - DRAG_MIN_DIP, m, 1e-9);
+            }
+        }
+    }
+    try testing.expectEqual(TAB_STRIP_MIN_DIP, tabStripMaxWidth(-5, 96));
+    try testing.expectEqual(TAB_STRIP_MIN_DIP, tabStripMaxWidth(100, 0));
+}
+
 pub fn configureDefaults(tab_view: ?*com.ITabView) void {
     if (tab_view) |tv| {
         tv.SetIsAddTabButtonVisible(true) catch {};

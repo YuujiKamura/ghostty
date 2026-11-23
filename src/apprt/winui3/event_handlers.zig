@@ -4,6 +4,7 @@ const winrt = @import("winrt.zig");
 const input_runtime = @import("input_runtime.zig");
 const split_view = @import("split_view.zig");
 const surface_binding = @import("surface_binding.zig");
+const tabview_runtime = @import("tabview_runtime.zig");
 
 const log = std.log.scoped(.winui3);
 
@@ -114,5 +115,20 @@ pub fn onLayoutUpdated(self: anytype, _: ?*anyopaque, _: ?*anyopaque) void {
 
     var rect: @import("os.zig").RECT = .{};
     _ = @import("os.zig").GetClientRect(hwnd, &rect);
+    capTabStripWidth(self, hwnd, rect.right - rect.left);
     nci.resizeDragBarWindow(rect.right - rect.left);
+}
+
+/// Keep the tab strip from filling the title bar (see
+/// tabview_runtime.tabStripMaxWidth). Only touches MaxWidth when it changes,
+/// so the LayoutUpdated it triggers does not loop.
+fn capTabStripWidth(self: anytype, hwnd: anytype, client_width_px: i32) void {
+    const tv = self.tab_view orelse return;
+    const os = @import("os.zig");
+    const max_w = tabview_runtime.tabStripMaxWidth(client_width_px, os.GetDpiForWindow(hwnd));
+    if (@abs(max_w - self.tab_strip_max_width) < 0.5) return;
+    self.tab_strip_max_width = max_w;
+    const fe = tv.queryInterface(com.IFrameworkElement) catch return;
+    defer fe.release();
+    fe.SetMaxWidth(max_w) catch {};
 }

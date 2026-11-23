@@ -636,6 +636,22 @@ if ($shouldRunRestore) {
 }
 
 # ============================================================
+# Phase 9: Tab strip width (drag area and caption buttons survive many tabs)
+# ============================================================
+Write-Host "`n=== Phase 9: Tab strip width ===" -ForegroundColor Cyan
+
+$stripTestName = "test-14-tab-strip-width"
+$shouldRunStrip = (-not $failedNames) -or ($stripTestName -in $failedNames)
+if ($shouldRunStrip) {
+    $stripPath = Join-Path $PSScriptRoot "$stripTestName.ps1"
+    Invoke-Test -Name $stripTestName -Block {
+        & $stripPath -ExePath $ExePath 6>&1 | Write-Host
+    }
+} else {
+    Write-Host "  SKIP: $stripTestName" -ForegroundColor DarkGray
+}
+
+# ============================================================
 # Phase 5: Regression repro (opt-in via -IncludeRegressionRepro)
 # Closes #245. Asserts the multi-session shell-flood load shape that
 # silently killed sessions on 2026-04-27 (#244) does NOT regress.

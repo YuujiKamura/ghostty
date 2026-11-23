@@ -237,6 +237,7 @@ pub const SplitMode = split_view.Mode;
 test {
     _ = split_view;
     _ = session_restore;
+    _ = tabview_runtime;
 }
 
 const TypedHandler = gen.TypedEventHandlerImpl(App, *const fn (*App, ?*anyopaque, ?*anyopaque) void);
@@ -290,6 +291,8 @@ active_surface_idx: usize = 0,
 last_active_surface_idx: ?usize = null,
 /// Side-by-side / top-bottom 2-pane split view state.
 split_mode: SplitMode = .none,
+/// MaxWidth last applied to the TabView (event_handlers.capTabStripWidth).
+tab_strip_max_width: f64 = 0,
 /// First tab of the shown window (split_view.windowStart); the split shows
 /// tabs [split_start, split_start + paneCount).
 split_start: usize = 0,
