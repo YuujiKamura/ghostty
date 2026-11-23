@@ -290,8 +290,9 @@ active_surface_idx: usize = 0,
 last_active_surface_idx: ?usize = null,
 /// Side-by-side / top-bottom 2-pane split view state.
 split_mode: SplitMode = .none,
-split_first_idx: usize = 0,
-split_second_idx: usize = 1,
+/// First tab of the shown window (split_view.windowStart); the split shows
+/// tabs [split_start, split_start + paneCount).
+split_start: usize = 0,
 split_button_panel: ?*com.IPanel = null,
 split_button_ui: ?*com.IUIElement = null,
 split_button_tapped_handler: ?*TappedHandler = null,
@@ -302,7 +303,7 @@ split_button_enter_token: ?i64 = null,
 split_button_exit_token: ?i64 = null,
 /// One-line header above each split pane ("2  title"). Grid (background)
 /// holding a ContentControl (text). Created lazily on first split.
-split_headers: [2]?SplitHeader = .{ null, null },
+split_headers: [split_view.MAX_PANES]?SplitHeader = .{null} ** split_view.MAX_PANES,
 /// Tabs to reopen after "restart and restore tabs" (KS_RESTORE_FILE).
 restore_plan: ?std.json.Parsed(session_restore.Plan) = null,
 /// Command / folder for the next tab created (consumed by applyTabOverride).
@@ -2335,7 +2336,7 @@ pub fn closeTab(self: *App, idx: usize) void {
     log.debug("closeTab: EXIT total={}", .{self.countSurfaces()});
 }
 
-/// Cycle split view mode: none -> top_bottom -> left_right -> none.
+/// Cycle split view mode: none -> top_bottom -> left_right -> grid -> none.
 /// Top/bottom is first because wide terminal rows are easier to read stacked.
 pub fn cycleSplitView(self: *App) void {
     self.applySplitMode(split_view.nextMode(self.split_mode));
@@ -2344,15 +2345,6 @@ pub fn cycleSplitView(self: *App) void {
 /// Toggle a specific split mode (used by Ctrl+Shift+E / Ctrl+Shift+O).
 pub fn toggleSplitMode(self: *App, mode: SplitMode) void {
     self.applySplitMode(split_view.toggleMode(self.split_mode, mode));
-}
-
-pub fn splitPair(self: *const App) split_view.Pair {
-    return .{ .first = self.split_first_idx, .second = self.split_second_idx };
-}
-
-pub fn setSplitPair(self: *App, p: split_view.Pair) void {
-    self.split_first_idx = p.first;
-    self.split_second_idx = p.second;
 }
 
 /// Apply `KS_SPLIT_VIEW` (top_bottom / left_right) at launch. Lets the UIA
@@ -2384,15 +2376,11 @@ fn applySplitMode(self: *App, mode: SplitMode) void {
         if (count < 2) return;
     }
 
-    if (self.split_mode == .none or !split_view.pairValid(self.splitPair(), count)) {
-        self.setSplitPair(split_view.initialPair(self.active_surface_idx, self.last_active_surface_idx, count));
-    }
-
     self.split_mode = mode;
     surface_binding.updateSelectedTab(self, self.active_surface_idx);
     self.updateSplitButtonVisual();
     input_runtime.focusKeyboardTarget(self);
-    log.info("applySplitMode: {s} first={} second={} active={}", .{ @tagName(mode), self.split_first_idx, self.split_second_idx, self.active_surface_idx });
+    log.info("applySplitMode: {s} start={} tabs={} active={}", .{ @tagName(mode), self.split_start, count, self.active_surface_idx });
 }
 
 /// Switch active surface focus when clicking a pane in split view.
@@ -2507,7 +2495,7 @@ fn createSplitHeader(self: *App, slot: usize) !SplitHeader {
     // Clicking a header focuses that pane.
     if (root.queryInterface(com.IUIElement)) |ui| {
         defer ui.release();
-        const cb: *const fn (*App, ?*anyopaque, ?*anyopaque) void = if (slot == 0) &onSplitHeader0Tapped else &onSplitHeader1Tapped;
+        const cb = split_header_tap_cbs[slot];
         if (TappedHandler.createWithIid(self.core_app.alloc, self, cb, &com.IID_TappedEventHandler)) |h| {
             header.tapped_handler = h;
             header.tapped_token = ui.AddTapped(h.comPtr()) catch null;
@@ -2518,19 +2506,24 @@ fn createSplitHeader(self: *App, slot: usize) !SplitHeader {
 
 fn onSplitHeaderTapped(self: *App, slot: usize) void {
     if (self.split_mode == .none) return;
-    const idx = if (slot == 0) self.split_first_idx else self.split_second_idx;
-    const surface = self.getSurface(idx) orelse return;
+    const surface = self.getSurface(self.split_start + slot) orelse return;
     self.focusSplitSurface(surface);
     input_runtime.focusKeyboardTarget(self);
 }
 
-fn onSplitHeader0Tapped(self: *App, _: ?*anyopaque, _: ?*anyopaque) void {
-    self.onSplitHeaderTapped(0);
-}
-
-fn onSplitHeader1Tapped(self: *App, _: ?*anyopaque, _: ?*anyopaque) void {
-    self.onSplitHeaderTapped(1);
-}
+const SplitHeaderTapFn = *const fn (*App, ?*anyopaque, ?*anyopaque) void;
+/// One Tapped callback per header slot (the slot is baked in at comptime).
+const split_header_tap_cbs: [split_view.MAX_PANES]SplitHeaderTapFn = blk: {
+    var cbs: [split_view.MAX_PANES]SplitHeaderTapFn = undefined;
+    for (0..split_view.MAX_PANES) |i| {
+        cbs[i] = &struct {
+            fn f(self: *App, _: ?*anyopaque, _: ?*anyopaque) void {
+                self.onSplitHeaderTapped(i);
+            }
+        }.f;
+    }
+    break :blk cbs;
+};
 
 // ---------------------------------------------------------------------------
 // Restart and restore tabs (session_restore.zig)
@@ -2581,8 +2574,7 @@ pub fn restartWithRestore(self: *App) void {
     const plan = session_restore.Plan{
         .active = self.active_surface_idx,
         .split_mode = @tagName(self.split_mode),
-        .split_first = self.split_first_idx,
-        .split_second = self.split_second_idx,
+        .split_first = self.split_start,
         .tabs = tabs,
     };
     const json = session_restore.writePlan(a, plan) catch return;
@@ -2662,10 +2654,8 @@ fn finishRestore(self: *App) void {
     const active = @min(plan.active, count - 1);
     if (self.tab_view) |tv| tv.SetSelectedIndex(@intCast(active)) catch {};
     const mode = std.meta.stringToEnum(SplitMode, plan.split_mode) orelse .none;
-    const pair = split_view.Pair{ .first = plan.split_first, .second = plan.split_second };
-    if (mode != .none and split_view.pairValid(pair, count)) {
-        self.setSplitPair(pair);
-        self.split_mode = mode; // keep the saved pair (applySplitMode only re-picks when invalid)
+    if (mode != .none and count >= 2) {
+        self.split_start = plan.split_first; // first shown tab (clamped on layout)
         self.applySplitMode(mode);
     }
 }
@@ -2698,6 +2688,7 @@ pub fn updateSplitButtonVisual(self: *App) void {
         .none => null,
         .top_bottom => .{ .A = 120, .R = 0x3A, .G = 0x7A, .B = 0xFE },
         .left_right => .{ .A = 120, .R = 0x2E, .G = 0xA0, .B = 0x80 },
+        .grid => .{ .A = 120, .R = 0x9A, .G = 0x5C, .B = 0xE6 },
     };
     if (color_opt) |color| {
         if (createSolidColorBrush(color)) |brush| {

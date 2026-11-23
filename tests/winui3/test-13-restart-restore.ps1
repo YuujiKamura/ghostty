@@ -144,7 +144,7 @@ try {
     Start-Sleep -Milliseconds 300
     Set-Content "$home2\.gemini\antigravity-cli\conversations\$agyId.db" "x"
     Test-AssertEqual -Expected 4 -Actual (Get-TabCount $old.Id) -Message "$testName - old window has 4 tabs"
-    Test-AssertEqual -Expected "3,4" -Actual (Get-HeaderNumbers $old.Id) -Message "$testName - old window split shows tabs 3 and 4"
+    Test-AssertEqual -Expected "1,2,3,4" -Actual (Get-HeaderNumbers $old.Id) -Message "$testName - old window split shows all 4 tabs"
 
     # --- 2. Restart.
     [Win32R]::PostMessageW($hwnd, $WM_APP_RESTART_RESTORE, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
@@ -162,7 +162,7 @@ try {
 
     # --- 3. Restored state.
     Test-AssertEqual -Expected 4 -Actual (Get-TabCount $new.ProcessId) -Message "$testName - 4 tabs restored"
-    Test-AssertEqual -Expected "3,4" -Actual (Get-HeaderNumbers $new.ProcessId) -Message "$testName - split view and pair restored"
+    Test-AssertEqual -Expected "1,2,3,4" -Actual (Get-HeaderNumbers $new.ProcessId) -Message "$testName - split view restored (all 4 tabs)"
 
     $desc = @(Get-Descendants $new.ProcessId)
     # ghostty runs each tab as `cmd.exe /C <command>`; look at the inner shells only.
@@ -228,7 +228,7 @@ try {
     [void](Find-GhosttyWindow -ProcessId $new.ProcessId)
     Start-Sleep -Seconds 4
     Test-AssertEqual -Expected 4 -Actual (Get-TabCount $new.ProcessId) -Message "$testName - 4 tabs after second restart"
-    Test-AssertEqual -Expected "3,4" -Actual (Get-HeaderNumbers $new.ProcessId) -Message "$testName - split kept after second restart"
+    Test-AssertEqual -Expected "1,2,3,4" -Actual (Get-HeaderNumbers $new.ProcessId) -Message "$testName - split kept after second restart"
     $cl2 = @(@(Get-Descendants $new.ProcessId) | Where-Object { $_.Name -eq 'cmd.exe' -and $_.CommandLine -notmatch '/C ' } | ForEach-Object { $_.CommandLine })
     Test-Assert -Condition (@($cl2 | Where-Object { $_ -like "*/k claude --resume $claudeId*" }).Count -eq 1) -Message "$testName - claude session id survives a second restart"
     Test-Assert -Condition (@($cl2 | Where-Object { $_ -like "*/k codex resume $codexId*" }).Count -eq 1) -Message "$testName - codex session id survives a second restart"

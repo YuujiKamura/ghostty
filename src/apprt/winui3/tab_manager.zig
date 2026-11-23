@@ -132,9 +132,6 @@ pub fn newTabWithProfile(
     }
     try tab_view.SetSelectedIndex(@intCast(new_idx));
     self.active_surface_idx = new_idx;
-    if (self.split_mode != .none and new_idx >= 1) {
-        self.setSplitPair(split_view.pairOnNewTab(prev_idx, new_idx));
-    }
 
     // Single authoritative panel switch (no more triple-fire).
     surface_binding.updateSelectedTab(self, new_idx);
@@ -212,8 +209,6 @@ pub fn closeTab(self: anytype, idx: usize) bool {
         if (current_len < 2) {
             self.split_mode = .none;
             self.updateSplitButtonVisual();
-        } else {
-            self.setSplitPair(split_view.pairOnRemove(self.splitPair(), idx, current_len, self.active_surface_idx));
         }
     }
 

@@ -23,7 +23,7 @@ pub fn setTabItemContent(tvi_insp: *winrt.IInspectable, content: ?*winrt.IInspec
 }
 
 /// WT-style tab content switch: Clear tab_content_grid children, then Append the active tab's panel
-/// (or two panels in top/bottom or left/right split when split_mode != .none).
+/// (or every tab, up to split_view.MAX_PANES, when split_mode != .none).
 pub fn updateSelectedTab(self: anytype, idx: usize) void {
     const count = self.countSurfaces();
     if (idx >= count) return;
@@ -66,11 +66,7 @@ pub fn updateSelectedTab(self: anytype, idx: usize) void {
         grid.SetRowSpacing(0.0) catch {};
     }
 
-    const use_split = self.split_mode != .none and
-        count >= 2 and
-        self.split_first_idx < count and
-        self.split_second_idx < count and
-        self.split_first_idx != self.split_second_idx;
+    const use_split = self.split_mode != .none and count >= 2;
 
     if (use_split) {
         if (attachSplitPanels(self, grid_opt, children)) {
@@ -92,7 +88,7 @@ pub fn updateSelectedTab(self: anytype, idx: usize) void {
         defer winrt.deleteHString(grid_class);
         if (winrt.getActivationFactory(com.IGridStatics, grid_class)) |grid_statics| {
             defer grid_statics.release();
-            setGridCell(grid_statics, panel, 0, 0) catch {};
+            setGridCell(grid_statics, panel, .{ .row = 0, .col = 0 }) catch {};
         } else |_| {}
     } else |_| {}
 
@@ -110,11 +106,12 @@ pub fn updateSelectedTab(self: anytype, idx: usize) void {
 /// Grid.SetRow/SetColumn take a FrameworkElement ABI pointer, not the
 /// IInspectable we hold. Passing the IInspectable makes XAML call through
 /// the wrong vtable (access violation in Microsoft.UI.Xaml.dll at startup).
-fn setGridCell(grid_statics: *com.IGridStatics, elem: *winrt.IInspectable, row: i32, col: i32) !void {
+fn setGridCell(grid_statics: *com.IGridStatics, elem: *winrt.IInspectable, cell: split_view.Cell) !void {
     const fe = try elem.queryInterface(com.IFrameworkElement);
     defer fe.release();
-    try grid_statics.SetRow(@ptrCast(fe), row);
-    try grid_statics.SetColumn(@ptrCast(fe), col);
+    try grid_statics.SetRow(@ptrCast(fe), cell.row);
+    try grid_statics.SetColumn(@ptrCast(fe), cell.col);
+    try grid_statics.SetColumnSpan(@ptrCast(fe), cell.col_span);
 }
 
 fn appendTracks(vec_raw: anytype, comptime class_name: []const u8, tracks: []const split_view.Track, comptime is_row: bool) bool {
@@ -145,14 +142,15 @@ fn appendTracks(vec_raw: anytype, comptime class_name: []const u8, tracks: []con
 
 fn attachSplitPanels(self: anytype, grid_opt: ?*com.IGrid, children: *com.IVector) bool {
     const grid = grid_opt orelse return false;
-    const layout = split_view.layoutFor(self.split_mode) orelse return false;
-    const surfaces = [2]*Surface{
-        self.getSurface(self.split_first_idx) orelse return false,
-        self.getSurface(self.split_second_idx) orelse return false,
-    };
-    var panels: [2]*winrt.IInspectable = undefined;
-    for (surfaces, 0..) |s, k| {
-        panels[k] = s.surface_grid orelse s.swap_chain_panel orelse return false;
+    const count = self.countSurfaces();
+    const n = split_view.paneCount(count);
+    self.split_start = split_view.windowStart(self.split_start, count, self.active_surface_idx);
+    const layout = split_view.layoutFor(self.split_mode, n) orelse return false;
+    var surfaces: [split_view.MAX_PANES]*Surface = undefined;
+    var panels: [split_view.MAX_PANES]*winrt.IInspectable = undefined;
+    for (0..n) |k| {
+        surfaces[k] = self.getSurface(self.split_start + k) orelse return false;
+        panels[k] = surfaces[k].surface_grid orelse surfaces[k].swap_chain_panel orelse return false;
     }
 
     const grid_class = winrt.hstring("Microsoft.UI.Xaml.Controls.Grid") catch return false;
@@ -160,27 +158,25 @@ fn attachSplitPanels(self: anytype, grid_opt: ?*com.IGrid, children: *com.IVecto
     const grid_statics = winrt.getActivationFactory(com.IGridStatics, grid_class) catch return false;
     defer grid_statics.release();
 
-    if (!appendTracks(grid.RowDefinitions() catch return false, "Microsoft.UI.Xaml.Controls.RowDefinition", layout.rows, true)) return false;
-    if (!appendTracks(grid.ColumnDefinitions() catch return false, "Microsoft.UI.Xaml.Controls.ColumnDefinition", layout.cols, false)) return false;
-    switch (self.split_mode) {
-        .top_bottom => grid.SetRowSpacing(0.0) catch {},
-        .left_right => grid.SetColumnSpacing(2.0) catch {},
-        .none => {},
-    }
+    if (!appendTracks(grid.RowDefinitions() catch return false, "Microsoft.UI.Xaml.Controls.RowDefinition", layout.rows(), true)) return false;
+    if (!appendTracks(grid.ColumnDefinitions() catch return false, "Microsoft.UI.Xaml.Controls.ColumnDefinition", layout.cols(), false)) return false;
+    // A 2px gap between side-by-side panes; stacked panes are separated by
+    // the header rows.
+    if (layout.n_cols > 1) grid.SetColumnSpacing(2.0) catch {};
 
-    for (0..2) |k| {
+    for (0..n) |k| {
         if (self.ensureSplitHeader(k)) |h| {
-            setGridCell(grid_statics, h.root, layout.header[k].row, layout.header[k].col) catch {};
+            setGridCell(grid_statics, h.root, layout.header[k]) catch {};
             children.append(@ptrCast(h.root)) catch {};
         }
-        setGridCell(grid_statics, panels[k], layout.pane[k].row, layout.pane[k].col) catch return false;
+        setGridCell(grid_statics, panels[k], layout.pane[k]) catch return false;
         children.append(@ptrCast(panels[k])) catch return false;
     }
 
-    for (surfaces) |s| s.rebindSwapChain();
+    for (surfaces[0..n]) |s| s.rebindSwapChain();
     refreshSplitHeaders(self);
 
-    log.info("updateSelectedTab (split {s}): first_idx={} second_idx={}", .{ @tagName(self.split_mode), self.split_first_idx, self.split_second_idx });
+    log.info("updateSelectedTab (split {s}): tabs {}..{} of {}", .{ @tagName(self.split_mode), self.split_start + 1, self.split_start + n, count });
     return true;
 }
 
@@ -193,8 +189,9 @@ const header_idle_fg = com.Color{ .A = 0xFF, .R = 0x9A, .G = 0x9A, .B = 0x9A };
 /// No-op outside split view. Safe to call on every title change.
 pub fn refreshSplitHeaders(self: anytype) void {
     if (self.split_mode == .none) return;
-    const idxs = [2]usize{ self.split_first_idx, self.split_second_idx };
-    for (idxs, 0..) |idx, k| {
+    const n = split_view.paneCount(self.countSurfaces());
+    for (0..n) |k| {
+        const idx = self.split_start + k;
         const h = self.split_headers[k] orelse continue;
         const surface = self.getSurface(idx) orelse continue;
         const active = idx == self.active_surface_idx;
@@ -222,12 +219,16 @@ pub fn refreshSplitHeaders(self: anytype) void {
     }
 }
 
-/// Is surface `s` one of the two tabs shown in split view?
+/// Is surface `s` one of the tabs shown in split view?
 pub fn isSplitMember(self: anytype, s: *Surface) bool {
     if (self.split_mode == .none) return false;
-    const a = self.getSurface(self.split_first_idx);
-    const b = self.getSurface(self.split_second_idx);
-    return (a != null and a.? == s) or (b != null and b.? == s);
+    const n = split_view.paneCount(self.countSurfaces());
+    for (0..n) |k| {
+        if (self.getSurface(self.split_start + k)) |shown| {
+            if (shown == s) return true;
+        }
+    }
+    return false;
 }
 
 /// Ensure the currently active surface's panel is displayed.

@@ -83,10 +83,9 @@ pub fn onSelectionChanged(self: anytype, sender_obj: ?*anyopaque, args_obj: ?*an
             }
             self.active_surface_idx = new_idx;
             if (self.split_mode != .none and self.surfaces.items.len >= 2) {
-                const old_pair = self.splitPair();
-                const new_pair = split_view.pairOnSelect(old_pair, prev_idx, new_idx);
-                if (new_pair.first != old_pair.first or new_pair.second != old_pair.second) {
-                    self.setSplitPair(new_pair);
+                // Re-layout only when the selected tab is outside the shown window.
+                const start = split_view.windowStart(self.split_start, self.surfaces.items.len, new_idx);
+                if (start != self.split_start) {
                     surface_binding.updateSelectedTab(self, new_idx);
                 } else {
                     surface_binding.refreshSplitHeaders(self);

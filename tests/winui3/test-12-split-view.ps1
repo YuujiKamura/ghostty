@@ -1,7 +1,8 @@
-# test-12-split-view — split view shows two tabs at once, each pane with a
-# one-line header ("1  title" / "2  title"); the tab strip is unchanged.
+# test-12-split-view — split view shows every tab (up to 4) at once, each
+# pane with a one-line header ("1  title" ...); the tab strip is unchanged.
 #
-# Axes: launch mode {none, top_bottom, left_right}. Split is opened via the
+# Axes: mode {none, top_bottom, left_right, grid} x tab count {1..5} via
+# NEW_TAB / SWITCH_TAB / CLOSE_TAB on the control plane. Split is opened via the
 # KS_SPLIT_VIEW launch env var (App.applyLaunchSplitMode) so no keys are
 # sent to whatever window is in the foreground. No mouse input.
 #
@@ -92,19 +93,26 @@ function Get-HeaderNumbers($elem) {
     return ($nums -join ',')
 }
 
-# Pair transitions after launch (tabs 1,2 shown, tab 2 focused). Expected
-# header numbers follow split_view.zig pairOnNewTab / pairOnSelect / pairOnRemove.
+# Tab-count steps after launch (2 tabs, tab 2 focused). Expected header
+# numbers = the shown window of up to 4 consecutive tabs that contains the
+# focused tab (split_view.windowStart).
 $steps = @(
-    @{ Cmd = "NEW_TAB";      Expect = "2,3"; Why = "new tab shown next to the focused one" },
-    @{ Cmd = "SWITCH_TAB|0"; Expect = "1,3"; Why = "selected tab replaces the unfocused pane" },
-    @{ Cmd = "CLOSE_TAB|2";  Expect = "1,2"; Why = "closed pane replaced by remaining tab" },
-    @{ Cmd = "CLOSE_TAB|1";  Expect = "";    Why = "one tab left: split view off" }
+    @{ Cmd = "NEW_TAB";      Expect = "1,2,3";   Why = "3 tabs: all shown" },
+    @{ Cmd = "NEW_TAB";      Expect = "1,2,3,4"; Why = "4 tabs: all shown"; Capture = "4tabs" },
+    @{ Cmd = "NEW_TAB";      Expect = "2,3,4,5"; Why = "5 tabs: cap 4, window follows the new tab" },
+    @{ Cmd = "SWITCH_TAB|0"; Expect = "1,2,3,4"; Why = "selecting a hidden tab pages the window back" },
+    @{ Cmd = "SWITCH_TAB|2"; Expect = "1,2,3,4"; Why = "selecting a shown tab keeps the window" },
+    @{ Cmd = "CLOSE_TAB|4";  Expect = "1,2,3,4"; Why = "back to 4 tabs" },
+    @{ Cmd = "CLOSE_TAB|3";  Expect = "1,2,3";   Why = "3 tabs"; Capture = "3tabs" },
+    @{ Cmd = "CLOSE_TAB|2";  Expect = "1,2";     Why = "2 tabs" },
+    @{ Cmd = "CLOSE_TAB|1";  Expect = "";        Why = "one tab left: split view off" }
 )
 
 $modes = @(
     @{ Name = "none";       Env = "";           Tabs = 1; Headers = 0 },
     @{ Name = "top_bottom"; Env = "top_bottom"; Tabs = 2; Headers = 2 },
-    @{ Name = "left_right"; Env = "left_right"; Tabs = 2; Headers = 2 }
+    @{ Name = "left_right"; Env = "left_right"; Tabs = 2; Headers = 2 },
+    @{ Name = "grid";       Env = "grid";       Tabs = 2; Headers = 2 }
 )
 
 foreach ($m in $modes) {
@@ -121,7 +129,7 @@ foreach ($m in $modes) {
         }
 
         $hwnd = Find-GhosttyWindow -ProcessId $proc.Id
-        [Win32Split]::SetWindowPos($hwnd, [IntPtr]::Zero, 120, 90, 1100, 820,
+        [Win32Split]::SetWindowPos($hwnd, [IntPtr]::Zero, 120, 90, 1400, 1000,
             ([Win32Split]::SWP_NOACTIVATE -bor [Win32Split]::SWP_NOZORDER)) | Out-Null
         Start-Sleep -Milliseconds 2500
 
@@ -136,8 +144,6 @@ foreach ($m in $modes) {
         Write-Host "  [$($m.Name)] header texts: $($headers -join ' | ')" -ForegroundColor Cyan
         Test-AssertEqual -Expected $m.Headers -Actual $headers.Count -Message "$testName [$($m.Name)] - split header count"
         if ($m.Headers -eq 2) {
-            Test-Assert -Condition ($headers[0] -like '1  *' -or $headers[1] -like '1  *') -Message "$testName [$($m.Name)] - header for tab 1"
-            Test-Assert -Condition ($headers[0] -like '2  *' -or $headers[1] -like '2  *') -Message "$testName [$($m.Name)] - header for tab 2"
             # Each pane's shell titles its own tab (set_title is routed by
             # target surface, not to the active tab): no "N  Tab N" fallback.
             foreach ($h in $headers) {
@@ -154,12 +160,12 @@ foreach ($m in $modes) {
             foreach ($st in $steps) {
                 $i++
                 $resp = Send-CPCommand $proc.Id $st.Cmd
-                Start-Sleep -Milliseconds 1200
+                Start-Sleep -Milliseconds 1500
                 Test-Assert -Condition (-not $proc.HasExited) -Message "$testName [$($m.Name)] step $i $($st.Cmd) - process alive (resp=$resp)"
                 $got = Get-HeaderNumbers (Find-GhosttyUIAElement -ProcessId $proc.Id)
                 Test-AssertEqual -Expected $st.Expect -Actual $got -Message "$testName [$($m.Name)] step $i $($st.Cmd) - headers ($($st.Why))"
-                if ($i -eq 2) {
-                    $png2 = Join-Path $env:TEMP "ghostty-test12-$($m.Name)-switched.png"
+                if ($st.ContainsKey('Capture')) {
+                    $png2 = Join-Path $env:TEMP "ghostty-test12-$($m.Name)-$($st.Capture).png"
                     Save-WindowCapture $hwnd $png2
                     Write-Host "  [$($m.Name)] capture: $png2" -ForegroundColor DarkGray
                 }

@@ -1,19 +1,18 @@
-//! Two-pane split view: pure state/layout logic.
+//! Split view: show every tab of the window at once, pure layout logic.
 //!
-//! The split view shows two tabs of the same window at once (top/bottom or
-//! left/right). Each pane gets a one-line header with the tab number and
-//! title so the user can tell which two tabs are on screen. The tab strip
-//! itself is unchanged.
+//! Modes: all tabs stacked top-to-bottom, side by side left-to-right, or in
+//! a grid (2x2 for four tabs, ...). Each pane gets a one-line header with
+//! the tab number and title; the tab strip itself is unchanged.
 //!
 //! Everything here is free of COM / XAML so it can be tested exhaustively.
 //! `surface_binding.zig` turns a `Layout` into Grid rows/columns.
 const std = @import("std");
 
-pub const Mode = enum { none, top_bottom, left_right };
+pub const Mode = enum { none, top_bottom, left_right, grid };
 
-/// Indices (into the tab list) of the two tabs shown. `first` is the
-/// top / left pane, and always `first < second`.
-pub const Pair = struct { first: usize, second: usize };
+/// At most this many tabs are shown at once (more panes get too small to
+/// read). Other tabs stay reachable through the tab strip.
+pub const MAX_PANES = 4;
 
 /// Parse the `KS_SPLIT_VIEW` launch env var. Used by the UIA suite to start
 /// in split mode without sending keys to whatever window is in front.
@@ -27,15 +26,19 @@ pub fn parseMode(raw: []const u8) Mode {
         std.ascii.eqlIgnoreCase(raw, "leftright") or
         std.ascii.eqlIgnoreCase(raw, "horizontal"))
         return .left_right;
+    if (std.ascii.eqlIgnoreCase(raw, "grid") or
+        std.ascii.eqlIgnoreCase(raw, "quad"))
+        return .grid;
     return .none;
 }
 
-/// Button / Ctrl+Shift+E cycle: off → top/bottom → left/right → off.
+/// Split button cycle: off -> top/bottom -> left/right -> grid -> off.
 pub fn nextMode(mode: Mode) Mode {
     return switch (mode) {
         .none => .top_bottom,
         .top_bottom => .left_right,
-        .left_right => .none,
+        .left_right => .grid,
+        .grid => .none,
     };
 }
 
@@ -44,70 +47,23 @@ pub fn toggleMode(current: Mode, requested: Mode) Mode {
     return if (current == requested) .none else requested;
 }
 
-fn ordered(a: usize, b: usize) Pair {
-    return .{ .first = @min(a, b), .second = @max(a, b) };
+/// Number of panes for `count` tabs.
+pub fn paneCount(count: usize) usize {
+    return @min(count, MAX_PANES);
 }
 
-/// Pair chosen when split view is switched on: the active tab plus the one
-/// used just before it (else its neighbour). Requires `count >= 2`.
-pub fn initialPair(active: usize, last_active: ?usize, count: usize) Pair {
-    std.debug.assert(count >= 2);
-    const primary = @min(active, count - 1);
-    const partner = blk: {
-        if (last_active) |last| {
-            if (last < count and last != primary) break :blk last;
-        }
-        break :blk if (primary + 1 < count) primary + 1 else primary - 1;
-    };
-    return ordered(primary, partner);
-}
-
-/// True when the pair can be shown as-is for `count` tabs.
-pub fn pairValid(p: Pair, count: usize) bool {
-    return p.first < p.second and p.second < count;
-}
-
-/// A tab outside the pair was selected in the tab strip. It replaces the
-/// pane that was NOT focused (`prev`), so the pane being worked in stays.
-/// A tab already in the pair leaves the pair unchanged.
-pub fn pairOnSelect(p: Pair, prev: usize, new: usize) Pair {
-    if (new == p.first or new == p.second) return p;
-    const keep = if (prev == p.second) p.second else p.first;
-    return ordered(keep, new);
-}
-
-/// A new tab was opened (it is appended at `new_idx`) while `prev` was
-/// focused: show prev + the new tab.
-pub fn pairOnNewTab(prev: usize, new_idx: usize) Pair {
-    std.debug.assert(new_idx >= 1);
-    const keep = if (prev < new_idx) prev else new_idx - 1;
-    return ordered(keep, new_idx);
-}
-
-/// Tab `removed` was closed; `new_len` tabs remain (>= 2) and `active` is
-/// the already-adjusted focused index. Surviving pair members keep showing
-/// (indices shifted); a closed member is replaced by the active tab, or by
-/// the lowest index not already shown.
-pub fn pairOnRemove(p: Pair, removed: usize, new_len: usize, active: usize) Pair {
-    std.debug.assert(new_len >= 2);
-    std.debug.assert(active < new_len);
-    const shift = struct {
-        fn f(i: usize, r: usize) ?usize {
-            if (i == r) return null;
-            return if (i > r) i - 1 else i;
-        }
-    }.f;
-    var a = shift(p.first, removed);
-    var b = shift(p.second, removed);
-    if (a == null and b == null) {
-        // Cannot happen (pair members are distinct), but stay total.
-        return initialPair(active, null, new_len);
+/// First tab of the shown window of `paneCount(count)` consecutive tabs.
+/// Moves as little as possible from `prev_start` so that `active` is
+/// inside, and stays within the tab list (e.g. after tabs were closed).
+pub fn windowStart(prev_start: usize, count: usize, active: usize) usize {
+    const n = paneCount(count);
+    if (n == 0) return 0;
+    var start = @min(prev_start, count - n);
+    if (active < count) {
+        if (active < start) start = active;
+        if (active >= start + n) start = active + 1 - n;
     }
-    const survivor = (a orelse b).?;
-    const replacement: usize = if (active != survivor) active else if (survivor == 0) 1 else 0;
-    if (a == null) a = replacement;
-    if (b == null) b = replacement;
-    return ordered(a.?, b.?);
+    return start;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,39 +71,62 @@ pub fn pairOnRemove(p: Pair, removed: usize, new_len: usize, active: usize) Pair
 // ---------------------------------------------------------------------------
 
 pub const Track = enum { auto, star };
-pub const Cell = struct { row: i32, col: i32 };
 
+pub const Cell = struct { row: i32, col: i32, col_span: i32 = 1 };
+
+/// Grid plan: header row (auto height) directly above each pane (star).
 pub const Layout = struct {
-    rows: []const Track,
-    cols: []const Track,
-    /// [0] = first pane (top/left), [1] = second pane.
-    header: [2]Cell,
-    pane: [2]Cell,
+    rows_buf: [2 * MAX_PANES]Track = undefined,
+    cols_buf: [MAX_PANES]Track = undefined,
+    n_rows: usize = 0,
+    n_cols: usize = 0,
+    header: [MAX_PANES]Cell = undefined,
+    pane: [MAX_PANES]Cell = undefined,
+    panes: usize = 0,
+
+    pub fn rows(self: *const Layout) []const Track {
+        return self.rows_buf[0..self.n_rows];
+    }
+    pub fn cols(self: *const Layout) []const Track {
+        return self.cols_buf[0..self.n_cols];
+    }
 };
 
-const tb_rows = [_]Track{ .auto, .star, .auto, .star };
-const tb_cols = [_]Track{.star};
-const lr_rows = [_]Track{ .auto, .star };
-const lr_cols = [_]Track{ .star, .star };
+/// Columns of the grid mode for `n` panes: the smallest c with c*c >= n
+/// (2 -> 2x1, 3/4 -> 2x2, 5/6 -> 3x2, 7..9 -> 3x3).
+pub fn gridColumns(n: usize) usize {
+    var c: usize = 1;
+    while (c * c < n) c += 1;
+    return c;
+}
 
-/// Grid plan for a split mode; null for `.none` (single pane, no headers).
-/// Headers sit directly above their pane.
-pub fn layoutFor(mode: Mode) ?Layout {
-    return switch (mode) {
-        .none => null,
-        .top_bottom => .{
-            .rows = &tb_rows,
-            .cols = &tb_cols,
-            .header = .{ .{ .row = 0, .col = 0 }, .{ .row = 2, .col = 0 } },
-            .pane = .{ .{ .row = 1, .col = 0 }, .{ .row = 3, .col = 0 } },
-        },
-        .left_right => .{
-            .rows = &lr_rows,
-            .cols = &lr_cols,
-            .header = .{ .{ .row = 0, .col = 0 }, .{ .row = 0, .col = 1 } },
-            .pane = .{ .{ .row = 1, .col = 0 }, .{ .row = 1, .col = 1 } },
-        },
+/// Layout for `n` panes (2..MAX_PANES) in `mode`; null for `.none` or n < 2.
+pub fn layoutFor(mode: Mode, n: usize) ?Layout {
+    if (mode == .none or n < 2 or n > MAX_PANES) return null;
+    var l = Layout{ .panes = n };
+    const c: usize = switch (mode) {
+        .top_bottom => 1,
+        .left_right => n,
+        .grid => gridColumns(n),
+        .none => unreachable,
     };
+    const r = (n + c - 1) / c;
+    l.n_cols = c;
+    for (0..c) |i| l.cols_buf[i] = .star;
+    l.n_rows = 2 * r;
+    for (0..r) |i| {
+        l.rows_buf[2 * i] = .auto;
+        l.rows_buf[2 * i + 1] = .star;
+    }
+    for (0..n) |i| {
+        const row: i32 = @intCast(i / c);
+        const col: i32 = @intCast(i % c);
+        // The last pane stretches over any empty cells left in its row.
+        const span: i32 = if (i == n - 1) @as(i32, @intCast(c)) - col else 1;
+        l.header[i] = .{ .row = 2 * row, .col = col, .col_span = span };
+        l.pane[i] = .{ .row = 2 * row + 1, .col = col, .col_span = span };
+    }
+    return l;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,11 +163,10 @@ pub fn headerText(buf: []u8, tab_idx: usize, title: ?[]const u8) []const u8 {
 }
 
 // ---------------------------------------------------------------------------
-// Tests — every (count, pair, prev/removed/active) combination up to 6 tabs.
+// Tests
 // ---------------------------------------------------------------------------
 
 const testing = std.testing;
-const MAX_TABS = 6;
 
 test "parseMode: aliases and fallback" {
     try testing.expectEqual(Mode.top_bottom, parseMode("top_bottom"));
@@ -197,15 +175,22 @@ test "parseMode: aliases and fallback" {
     try testing.expectEqual(Mode.top_bottom, parseMode("1"));
     try testing.expectEqual(Mode.left_right, parseMode("left_right"));
     try testing.expectEqual(Mode.left_right, parseMode("Horizontal"));
+    try testing.expectEqual(Mode.grid, parseMode("grid"));
+    try testing.expectEqual(Mode.grid, parseMode("QUAD"));
     try testing.expectEqual(Mode.none, parseMode(""));
     try testing.expectEqual(Mode.none, parseMode("0"));
     try testing.expectEqual(Mode.none, parseMode("bogus"));
 }
 
-test "nextMode / toggleMode: all mode combinations" {
-    try testing.expectEqual(Mode.top_bottom, nextMode(.none));
-    try testing.expectEqual(Mode.left_right, nextMode(.top_bottom));
-    try testing.expectEqual(Mode.none, nextMode(.left_right));
+test "nextMode cycles through every mode once; toggleMode all combinations" {
+    var m: Mode = .none;
+    var seen = std.EnumSet(Mode).initEmpty();
+    for (0..std.enums.values(Mode).len) |_| {
+        try testing.expect(!seen.contains(m));
+        seen.insert(m);
+        m = nextMode(m);
+    }
+    try testing.expectEqual(Mode.none, m);
     for (std.enums.values(Mode)) |cur| {
         for (std.enums.values(Mode)) |req| {
             const got = toggleMode(cur, req);
@@ -214,122 +199,83 @@ test "nextMode / toggleMode: all mode combinations" {
     }
 }
 
-test "initialPair: valid and contains active, all inputs" {
-    var count: usize = 2;
-    while (count <= MAX_TABS) : (count += 1) {
-        for (0..count) |active| {
-            // last_active: null, every index, and one out of range.
-            var l: usize = 0;
-            while (l <= count + 1) : (l += 1) {
-                const last: ?usize = if (l == count + 1) null else l;
-                const p = initialPair(active, last, count);
-                try testing.expect(pairValid(p, count));
-                try testing.expect(p.first == active or p.second == active);
-                if (last) |li| {
-                    if (li < count and li != active)
-                        try testing.expect(p.first == li or p.second == li);
-                }
-            }
-        }
-    }
-}
-
-test "pairOnSelect: valid, keeps focused pane, shows new tab" {
-    var count: usize = 2;
-    while (count <= MAX_TABS) : (count += 1) {
-        for (0..count) |f| {
-            for (f + 1..count) |s| {
-                const p = Pair{ .first = f, .second = s };
-                // prev is always a pane of the pair (focus lives in one of them).
-                for ([_]usize{ f, s }) |prev| {
-                    for (0..count) |new| {
-                        const q = pairOnSelect(p, prev, new);
-                        try testing.expect(pairValid(q, count));
-                        try testing.expect(q.first == new or q.second == new);
-                        if (new == f or new == s) {
-                            try testing.expectEqual(p, q);
-                        } else {
-                            try testing.expect(q.first == prev or q.second == prev);
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-test "pairOnNewTab: shows previous and the new tab" {
-    var new_idx: usize = 1;
-    while (new_idx < MAX_TABS) : (new_idx += 1) {
+test "windowStart: active always shown, window inside the list, minimal moves" {
+    var count: usize = 1;
+    while (count <= 9) : (count += 1) {
+        const n = paneCount(count);
+        try testing.expectEqual(@min(count, MAX_PANES), n);
         var prev: usize = 0;
-        while (prev <= new_idx) : (prev += 1) {
-            const q = pairOnNewTab(prev, new_idx);
-            try testing.expect(pairValid(q, new_idx + 1));
-            try testing.expectEqual(new_idx, q.second);
-            if (prev < new_idx) try testing.expectEqual(prev, q.first);
-        }
-    }
-}
-
-test "pairOnRemove: valid, survivors kept, active shown when replaced" {
-    var old_len: usize = 3;
-    while (old_len <= MAX_TABS + 1) : (old_len += 1) {
-        const new_len = old_len - 1;
-        for (0..old_len) |f| {
-            for (f + 1..old_len) |s| {
-                for (0..old_len) |removed| {
-                    for (0..new_len) |active| try checkRemove(f, s, removed, new_len, active);
-                }
+        while (prev <= count + 2) : (prev += 1) {
+            for (0..count) |active| {
+                const s = windowStart(prev, count, active);
+                try testing.expect(s + n <= count);
+                try testing.expect(active >= s and active < s + n);
+                // Unmoved when the active tab was already inside the (clamped) old window.
+                const old = @min(prev, count - n);
+                if (active >= old and active < old + n) try testing.expectEqual(old, s);
             }
         }
     }
+    try testing.expectEqual(@as(usize, 0), windowStart(0, 0, 0));
 }
 
-fn checkRemove(f: usize, s: usize, removed: usize, new_len: usize, active: usize) !void {
-    {
-        const q = pairOnRemove(.{ .first = f, .second = s }, removed, new_len, active);
-        try testing.expect(pairValid(q, new_len));
-        for ([_]usize{ f, s }) |m| {
-            if (m == removed) continue;
-            const shifted = if (m > removed) m - 1 else m;
-            try testing.expect(q.first == shifted or q.second == shifted);
+fn checkLayout(mode: Mode, n: usize) !void {
+    const l = layoutFor(mode, n).?;
+    try testing.expectEqual(n, l.panes);
+    const R: i32 = @intCast(l.n_rows);
+    const C: i32 = @intCast(l.n_cols);
+    // Every cell of the grid is covered by exactly one header or pane.
+    var used = [_][MAX_PANES]bool{[_]bool{false} ** MAX_PANES} ** (2 * MAX_PANES);
+    for (0..n) |i| {
+        for ([_]Cell{ l.header[i], l.pane[i] }) |cell| {
+            try testing.expect(cell.row >= 0 and cell.row < R);
+            try testing.expect(cell.col >= 0 and cell.col_span >= 1 and cell.col + cell.col_span <= C);
+            var c = cell.col;
+            while (c < cell.col + cell.col_span) : (c += 1) {
+                const r: usize = @intCast(cell.row);
+                const cc: usize = @intCast(c);
+                try testing.expect(!used[r][cc]);
+                used[r][cc] = true;
+            }
         }
-        if (removed == f or removed == s) {
-            const survivor_old = if (removed == f) s else f;
-            const survivor = if (survivor_old > removed) survivor_old - 1 else survivor_old;
-            if (active != survivor) try testing.expect(q.first == active or q.second == active);
-        } else {
-            // Neither shown tab closed: pair only shifts.
-            const ef = if (f > removed) f - 1 else f;
-            const es = if (s > removed) s - 1 else s;
-            try testing.expectEqual(Pair{ .first = ef, .second = es }, q);
-        }
+        // Header directly above its pane, same width.
+        try testing.expectEqual(l.header[i].col, l.pane[i].col);
+        try testing.expectEqual(l.header[i].col_span, l.pane[i].col_span);
+        try testing.expectEqual(l.header[i].row + 1, l.pane[i].row);
+        try testing.expectEqual(Track.auto, l.rows()[@intCast(l.header[i].row)]);
+        try testing.expectEqual(Track.star, l.rows()[@intCast(l.pane[i].row)]);
+    }
+    for (0..l.n_rows) |r| for (0..l.n_cols) |c| try testing.expect(used[r][c]);
+    // Reading order: tab order goes left-to-right, then top-to-bottom.
+    for (1..n) |i| {
+        const a = l.pane[i - 1];
+        const b = l.pane[i];
+        try testing.expect(b.row > a.row or (b.row == a.row and b.col > a.col));
+    }
+    switch (mode) {
+        .top_bottom => try testing.expectEqual(@as(usize, 1), l.n_cols),
+        .left_right => try testing.expectEqual(@as(usize, 2), l.n_rows),
+        .grid => {
+            // Never more columns than rows+1 and no empty grid row.
+            try testing.expect(l.n_cols * l.n_cols >= n);
+            try testing.expect((l.n_rows / 2 - 1) * l.n_cols < n);
+        },
+        .none => unreachable,
     }
 }
 
-test "layoutFor: every split mode has distinct cells inside the grid, header above pane" {
-    try testing.expect(layoutFor(.none) == null);
-    for ([_]Mode{ .top_bottom, .left_right }) |mode| {
-        const l = layoutFor(mode).?;
-        const cells = [_]Cell{ l.header[0], l.pane[0], l.header[1], l.pane[1] };
-        for (cells, 0..) |c, i| {
-            try testing.expect(c.row >= 0 and c.row < l.rows.len);
-            try testing.expect(c.col >= 0 and c.col < l.cols.len);
-            for (cells[i + 1 ..]) |d| try testing.expect(!(c.row == d.row and c.col == d.col));
-        }
-        for (0..2) |k| {
-            try testing.expectEqual(l.header[k].col, l.pane[k].col);
-            try testing.expectEqual(l.header[k].row + 1, l.pane[k].row);
-            try testing.expectEqual(Track.auto, l.rows[@intCast(l.header[k].row)]);
-            try testing.expectEqual(Track.star, l.rows[@intCast(l.pane[k].row)]);
-        }
-        // Pane order: first is top (top_bottom) or left (left_right).
-        switch (mode) {
-            .top_bottom => try testing.expect(l.pane[0].row < l.pane[1].row),
-            .left_right => try testing.expect(l.pane[0].col < l.pane[1].col),
-            .none => unreachable,
-        }
+test "layoutFor: every split mode x pane count fills the grid exactly" {
+    for ([_]Mode{ .top_bottom, .left_right, .grid }) |mode| {
+        try testing.expect(layoutFor(mode, 0) == null);
+        try testing.expect(layoutFor(mode, 1) == null);
+        try testing.expect(layoutFor(mode, MAX_PANES + 1) == null);
+        var n: usize = 2;
+        while (n <= MAX_PANES) : (n += 1) try checkLayout(mode, n);
     }
+    for (0..MAX_PANES + 2) |n| try testing.expect(layoutFor(.none, n) == null);
+    // Grid shapes the user sees.
+    try testing.expectEqual(@as(usize, 2), layoutFor(.grid, 4).?.n_cols); // 2x2
+    try testing.expectEqual(@as(i32, 2), layoutFor(.grid, 3).?.pane[2].col_span); // 3rd spans the bottom row
 }
 
 test "headerText: number + title, fallback, truncation keeps valid UTF-8" {
@@ -337,7 +283,6 @@ test "headerText: number + title, fallback, truncation keeps valid UTF-8" {
     try testing.expectEqualStrings("1  pwsh", headerText(&buf, 0, "pwsh"));
     try testing.expectEqualStrings("3  Tab 3", headerText(&buf, 2, null));
     try testing.expectEqualStrings("3  Tab 3", headerText(&buf, 2, ""));
-    // Japanese title truncated at every buffer size: always valid UTF-8 and a prefix.
     const title = "ゴーストティ分割表示テスト";
     var full_buf: [128]u8 = undefined;
     const full = headerText(&full_buf, 1, title);
