@@ -10,6 +10,10 @@
 //!   - Codex has no pid map: match `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`
 //!     (first line `session_meta` with id, cwd, timestamp) against the
 //!     process start time, unless the command line already says `resume <id>`.
+//!   - agy (Antigravity CLI, 2026-11-23): conversations are
+//!     `~/.gemini/antigravity-cli/conversations/<id>.db`; pick the one created
+//!     after the process started (or `--conversation <id>` on its command
+//!     line). Resume with `agy --conversation <id>`.
 //!
 //! Pure logic (plan JSON, argv filtering, restore command, codex matching)
 //! is at the top and unit-tested; Win32 process inspection is below.
@@ -19,7 +23,7 @@ const Allocator = std.mem.Allocator;
 
 const log = std.log.scoped(.session_restore);
 
-pub const Kind = enum { shell, claude, codex };
+pub const Kind = enum { shell, claude, codex, agy };
 
 pub const Tab = struct {
     kind: Kind = .shell,
@@ -84,6 +88,14 @@ pub fn keepArgs(alloc: Allocator, kind: Kind, argv: []const []const u8) ![]const
                 if (takes_value and i + 1 < argv.len and argv[i + 1].len > 0 and argv[i + 1][0] != '-') i += 1;
                 continue;
             },
+            .agy => {
+                if (std.mem.eql(u8, a, "--conversation")) {
+                    if (i + 1 < argv.len) i += 1;
+                    continue;
+                }
+                if (std.mem.startsWith(u8, a, "--conversation=") or
+                    std.mem.eql(u8, a, "--continue") or std.mem.eql(u8, a, "-c")) continue;
+            },
             .codex => {
                 if (std.mem.eql(u8, a, "resume") or std.mem.eql(u8, a, "fork")) {
                     // Subcommand: drop it, its session id and --last.
@@ -108,6 +120,15 @@ pub fn claudeResumeArg(argv: []const []const u8) ?[]const u8 {
             const v = argv[i + 1];
             if (v.len > 0 and v[0] != '-') return v;
         }
+    }
+    return null;
+}
+
+/// Conversation id given on an agy command line (`--conversation <id>`).
+pub fn agyConversationArg(argv: []const []const u8) ?[]const u8 {
+    for (argv, 0..) |a, i| {
+        if (std.mem.startsWith(u8, a, "--conversation=")) return a["--conversation=".len..];
+        if (std.mem.eql(u8, a, "--conversation") and i + 1 < argv.len) return argv[i + 1];
     }
     return null;
 }
@@ -152,6 +173,7 @@ pub fn restoreCommand(alloc: Allocator, tab: Tab) !?[:0]u8 {
         .shell => return null,
         .claude => try out.appendSlice(alloc, "cmd.exe /k claude --resume "),
         .codex => try out.appendSlice(alloc, "cmd.exe /k codex resume "),
+        .agy => try out.appendSlice(alloc, "cmd.exe /k agy --conversation "),
     }
     try appendQuoted(&out, alloc, id);
     for (tab.args) |a| {
@@ -270,10 +292,15 @@ extern "kernel32" fn Process32FirstW(h: win.HANDLE, pe: *PROCESSENTRY32W) callco
 extern "kernel32" fn Process32NextW(h: win.HANDLE, pe: *PROCESSENTRY32W) callconv(.winapi) win.BOOL;
 extern "kernel32" fn OpenProcess(access: u32, inherit: win.BOOL, pid: u32) callconv(.winapi) ?win.HANDLE;
 extern "kernel32" fn GetProcessTimes(h: win.HANDLE, c: *win.FILETIME, e: *win.FILETIME, k: *win.FILETIME, u: *win.FILETIME) callconv(.winapi) win.BOOL;
+extern "kernel32" fn GetFileInformationByHandle(h: win.HANDLE, info: *win.BY_HANDLE_FILE_INFORMATION) callconv(.winapi) win.BOOL;
 extern "kernel32" fn WaitForSingleObject(h: win.HANDLE, ms: u32) callconv(.winapi) u32;
 extern "ntdll" fn NtQueryInformationProcess(h: win.HANDLE, class: u32, buf: *anyopaque, len: u32, ret: ?*u32) callconv(.winapi) i32;
 
+extern "kernel32" fn ReadProcessMemory(h: win.HANDLE, addr: usize, buf: [*]u8, size: usize, read: ?*usize) callconv(.winapi) win.BOOL;
+
 const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
+const PROCESS_VM_READ: u32 = 0x0010;
 const SYNCHRONIZE: u32 = 0x00100000;
 const ProcessCommandLineInformation: u32 = 60;
 const TH32CS_SNAPPROCESS: u32 = 0x2;
@@ -318,6 +345,39 @@ fn commandLine(alloc: Allocator, pid: u32) ![]const []const u8 {
     return args.toOwnedSlice(alloc);
 }
 
+/// Current folder of another process: PEB -> ProcessParameters ->
+/// CurrentDirectory.DosPath (x64 offsets 0x20 / 0x38). cmd.exe does not
+/// report its folder to the terminal (no OSC 7), so this is how a plain
+/// shell tab or an agy tab keeps its folder across a restart.
+fn processCwd(alloc: Allocator, pid: u32) ?[]const u8 {
+    if (@sizeOf(usize) != 8) return null;
+    const h = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid) orelse return null;
+    defer win.CloseHandle(h);
+    var pbi: win.PROCESS_BASIC_INFORMATION = undefined;
+    if (NtQueryInformationProcess(h, 0, &pbi, @sizeOf(win.PROCESS_BASIC_INFORMATION), null) != 0) return null;
+    const read = struct {
+        fn f(hh: win.HANDLE, addr: usize, out: []u8) bool {
+            var n: usize = 0;
+            return ReadProcessMemory(hh, addr, out.ptr, out.len, &n) != 0 and n == out.len;
+        }
+    }.f;
+    var params_addr: usize = 0;
+    if (!read(h, @intFromPtr(pbi.PebBaseAddress) + 0x20, std.mem.asBytes(&params_addr))) return null;
+    var dos: extern struct { len: u16, max: u16, pad: u32, buf: usize } = undefined;
+    if (!read(h, params_addr + 0x38, std.mem.asBytes(&dos))) return null;
+    if (dos.len == 0 or dos.len > 4096) return null;
+    const w = alloc.alloc(u16, dos.len / 2) catch return null;
+    if (!read(h, dos.buf, std.mem.sliceAsBytes(w))) return null;
+    var path = std.unicode.wtf16LeToWtf8Alloc(alloc, w) catch return null;
+    // "C:\work\" -> "C:\work" (keep "C:\").
+    if (path.len > 3 and path[path.len - 1] == '\\') path = path[0 .. path.len - 1];
+    return path;
+}
+
+fn isShellName(p: *const Proc) bool {
+    return isNamed(p, "cmd.exe") or isNamed(p, "pwsh.exe") or isNamed(p, "powershell.exe") or isNamed(p, "bash.exe");
+}
+
 fn processStartMs(pid: u32) ?i64 {
     const h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) orelse return null;
     defer win.CloseHandle(h);
@@ -348,7 +408,22 @@ fn homeDir(alloc: Allocator) ![]u8 {
 
 /// Describe what runs in a tab whose shell is `shell_pid`. Everything is
 /// allocated in `alloc` (use an arena). Falls back to a plain shell tab.
-pub fn inspectTab(alloc: Allocator, procs: []const Proc, shell_pid: u32, shell_cwd: ?[]const u8) Tab {
+pub fn inspectTab(alloc: Allocator, procs: []const Proc, shell_pid: u32, reported_cwd: ?[]const u8) Tab {
+    // Folder of the interactive shell, read from the innermost shell process
+    // under the `cmd.exe /C` wrapper. The terminal's own pwd is only a
+    // fallback: without OSC 7 (cmd.exe) it stays at the start folder.
+    const shell_cwd = blk: {
+        var cur = shell_pid;
+        var depth: u8 = 0;
+        while (depth < 4) : (depth += 1) {
+            const child = for (procs) |*p| {
+                if (p.ppid == cur and p.pid != cur and isShellName(p)) break p;
+            } else null;
+            const c = child orelse break;
+            cur = c.pid;
+        }
+        break :blk processCwd(alloc, cur) orelse reported_cwd;
+    };
     const tab = Tab{ .cwd = shell_cwd };
     // Breadth-first over descendants of the shell.
     var queue: std.ArrayList(u32) = .empty;
@@ -360,6 +435,9 @@ pub fn inspectTab(alloc: Allocator, procs: []const Proc, shell_pid: u32, shell_c
             if (p.ppid != parent or p.pid == parent) continue;
             if (isNamed(p, "claude.exe")) {
                 if (inspectClaude(alloc, p.pid, shell_cwd)) |t| return t;
+            } else if (isNamed(p, "agy.exe")) {
+                if (inspectAgy(alloc, p.pid, shell_cwd)) |t| return t;
+                continue;
             } else if (isNamed(p, "codex.exe")) {
                 if (inspectCodex(alloc, procs, p, shell_cwd)) |t| return t;
                 continue; // don't descend into codex helpers
@@ -419,6 +497,47 @@ fn inspectCodex(alloc: Allocator, procs: []const Proc, p: *const Proc, cwd: ?[]c
         .session_id = id,
         .args = keepArgs(alloc, .codex, argv) catch &.{},
     };
+}
+
+fn inspectAgy(alloc: Allocator, pid: u32, cwd: ?[]const u8) ?Tab {
+    const argv = commandLine(alloc, pid) catch &[_][]const u8{"agy"};
+    const id = agyConversationArg(argv) orelse blk: {
+        const start = processStartMs(pid) orelse return null;
+        break :blk findAgyConversation(alloc, start) orelse return null;
+    };
+    return .{ .kind = .agy, .cwd = processCwd(alloc, pid) orelse cwd, .session_id = id, .args = keepArgs(alloc, .agy, argv) catch &.{} };
+}
+
+/// Newest `<id>.db` created after the agy process started (its -wal file
+/// carries the latest write time).
+fn findAgyConversation(alloc: Allocator, start_ms: i64) ?[]const u8 {
+    const home = homeDir(alloc) catch return null;
+    const dir_path = std.fmt.allocPrint(alloc, "{s}\\.gemini\\antigravity-cli\\conversations", .{home}) catch return null;
+    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
+    defer dir.close();
+    var cands: std.ArrayList(CodexCandidate) = .empty;
+    var it = dir.iterate();
+    while (it.next() catch null) |ent| {
+        if (ent.kind != .file or !std.mem.endsWith(u8, ent.name, ".db")) continue;
+        const id = ent.name[0 .. ent.name.len - 3];
+        const created = fileTimeMs(dir, ent.name, .created) orelse continue;
+        var modified = fileTimeMs(dir, ent.name, .modified) orelse continue;
+        const wal = std.fmt.allocPrint(alloc, "{s}-wal", .{ent.name}) catch continue;
+        if (fileTimeMs(dir, wal, .modified)) |w| modified = @max(modified, w);
+        cands.append(alloc, .{ .id = alloc.dupe(u8, id) catch continue, .cwd = "", .created_ms = created, .modified_ms = modified }) catch {};
+    }
+    const i = pickCodexSession(cands.items, start_ms, null) orelse return null;
+    return cands.items[i].id;
+}
+
+fn fileTimeMs(dir: std.fs.Dir, name: []const u8, which: enum { created, modified }) ?i64 {
+    const f = dir.openFile(name, .{}) catch return null;
+    defer f.close();
+    var info: win.BY_HANDLE_FILE_INFORMATION = undefined;
+    if (GetFileInformationByHandle(f.handle, &info) == 0) return null;
+    const ft = if (which == .created) info.ftCreationTime else info.ftLastWriteTime;
+    const ticks: i64 = @intCast((@as(u64, ft.dwHighDateTime) << 32) | ft.dwLowDateTime);
+    return @divFloor(ticks - 116444736000000000, 10_000);
 }
 
 fn findCodexRollout(alloc: Allocator, start_ms: i64, cwd: ?[]const u8) ?CodexCandidate {
@@ -537,6 +656,27 @@ test "claudeResumeArg: every form" {
     try testing.expect(claudeResumeArg(&.{ "claude", "-c" }) == null);
 }
 
+test "agy: keepArgs drops conversation picking, arg lookup, restore command" {
+    const A = testing.allocator;
+    const cases = [_]struct { in: []const []const u8, out: []const []const u8, id: ?[]const u8 }{
+        .{ .in = &.{"agy"}, .out = &.{}, .id = null },
+        .{ .in = &.{ "agy", "--model", "m" }, .out = &.{ "--model", "m" }, .id = null },
+        .{ .in = &.{ "agy", "--conversation", "c1", "--effort", "low" }, .out = &.{ "--effort", "low" }, .id = "c1" },
+        .{ .in = &.{ "agy", "--conversation=c2", "-c" }, .out = &.{}, .id = "c2" },
+        .{ .in = &.{ "agy", "--continue", "--mode", "plan" }, .out = &.{ "--mode", "plan" }, .id = null },
+    };
+    for (cases) |c| {
+        const got = try keepArgs(A, .agy, c.in);
+        defer A.free(got);
+        try testing.expectEqual(c.out.len, got.len);
+        for (c.out, got) |e, g| try testing.expectEqualStrings(e, g);
+        if (c.id) |id| try testing.expectEqualStrings(id, agyConversationArg(c.in).?) else try testing.expect(agyConversationArg(c.in) == null);
+    }
+    const cmd = (try restoreCommand(A, .{ .kind = .agy, .session_id = "b58", .args = &.{ "--effort", "low" } })).?;
+    defer A.free(cmd);
+    try testing.expectEqualStrings("cmd.exe /k agy --conversation b58 --effort low", cmd);
+}
+
 test "restoreCommand: every kind x with/without args x quoting" {
     const A = testing.allocator;
     try testing.expect((try restoreCommand(A, .{})) == null);
@@ -607,9 +747,15 @@ test "inspectTab on this test process: plain shell, no crash" {
     const procs = snapshotProcesses(a);
     try testing.expect(procs.len > 0);
     const me = win.GetCurrentProcessId();
-    const t = inspectTab(a, procs, me, "C:\tmp");
+    // The folder read from the process wins over the terminal-reported one
+    // (which for cmd.exe stays at the start folder).
+    const t = inspectTab(a, procs, me, "C:\\stale");
     try testing.expectEqual(Kind.shell, t.kind);
-    try testing.expectEqualStrings("C:\tmp", t.cwd.?);
+    try testing.expectEqualStrings(processCwd(a, me).?, t.cwd.?);
+    // Our own folder reads back through the PEB.
+    var cwd_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const real_cwd = try std.process.getCwd(&cwd_buf);
+    try testing.expect(std.ascii.eqlIgnoreCase(std.mem.trimRight(u8, real_cwd, "\\"), processCwd(a, me).?));
     // Command line of ourselves parses and starts with the test binary.
     const argv = try commandLine(a, me);
     try testing.expect(argv.len >= 1);

@@ -8,7 +8,7 @@
 # and a codex rollout. Commands are typed through the control plane pipe.
 # No keyboard / mouse input.
 #
-# Axes: tab kind {claude, codex, shell} x restored property {kind, session
+# Axes: tab kind {claude, codex, agy, shell} x restored property {kind, session
 # id, folder, args}, plus split pair and active tab.
 
 param([string]$ExePath)
@@ -43,6 +43,11 @@ $work2 = Join-Path $root "work-codex"
 foreach ($d in @($home2, $bin, $work1, $work2, "$home2\.claude\sessions")) { New-Item -ItemType Directory -Force $d | Out-Null }
 Copy-Item "$env:WINDIR\System32\cmd.exe" "$bin\claude.exe"
 Copy-Item "$env:WINDIR\System32\cmd.exe" "$bin\codex.exe"
+Copy-Item "$env:WINDIR\System32\cmd.exe" "$bin\agy.exe"
+$work3 = Join-Path $root "work-agy"
+$work4 = Join-Path $root "work shell"
+New-Item -ItemType Directory -Force $work3, $work4, "$home2\.gemini\antigravity-cli\conversations" | Out-Null
+$agyId = "b5831a96-0000-4ffe-bb74-13845987f150"
 
 $claudeId = "11111111-2222-3333-4444-555555555555"
 $codexId = "019a0000-aaaa-7bbb-8ccc-dddddddddddd"
@@ -127,8 +132,19 @@ try {
     ($meta | ConvertTo-Json -Compress -Depth 4) | Set-Content -Encoding UTF8 (Join-Path $dayDir "rollout-test-sub.jsonl")
 
     Send-CP $old.Id "NEW_TAB" | Out-Null; Start-Sleep -Seconds 2
-    Test-AssertEqual -Expected 3 -Actual (Get-TabCount $old.Id) -Message "$testName - old window has 3 tabs"
-    Test-AssertEqual -Expected "1,3" -Actual (Get-HeaderNumbers $old.Id) -Message "$testName - old window split shows tabs 1 and 3"
+    # Tab 3: plain cmd that moved to another folder (cmd reports no OSC 7).
+    Send-Line $old.Id "cd /d `"$work4`""
+    Start-Sleep -Milliseconds 800
+    # Tab 4: agy. An older conversation (created before agy started) must not be picked.
+    Set-Content "$home2\.gemini\antigravity-cli\conversations\00000000-old.db" "x"
+    Start-Sleep -Milliseconds 300
+    Send-CP $old.Id "NEW_TAB" | Out-Null; Start-Sleep -Seconds 2
+    Send-Line $old.Id "cd /d `"$work3`" && agy -n 600 127.0.0.1"
+    [void](Wait-Process-Named $old.Id "agy.exe")
+    Start-Sleep -Milliseconds 300
+    Set-Content "$home2\.gemini\antigravity-cli\conversations\$agyId.db" "x"
+    Test-AssertEqual -Expected 4 -Actual (Get-TabCount $old.Id) -Message "$testName - old window has 4 tabs"
+    Test-AssertEqual -Expected "3,4" -Actual (Get-HeaderNumbers $old.Id) -Message "$testName - old window split shows tabs 3 and 4"
 
     # --- 2. Restart.
     [Win32R]::PostMessageW($hwnd, $WM_APP_RESTART_RESTORE, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
@@ -145,8 +161,8 @@ try {
     Start-Sleep -Seconds 4
 
     # --- 3. Restored state.
-    Test-AssertEqual -Expected 3 -Actual (Get-TabCount $new.ProcessId) -Message "$testName - 3 tabs restored"
-    Test-AssertEqual -Expected "1,3" -Actual (Get-HeaderNumbers $new.ProcessId) -Message "$testName - split view and pair restored"
+    Test-AssertEqual -Expected 4 -Actual (Get-TabCount $new.ProcessId) -Message "$testName - 4 tabs restored"
+    Test-AssertEqual -Expected "3,4" -Actual (Get-HeaderNumbers $new.ProcessId) -Message "$testName - split view and pair restored"
 
     $desc = @(Get-Descendants $new.ProcessId)
     # ghostty runs each tab as `cmd.exe /C <command>`; look at the inner shells only.
@@ -154,8 +170,9 @@ try {
     $cmdlines | ForEach-Object { Write-Host "  restored: $_" -ForegroundColor Cyan }
     Test-Assert -Condition (@($cmdlines | Where-Object { $_ -like "*/k codex resume $codexId -n 600 127.0.0.1*" }).Count -eq 1) -Message "$testName - codex tab resumes its own (non-subagent) session with original args"
     Test-Assert -Condition (@($cmdlines | Where-Object { $_ -like "*/k claude --resume $claudeId -n 600 127.0.0.1*" }).Count -eq 1) -Message "$testName - claude tab resumes its session with original args"
-    $resumeCount = @($cmdlines | Where-Object { $_ -match 'resume' }).Count
-    Test-AssertEqual -Expected 2 -Actual $resumeCount -Message "$testName - plain shell tab is not given a resume command"
+    Test-Assert -Condition (@($cmdlines | Where-Object { $_ -like "*/k agy --conversation $agyId -n 600 127.0.0.1*" }).Count -eq 1) -Message "$testName - agy tab resumes the conversation it created, with original args"
+    $resumeCount = @($cmdlines | Where-Object { $_ -match 'resume|--conversation' }).Count
+    Test-AssertEqual -Expected 3 -Actual $resumeCount -Message "$testName - plain shell tab is not given a resume command"
 
     # Folders: the restored fake agents (ping) run in the saved working dirs.
     foreach ($pair in @(@{ Name = 'claude.exe'; Dir = $work1 }, @{ Name = 'codex.exe'; Dir = $work2 })) {
@@ -163,6 +180,14 @@ try {
         # ping exits at once on "--resume"; the cmd.exe /k shell remains. Check the shell's start folder via its prompt in the capture instead.
     }
     Test-Assert -Condition (-not $newProc.HasExited) -Message "$testName - new process alive"
+
+    # Folders: tab 4 (agy, active) and tab 3 (plain shell) reopen where they were.
+    $tail4 = Send-CP $new.ProcessId "TAIL|5"
+    Test-Assert -Condition ($tail4 -like "*$work3>*") -Message "$testName - agy tab reopened in its folder"
+    Send-CP $new.ProcessId "SWITCH_TAB|2" | Out-Null; Start-Sleep -Milliseconds 800
+    $tail3 = Send-CP $new.ProcessId "TAIL|5"
+    Test-Assert -Condition ($tail3 -like "*$work4>*") -Message "$testName - plain shell tab reopened in its folder (read from the process)"
+    Send-CP $new.ProcessId "SWITCH_TAB|3" | Out-Null; Start-Sleep -Milliseconds 800
 
     $r = New-Object Win32R+RECT; [Win32R]::GetWindowRect($hwnd2, [ref]$r) | Out-Null
     $bmp = New-Object System.Drawing.Bitmap ($r.Right - $r.Left), ($r.Bottom - $r.Top)
@@ -202,10 +227,12 @@ try {
     $new = $third
     [void](Find-GhosttyWindow -ProcessId $new.ProcessId)
     Start-Sleep -Seconds 4
-    Test-AssertEqual -Expected 3 -Actual (Get-TabCount $new.ProcessId) -Message "$testName - 3 tabs after second restart"
-    Test-AssertEqual -Expected "1,3" -Actual (Get-HeaderNumbers $new.ProcessId) -Message "$testName - split kept after second restart"
+    Test-AssertEqual -Expected 4 -Actual (Get-TabCount $new.ProcessId) -Message "$testName - 4 tabs after second restart"
+    Test-AssertEqual -Expected "3,4" -Actual (Get-HeaderNumbers $new.ProcessId) -Message "$testName - split kept after second restart"
     $cl2 = @(@(Get-Descendants $new.ProcessId) | Where-Object { $_.Name -eq 'cmd.exe' -and $_.CommandLine -notmatch '/C ' } | ForEach-Object { $_.CommandLine })
     Test-Assert -Condition (@($cl2 | Where-Object { $_ -like "*/k claude --resume $claudeId*" }).Count -eq 1) -Message "$testName - claude session id survives a second restart"
+    Test-Assert -Condition (@($cl2 | Where-Object { $_ -like "*/k codex resume $codexId*" }).Count -eq 1) -Message "$testName - codex session id survives a second restart"
+    Test-Assert -Condition (@($cl2 | Where-Object { $_ -like "*/k agy --conversation $agyId*" }).Count -eq 1) -Message "$testName - agy conversation id survives a second restart"
 } finally {
     if ($old -and -not $old.HasExited) { Stop-Ghostty -Process $old }
     if ($new) { $np = Get-Process -Id $new.ProcessId -ErrorAction SilentlyContinue; if ($np) { Stop-Ghostty -Process $np } }
