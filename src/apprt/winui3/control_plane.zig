@@ -178,7 +178,7 @@ pub const ControlPlane = struct {
     pub const CaptureStateFn = *const fn (ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) anyerror!?StateSnapshot;
     pub const CaptureTailFn = *const fn (ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) anyerror!?[]u8;
     pub const CaptureHistoryFn = *const fn (ctx: *anyopaque, allocator: Allocator, tab_idx: ?usize) anyerror!?[]u8;
-    pub const CaptureTabListFn = *const fn (ctx: *anyopaque, allocator: Allocator) anyerror!?[]u8;
+    pub const ListTabIdsFn = *const fn (ctx: *anyopaque, allocator: Allocator) Allocator.Error![]u64;
 
     allocator: Allocator,
     hwnd: os.HWND,
@@ -204,7 +204,7 @@ pub const ControlPlane = struct {
     capture_state_fn: ?CaptureStateFn = null,
     capture_tail_fn: ?CaptureTailFn = null,
     capture_history_fn: ?CaptureHistoryFn = null,
-    capture_tab_list_fn: ?CaptureTabListFn = null,
+    list_tab_ids_fn: ?ListTabIdsFn = null,
     max_pending_inputs: usize = default_max_pending_inputs,
     max_inflight_data_requests: u32 = default_max_inflight_data_requests,
     inflight_data_requests: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
@@ -254,7 +254,7 @@ pub const ControlPlane = struct {
         capture_state_fn: ?CaptureStateFn,
         capture_tail_fn: ?CaptureTailFn,
         capture_history_fn: ?CaptureHistoryFn,
-        capture_tab_list_fn: ?CaptureTabListFn,
+        list_tab_ids_fn: ?ListTabIdsFn,
     ) !*ControlPlane {
         const self = try allocator.create(ControlPlane);
         errdefer allocator.destroy(self);
@@ -266,7 +266,7 @@ pub const ControlPlane = struct {
             .capture_state_fn = capture_state_fn,
             .capture_tail_fn = capture_tail_fn,
             .capture_history_fn = capture_history_fn,
-            .capture_tab_list_fn = capture_tab_list_fn,
+            .list_tab_ids_fn = list_tab_ids_fn,
         };
         self.cache.ttl_ns = self.loadCacheTtlNs();
         self.max_pending_inputs = self.loadMaxPendingInputs();
@@ -297,6 +297,7 @@ pub const ControlPlane = struct {
         self.provider = .{
             .ctx = @ptrCast(self),
             .captureSnapshot = &provCaptureSnapshot,
+            .listTabIds = if (self.list_tab_ids_fn != null) &provListTabIds else null,
             .captureHistory = &provCaptureHistory,
             .sendInput = &provSendInput,
             .ackPoll = &provAckPoll,
@@ -367,11 +368,14 @@ pub const ControlPlane = struct {
     ) []const u8 {
         const req = std.mem.trim(u8, request, " \r\n\t");
         const cmd = commandName(req);
+        const cacheable = isCacheableCommand(cmd) and
+            (self.list_tab_ids_fn == null or
+                (!std.mem.eql(u8, cmd, "LIST_TABS") and std.mem.indexOf(u8, req, "|id=") == null));
         if (std.mem.eql(u8, cmd, "CAPABILITIES")) {
             return std.fmt.allocPrint(
                 allocator,
-                "OK|{s}|CAPABILITIES|transport=polling|reads=STATE,CAPTURE_PANE,TAIL,HISTORY,WAIT_FOR,PANE_PID,CURSOR_POS,PANE_TITLE,LIST_TABS|writes=INPUT,RAW_INPUT,PASTE,SEND_KEYS,ACK_POLL|control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS|features=input_tab_routing\n",
-                .{self.session_name orelse "ghostty"},
+                "OK|{s}|CAPABILITIES|transport=polling|reads=STATE,CAPTURE_PANE,TAIL,HISTORY,WAIT_FOR,PANE_PID,CURSOR_POS,PANE_TITLE,LIST_TABS|writes=INPUT,RAW_INPUT,PASTE,SEND_KEYS,ACK_POLL|control=NEW_TAB,CLOSE_TAB,SWITCH_TAB,FOCUS|features=input_tab_routing{s}\n",
+                .{ self.session_name orelse "ghostty", if (self.list_tab_ids_fn != null) ",display_tab_ids" else "" },
             ) catch "ERR|oom\n";
         }
         if (isBackpressureCommand(cmd) and self.pendingInputLen() >= self.max_pending_inputs) {
@@ -384,7 +388,7 @@ pub const ControlPlane = struct {
         if (cb_now_ns < self.renderer_locked_circuit_open_until_ns.load(.acquire)) {
             return allocator.dupe(u8, "ERR|BUSY|renderer_locked\n") catch "ERR|BUSY|renderer_locked\n";
         }
-        if (isCacheableCommand(cmd)) {
+        if (cacheable) {
             if (self.tryGetCachedResponse(req, allocator)) |cached| {
                 return cached;
             }
@@ -442,7 +446,7 @@ pub const ControlPlane = struct {
             }
             return allocator.dupe(u8, "ERR|BUSY|renderer_locked\n") catch return "ERR|BUSY|renderer_locked\n";
         }
-        if (isCacheableCommand(cmd) and !std.mem.startsWith(u8, std.mem.trim(u8, resp, " \r\n\t"), "ERR|")) {
+        if (cacheable and !std.mem.startsWith(u8, std.mem.trim(u8, resp, " \r\n\t"), "ERR|")) {
             self.updateCachedResponse(req, resp);
         }
         return resp;
@@ -773,6 +777,11 @@ pub const ControlPlane = struct {
         self.drained_lock.lock();
         defer self.drained_lock.unlock();
         return cmd_id <= self.last_drained_cmd_id;
+    }
+
+    fn provListTabIds(ctx: *anyopaque, allocator: Allocator) Allocator.Error![]u64 {
+        const self: *ControlPlane = @ptrCast(@alignCast(ctx));
+        return self.list_tab_ids_fn.?(self.callback_ctx.?, allocator);
     }
 
     /// Issue #142: capture all tab state in a single SendMessageW round-trip.

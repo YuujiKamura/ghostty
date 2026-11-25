@@ -901,7 +901,7 @@ fn initXaml(self: *App) !void {
                 controlPlaneCaptureState,
                 controlPlaneCaptureTail,
                 controlPlaneCaptureHistory,
-                controlPlaneCaptureTabList,
+                controlPlaneListTabIds,
             ) catch |err| blk: {
                 log.err("control_plane: create FAILED err={s}", .{@errorName(err)});
                 break :blk null;
@@ -2892,43 +2892,13 @@ fn controlPlaneCaptureHistory(ctx: *anyopaque, allocator: Allocator, tab_idx: ?u
     return try allocator.dupe(u8, history);
 }
 
-fn controlPlaneCaptureTabList(ctx: *anyopaque, allocator: Allocator) !?[]u8 {
+fn controlPlaneListTabIds(ctx: *anyopaque, allocator: Allocator) Allocator.Error![]u64 {
     const self: *App = @ptrCast(@alignCast(ctx));
-    const tab_count = self.countSurfaces();
-    if (tab_count == 0) return null;
-
-    var buf: std.ArrayListUnmanaged(u8) = .{};
-    errdefer buf.deinit(allocator);
-    const writer = buf.writer(allocator);
-    try writer.print("LIST_TABS|{d}|{d}\n", .{ tab_count, self.active_surface_idx });
-
-    var i: usize = 0;
-    while (i < tab_count) : (i += 1) {
-        if (self.getSurface(i)) |surface| {
-            // Issue #207 hyp 1: use *Locked variants per-tab and
-            // gracefully degrade on contention (single TAB row writes
-            // "?" / 0 instead of parking the whole LIST_TABS request).
-            // Listing many tabs is read-heavy; one contended lock must
-            // not stall the rest.
-            const pwd_val = surface.pwdLocked(allocator) catch |err| switch (err) {
-                error.RendererLocked => null,
-                else => |e| return e,
-            };
-            defer if (pwd_val) |p| allocator.free(p);
-            const title = surface.getTitle() orelse "";
-            const at_prompt = surface.cursorIsAtPromptLocked() orelse false;
-            const has_sel = surface.hasSelectionLocked() orelse false;
-            try writer.print("TAB|{d}|{s}|pwd={s}|prompt={d}|selection={d}|id={d}\n", .{
-                i,
-                title,
-                pwd_val orelse "",
-                @as(u8, if (at_prompt) 1 else 0),
-                @as(u8, if (has_sel) 1 else 0),
-                surface.tab_id,
-            });
-        }
-    }
-    return try buf.toOwnedSlice(allocator);
+    self.surfaces_mutex.lock();
+    defer self.surfaces_mutex.unlock();
+    const ids = try allocator.alloc(u64, self.surfaces_snapshot.len);
+    for (self.surfaces_snapshot, ids) |surface, *id| id.* = surface.tab_id;
+    return ids;
 }
 
 // ---------------------------------------------------------------
