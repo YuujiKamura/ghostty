@@ -340,6 +340,7 @@ pub extern "user32" fn ReleaseCapture() callconv(.winapi) BOOL;
 pub extern "user32" fn GetFocus() callconv(.winapi) ?HWND;
 pub extern "user32" fn GetWindow(hWnd: HWND, uCmd: UINT) callconv(.winapi) ?HWND;
 pub extern "user32" fn GetAncestor(hWnd: HWND, gaFlags: UINT) callconv(.winapi) ?HWND;
+pub extern "user32" fn GetWindowThreadProcessId(hWnd: HWND, processId: ?*DWORD) callconv(.winapi) DWORD;
 pub const GW_CHILD: UINT = 5;
 pub const GW_HWNDNEXT: UINT = 2;
 pub const GA_PARENT: UINT = 1;

@@ -546,7 +546,7 @@ fn inputSinkMessageHandler(self: *NonClientIslandWindow, hwnd: os.HWND, msg: os.
             const parent = os.GetAncestor(hwnd, os.GA_PARENT) orelse return 0;
             const ht = @as(c_int, @intCast(@as(usize, @bitCast(wparam))));
             return switch (ht) {
-                os.HTTOP, os.HTCAPTION => os.SendMessageW(parent, msg, wparam, lparam),
+                os.HTTOP, os.HTCAPTION => forwardDragBarMessage(parent, msg, wparam, lparam),
                 else => 0,
             };
         },
@@ -555,7 +555,7 @@ fn inputSinkMessageHandler(self: *NonClientIslandWindow, hwnd: os.HWND, msg: os.
             const parent = os.GetAncestor(hwnd, os.GA_PARENT) orelse return 0;
             const ht = @as(c_int, @intCast(@as(usize, @bitCast(wparam))));
             return switch (ht) {
-                os.HTTOP, os.HTCAPTION => os.SendMessageW(parent, msg, wparam, lparam),
+                os.HTTOP, os.HTCAPTION => forwardDragBarMessage(parent, msg, wparam, lparam),
                 // WT: caption buttons are pressed via _titlebar.PressButton()
                 os.HTMINBUTTON, os.HTMAXBUTTON, os.HTCLOSE => 0,
                 else => 0,
@@ -566,7 +566,7 @@ fn inputSinkMessageHandler(self: *NonClientIslandWindow, hwnd: os.HWND, msg: os.
             const parent = os.GetAncestor(hwnd, os.GA_PARENT) orelse return 0;
             const ht = @as(c_int, @intCast(@as(usize, @bitCast(wparam))));
             return switch (ht) {
-                os.HTTOP, os.HTCAPTION => os.SendMessageW(parent, msg, wparam, lparam),
+                os.HTTOP, os.HTCAPTION => forwardDragBarMessage(parent, msg, wparam, lparam),
                 // WT: _titlebar.ReleaseButtons() + _titlebar.ClickButton()
                 // We use WM_SYSCOMMAND since we don't have XAML titlebar buttons yet.
                 os.HTMINBUTTON => blk: {
@@ -588,11 +588,19 @@ fn inputSinkMessageHandler(self: *NonClientIslandWindow, hwnd: os.HWND, msg: os.
 
         os.WM_NCRBUTTONDOWN, os.WM_NCRBUTTONUP, os.WM_NCRBUTTONDBLCLK => {
             const parent = os.GetAncestor(hwnd, os.GA_PARENT) orelse return 0;
-            return os.SendMessageW(parent, msg, wparam, lparam);
+            return forwardDragBarMessage(parent, msg, wparam, lparam);
         },
 
         else => return os.DefWindowProcW(hwnd, msg, wparam, lparam),
     }
+}
+
+fn forwardDragBarMessage(parent: os.HWND, msg: os.UINT, wparam: os.WPARAM, lparam: os.LPARAM) os.LRESULT {
+    // Native caption handling must finish in order with the original input event.
+    // Only call the parent synchronously when it runs on this same UI thread.
+    const parent_thread = os.GetWindowThreadProcessId(parent, null);
+    if (parent_thread != os.GetCurrentThreadId()) return 0;
+    return os.SendMessageW(parent, msg, wparam, lparam); // LINT-ALLOW: sendmessagew (thread ID guard prevents a cross-thread wait)
 }
 
 /// WT: _dragBarNcHitTest
