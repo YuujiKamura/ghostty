@@ -47,11 +47,11 @@ pub fn decodeAndEmitUtf16(utf8: []const u8, emit_fn: *const fn (u16) void) usize
 /// silently swallowed.
 pub const STALE_COMMIT_THRESHOLD_MS: i64 = 100;
 
-/// After TSF commits text, the same finalized non-ASCII characters may
+/// After TSF commits text, its first finalized non-ASCII character may
 /// also arrive via CharacterReceived (WM_CHAR). To deduplicate, callers
-/// set `tsf_just_committed_at_ms` to a fresh timestamp at commit time;
-/// the first CharacterReceived after the commit then consumes the flag
-/// and, if non-ASCII, is suppressed.
+/// set the commit timestamp and first UTF-16 unit; the first
+/// CharacterReceived consumes the pending record and is suppressed only
+/// when it matches that committed unit.
 ///
 /// The flag is consumed (set to 0) on every call, regardless of whether
 /// the event is suppressed. If the timestamp is 0 (never set) or older
@@ -63,15 +63,30 @@ pub const STALE_COMMIT_THRESHOLD_MS: i64 = 100;
 /// Pure -- the caller supplies `now_ms` so tests do not need a real clock.
 pub fn shouldSuppressCharAfterCommit(
     tsf_just_committed_at_ms: *i64,
+    tsf_first_committed_unit: *u16,
     now_ms: i64,
     char_code: u16,
     threshold_ms: i64,
 ) bool {
     const at_ms = tsf_just_committed_at_ms.*;
     tsf_just_committed_at_ms.* = 0; // always consume the flag
+    const expected = tsf_first_committed_unit.*;
+    tsf_first_committed_unit.* = 0;
     if (at_ms == 0) return false; // never set
     if (now_ms - at_ms > threshold_ms) return false; // stale
-    return char_code > 0x7F;
+    return char_code > 0x7F and char_code == expected;
+}
+
+/// Return the first UTF-16 code unit of a valid UTF-8 string, or null when
+/// the string is empty/invalid. Supplementary scalars return their high
+/// surrogate because CharacterReceived reports UTF-16 units.
+pub fn firstUtf16Unit(utf8: []const u8) ?u16 {
+    if (utf8.len == 0) return null;
+    const cp_len = std.unicode.utf8ByteSequenceLength(utf8[0]) catch return null;
+    if (cp_len > utf8.len) return null;
+    const codepoint = std.unicode.utf8Decode(utf8[0..cp_len]) catch return null;
+    if (codepoint <= 0xFFFF) return @intCast(codepoint);
+    return @intCast(((codepoint - 0x10000) >> 10) + 0xD800);
 }
 
 // ===================================================================
@@ -155,32 +170,51 @@ test "decodeAndEmitUtf16 - empty input" {
 
 test "shouldSuppressCharAfterCommit - fresh non-ASCII suppressed" {
     var at_ms: i64 = 1000;
-    try std.testing.expect(shouldSuppressCharAfterCommit(&at_ms, 1000, 0x30C6, STALE_COMMIT_THRESHOLD_MS)); // テ
+    var first_unit: u16 = 0x30C6;
+    try std.testing.expect(shouldSuppressCharAfterCommit(&at_ms, &first_unit, 1000, 0x30C6, STALE_COMMIT_THRESHOLD_MS)); // テ
     try std.testing.expectEqual(@as(i64, 0), at_ms); // consumed
+    try std.testing.expectEqual(@as(u16, 0), first_unit);
+}
+
+test "shouldSuppressCharAfterCommit - unrelated fresh circled number is not suppressed" {
+    var at_ms: i64 = 1000;
+    var first_unit: u16 = 0x30C6;
+    // A Japanese TSF commit followed immediately by typing ① must not eat ①.
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, &first_unit, 1000, 0x2460, STALE_COMMIT_THRESHOLD_MS));
+}
+
+test "shouldSuppressCharAfterCommit - matching fresh circled number duplicate is suppressed" {
+    var at_ms: i64 = 1000;
+    var first_unit: u16 = 0x2460;
+    try std.testing.expect(shouldSuppressCharAfterCommit(&at_ms, &first_unit, 1000, 0x2460, STALE_COMMIT_THRESHOLD_MS));
 }
 
 test "shouldSuppressCharAfterCommit - fresh ASCII not suppressed" {
     var at_ms: i64 = 1000;
-    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, 1000, 0x41, STALE_COMMIT_THRESHOLD_MS)); // 'A'
+    var first_unit: u16 = 0x41;
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, &first_unit, 1000, 0x41, STALE_COMMIT_THRESHOLD_MS)); // 'A'
     try std.testing.expectEqual(@as(i64, 0), at_ms); // consumed
 }
 
 test "shouldSuppressCharAfterCommit - boundary 0x7F not suppressed" {
     var at_ms: i64 = 1000;
-    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, 1000, 0x7F, STALE_COMMIT_THRESHOLD_MS)); // DEL
+    var first_unit: u16 = 0x7F;
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, &first_unit, 1000, 0x7F, STALE_COMMIT_THRESHOLD_MS)); // DEL
     try std.testing.expectEqual(@as(i64, 0), at_ms);
 }
 
 test "shouldSuppressCharAfterCommit - boundary 0x80 suppressed" {
     var at_ms: i64 = 1000;
-    try std.testing.expect(shouldSuppressCharAfterCommit(&at_ms, 1000, 0x80, STALE_COMMIT_THRESHOLD_MS));
+    var first_unit: u16 = 0x80;
+    try std.testing.expect(shouldSuppressCharAfterCommit(&at_ms, &first_unit, 1000, 0x80, STALE_COMMIT_THRESHOLD_MS));
     try std.testing.expectEqual(@as(i64, 0), at_ms);
 }
 
 test "shouldSuppressCharAfterCommit - timestamp 0 (never set), nothing suppressed" {
     var at_ms: i64 = 0;
-    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, 1000, 0x30C6, STALE_COMMIT_THRESHOLD_MS));
-    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, 1000, 0x41, STALE_COMMIT_THRESHOLD_MS));
+    var first_unit: u16 = 0x30C6;
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, &first_unit, 1000, 0x30C6, STALE_COMMIT_THRESHOLD_MS));
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, &first_unit, 1000, 0x41, STALE_COMMIT_THRESHOLD_MS));
     try std.testing.expectEqual(@as(i64, 0), at_ms);
 }
 
@@ -190,20 +224,29 @@ test "shouldSuppressCharAfterCommit - stale (>threshold) non-ASCII not suppresse
     // mobile/remote bridge. With the age check, a >100ms gap demotes the
     // suppression so the first Japanese char from the next burst emits.
     var at_ms: i64 = 1000;
+    var first_unit: u16 = 0x3069;
     const now_ms: i64 = 1101; // 101ms later -- past threshold
-    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, now_ms, 0x3069, STALE_COMMIT_THRESHOLD_MS)); // ど
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, &first_unit, now_ms, 0x3069, STALE_COMMIT_THRESHOLD_MS)); // ど
     try std.testing.expectEqual(@as(i64, 0), at_ms); // still consumed
 }
 
 test "shouldSuppressCharAfterCommit - exactly at threshold (strict >) still suppresses" {
     var at_ms: i64 = 1000;
+    var first_unit: u16 = 0x30C6;
     const now_ms: i64 = 1100; // exactly 100ms -- still within
-    try std.testing.expect(shouldSuppressCharAfterCommit(&at_ms, now_ms, 0x30C6, STALE_COMMIT_THRESHOLD_MS));
+    try std.testing.expect(shouldSuppressCharAfterCommit(&at_ms, &first_unit, now_ms, 0x30C6, STALE_COMMIT_THRESHOLD_MS));
     try std.testing.expectEqual(@as(i64, 0), at_ms);
 }
 
 test "shouldSuppressCharAfterCommit - 1 second past threshold not suppressed" {
     var at_ms: i64 = 1000;
-    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, 2000, 0x30C6, STALE_COMMIT_THRESHOLD_MS));
+    var first_unit: u16 = 0x30C6;
+    try std.testing.expect(!shouldSuppressCharAfterCommit(&at_ms, &first_unit, 2000, 0x30C6, STALE_COMMIT_THRESHOLD_MS));
     try std.testing.expectEqual(@as(i64, 0), at_ms);
+}
+
+test "firstUtf16Unit - circled number BMP and supplementary emoji" {
+    try std.testing.expectEqual(@as(?u16, 0x2460), firstUtf16Unit("①"));
+    try std.testing.expectEqual(@as(?u16, 0xD83D), firstUtf16Unit("😀"));
+    try std.testing.expectEqual(@as(?u16, null), firstUtf16Unit(""));
 }

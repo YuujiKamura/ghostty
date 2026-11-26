@@ -390,13 +390,15 @@ window_title: ?[:0]u8 = null,
 tsf_impl: ?Tsf.TsfImplementation = null,
 
 /// Timestamp (ms since epoch) when tsfHandleOutput last committed text.
-/// Consumed by the next CharacterReceived to suppress duplicated non-ASCII
-/// text that may also arrive through the XAML input path after a TSF
+/// Consumed by the next CharacterReceived to suppress the matching first
+/// non-ASCII unit that may also arrive through the XAML input path after a TSF
 /// commit. 0 means "no pending commit". The receiver also treats a
 /// timestamp older than tsf_logic.STALE_COMMIT_THRESHOLD_MS as stale so
 /// the suppression does not eat the first Japanese char of an unrelated
 /// later typing burst (e.g. via a mobile/remote input bridge).
 tsf_just_committed_at_ms: i64 = 0,
+/// First UTF-16 code unit of the pending TSF commit, for exact duplicate matching.
+tsf_just_committed_first_unit: u16 = 0,
 
 /// DispatcherQueueController — must be kept alive for the lifetime of the app.
 dq_controller: ?*winrt.IInspectable = null,
@@ -1364,12 +1366,15 @@ fn tsfHandleOutput(userdata: ?*anyopaque, utf8: []const u8) void {
     // and silently drop the first character — causing "kanji missing" bug.
     surface.pending_keydown = .none;
 
-    // Signal that TSF just committed text. If XAML also delivers the same
-    // finalized non-ASCII characters via CharacterReceived, suppress that
-    // duplicate path and keep TSF output as the sole source of committed text.
-    // Store the current time so a later CharacterReceived can tell whether
-    // the duplicate it is about to consume is still fresh.
-    app.tsf_just_committed_at_ms = std.time.milliTimestamp();
+    // Signal the first committed unit so the XAML duplicate guard can match
+    // the actual TSF output instead of swallowing any unrelated Unicode text.
+    if (tsf_logic.firstUtf16Unit(utf8)) |first_unit| {
+        app.tsf_just_committed_first_unit = first_unit;
+        app.tsf_just_committed_at_ms = std.time.milliTimestamp();
+    } else {
+        app.tsf_just_committed_first_unit = 0;
+        app.tsf_just_committed_at_ms = 0;
+    }
 
     // Decode UTF-8 into codepoints and send each as a UTF-16 char event,
     // which follows the same path as IME commit via handleCharEvent.

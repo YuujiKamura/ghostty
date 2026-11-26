@@ -1734,8 +1734,14 @@ pub fn Surface(comptime App: type) type {
                     const ea_peek: *com.ICharacterReceivedRoutedEventArgs = @ptrCast(@alignCast(args orelse return));
                     const ch_peek = ea_peek.Character() catch return;
                     const now_ms = std.time.milliTimestamp();
-                    if (tsf_logic.shouldSuppressCharAfterCommit(&self.app.tsf_just_committed_at_ms, now_ms, ch_peek, tsf_logic.STALE_COMMIT_THRESHOLD_MS)) {
-                        log.debug("xaml_surface: CharacterReceived ch=0x{x} SUPPRESSED (tsf commit fresh, non-ASCII)", .{ch_peek});
+                    if (tsf_logic.shouldSuppressCharAfterCommit(
+                        &self.app.tsf_just_committed_at_ms,
+                        &self.app.tsf_just_committed_first_unit,
+                        now_ms,
+                        ch_peek,
+                        tsf_logic.STALE_COMMIT_THRESHOLD_MS,
+                    )) {
+                        log.debug("xaml_surface: CharacterReceived ch=0x{x} SUPPRESSED (matches fresh TSF commit)", .{ch_peek});
                         return;
                     }
                 }
